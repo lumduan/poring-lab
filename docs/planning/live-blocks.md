@@ -1139,6 +1139,33 @@ crop; the hotbar reader's geometry and font (hotbar_count.py, row 1 at the 1280 
 its two-digit limit (a count over 99 reads unknown, though the sensor's range is 0..999); one press
 per call of the eat function; the runner's `HEAL_CANDY_KEYS`.
 
+### 10.1 The live A/B: B4 (the stage-4a box) vs B5 (the one box today) -- pre-registered 2026-11-14 15:08 ICT from `date`, BEFORE any run
+
+`scripts/stage5_ab.py run --label s5ab-1114 --pairs 3 --minutes 20` (alternating B4 B5, B5 B4, B4
+B5; stage2_ab's setup before every run; a STOP file in /dev/shm/poring-lab-tmp/stage5-ab/<label>/).
+- **B4** = `project_xmas_dun02_stage4.json` (drink under 30 %, no eat); **B5** =
+  `project_xmas_dun02.json` (drink under 50 %, eat F6 / F7). The plan refuses unless only B5 eats
+  and the two boxes' roles, model and recipes are the same, and unless the Run config has
+  `alarm_fast` on: BOTH arms run dungeon@9.53's fast alarm (section 11), so its live numbers are
+  reported too (report-only).
+- **The bar (`stage5_ab.BAR`)**:
+  1. **deaths**: B5's <= B4's, over EVERY run that played (>= 1 min, or a death) -- section 7's
+     flaw fixed: a death no longer hides by making its run invalid;
+  2. **under50**: B5's share of HP-read time under 50 % < B4's (valid runs pooled; each read holds
+     until the next, at most 2 s): the band closed;
+  3. **openers_h**: B5's Knife openers / h >= 0.8 x B4's (valid runs pooled);
+  4. **kills_h**: the mean paired (B5 - B4) kills / h >= -2 x its standard error, judged only with
+     >= 3 valid pairs (a valid run: >= 80 % of its minutes, or a weight-home end);
+  5. **eat**: B5 pressed an eat key at least once and B4 never.
+  Any line FAIL -> FAIL; a line not judged -> INCONCLUSIVE; else PASS.
+- **Report-only**: potions / h and their cost at 1,200 z each; eats / h; the alarm's fires inside a
+  long action and between steps (each to be judged true or false against the packets' party in
+  view, as 11.1/11.2); the lowest HP; and for the alarm, deaths per played run against last night's
+  10 in 30 (both arms here run it).
+- **Known before the run**: her F6 / F7 hold 2 Candy Canes and 7 Candies from 2026-11-11's GM
+  `@item` setup (4CF), not loot; the first B5 run eats them. They are counted apart from looted
+  candies in the report (the setup never tops candies up).
+
 ## 11. Batt's 2026-11-14 answers (~14:0x ICT): the Knight, the Knife, the Butterfly Wings
 
 **Batt's words (Thai, translated), answering the morning report's four questions:**
