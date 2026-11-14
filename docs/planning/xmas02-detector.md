@@ -4473,7 +4473,7 @@ dataloader workers`, `Starting training for 10 epochs`. A watcher (S4.5) yields 
   `0b43ebbfe8e2bb5c4333d2297520f4f05d9ce79b6fa1cdcde12663879d167a10`** (5,533,786 bytes). Nothing is
   refitted after this line. Next: S4.6 steps 2-6.
 
-#### S4.9 (2026-11-15 00:20 ICT from `date`, BEFORE any labeller sees the pack or any prediction exists): the export, the registration, sk3a's labels and the evaluation pack
+#### S4.9 (2026-11-15 00:19 ICT from `date`, BEFORE any labeller sees the pack or any prediction exists): the export, the registration, sk3a's labels and the evaluation pack
 
 - **The export (M9's recipe, 00:12:37-00:13:27; the archived `onnx-export/build.sh` `0b1db27c...`, a
   1.5 GB RAM env removed after; the lab's /dev/shm 2.44 GB at its peak):** torch 2.15.0+cpu,
@@ -4512,3 +4512,70 @@ dataloader workers`, `Starting training for 10 epochs`. A watcher (S4.5) yields 
   `2089f76a...`; they differ in the letter and the answers path).
 - The four species and Garm Baby on sk3a are reported only (S4.6 point 5); the Goblin's verdict is
   `Q1.per_species.g_gobline_xmas` on this pack.
+
+#### S4.10 (2026-11-15 00:32 ICT from `date`): THE RESULT (scored once) -- THE GOBLIN CLASS FAILS ITS PRECISION BAR
+
+S4.6's steps 5-6, each once. The labellers' answers were scored as given.
+
+**The inputs (B0, 00:30:10, before any score):** labellers W and X (both NEW, blind: the pack only;
+each answered all 420 crops; X also ran a parse check on its OWN answers file, nothing on the pack),
+sha256 **W `7face8503940bc8fa6faebd36e130bc12b80154adafbb6e982d594fc1fc9c6c2`**, **X
+`d8226762efd4234890987c809e3e809005e193abc8eeb82cc4b1e1113e9ed034`**. The labellers' pack matched its
+file list (444 / 444). Re-hashed and equal to their records: the key `d77b9767...`, last.pt
+`0b43ebbf...` (the NAS copy), the cache manifest `9d7a9b38...`; the reused 11-07 key `fc9facb1...`, C
+`01808a2b...`, D `9c3817ba...`, refs `c640936a...`; M11's gw3 key `99f2acc7...`, G `42c6bae1...`, H
+`76dd9859...`, refs `0144eab7...`.
+
+**The predictions (the worker, predict_dir, imgsz 1280, conf 0.25, the frozen last.pt from the NAS
+archive; 00:20-00:23, before the labellers' answers, never shown to them):** sk3a's 309 pack frames
+(`q1-refs-sk3a.json` `a896bbc1...` -> `q1-pred-sk3a.json` `e68d8d3b...`), pooled TEST 231 frames
+(`531b7cdc...`), gw3 261 frames (`ffa36882...`). (The TEST and gw3 steps first stopped at once on a
+missing refs copy, B0's copy step not yet run, and were re-run unchanged at 00:21:45.)
+
+**The scores (00:30:15, `eval_q1.py score`, the new cache's manifest):**
+
+| bar (S4.6) | measured | rule | verdict |
+|---|---|---|---|
+| **Christmas Goblin on sk3a, Q1s** (`Q1.per_species.g_gobline_xmas`) | **57 evaluated; recall 46 / 57 = 0.807; precision 46 / (46 + 31) = 0.597** | >= 50; recall >= 0.80 AND precision >= 0.80 | **FAIL (precision)** |
+| Stormy Knight on sk3a (reported) | Q1s 59 evaluated, recall 59 / 59 = 1.000, precision 0.908; Q1c recall 1.000 | no bar | - |
+| **Garm Baby on gw3, Q1s** | 59 evaluated (24 dogs), recall 1.000, precision 59 / 64 = 0.922 (xmas02gb, M11: the same 1.000 / 0.922) | >= 50; >= 0.80 / >= 0.80 | **PASS** |
+| **Myst Case, pooled TEST, Q1c** | 59, recall 0.983, precision 0.935 (M11: 1.000 / 0.937) | same | **PASS** |
+| **Cruiser, pooled TEST, Q1c** | 56, recall 1.000, precision 0.933 (0.982 / 0.932) | same | **PASS** |
+| **Cookie, pooled TEST, Q1c** | 60, recall 0.983, precision 0.937 (1.000 / 0.938) | same | **PASS** |
+| **Christmas Cookie, pooled TEST, Q1c** | 58, recall 1.000, precision 0.935 (1.000 / 0.935) | same | **PASS** |
+| **D1, the detect server's forward p95** (S4.6 point 6: OpenVINO on the Arc, 300 of sk3a's pack frames, one model a run, 00:23:49-00:25:00) | **xmas02sk 17.96 ms** (p50 17.18); xmas02gb 17.39 ms (1.03 x); the call p95 (harness included) 66.9 vs 71.7 ms; all 600 calls on the GPU path | <= 35 ms | **PASS** |
+
+**THE VERDICT: FAIL** -- the Goblin's Q1s precision (0.597) is below 0.80; every other bar passes.
+Not re-scored. **xmas02sk is NOT deployed**: MAP_MODELS["xmas_dun02"], the runner and the alarm stay
+xmas02gb. GPU_WEIGHTS keeps the entry (served only, like the failed fi rounds).
+
+**Reported, deciding nothing (the geometry of the failure; no frame opened):**
+- **The 31 Goblin boxes charged against precision are almost all on real Goblins.** Scratch
+  `fp_goblin.py` (eval_q1's own match, then sk3a's own labels): **26 of the 31 overlap (IoU >= 0.5) a
+  KEPT Goblin label of the same frame that was not drawn into the pack**, 3 lie on an excluded
+  Goblin's region (crowd, occluded_model, ambiguous_view), 1 on an excluded Garm Baby (next_move), 1 on
+  an excluded knight (occluded_terrain). Their centres fall inside evaluated boxes of a knight (12),
+  another Goblin (11) and a Garm Baby (8): the party stands in a heap. Q1's precision charges every
+  unmatched class-s box whose centre lies in ANY evaluated box (gef10-eval.md's rule), so in the
+  knight's crowd a correct box on a Goblin that is not one of the 60 crops counts as false. M11 met
+  the same with two stacked dogs (5 boxes); here the party is 6 Goblins deep. Frame 779 holds two
+  near-identical Goblin boxes (443-484 x 377-462): possibly one double box.
+- **Recall:** 46 / 57 Q1s (clear 38 / 46, under a model 8 / 11); the 11 misses: 9 unboxed, 1 boxed
+  garm_baby, 1 knight_of_windstorm. Q1c recall 48 / 57.
+- **sk3a's other species (reported):** Q1s Myst Case 60 / 1.000 / 1.000, Cruiser 57 / 0.930 / 1.000,
+  Cookie 60 / 1.000 / 1.000, Christmas Cookie 59 / 1.000 / 1.000, Garm Baby 57 / 0.930 / 0.841. Q1c on
+  sk3a: precision 0.54-0.57 for every species (the collapsed rule charges each species all 45
+  unmatched monster boxes inside any evaluated box of the crowd); Q1c pooled 392 / 409, precision 0.897.
+- **The labellers:** W q1 yes 417 / no 1 / unsure 2; X yes 419 / no 1. 409 of 420 crops evaluated
+  (W excluded 11, X 7). No crop was read as Poring (C) or Santa Poring (I).
+- **What the masks did:** the class learnt to SEE the party -- the knight at 59 / 59, the Goblin
+  boxes landing on real Goblins -- but the pre-registered bar, scored in the crowd, fails. A next
+  round's options, each needing its own amendment (none is taken here): a precision rule that does
+  not charge boxes on labelled units of the same species (a scorer change, decided BEFORE a new
+  held-out, never applied to this one); a fresh held-out recorded with the party apart from other
+  Goblins is not possible (the summons are the knight's skill); or the alarm's own measure (party in
+  view by packets, as live-blocks.md 11.1/11.2) on recordings, offline.
+- **Outputs:** local `data/train/eval/xmas02sk/` (refs, predictions, scores, D1), sha256 above;
+  `q1-score-sk3a.json` `9408e860...`, `q1-score-gw3.json` `7fb8fc8b...`, `q1-score-test.json`
+  `6705236b...`, `d1-xmas02sk.json` `6d477bd6...`, `d1-xmas02gb.json` `721e6487...`.
+
