@@ -1670,8 +1670,11 @@ sha256, the base revision, `HuntState` present or not). Why not a frozen copy co
 repo: 11,425 lines duplicated, and a copy that drifts. Why not before / after series: the Stormy
 Knight's schedule and the map's state change over hours; alternating pairs share them. Why not a
 second checkout of the base: it would also run the base's flow_play, poring_flow and the rest;
-the launcher varies one file only (the tool refuses unless `git diff eb160ee1 <head>` touches no
-runner-side code but scripts/dungeon_hunt.py and the 5b-1 tools).
+the launcher varies one file only. ➡️ Correction (the parent, 2026-11-14 19:3x, on review): the
+tool has NO `git diff` check; both arms share the checkout's other code by construction, so only
+the runner text differs. Since 5b-1's merge, main also carries round 20 (12.4: poring_flow's
+settings, lint and the box's fixture; no change to flow_play or run()'s signature), which both
+arms play alike.
 
 **The series** (`scripts/stage5b_ab.py`, a sibling of stage5_ab.py sharing stage2_ab's setup,
 detect server, run and score; run by the parent after review, NOT run yet):
