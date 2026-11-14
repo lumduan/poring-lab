@@ -4,6 +4,7 @@
 // value that is not in the list KEPT, marked. The Blockly fields themselves (they save, load and
 // show these) are in blockly_headless.test.ts.
 import assert from "node:assert/strict";
+import { existsSync, readFileSync } from "node:fs";
 import { test } from "node:test";
 
 import type { CatalogueDoc } from "./api.ts";
@@ -13,6 +14,7 @@ import type { Models } from "./models.ts";
 import {
   argRows,
   argsWith,
+  buttonStep,
   callArgsWith,
   callRows,
   closedText,
@@ -22,11 +24,15 @@ import {
   condOf,
   condText,
   defOn,
+  exprProblem,
   functionsOn,
+  GAME_AREAS,
   matchScore,
+  niceStep,
   numberOf,
   numText,
   optNumOf,
+  pickerColours,
   type PickerData,
   pickerList,
   type PickSpec,
@@ -41,8 +47,11 @@ import {
   snap,
   stepBy,
   stopReasons,
+  toViewBox,
   typedProblem,
 } from "./pickers.ts";
+import * as PLACE from "./pickers.ts";
+import { BLOCK_STYLES, contrast } from "./theme.ts";
 import { MAIN_TAB, nodeById, type Project, sampleProject, xmasProject } from "./project.ts";
 
 const MODELS: Models = {
@@ -124,7 +133,8 @@ test("numbers: the step, the grid, the clamp of the CONTROL; the keys of a slide
   assert.equal(sliderKey("a", 50, r), null);
   assert.equal(numText(1, "cells", "cell"), "1 cell");
   assert.equal(numText(2.5, "s"), "2.5 s");
-  assert.deepEqual(presetsOf(r), [20, 40, 55, 75, 90]);
+  assert.deepEqual(presetsOf(r), [25, 40, 50, 75, 90]); // round 22: round values near the quarters
+  assert.deepEqual(presetsOf({ lo: 5, hi: 95, step: 1 }), [10, 25, 50, 75, 90]); // not 5 / 28 / 50 / 73 / 95
   assert.deepEqual(presetsOf({ lo: 0, hi: 60, step: 0.5 }, [0.5, 1, 2, 5, 10, 99]), [0.5, 1, 2, 5, 10]);
   assert.deepEqual(pointIn(1500, -4), [1279, 0]);
   // an optional number in a text field: empty = none / the default, garbage kept (NaN), never a guess
@@ -333,4 +343,112 @@ test("every picker in the block definitions is a field the converter reads (a nu
   assert.equal(DEF_BY_TYPE.pl_vardecl.args0![0].type, "field_input");
   assert.equal(DEF_BY_TYPE.pl_event.args1![0].type, "field_input");
   assert.ok(nodeById(xmasProject(), "xmas_dun02"));
+});
+
+// --- round 22 (the reviewer's measure of round 21 in a real browser) -------------------------------
+test("round 22: a picker opens below or above its field, scrolls the field to where it fits, then compact, then capped -- never over it", () => {
+  const { placePicker, PICKER_GAP, PICKER_MARGIN } = PLACE;
+  // 390 x 844: the blocks area 416 px tall from y 400; a field mid-area; a 407 px picker
+  const area = { areaTop: 400, areaBottom: 816 };
+  const mid = { ...area, fieldTop: 560, fieldBottom: 584 };
+  assert.deepEqual(placePicker({ ...mid, height: 150 }, true, false), { side: "below", scrollBy: 0, compact: false, maxHeight: null });
+  assert.deepEqual(placePicker({ ...area, fieldTop: 780, fieldBottom: 804, height: 300 }, true, false), { side: "above", scrollBy: 0, compact: false, maxHeight: null });
+  // fits on neither side, but the area holds the field and the picker: scroll the field to the top
+  const sc = placePicker({ ...mid, height: 340 }, true, false);
+  assert.equal(sc.side, "below");
+  assert.equal(sc.scrollBy, 560 - (400 + PICKER_MARGIN)); // the shorter scroll: the field to the top
+  assert.equal(placePicker({ ...area, fieldTop: 640, fieldBottom: 664, height: 340 }, true, false).side, "above"); // nearer the bottom: to the bottom
+  // after that scroll it fits below
+  const after = { ...area, fieldTop: 560 - sc.scrollBy, fieldBottom: 584 - sc.scrollBy, height: 340 };
+  assert.equal(placePicker(after, false, false).side, "below");
+  assert.ok(after.fieldBottom + PICKER_GAP + 340 <= area.areaBottom);
+  // too tall for the area even after a scroll: compact first, then capped to the larger side
+  assert.deepEqual(placePicker({ ...mid, height: 407 }, true, false), { side: "below", scrollBy: 0, compact: true, maxHeight: null });
+  const cap = placePicker({ ...mid, height: 407 }, false, true);
+  assert.equal(cap.compact, true);
+  assert.ok(cap.maxHeight !== null && 584 + PICKER_GAP + cap.maxHeight <= area.areaBottom, JSON.stringify(cap));
+  // never over the field: whatever the case, the side it takes holds the picker as planned
+  for (let top = 410; top < 800; top += 37) {
+    for (const h of [120, 250, 340, 407]) {
+      const m = { ...area, fieldTop: top, fieldBottom: top + 24, height: h };
+      let p = placePicker(m, true, false);
+      const scrolled = { ...m, fieldTop: m.fieldTop - p.scrollBy, fieldBottom: m.fieldBottom - p.scrollBy };
+      if (p.scrollBy) p = placePicker(scrolled, false, false);
+      if (p.compact) p = placePicker(scrolled, false, true);
+      const height = p.maxHeight ?? h;
+      if (p.side === "below") assert.ok(scrolled.fieldBottom + PICKER_GAP + height <= area.areaBottom, `${top} ${h}`);
+      else assert.ok(scrolled.fieldTop - PICKER_GAP - height >= area.areaTop, `${top} ${h}`);
+    }
+  }
+});
+
+test("round 22: the point picture maps a pointer through its own box: 50 % and 55 % read 360 and 396 (the mouse drag read y 691)", () => {
+  // the picture 256 x 144 drawn at (100, 300) on the screen, 256 px wide (as the picker draws it)
+  const box = { left: 100, top: 300, width: 256, height: 144 };
+  const view = { width: 256, height: 144 };
+  const read = (fx: number, fy: number) => {
+    const [x, y] = toViewBox(box.left + fx * box.width, box.top + fy * box.height, box, view);
+    return pointIn((x * 1280) / 256, (y * 720) / 144);
+  };
+  assert.deepEqual(read(0.5, 0.5), [640, 360]);
+  assert.deepEqual(read(0.55, 0.55), [704, 396]);
+  assert.deepEqual(read(0.6, 0.6), [768, 432]); // not stuck at 719
+  // a picture drawn smaller (max-width) maps the same
+  assert.deepEqual(toViewBox(150, 336, { left: 100, top: 300, width: 128, height: 72 }, view), [100, 72]);
+  // the client's fixed windows are outlined inside the picture
+  for (const a of GAME_AREAS) {
+    const [x, y, w, h] = a.box;
+    assert.ok(x >= 0 && y >= 0 && x + w <= 1280 && y + h <= 720, a.name);
+  }
+});
+
+test("round 22: +/- take a nice step (about 1 % of the range), never finer than the field's; presets are round", () => {
+  assert.equal(niceStep({ lo: 0.5, hi: 30, step: 0.01 }), 0.5); // END_HOT_S: 59 taps, not 2,950
+  assert.equal(buttonStep(2, 1, { lo: 0.5, hi: 30, step: 0.01 }), 2.5);
+  assert.equal(niceStep({ lo: 1, hi: 30, step: 1 }), 1); // never finer than the field's step
+  assert.equal(niceStep({ lo: 0, hi: 1000, step: 1 }), 10);
+  assert.equal(niceStep({ lo: 0, hi: 3600, step: 0.1 }), 50);
+  assert.equal(niceStep({ lo: 20, hi: 90, step: 5 }), 5);
+  assert.equal(niceStep({ lo: 0, hi: 0.2, step: 0.001 }), 0.002);
+});
+
+test("round 22: an unfinished condition says so in a learner's words", () => {
+  assert.equal(exprProblem("hp_percent() >= "), "the condition is not finished: a value is missing after >=");
+  assert.equal(exprProblem("hp_percent() < 50 and"), "the condition is not finished: a value is missing after and");
+  assert.equal(exprProblem("hotbar_count(key=\"F6\""), "a ( is not closed: add ) after its inputs");
+  assert.equal(exprProblem('hotbar_count(key="F6) > 0'), 'a text in quotes is not closed: add " at its end');
+  assert.equal(exprProblem("hp_percent() < 50"), "");
+  assert.doesNotMatch(exprProblem("hp_percent() >= "), /col [0-9]+|unexpected "end"/);
+});
+
+test("round 22: a picker on a greyed block reads at 4.5:1 or more (every block style, light and dark)", () => {
+  for (const [name, st] of Object.entries(BLOCK_STYLES)) {
+    const c = pickerColours(st.colourPrimary, (st as { colourTertiary?: string }).colourTertiary ?? st.colourPrimary);
+    assert.ok(contrast(c.primary, "#ffffff") >= 4.5, `${name}: ${c.primary} ${contrast(c.primary, "#ffffff").toFixed(2)}:1`);
+  }
+  const grey = pickerColours("#cbd5e1", "#94a3b8"); // the greyed (not used) setting block
+  assert.notEqual(grey.primary, "#cbd5e1");
+  assert.ok(contrast(grey.primary, "#ffffff") >= 4.5);
+  assert.deepEqual(pickerColours("#0e7490", "#0b5d73"), { primary: "#0e7490", tertiary: "#0b5d73" }); // already readable: kept
+});
+
+test("round 22: a role lists only what it can call -- no inputs needed, no event, no monster's recipe; eat takes its key", () => {
+  const d = xmas();
+  const heal = refChoices(ref("role", { role: "heal" }), d).map((c) => c.value);
+  assert.ok(heal.includes("heal") && heal.includes("fly_wing") && heal.includes("knife_on"));
+  for (const no of ["attack_mystcase", "attack_cookie", "drink", "eat"]) assert.ok(!heal.includes(no), no);
+  assert.ok(refChoices(ref("role", { role: "eat" }), d).some((c) => c.value === "eat")); // eat(key): the box's events call eat("F6")
+  assert.equal(refKnown(ref("role", { role: "heal" }), "attack_mystcase", d), false); // loaded: kept, marked
+  assert.ok(!refChoices(ref("escalate"), d).some((c) => c.value === "attack_mystcase"));
+});
+
+test("round 22: the outlined windows are the UI anchors' home places (no picture is shown or kept)", () => {
+  const ui = new URL("../../../../../packages/poring_env/src/poring_env/ui_anchors.py", import.meta.url);
+  if (!existsSync(ui)) return;
+  const py = readFileSync(ui, "utf8");
+  for (const [name, x, y] of [["basic_info", 0, 0], ["hotbar", 230, 0], ["minimap", 1136, 18], ["chat", 0, 531]] as const) {
+    assert.match(py, new RegExp(`"${name}": \\(${x}, ${y}\\)`), name);
+  }
+  assert.match(py, /"basic_info": WindowSpec\("basic_info", size=\(220, 140\)/);
+  assert.match(py, /"minimap", size=\(128, 142\)/);
 });

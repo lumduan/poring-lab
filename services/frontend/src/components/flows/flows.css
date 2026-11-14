@@ -298,3 +298,42 @@
   font-style: normal;
   font-weight: 700;
 }
+/* round 22: the picker's footer -- Cancel, Done, and what the keys do (Escape cancels the whole
+   session, Enter or Done keeps) */
+.pl-picker-foot {
+  margin-top: 8px;
+}
+.pl-picker-cancel {
+  background: transparent;
+}
+.pl-picker-hint {
+  font-size: 11px;
+  text-align: center;
+  margin: 4px 0 0;
+  opacity: 0.85;
+}
+/* round 22: a picker that fits on neither side of its field opens COMPACT (fewer rows) */
+.pl-picker-compact .pl-picker-title,
+.pl-picker-compact .pl-picker-presets,
+.pl-picker-compact .pl-picker-hint,
+.pl-picker-compact .pl-picker-typed-label {
+  display: none;
+}
+.pl-picker-compact .pl-picker-readout {
+  font-size: 15px;
+  margin: 0 0 2px;
+}
+.pl-picker-compact .pl-picker-screen {
+  max-width: 176px;
+}
+.pl-picker-compact .pl-picker-list {
+  max-height: 9rem;
+}
+.pl-picker-compact .pl-picker-lever {
+  max-width: 200px;
+}
+/* round 22: a long condition's further lines, in the same white box as its first (dark words) */
+.blocklyText.pl-expr-wrap,
+.pl-expr-wrap .blocklyText {
+  fill: #1f2937 !important;
+}

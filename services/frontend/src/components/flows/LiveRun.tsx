@@ -188,7 +188,7 @@ export function LiveRunButtons({ live, blocked = null }: { live: Live; blocked?:
  * (a node without the runner: the live block player checks its own start). `held` (round 21, the
  * re-measure of round 20): why the CHECK cannot run either -- the blocks hold problems that keep a
  * tab from becoming the project, so a check would read the project as it was before them. */
-export default function LiveRun({ live, checklist = [], minutes = null, keys = null, blocked = null, held = null, check: withCheck = true }: { live: Live; checklist?: ChecklistItem[]; minutes?: number | null; keys?: RunKeys | null; blocked?: string | null; held?: string | null; check?: boolean }) {
+export default function LiveRun({ live, checklist = [], minutes = null, keys = null, blocked = null, held = null, check: withCheck = true, global = true }: { live: Live; checklist?: ChecklistItem[]; minutes?: number | null; keys?: RunKeys | null; blocked?: string | null; held?: string | null; check?: boolean; global?: boolean }) {
   const { st, err, buttons: b, flow } = live;
   const title = st?.flows?.[flow]?.title;
   const active = ACTIVE.includes(st?.state ?? "");
@@ -252,7 +252,7 @@ export default function LiveRun({ live, checklist = [], minutes = null, keys = n
                   {t.mark === "fail" && !t.refuses && <span className="live-tick-words"> (the runner goes on without it)</span>}
                   {/* matpilot #5: a key that reads none may simply be the wrong key */}
                   {t.mark === "fail" && /^0 /.test(t.value ?? "") && ["wings", "heals", "home"].includes(it.id) && (
-                    <span className="live-tick-words"> · if the items are on another hotbar key, set that key in the function (this node&apos;s, or Global&apos;s keys tab)</span>
+                    <span className="live-tick-words"> · if the items are on another hotbar key, set that key in the function ({global ? "this node's, or Global's keys tab" : "this node's keys tab"})</span>
                   )}
                 </li>
               );

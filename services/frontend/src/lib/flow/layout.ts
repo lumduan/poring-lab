@@ -12,7 +12,7 @@
 // of the ready-made projects' tabs, nested as it is, must end before Blockly's controls at 390.
 import { type ArgDef, type BlockDef, DEF_BY_TYPE, type FieldKind } from "./blockdefs.ts";
 import type { WsBlock } from "./blocks.ts";
-import { closedText, shortExpr } from "./pickers.ts";
+import { closedText, wrapExpr } from "./pickers.ts";
 import { rowUnits, SETTING_GEOMETRY as G, textUnits } from "./settings.ts";
 
 /** A statement input's left side, workspace units (zelos draws ~16; taken at 20: the model then errs wide by 8-15 % on the reviewer's three re-measured rows of main, layout.test.ts). */
@@ -60,7 +60,7 @@ function valueUnits(a: Extract<ArgDef, { type: FieldKind }>, b: WsBlock, labels:
       return textUnits(shown) + G.field + G.arrow;
     }
     case "field_pl_text":
-      return textUnits(closedText(a.pick, v, v, true, true)) + BOX; // as a phone shows it
+      return textUnits(closedText(a.pick, v, v, true)) + BOX;
     default:
       return textUnits(v) + BOX;
   }
@@ -153,7 +153,8 @@ export function rowsOf(b: WsBlock, labels: Record<string, string> = {}, indent =
 /** A value block's width (its widest row; a reporter of one text field: the text and its box). */
 export function blockWidth(b: WsBlock, labels: Record<string, string> = {}): number {
   const def = DEF_BY_TYPE[b.type];
-  if (b.type === "pl_expr") return textUnits(shortExpr(String(b.fields?.TEXT ?? ""))) + BOX + 2 * ROUND; // as a phone shows it
+  // round 22: a long expression WRAPS (pickers.ts wrapExpr): its widest line, still one white box
+  if (b.type === "pl_expr") return Math.max(...wrapExpr(String(b.fields?.TEXT ?? "")).map((l) => textUnits(l))) + BOX + 2 * ROUND;
   if (b.type === "pl_raw_expr") return textUnits(String(b.fields?.TEXT ?? "")) + BOX + 2 * ROUND;
   if (!def) return textUnits(b.type) + G.side;
   return Math.max(0, ...blockRows({ ...b, next: undefined }, labels));
