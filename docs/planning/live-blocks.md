@@ -2111,7 +2111,17 @@ memory do with that kill's cells (they would still look later: 14.2 #5's hold).
 
 **The commits** (feat/hunt-blocks): 18b41136 (the cursor; run()'s drive branch; huntstate_check
 drive), c224ac54 (the hunt loop: blocks, rules, the player, the harness, the fixture), 7a8c07ca (the
-editor: the hunt tab and its blocks), c302029a (stage5b2_ab.py), then this section. **Changed
+editor: the hunt tab and its blocks), c302029a (stage5b2_ab.py), 62ddbc56 (this section, ADR-0020
+Amendment K, console.md), 31997a22 (the block `fight` renamed `fight_target`: the full suite found a
+function `fight` in existing flows, 14.2 #1), then the test results below.
+
+**The tests at 31997a22** (2026-11-14, the suite ended ~21:2x ICT): the full Python suite 5,869 passed, 94 skipped,
+3 failed -- exactly the three that fail in a /dev/shm worktree only (test_mapcache_paths,
+test_dungeon_hunt's dagger-worn start check, test_patrol_sim's gef_fild10 laps: client data a
+worktree lacks); ruff check and mypy clean; ruff format --check clean but the two files that fail on
+main (docs/setup/new-lab-host.md, test_fight_time.py); the frontend's test (458 passed, 1 skipped),
+typecheck and lint clean; `huntstate_check.py check` and `drive` rc 0; `hunt_trace.py check
+--seeds 200` YES on all 223 scenarios. **Changed
 tests** (the same fact on the new state): test_huntstate_check (the committed runner is the rewrite
 with `drive_ok`; without it the branch is named), test_stage5b_ab (B is 5b-1's file, bb6d41eb's;
 new: the 5b-2 runner is refused as B), test_recipes (use_skill in a recipe: refused in the recipe's
