@@ -8,7 +8,14 @@ import struct
 from pathlib import Path
 
 from poring_flow import editor
-from poring_flow.kbsheet import load_local_world, metamorphoses, npc_key, option_key, read_gat
+from poring_flow.kbsheet import (
+    known_maps,
+    load_local_world,
+    metamorphoses,
+    npc_key,
+    option_key,
+    read_gat,
+)
 from poring_flow.lint import lint
 from poring_flow.trace import Scenario, simulate
 
@@ -172,3 +179,45 @@ def test_without_the_skill_file_the_species_are_the_spawn_lines_and_a_note_says_
     world, labels = load_local_world("srv", ["m_field"], kb(tmp_path, None))
     assert sorted(world.mobs) == [9301] and world.mobs[9301].turns_into == []
     assert any("mob_skills.json" in n and "spawn lines only" in n for n in labels.notes)
+
+
+def test_the_map_pickers_list_every_map_the_kb_names_with_its_kafra(tmp_path: Path) -> None:
+    """Round 21 (live-blocks.md 12.5): the names come from the local KB at run time (synthetic
+    here): the warps' both ends, the NPCs' and the Kafras' maps, the spawn lines', the sheets'."""
+    root = kb(tmp_path, None)
+    (root / "maps" / "srv").mkdir(parents=True)
+    (root / "maps" / "srv" / "m_sheet.json").write_text(json.dumps({"map": "m_sheet"}))
+    (root / "maps" / "srv" / "_server.json").write_text("{}")
+    maps, notes = known_maps("srv", root)
+    assert maps == [
+        {"id": "m_field", "kafra": False},
+        {"id": "m_sheet", "kafra": False},
+        {"id": "m_town", "kafra": True},
+    ]
+    assert notes == []
+    # nothing written: the KB directory holds what it held
+    held = sorted(p.name for p in (root / "maps" / "srv").iterdir())
+    assert held == ["_server.json", "m_sheet.json"]
+
+
+def test_the_map_list_refuses_ids_that_could_leave_the_kb_and_says_what_is_missing(
+    tmp_path: Path,
+) -> None:
+    root = kb(tmp_path, None)
+    for server in ("..", "a/b", ""):
+        maps, notes = known_maps(server, root)
+        assert maps == [] and notes, server
+    maps, notes = known_maps("other", root)  # no bindings for it: only the spawn lines' maps
+    assert maps == [{"id": "m_field", "kafra": False}]
+    assert any("no L3 bindings" in n for n in notes)
+    empty = tmp_path / "empty"
+    empty.mkdir()
+    maps, notes = known_maps("srv", empty)
+    assert maps == [] and any("names no maps" in n for n in notes)
+
+
+def test_the_sample_maps_are_the_synthetic_sheets() -> None:
+    assert editor.sample_maps() == [
+        {"id": "field_1", "kafra": False},
+        {"id": "town_1", "kafra": True},
+    ]

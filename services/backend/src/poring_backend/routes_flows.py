@@ -2,6 +2,9 @@
 
     GET  /flows/catalogue[?client=<L2 build>]   blocks, sensors, verification badges, windows
     GET  /flows/world?source=&server=&maps=      the pickers' static data (map sheets, labels)
+    GET  /flows/maps?source=&server=             round 21: every map name the world knows, each
+                                                 with whether a Kafra stands there (the map
+                                                 pickers' list; the local KB at run time)
     GET  /flows/sample                           the committed SYNTHETIC sample flow (IR JSON)
     POST /flows/lint      {project, world}       the linter (layers 1-3) on a PROJECT (format 3)
     POST /flows/simulate  {project, world, scenario}  the trace (poring_flow.project): no game
@@ -389,6 +392,38 @@ async def get_world(
                 and len(rows) * len(rows[0]) <= 512 * 512
             }
         return doc
+
+    return dict(await _compute(request, state, build))
+
+
+@router.get("/maps")
+async def get_maps(
+    request: Request,
+    source: World = "local",
+    server: str = Query(default="lab-rathena", max_length=64),
+    state: AppState = Depends(read_gate),
+) -> dict[str, Any]:
+    """Round 21 (docs/planning/live-blocks.md 12.5): the map names the world knows, for the block
+    editor's map pickers (the save point, walk to, an exit, a Kafra teleport). The local KB is
+    client- and GPL-derived: read here at run time, never committed (kbsheet.known_maps); the
+    sample world gives its synthetic maps. Rate-limited with GET /flows/world (it reads files)."""
+    _engine(request)
+    if not state.flows_read_rate.allow(
+        request.client.host if request.client else "", time.monotonic()
+    ):
+        raise _fail(request, 429, "rate_limited")
+    if not KEY.match(server):
+        raise _fail(request, 422, "invalid_query")
+    from poring_flow import editor
+    from poring_flow.kbsheet import known_maps
+
+    def build() -> dict[str, Any]:
+        notes: list[str] = []
+        if source == "sample":
+            maps = editor.sample_maps()
+        else:
+            maps, notes = known_maps(server, _kb_root(state))
+        return {"server": server, "source": source, "maps": maps, "notes": notes}
 
     return dict(await _compute(request, state, build))
 

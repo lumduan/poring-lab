@@ -5,12 +5,13 @@
 // box (project_xmas_dun02.json); the settings are its setting blocks (live-blocks.md 12), at our
 // defaults.
 import assert from "node:assert/strict";
+import { existsSync, readFileSync } from "node:fs";
 import { test } from "node:test";
 
-import { type BoxDoc, boxNameWords, boxTabNote, boxTabShort } from "./box.ts";
+import { type BoxDoc, boxNameWords, boxReplaced, boxTabNote, boxTabShort } from "./box.ts";
 import { xmasProject } from "./project.ts";
 import { nodeSettings } from "./settings.ts";
-import { stripFoldLine } from "./words.ts";
+import { FOLD_MAX_CHARS, stripFoldLine } from "./words.ts";
 
 const ev = (play: string, settings: string[], replaces: string, by: string, tab: string, when: string, until: string | null = null) => ({ play, settings, replaces, kind: "event" as const, by, path: `xmas_dun02/${tab}/${by}`, when, until });
 const fnRow = (play: string, settings: string[], replaces: string, by: string | null, tab: string, steps?: string) => ({ play, settings, replaces, kind: "function" as const, by, path: by ? `xmas_dun02/${tab}/${by}` : null, ...(steps ? { steps } : {}) });
@@ -45,7 +46,8 @@ test("the survival tab's note: each event, what it replaces, the setting it make
       "drink replaces the runner's potion on HP (its setting potion_below is not used in this box); " +
       "fly_away replaces the runner's Fly Wing on HP (its setting fly_below is not used in this box) and the runner's boss fly (a Battle Log boss line); " +
       "bag_full replaces the runner's weight exit on a read weight (an unread weight drawn red keeps its own rule) (its setting weight_home is not used in this box). " +
-      "The HP-rate fly stays the runner's (the settings or HP falling faster than 150 HP/s (fly_rate) while under 50 % (fly_rate_below)).",
+      // round 21 (the re-measure of round 20): each setting names its subject (no fragments)
+      "The HP-rate fly stays the runner's: Fly Wing when HP falls faster than 150 HP/s (fly_rate); the Fly Wing's fall rule: only while HP is under 50 % (fly_rate_below).",
   );
   // the exits tab: the respawn's two functions; and its group's weight_home, played by survival's bag_full
   assert.equal(
@@ -62,12 +64,28 @@ test("the survival tab's note: each event, what it replaces, the setting it make
     "In a Run of this project, respawn_button (tab exits) replaces the runner's clicks on the death dialog (its setting respawn_at is not used in this box); " +
       "respawn_ok (tab exits) replaces the runner's clicks on the death dialog (its setting respawn_confirm_at is not used in this box); the other settings here stay the runner's.",
   );
-  assert.equal(boxTabShort(BOX, "xmas_dun02", "respawn"), "2 functions of another tab play part of it");
+  assert.equal(boxTabShort(BOX, "xmas_dun02", "respawn"), "2 functions in exits play it");
   // a tab the box plays nothing of, no box: no note; without the settings: their words only
   assert.equal(boxTabNote(BOX, "xmas_dun02", "keys", values), null);
   assert.equal(boxTabNote(BOX, "xmas_dun02", "aim", values), null);
   assert.equal(boxTabNote(null, "xmas_dun02", "survival", values), null);
-  assert.match(boxTabNote(BOX, "xmas_dun02", "survival", null) ?? "", /HP-rate fly stays the runner's \(the settings or HP falling faster than \(fly_rate\) while under \(fly_rate_below\)\)/);
+  assert.match(boxTabNote(BOX, "xmas_dun02", "survival", null) ?? "", /HP-rate fly stays the runner's: Fly Wing when HP falls faster than \(fly_rate\); the Fly Wing's fall rule: only while HP is under \(fly_rate_below\)\./);
+});
+
+test("round 21: the settings the box replaces, in the lint's own words, for the Settings flyout and the search", () => {
+  const r = boxReplaced(BOX);
+  assert.equal(r.get("potion_below"), "not used here: the drink event plays it");
+  assert.equal(r.get("fly_below"), "not used here: the fly_away event plays it");
+  assert.equal(r.get("weight_home"), "not used here: the bag_full event plays it");
+  assert.equal(r.get("respawn_at"), "not used here: the respawn_button function plays it");
+  assert.equal(r.get("fly_rate"), undefined); // the HP-rate fly stays the runner's: live
+  assert.equal(boxReplaced(null).size, 0);
+  // the same words as the lint's note on a block of such a setting (poring_flow lint/settings.py _use)
+  const lint = new URL("../../../../../packages/poring_flow/src/poring_flow/lint/settings.py", import.meta.url);
+  if (existsSync(lint)) {
+    const py = readFileSync(lint, "utf8");
+    assert.match(py, /f"not used \{'here' if not on else on\[1:\]\}: the \{by\} "\s*f"\{kind\} plays it"/);
+  }
 });
 
 test("the /maps inspector's tabs list says what the box plays of each name in a Run", () => {
@@ -80,8 +98,8 @@ test("the /maps inspector's tabs list says what the box plays of each name in a 
 // matpilot round 18 #4: on a phone the strip folds to ONE line; the IN A RUN part's short words lead
 test("the strip's folded line: IN A RUN in a few words, else the first part", () => {
   const short = boxTabShort(BOX, "xmas_dun02", "survival");
-  assert.equal(short, "3 events replace the runner's own");
-  assert.equal(boxTabShort(BOX, "xmas_dun02", "exits"), "3 functions replace the runner's own");
+  assert.equal(short, "3 events replace the runner");
+  assert.equal(boxTabShort(BOX, "xmas_dun02", "exits"), "3 functions replace the runner");
   assert.equal(boxTabShort(BOX, "xmas_dun02", "keys"), null);
   assert.equal(boxTabShort(null, "xmas_dun02", "survival"), null);
   assert.match(boxTabShort({ ...BOX, playable: false }, "xmas_dun02", "survival") ?? "", /^once it can play, 3 events replace/);
@@ -90,8 +108,16 @@ test("the strip's folded line: IN A RUN in a few words, else the first part", ()
     { head: "IMPORTS", text: "its tabs (keys, survival) and Global" },
     { head: "IN A RUN", text: boxTabNote(BOX, "xmas_dun02", "survival", values) ?? "", short },
   ];
-  assert.equal(stripFoldLine(parts), "IN A RUN: 3 events replace the runner's own · 2 more");
-  assert.equal(stripFoldLine(parts.slice(0, 2)), "MAP: xmas_dun02 · 1 more");
+  assert.equal(stripFoldLine(parts), "IN A RUN: 3 events replace the runner · +2");
+  assert.equal(stripFoldLine(parts.slice(0, 2)), "MAP: xmas_dun02 · +1");
   assert.equal(stripFoldLine([]), "");
-  assert.equal(boxTabShort(BOX, "xmas_dun02", "knife"), "2 functions replace the runner's own");
+  assert.equal(boxTabShort(BOX, "xmas_dun02", "knife"), "2 functions replace the runner");
+  // round 21 (the re-measure of round 20): every tab's folded line fits 366 px at 390, with the
+  // most parts a map node's strip shows (MAP, EXITS, RUN, IMPORTS, REPLACES GLOBAL'S, SETTINGS)
+  for (const tab of ["survival", "knife", "exits", "respawn", "monsters", "main", "aim"]) {
+    const s = boxTabShort(BOX, "xmas_dun02", tab);
+    if (!s) continue;
+    const line = stripFoldLine([{ head: "MAP", text: "" }, { head: "EXITS", text: "" }, { head: "RUN", text: "" }, { head: "IMPORTS", text: "" }, { head: "SETTINGS", text: "" }, { head: "IN A RUN", text: "", short: s }]);
+    assert.ok(line.length <= FOLD_MAX_CHARS, `${tab}: ${line.length} characters: ${line}`);
+  }
 });

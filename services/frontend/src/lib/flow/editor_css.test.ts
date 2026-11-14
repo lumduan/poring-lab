@@ -87,7 +87,10 @@ test("on a phone the Python file buttons are one row that scrolls sideways; the 
   assert.match(files.body, /overflow-x:\s*auto/);
   const code = ruleWith(studio, ".studio-side .code-view", sheet);
   assert.match(code?.body ?? "", /min-height:\s*12rem/);
-  assert.match(code?.body ?? "", /flex:\s*1 0 auto/);
+  // round 21 (the re-measure of round 20): the code box scrolls inside, the file row and the × stay
+  assert.match(code?.body ?? "", /flex:\s*1 1 0/);
+  assert.match(code?.body ?? "", /overflow:\s*auto/);
+  for (const sel of [".studio-side > .studio-panel-header", ".studio-side > .python-files"]) assert.match(ruleWith(studio, sel, sheet)?.body ?? "", /position:\s*sticky/, sel);
   // still inside the phone's media block (not a wide screen's rule)
   const media = studio.lastIndexOf("@media (max-width: 48rem)", files.at);
   assert.ok(media > 0 && studio.indexOf("@media", media + 1) > files.at);

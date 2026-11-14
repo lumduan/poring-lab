@@ -8,8 +8,9 @@ import type { Finding, LintDoc } from "./api.ts";
 
 /** A detached stack: its top block, how many blocks it holds, and whether it is a value block. */
 export type Loose = { id: string | null; type: string; words: string; count: number; value: boolean };
-/** A block that cannot become the IR: where (a node path or a field), why, and its block. */
-export type Issue = { where: string; text: string; id: string | null };
+/** A block that cannot become the IR: where (a node path or a field), why, and its block; `note`:
+ * the short words its own rows say (round 21: a setting block set on two tabs). */
+export type Issue = { where: string; text: string; id: string | null; note?: string };
 
 const DECORATION = new Set(["BADGE", "RUN", "EVIDENCE"]);
 
@@ -21,6 +22,7 @@ function argWords(a: ArgDef, b: WsBlock, depth: number): string {
     }
     case "input_statement":
     case "input_dummy":
+    case "input_end_row": // round 21: a row's end, no words
     case "field_image":
       return "";
     case "field_label":
@@ -41,7 +43,7 @@ export function blockWords(b: WsBlock, max = 60, depth = 0): string {
   else {
     const parts: string[] = [];
     const d = def as BlockDef & Record<string, unknown>;
-    for (let n = 0; n < 6; n++) {
+    for (let n = 0; n <= 8; n++) {
       const msg = d[`message${n}`] as string | undefined;
       if (msg === undefined) break;
       const args = (d[`args${n}`] as ArgDef[] | undefined) ?? [];
@@ -122,8 +124,14 @@ export function stripFoldLine(parts: StripPart[]): string {
   const first = run ?? parts[0];
   if (!first) return "";
   const more = parts.length - 1;
-  return `${first.head}: ${first.short ?? first.text}${more > 0 ? ` · ${more} more` : ""}`;
+  // round 21 (the re-measure of round 20): "+4", not "4 more" (the line fits 366 px at 390)
+  return `${first.head}: ${first.short ?? first.text}${more > 0 ? ` · +${more}` : ""}`;
 }
+
+/** Round 21: the folded line's longest text that fits the strip at 390 px (366 px wide; the
+ * reviewer measured round 20's 55-character line at 380-421 px, ~7.3 px a character, with " ▸"
+ * after it): 45 characters, two to spare. */
+export const FOLD_MAX_CHARS = 45;
 
 /** /maps' ready sentence (its START map node's id, else null: login is not live yet), and while
  * another input writer of ours plays (``busy``, liverun busyWhy) the reason Run is off instead of

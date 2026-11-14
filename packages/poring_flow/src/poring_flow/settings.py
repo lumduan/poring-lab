@@ -170,7 +170,9 @@ FIELDS: tuple[Field, ...] = (
         "fly_rate",
         "survival",
         "int",
-        "or HP falling faster than",
+        # round 21 (the re-measure of round 20): with fly_below out of the box this read as a
+        # fragment ("or HP falling faster than"): it names its subject
+        "Fly Wing when HP falls faster than",
         50,
         1000,
         1,
@@ -181,7 +183,7 @@ FIELDS: tuple[Field, ...] = (
         "fly_rate_below",
         "survival",
         "share",
-        "while under",
+        "the Fly Wing's fall rule: only while HP is under",
         0.20,
         0.90,
         0.05,
@@ -204,7 +206,8 @@ FIELDS: tuple[Field, ...] = (
         "respawn_confirm_at",
         "respawn",
         "point_or_none",
-        "then confirm with the OK button",
+        # round 21: it began as respawn_at's continuation ("then confirm with the OK button")
+        "the OK button that confirms the respawn",
         flag="--respawn-confirm-at",
     ),  # fmt: skip
     # --- the runner's constants (dungeon@9.44): --tune NAME=VALUE ------------------------------

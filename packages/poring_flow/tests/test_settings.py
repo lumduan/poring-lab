@@ -136,8 +136,8 @@ def test_the_setting_blocks_round_trip_through_the_python_view() -> None:
     g = files["global/knife.py"]
     assert "\nknife_swap = False  # Batt's Knife swap (on / off)\n" in g
     assert '\nsteal_cue = "both"  # the steal cue (popup / both)\n' in g
-    assert '\nrespawn_confirm_at = "none"  # then confirm with the OK button ("X,Y" in the game ' \
-           'picture or "none")' in files["global/respawn.py"]  # fmt: skip
+    assert '\nrespawn_confirm_at = "none"  # the OK button that confirms the respawn ("X,Y" in ' \
+           'the game picture or "none")' in files["global/respawn.py"]  # fmt: skip
     assert "\nLOOT_MAX_S = 30.0  # a loot step at most (s)\n" in files["global/loot.py"]
     # a comment is not the value: the parser reads the assignment, the comment is the words
     loot = files["global/loot.py"]

@@ -183,7 +183,10 @@ export function settingTooltip(f: SettingField, place: SettingPlace | string = {
         : f.kind === "point" || f.kind === "point_or_none"
           ? `a point X, Y in the ${SETTINGS.game_px[0]} x ${SETTINGS.game_px[1]} game picture${f.kind === "point_or_none" ? ', or "none"' : ""}`
           : `${withUnit(f, f.lo)} to ${withUnit(f, f.hi)}, in steps of ${withUnit(f, f.step)}`;
-  const runner = f.flag === "--tune" ? `the runner's ${f.name} (--tune)` : f.flag ? `the runner's ${f.flag}` : "a switch for the settings it needs";
+  // round 21 (the re-measure of round 20): a switch without a flag of its own says WHICH settings
+  // it turns on (weight_exit: weight_home), not "a switch for the settings it needs"
+  const deps = SETTING_BLOCKS.filter((d) => d.needs.some(([n]) => n === f.name)).map((d) => `${d.var} (${d.words})`);
+  const runner = f.flag === "--tune" ? `the runner's ${f.name} (--tune)` : f.flag ? `the runner's ${f.flag}` : deps.length ? `a switch with no flag of its own: ${deps.join(", ")} ${deps.length === 1 ? "is" : "are"} used only while it is on` : "a switch with no flag of its own";
   const global = at.global ? " A map's block replaces Global's there." : "";
   const fallback = at.fallback ?? (at.global ? "Global's value (a map node), else the default" : `the default, ${withUnit(f, f.default)}`);
   const note = at.note?.unused ? `\nIn a Run of this project: ${at.note.unused}.` : "";
@@ -310,9 +313,9 @@ export function settingRows(f: SettingField): SettingRows {
 }
 /** PURE: the lint's "not used" words as the block's note rows (at most SETTING_NOTE_ROWS; the rest
  * in the tooltip), each line no wider than the budget. */
-export function noteLines(text: string): string[] {
+export function noteLines(text: string, mark = "·"): string[] {
   if (!text) return [];
-  const lines = wrapBalanced(`· ${text}`, LINE_MAX);
+  const lines = wrapBalanced(`${mark} ${text}`, LINE_MAX);
   return lines.length <= SETTING_NOTE_ROWS ? lines : [...lines.slice(0, SETTING_NOTE_ROWS - 1), `${lines[SETTING_NOTE_ROWS - 1]} …`];
 }
 /** Every row's width of a setting block as laid out (the test's measure; the note rows at their
@@ -476,10 +479,11 @@ export function checklistWithKeys(items: ChecklistItem[], keys: RunKeys | null |
 /** PURE: the setting tabs' one line on /flows' strip ("SETTINGS: the Knife swap -- Batt's technique
  * ...: 6 settings; a map's block replaces Global's, a deleted one falls back"), or null for a tab
  * that is not a settings group's or holds none. */
-export function settingTabNote(tab: Tab, nodeKind: string): string | null {
+export function settingTabNote(tab: Tab, nodeKind: string, hasGlobal = true): string | null {
   const g = groupOf(tab.name);
   const n = Object.keys(tab.vars).filter((k) => SETTING_BY_VAR.get(k)?.block).length;
   if (!g || g.id === "keys" || n === 0) return null;
-  const rule = nodeKind === "global" ? "every map node takes these unless it sets its own" : "these replace Global's here; a deleted one falls back to Global's, else the default";
+  // round 21 (the re-measure of round 20): Global is named only where the project has a Global node
+  const rule = nodeKind === "global" ? "every map node takes these unless it sets its own" : hasGlobal ? "these replace Global's here; a deleted one falls back to Global's, else the default" : "a deleted one falls back to the default";
   return `${g.title} -- ${g.note}: ${n} setting${n === 1 ? "" : "s"} of the runner's hunt core (${rule})`;
 }

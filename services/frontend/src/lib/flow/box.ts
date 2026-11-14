@@ -48,6 +48,20 @@ function playedFromElsewhere(box: BoxDoc, node: string, tab: string): BoxTakeove
   return box.takeovers.filter((t) => t.by && t.path && !t.path.startsWith(`${node}/${tab}/`) && t.settings.some((s) => SETTING_BY_NAME.get(s)?.group === tab));
 }
 
+/** PURE (round 21, the re-measure of round 20): the settings the node's box replaces in a Run, each
+ * with the words the lint puts on its block (poring_flow lint/settings.py `_use`: "not used here:
+ * the drink event plays it"; layout of the same rows: live.takeovers), for the Settings flyout and
+ * the search: a setting the box replaces is listed greyed with these words, and becomes live again
+ * when the person deletes the event that plays it (the lint runs again). */
+export function boxReplaced(box: BoxDoc | null | undefined): Map<string, string> {
+  const out = new Map<string, string>();
+  for (const t of box?.takeovers ?? []) {
+    if (!t.by) continue;
+    for (const s of t.settings) if (!out.has(s)) out.set(s, `not used here: the ${t.by} ${t.kind} plays it`);
+  }
+  return out;
+}
+
 /** PURE: the note on a tab whose events or functions the box plays in a Run of this project
  * ("survival": drink, fly_away, bag_full), or null: what each replaces of the runner's, with the
  * setting block it replaces and its value, and what stays the runner's (the HP-rate fly). `node`
@@ -65,7 +79,8 @@ export function boxTabNote(box: BoxDoc | null | undefined, node: string, tab: st
     return `${by} replaces ${[...new Set(each)].join(" and ")}`;
   });
   const flies = here.some((t) => t.play === "fly_hp");
-  const stays = flies && box.stays.length ? ` The HP-rate fly stays the runner's (the settings ${box.stays.map((s) => settingText(s, values)).join(" ")}).` : "";
+  // round 21 (the re-measure of round 20): each setting by its own words, one after the other
+  const stays = flies && box.stays.length ? ` The HP-rate fly stays the runner's: ${box.stays.map((s) => settingText(s, values)).join("; ")}.` : "";
   const soon = box.playable ? "In a Run of this project" : "Once this box can play (Run refuses it as it is)";
   const head = parts.length ? `${soon} these play inside the hunt core, and the runner's own are off: ${parts.join("; ")}.${stays}` : "";
   // round 20 #4a: the group's settings another tab's event or function plays (the respawn tab)
@@ -88,9 +103,11 @@ export function boxTabShort(box: BoxDoc | null | undefined, node: string, tab: s
     const count = (word: BoxTakeover["kind"]) => [...m.values()].filter((k) => k === word).length;
     return (["event", "function", "model"] as const).map((k) => [count(k), k] as const).filter(([n]) => n > 0).map(([n, k]) => `${n} ${k}${n === 1 ? "" : "s"}`).join(" and ");
   };
+  // round 21 (the re-measure of round 20: the folded line was 380-421 px in 366 at 390): fewer words
   const soon = box.playable ? "" : "once it can play, ";
-  if (!kinds.size) return `${soon}${counted(away)} of another tab play${away.size === 1 ? "s" : ""} part of it`;
-  return `${soon}${counted(kinds)} replace${kinds.size === 1 ? "s" : ""} the runner's own`;
+  const tabs = [...new Set(playedFromElsewhere(box, node, tab).map((t) => tabOfPath(t.path)))].join(", ");
+  if (!kinds.size) return `${soon}${counted(away)} in ${tabs} play${away.size === 1 ? "s" : ""} it`;
+  return `${soon}${counted(kinds)} replace${kinds.size === 1 ? "s" : ""} the runner`;
 }
 
 /** PURE: one name's words in a node's list of tabs and names (the /maps inspector), when the box
