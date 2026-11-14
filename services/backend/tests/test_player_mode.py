@@ -389,7 +389,7 @@ def test_the_run_ends_while_one_fly_wing_is_left() -> None:
     assert dh.player_wings_low(fly, 1) and dh.player_wings_low(fly, 0)
     assert not dh.player_wings_low(fly, 2) and not dh.player_wings_low(fly, None)
     assert not dh.player_wings_low(pot, 1)
-    loop = SRC[SRC.index("keep_n: int | None = None") :]
+    loop = SRC[SRC.index("keep_n = None") :]
     assert loop.index("if player and player_wings_low(item_, n_):") < loop.index(
         'reason = f"stock_keep: {keep_n} Fly Wing(s) left, kept for the end"'
     )

@@ -174,7 +174,7 @@ def test_unreach_escape_is_wired_only_behind_its_flag() -> None:
     i_clear = nh.index("ua_locks.clear()")
     i_esc = nh.index("act_u = unreach_escape(tr_u, tick)")
     i_mode = nh.index('hs.mode = "search"')
-    i_cont = nh.index("continue")
+    i_cont = nh.index("return TICK_DONE")  # 5b-1: the step's continue
     i_lock = nh.rindex("lock = None")
     assert i_on < i_rec < i_tr < i_clear < i_esc < i_mode < i_cont < i_lock
     assert "hs.last_walk = tick + UNREACH_GRACE_S" in nh and "hs.fly_at = time.monotonic()" in nh

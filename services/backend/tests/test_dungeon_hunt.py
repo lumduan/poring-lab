@@ -15,6 +15,7 @@ ROOT = Path(__file__).resolve().parents[3]
 sys.path.insert(0, str(ROOT / "scripts"))
 
 import dungeon_hunt as dh  # noqa: E402
+import huntstate_check as hc  # noqa: E402
 
 A, B, C = (dh.STRATEGIES[k] for k in "ABC")
 
@@ -2136,7 +2137,7 @@ def test_unread_step_is_wired_into_the_pos_unread_rule_only() -> None:
         assert end_ in body
     # LF-4 leaves the fight branch alone: the rule is still checked outside fights only
     fight_end = "time.sleep(max(0.0, 1.0 / READ_HZ - (time.monotonic() - tick)))\n"
-    assert fight_end + "                    continue" in src
+    assert fight_end + "                    return TICK_DONE" in src  # 5b-1: the step's continue
 
 
 # --- --still-target (dungeon@9.23, LS-2; rogue-xmas02.md Study S-LS) ------------------------------
@@ -3042,8 +3043,11 @@ def test_bare_steal_is_wired_off_by_default_at_strike_tick_escapes_and_end() -> 
     for ind in (" " * 24, " " * 16):  # the boss guard's walk-away; --unreach-escape's walk
         assert (f"{ind}hs.bare.escape()  # dungeon@9.27: never walk away bare\n{ind}"
                 'click_at(u_w, v_w, "walk")') in src  # fmt: skip
-    assert ('hs.bare.tick(tick, hs.lock is not None, hs.mode == "fight", img, frac)\n'
-            "                # --- FIGHT: locked, or scan for the attacker") in src  # fmt: skip
+    tick_ = hc.driver_loop(ast.parse(src)).body  # 5b-1: the tick as the driver plays its steps
+    i_bt = next(i for i, x in enumerate(tick_) if ast.unparse(x) == (
+        "if hs.bare is not None:\n    hs.bare.tick(tick, hs.lock is not None, hs.mode == 'fight', "
+        "img, frac)"))  # fmt: skip
+    assert ast.unparse(tick_[i_bt + 1].test) == "hs.mode == 'fight'"  # type: ignore[attr-defined]
     i_end = src.index('bare_final = hs.bare.run_end(dead=hs.reason == "death")')
     assert i_end < src.index('ev({"kind": "run_end", "reason": hs.reason')
     assert '**({"bare": bare_final} if bare_final is not None else {})' in src
@@ -3327,7 +3331,9 @@ def test_bare_ready_is_wired_after_the_loot_step_and_holds_only_the_search_walk(
             "                                  tick - hs.fly_at, tick < hs.boss_until, "
             "unread_active())") in hook  # fmt: skip
     assert "tick - last_click_t[0] >= BARE_READY_SETTLE_S, frac)" in hook
-    assert 'if got_r == "swap":\n                        continue' in hook
+    assert ('if got_r == "swap":\n                        # the swap took ~2 s: a fresh tick '
+            "reads the fight signs first\n"
+            "                        return TICK_DONE") in hook  # fmt: skip
     assert "and not ready_hold \\\n" in src[i_rest:]  # the search walk's click waits
     body = src[src.index("        def click_at(u: float, v: float, why: str) -> None:") :]
     body = body[: body.index("\n        def ", 10)]
@@ -3969,8 +3975,8 @@ def test_queue_is_wired_after_the_loot_step_before_the_search_walk_through_strik
     i_rest = src.index("# --- REST (B / C): to the nearest spot, sit until HP 100 %")
     i_walk = src.index("and not ready_hold \\\n", i_rest)  # the search walk's click
     assert i_loot < i_due < i_set < i_after < i_ready < i_pick < i_rest < i_walk
-    assert src[i_loot:i_due].count("continue") == 1  # a loot SWORD (a new fight): no pick due
-    assert src[i_pick:i_rest].count("continue") == 1
+    assert src[i_loot:i_due].count("return TICK_DONE") == 1  # a loot SWORD (a new fight)
+    assert src[i_pick:i_rest].count("return TICK_DONE") == 1
     i_fight = src.index("                # --- FIGHT: locked, or scan for the attacker")
     book = ('if hs.mode == "fight":\n                    if q_on and boxes is not None:  # '
             "dungeon@9.30 (--queue): bookkeeping only\n"

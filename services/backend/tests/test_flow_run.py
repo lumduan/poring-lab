@@ -232,7 +232,7 @@ def test_stop_goes_through_the_runners_normal_end(tmp_path: Path) -> None:
     src = (ROOT / "scripts" / "dungeon_hunt.py").read_text()
     assert '"--stop-file"' in src and "if stop_file is not None and stop_file.exists():" in src
     i = src.index("if stop_file is not None and stop_file.exists():")
-    assert "break  # the NORMAL end" in src[i : i + 400]
+    assert "# the NORMAL end" in src[i : i + 400] and "return RUN_END" in src[i : i + 400]
     assert fr.STOP_GRACE_S >= 30  # a tick is 0.2 s; a strike or loot step can take seconds
 
 

@@ -24,6 +24,7 @@ ROOT = Path(__file__).resolve().parents[3]
 sys.path.insert(0, str(ROOT / "scripts"))
 
 import dungeon_hunt as dh  # noqa: E402
+import huntstate_check as hc  # noqa: E402
 
 SRC = (ROOT / "scripts" / "dungeon_hunt.py").read_text()
 TREE = ast.parse(SRC)
@@ -280,13 +281,11 @@ def test_the_look_runs_in_any_mode_but_sitting_before_the_fight_branch() -> None
     i_fight = SRC.index("                # --- FIGHT: locked, or scan for the attacker")
     i_fight_if = SRC.index('                if hs.mode == "fight":\n', i_fight)
     assert i_prune_936 < i_hook < i_fight < i_fight_if  # before the fight branch: fights looked at
-    i_loop = SRC.index("            while time.monotonic() < t_end:")
-    assert i_loop < i_hook
+    i_steps = SRC.index("            def step_begin() -> str | None:")  # 5b-1: the loop's steps
+    assert i_steps < i_hook < SRC.index("            while time.monotonic() < t_end:")
     # no mode test guards it (search, fight, after, a walk to rest): only sitting stops it -- the
     # hook is a statement of the loop's own body, its one inner test `lm_kills and not sitting`
-    run_node = _fn("run")
-    loop = next(n for n in ast.walk(run_node) if isinstance(n, ast.While)
-                and "t_end" in _src(n.test))  # fmt: skip
+    loop = hc.driver_loop(_fn("run"))  # 5b-1: the tick as the driver plays its steps
     outer = [n for n in loop.body if isinstance(n, ast.If) and _src(n.test) == "lm_on"
              and "memory_look(tick)" in _src(n)]  # fmt: skip
     assert len(outer) == 1
@@ -373,7 +372,7 @@ def test_the_loot_step_is_9_36s_plus_two_marked_blocks() -> None:
 
 def test_the_calm_path_is_9_36s_after_the_fight_branch_before_the_after_block() -> None:
     i_fight = SRC.index("                if hs.mode == \"fight\" or (hs.lock is not None):\n"
-                        "                    continue\n")  # fmt: skip
+                        "                    return TICK_DONE\n")  # fmt: skip
     i_rk = SRC.index("if rk_on and rk_pending and recheck_tick(tick, calm):")
     i_hook = SRC.index("if lm_on and lm_mem and memory_tick(tick, calm):")
     i_after = SRC.index("                # --- AFTER a fight: loot, then rest or search")
@@ -403,7 +402,7 @@ def test_the_flag_off_changes_nothing() -> None:
     """Every use of the memory's state and closures in the main loop, at the run's end and inside
     the loot step sits under an ``if lm_on ...`` test (False unless the flag): the default run is
     today's."""
-    run_node = _fn("run")
+    run_node = hc.inline_steps(_fn("run"))[0]  # 5b-1: the tick as the driver plays its steps
     parent = _parents(run_node)
     loop = next(n for n in ast.walk(run_node) if isinstance(n, ast.While)
                 and "t_end" in _src(n.test))  # fmt: skip

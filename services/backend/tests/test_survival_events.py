@@ -27,6 +27,7 @@ sys.path.insert(0, str(ROOT / "scripts"))
 import dungeon_hunt as dh  # noqa: E402
 import flow_play as fp  # noqa: E402
 import flow_run as fr  # noqa: E402
+import huntstate_check as hc  # noqa: E402
 
 from poring_flow import live  # noqa: E402
 from poring_flow import project as pj  # noqa: E402
@@ -415,10 +416,8 @@ def _src(fn: Any) -> ast.AST:
 
 
 def _loop() -> ast.While:
-    loops = [n for n in ast.walk(_src(dh.run)) if isinstance(n, ast.While)
-             and ast.unparse(n.test) == "time.monotonic() < t_end"]  # fmt: skip
-    assert len(loops) == 1
-    return loops[0]
+    """The main loop as the driver plays it (5b-1: the steps' bodies in their order)."""
+    return hc.driver_loop(_src(dh.run))
 
 
 def _assigned(node: ast.AST) -> set[str]:

@@ -110,6 +110,29 @@ SECTIONS = (
     ("pace", "time.sleep(max(0.0, 1.0 / READ_HZ"),
 )
 
+# T2: each step's one-line docstring (live-blocks.md 13.2's table); a step without one has none
+STEP_DOCS = {
+    "begin": "The tick's clock; the Run's Stop; a stop or a Fly Wing from inside an action.",
+    "sense": "The frame, HP and SP, the stock re-reads, the Miss cue, dead, the position.",
+    "hook": "The live player's tick hook (stage 1): its stop ends the run.",
+    "vitals": "Death; the house rest's unexpected load screen.",
+    "battle_log": "The Battle Log's new lines: the boss line, hits, the exp kills, the loot list.",
+    "survive": "Calm; the box's survival events (stage 2); the runner's sustain; Auto Guard.",
+    "engage": "The fight signs, the Garm Baby alarm, the boss guard; the engage: mode fight.",
+    "ui": "The UI watch (every UI_EVERY_S): the weight, the box's weight event, home.",
+    "upkeep": "Overweight; the idle clock; the recheck / memory ageing; the HUD; bare.tick.",
+    "fight": "Mode fight: the kill read, unlock, the quiet end, the strikes, the scans.",
+    "hold": "A lock without a fight waits; the loot recheck; the loot memory.",
+    "loot": "Mode after: the queue cleared; the loot step.",
+    "after": "The queue pick due; overweight; the rest decision; after becomes search.",
+    "ready": "--bare-ready's idle swap; --queue's next target.",
+    "rest": "Mode rest: sitting, the house rest, the walk to a rest spot.",
+    "idle": "The idle watchdog: uncarve, or a Fly Wing.",
+    "plant": "The White Plant sweep.",
+    "search": "The goal; the walk click (pick, dodge, trust, stall, carve); melee-ring.",
+    "position": "The unread position's Fly Wing; 30 s unread ends the run.",
+    "pace": "The sleep to READ_HZ.",
+}
 DYNAMIC = ("exec", "eval", "locals", "vars", "globals")
 SCOPES = (ast.FunctionDef, ast.AsyncFunctionDef, ast.Lambda, ast.ClassDef, ast.ListComp,
           ast.SetComp, ast.DictComp, ast.GeneratorExp)  # fmt: skip
@@ -724,6 +747,18 @@ def loop_only_names(ri: RunInfo) -> list[str]:
     return sorted(out)
 
 
+def _wrap(names: Sequence[str], indent: int, width: int = 100) -> list[list[str]]:
+    """`nonlocal` lists that fit the line width (several statements: the same declaration)."""
+    out: list[list[str]] = []
+    cur: list[str] = []
+    for n in names:
+        if cur and indent + len("nonlocal ") + len(", ".join([*cur, n])) > width:
+            out.append(cur)
+            cur = []
+        cur.append(n)
+    return [*out, cur] if cur else out
+
+
 def derive_outline(src: str, spec: Sequence[tuple[str, str]] = SECTIONS) -> str:
     return outline_edits(src, spec).apply()
 
@@ -760,8 +795,9 @@ def outline_edits(src: str, spec: Sequence[tuple[str, str]] = SECTIONS) -> Edits
             ed.replace(node.lineno, node.col_offset, node.col_offset + len(kw), f"return {sig}")
         nl = bound_in(stmts)
         head = ("\n" if k else "") + f"{dind}def step_{name}() -> str | None:\n"
-        if nl:
-            head += f"{ind}nonlocal {', '.join(nl)}\n"
+        if name in STEP_DOCS:
+            head += f'{ind}"""{STEP_DOCS[name]}"""\n'
+        head += "".join(f"{ind}nonlocal {', '.join(g)}\n" for g in _wrap(nl, len(ind)))
         ed.insert(prev_end + 1, 0, head)
         prev_end = stmts[-1].end_lineno or stmts[-1].lineno
     names = [n for n, _ in secs]
@@ -842,11 +878,10 @@ def inline_steps(run: ast.FunctionDef) -> tuple[ast.FunctionDef, list[str], list
         if ast.unparse(fn.returns) != "str | None" if fn.returns else True:
             bad.append(f"step_{name}: its return annotation")
         stmts = list(fn.body)
-        if stmts and isinstance(stmts[0], ast.Nonlocal):
-            declared = set(stmts[0].names)
+        declared: set[str] = set()
+        while stmts and isinstance(stmts[0], ast.Nonlocal):  # the step's head (one or more)
+            declared |= set(stmts[0].names)
             stmts = stmts[1:]
-        else:
-            declared = set()
         if set(bound_in(stmts)) != declared:
             bad.append(f"step_{name}: binds {sorted(set(bound_in(stmts)) ^ declared)} "
                        "not as nonlocal (a step has no local of its own)")  # fmt: skip
@@ -869,6 +904,21 @@ def inline_steps(run: ast.FunctionDef) -> tuple[ast.FunctionDef, list[str], list
         bad.append(f"run()'s declarations: {sorted(declared ^ need)} differ from the names only "
                    "the steps bind")  # fmt: skip
     return run, order, bad
+
+
+def driver_loop(tree: ast.AST) -> ast.While:
+    """For tests that reason about "the loop's statements": run()'s main loop as the driver PLAYS
+    it -- the steps' bodies inlined in hunt_steps' order, `return TICK_DONE` as `continue`,
+    `return RUN_END` as `break` (OUTLINE's inverse; `check` proves it is the same program). `tree`:
+    run()'s FunctionDef or a module holding it; a run() not outlined: its own loop."""
+    run = tree if isinstance(tree, ast.FunctionDef) else next(
+        n for n in ast.walk(tree)
+        if isinstance(n, ast.FunctionDef) and n.name == "run")  # fmt: skip
+    outlined = any(isinstance(n, ast.FunctionDef) and n.name == "hunt_tick" for n in ast.walk(run))
+    got = inline_steps(run)[0] if outlined else run
+    (loop,) = [n for n in ast.walk(got) if isinstance(n, ast.While)
+               and ast.unparse(n.test) == LOOP_TEST]  # fmt: skip
+    return loop
 
 
 def _nodoc(fn: ast.FunctionDef) -> ast.FunctionDef:

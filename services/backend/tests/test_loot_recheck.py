@@ -20,6 +20,7 @@ ROOT = Path(__file__).resolve().parents[3]
 sys.path.insert(0, str(ROOT / "scripts"))
 
 import dungeon_hunt as dh  # noqa: E402
+import huntstate_check as hc  # noqa: E402
 
 SRC = (ROOT / "scripts" / "dungeon_hunt.py").read_text()
 TREE = ast.parse(SRC)
@@ -196,8 +197,8 @@ def test_the_recheck_never_sleeps_in_the_loop() -> None:
         "if rk_on and rk_pending:  # dungeon@9.36: the pending kills age out every tick\n"
         "                    recheck_prune(tick)\n",
         "if rk_on and rk_pending and recheck_tick(tick, calm):\n"
-        "                    continue  # it hovered (or a fight began): a fresh tick reads the "
-        "signs first\n",
+        "                    # it hovered (or a fight began): a fresh tick reads the signs first\n"
+        "                    return TICK_DONE\n",
         "if rk_on:  # dungeon@9.36: the loot step just asked the item model (with a\n"
         '                        rk_st["last"] = time.monotonic()  # position): the recheck '
         "waits its 1 s\n",
@@ -244,7 +245,7 @@ def test_the_loot_step_is_unchanged_and_the_kills_are_registered_at_both_kill_si
 
 def test_the_hook_runs_after_the_fight_branch_before_the_after_block() -> None:
     i_fight = SRC.index("                if hs.mode == \"fight\" or (hs.lock is not None):\n"
-                        "                    continue\n")  # fmt: skip
+                        "                    return TICK_DONE\n")  # fmt: skip
     i_hook = SRC.index("if rk_on and rk_pending and recheck_tick(tick, calm):")
     i_after = SRC.index("                # --- AFTER a fight: loot, then rest or search")
     i_loot = SRC.index("got_ = loot_step(hs.loot_list, hs.fight_ref)")
@@ -278,6 +279,7 @@ def test_the_flag_off_changes_nothing() -> None:
     """Every use of the recheck's state in the main loop (and at the run's end) sits under an
     ``if rk_on ...`` test (False unless the flag): the default run is today's."""
     run_node = next(n for n in TREE.body if isinstance(n, ast.FunctionDef) and n.name == "run")
+    run_node = hc.inline_steps(run_node)[0]  # 5b-1: the tick as the driver plays its steps
     parent: dict[ast.AST, ast.AST] = {}
     for node in ast.walk(run_node):
         for child in ast.iter_child_nodes(node):

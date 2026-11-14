@@ -167,6 +167,18 @@ def test_the_checker_passes_the_rewrite_and_prints_every_condition() -> None:
     assert "resolver vs symtable" in out and "the same" in out
 
 
+def test_driver_loop_gives_the_tests_the_loop_as_the_driver_plays_it() -> None:
+    """Tests that reason about "the loop's statements" read hc.driver_loop: the outlined toy's
+    loop with its steps inlined is the lifted toy's loop, statement for statement."""
+    ri = hc.parse_run(TOY)
+    lifted = hc.derive_lift(TOY, hc.lifted_names(ri, (), ()), ALIASED)
+    want = hc.driver_loop(ast.parse(lifted))
+    got = hc.driver_loop(ast.parse(_derive(TOY)))
+    assert len(got.body) == len(want.body) > 5
+    assert [ast.unparse(x) for x in got.body] == [ast.unparse(x) for x in want.body]
+    assert any(isinstance(n, ast.Continue) for n in ast.walk(got))  # the signals as they were
+
+
 # --- positive cases: each kind of wrong rewrite is named -----------------------------------------
 def test_a_wrong_rename_of_a_shadowing_parameter_is_caught_and_plays_differently() -> None:
     new = _derive(TOY)

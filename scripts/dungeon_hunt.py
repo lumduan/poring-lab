@@ -9472,16 +9472,176 @@ def run(a: argparse.Namespace, *, hook: Any = None, session: tuple[Any, Any] | N
 
         try:
             stop_file = Path(a.stop_file) if getattr(a, "stop_file", None) else None
-            while time.monotonic() < t_end:
+            # run()'s locals only the steps bind (nonlocal): declared here, never set here
+            Image: Any
+            _i: Any
+            _r2: Any
+            _res: Any
+            _rp: Any
+            act_: Any
+            act_u: Any
+            added_q: Any
+            ag_on: Any
+            ahead_: Any
+            aim: tuple[float, float] | None
+            approaching: Any
+            at_spot: Any
+            boss_hit: str | None
+            box_fly: str | None
+            box_line: Any
+            bx_: Any
+            c: Any
+            c2: Any
+            c_p: Any
+            c_q: Any
+            c_w: Any
+            calm: Any
+            cell_c: Any
+            cell_h: Any
+            cells_p: Any
+            cells_q: Any
+            clicks0_: Any
+            cs: Any
+            dark: Any
+            dead: Any
+            diag_due: Any
+            dodge: Any
+            dropped: Any
+            dt_h: Any
+            end_h: Any
+            ext_: Any
+            fb_why: str | None
+            fits: Any
+            fits_plain: Any
+            fits_q: Any
+            found: Any
+            found_p: Any
+            frac: Any
+            free_: Any
+            fresh: Any
+            frs: Any
+            full: Any
+            fwd: Any
+            garm_now: Any
+            goal: Any
+            got_: Any
+            got_b: Any
+            got_d: Any
+            got_h: Any
+            got_r: Any
+            h_: Any
+            held: Any
+            here_b: Any
+            hit_now: Any
+            i_p: Any
+            idle: Any
+            img: Any
+            img_meta: Any
+            item_: Any
+            keep_n: int | None
+            lf2_: Any
+            lf_rec: dict[str, Any]
+            ln: Any
+            lrel: Any
+            mc_: Any
+            n_: Any
+            n_lock: Any
+            n_r: Any
+            n_w: Any
+            near_: Any
+            near_end: Any
+            new: Any
+            new_kill: Any
+            ni_: Any
+            nxt_: Any
+            off_t: Any
+            out_item: Any
+            overweight: Any
+            p_: Any
+            pct: Any
+            pick_how: Any
+            pos: Any
+            q: Any
+            quiet: Any
+            rd: Any
+            rd_why: Any
+            reach_w: Any
+            read_h: Any
+            ready_hold: Any
+            rec_w: Any
+            red_now: Any
+            rel: Any
+            rel_b: Any
+            rel_d: Any
+            rel_q: Any
+            res: Any
+            res_q: Any
+            res_w: Any
+            ring_on: Any
+            seen_: Any
+            sh_: Any
+            since: Any
+            sit_why: Any
+            skip_b: Any
+            skip_s: Any
+            sp_e: Any
+            spf: Any
+            spot: Any
+            spp: Any
+            st_: Any
+            still_: Any
+            streak_: Any
+            swing_now: Any
+            t_h: Any
+            t_q: Any
+            taken_new: Any
+            tick: Any
+            tr_u: Any
+            tw_: Any
+            typ: Any
+            u: Any
+            u2: Any
+            u_b: Any
+            u_d: Any
+            u_l: Any
+            u_p: Any
+            u_q: Any
+            u_w: Any
+            usable: Any
+            v: Any
+            v2: Any
+            v_b: Any
+            v_d: Any
+            v_l: Any
+            v_p: Any
+            v_q: Any
+            v_w: Any
+            verdict_q: Any
+            w_now: Any
+            wa_: Cell | None
+            wa_fits: Any
+            wa_reach: Any
+            what: Any
+            why: Any
+            why_bw: Any
+            why_s: Any
+            why_w: Any
+            why_wh: Any
+            wt_: Any
+
+            def step_begin() -> str | None:
+                """The tick's clock; the Run's Stop; a stop or a Fly Wing from inside an action."""
+                nonlocal tick
                 tick = time.monotonic()
                 if stop_file is not None and stop_file.exists():  # dungeon@9.40: the Run's Stop
                     hs.reason = "stopped: the person pressed Stop"
                     ev({"kind": "stop_file", "path": str(stop_file)})
-                    break  # the NORMAL end: the safe-end escape, the packets, a player's way home
+                    # the NORMAL end: the safe-end escape, the packets, a player's way home
+                    return RUN_END
                 if box_stop[0] is not None:  # dungeon@9.49: the box ended it inside a long action
                     hs.reason = f"stopped: {box_stop[0]}"
                     ev({"kind": "hook_stop", "why": box_stop[0]})
-                    break
+                    return RUN_END
                 if escaped[0]:  # a Fly Wing inside a scan or a strike (guard_tick)
                     escaped[0] = False
                     hs.fly_at = tick
@@ -9491,13 +9651,18 @@ def run(a: argparse.Namespace, *, hook: Any = None, session: tuple[Any, Any] | N
                     # Amendment F: a new spot, the old hits gone
                     hs.here, hs.last_taken = None, -1e9
                     hs.last_swing = -1e9
+
+            def step_sense() -> str | None:
+                """The frame, HP and SP, the stock re-reads, the Miss cue, dead, the position."""
+                nonlocal ag_on, dark, dead, dt_h, fresh, held, img, img_meta, item_, keep_n, lf2_
+                nonlocal lf_rec, mc_, n_, out_item, p_, pct, pos, rd, rd_why, spp
                 img = frame()
                 img_meta = frame_meta[0]  # 9.21 (LF-2): the frame this tick reads
                 pct = hpp.read(img, glyphs)
                 spp = hpp.read(img, glyphs, hpp.SP_DY)
                 if stock_watch is not None and stock_due:  # dungeon@8.4: the stock after a press
                     out_item = None
-                    keep_n: int | None = None  # dungeon@9.35: the Fly Wings kept for the end
+                    keep_n = None  # dungeon@9.35: the Fly Wings kept for the end
                     for item_ in [i for i, t_ in stock_due.items() if tick >= t_]:
                         n_ = hb.read_count(hb.gray(img), stock_watch[1][item_], stock_watch[0])
                         stock_tries[item_] = stock_tries.get(item_, 0) + 1
@@ -9517,11 +9682,11 @@ def run(a: argparse.Namespace, *, hook: Any = None, session: tuple[Any, Any] | N
                             keep_n = n_
                     if out_item is not None:  # no escape (or no potion) left: end, warp home
                         hs.reason = f"stock_out: item {out_item} reads 0 on the hotbar"
-                        break
+                        return RUN_END
                     if keep_n is not None:  # dungeon@9.35: no warp takes a player home, so her
                         # last Fly Wing(s) stay for the end's own escape: the run ends here
                         hs.reason = f"stock_keep: {keep_n} Fly Wing(s) left, kept for the end"
-                        break
+                        return RUN_END
                 if miss_tpl is not None and not hs.sitting and hs.mode != "after":  # dungeon@9.1:
                     # a missed swing AT us (drawn above the attacker, beside us); 9.1b: not read
                     # on the tick after a fight's end, so a Miss still drawn goes to the loot step
@@ -9543,7 +9708,7 @@ def run(a: argparse.Namespace, *, hook: Any = None, session: tuple[Any, Any] | N
                 fresh = tick - hs.fly_at >= FLY_SETTLE_S
                 rd = selfpos.read_minimap(img, digits, light=True) if fresh else None
                 pos, held = pos_ok.check(tick, rd) if rd is not None else (None, None)
-                lf_rec: dict[str, Any] = {}  # LF-1 (logging only, always): the held-back read
+                lf_rec = {}  # LF-1 (logging only, always): the held-back read
                 if held is not None:
                     dt_h = None if held.dt is None else round(held.dt, 2)
                     lf_rec = {"held": list(held.cell), "held_dt": dt_h}
@@ -9561,7 +9726,7 @@ def run(a: argparse.Namespace, *, hook: Any = None, session: tuple[Any, Any] | N
                         ev({"kind": "jump", "from": list(hs.here), "to": list(p_),
                             "since_s": round(tick - hs.last_pos_t, 2)})  # fmt: skip
                         hs.reason = "hard_bar: position jump (map change?)"
-                        break
+                        return RUN_END
                     if ust["t0"] is not None:  # 9.22 (--unread-step): (c) a fresh read, no wing
                         unread_end(
                             "fresh", at=list(p_), held=None if hs.here is None else list(hs.here)
@@ -9573,13 +9738,20 @@ def run(a: argparse.Namespace, *, hook: Any = None, session: tuple[Any, Any] | N
                     "dark": dark, "pos": None if hs.here is None else list(hs.here),
                     "here_age_s": round(tick - hs.last_pos_t, 2), **lf_rec,
                     "rd": rd_why})  # fmt: skip
+
+            def step_hook() -> str | None:
+                """The live player's tick hook (stage 1): its stop ends the run."""
+                nonlocal why_hk
                 if hook is not None:  # dungeon@9.48: the live player's tick hook (the CLI: none)
                     why_hk = hook_stop(hook, HuntTick(tick, pct, spp, bool(dead), hs.here, hs.mode,
                                                       MappingProxyType(counts), img))  # fmt: skip
                     if why_hk is not None:  # its stop: the NORMAL end, as the Stop file's
                         hs.reason = f"stopped: {why_hk}"
                         ev({"kind": "hook_stop", "why": why_hk})
-                        break
+                        return RUN_END
+
+            def step_vitals() -> str | None:
+                """Death; the house rest's unexpected load screen."""
                 if dead:
                     hs.reason = "death"
                     ev(
@@ -9590,7 +9762,7 @@ def run(a: argparse.Namespace, *, hook: Any = None, session: tuple[Any, Any] | N
                             ],
                         }
                     )
-                    break
+                    return RUN_END
                 if house_on:  # gef10-house-rest.md: on the FIELD a load screen nobody asked for
                     # (no door / exit click of ours, no Fly Wing) is a map change: a hard bar
                     hs.gap_since = None if pct is not None else (tick if hs.gap_since is None
@@ -9601,13 +9773,17 @@ def run(a: argparse.Namespace, *, hook: Any = None, session: tuple[Any, Any] | N
                         ev({"kind": "house_gap", "s": round(tick - hs.gap_since, 2),
                             "since_fly_s": round(hs.gap_since - hs.fly_at, 1)})  # fmt: skip
                         hs.reason = "hard_bar: an unexpected load screen (map change?)"
-                        break
+                        return RUN_END
+
+            def step_battle_log() -> str | None:
+                """The Battle Log's new lines: the boss line, hits, the exp kills, the loot list."""
+                nonlocal boss_hit, ln, new, new_kill, taken_new, typ
                 # the Battle Log's new lines (its own process; pixels only)
                 with blt.lock:
                     new = blt.lines[hs.seen_lines :]
                     hs.seen_lines = len(blt.lines)
                 taken_new = None
-                boss_hit: str | None = None
+                boss_hit = None
                 for ln in new:
                     if bosses and ln.get("type") in ("damage", "taken"):  # the boss guard
                         boss_hit = boss_of(ln.get("name_read"), bosses, map_species) or boss_hit
@@ -9646,7 +9822,11 @@ def run(a: argparse.Namespace, *, hook: Any = None, session: tuple[Any, Any] | N
                         hs.lock = None
                 if not blt.alive():
                     hs.reason = "battle_log_reader_died"
-                    break
+                    return RUN_END
+
+            def step_survive() -> str | None:
+                """Calm; the box's survival events (stage 2); the runner's sustain; Auto Guard."""
+                nonlocal Image, box_fly, calm, diag_due, frac, off_t, spf, what, why, why_bx
                 frac = None if pct is None else pct / 100.0
                 spf = None if spp is None else spp / 100.0
                 # sustain first (every strategy), then Auto Guard (S4b2)
@@ -9661,7 +9841,7 @@ def run(a: argparse.Namespace, *, hook: Any = None, session: tuple[Any, Any] | N
                 calm = (tick - hs.last_taken > CALM_S and hs.mode != "fight" and not hs.sitting
                         and not hp_dropped(st.hist, tick))  # fmt: skip
                 off_t = box_off
-                box_fly: str | None = None
+                box_fly = None
                 if box_on:  # dungeon@9.49 (live-blocks.md stage 2): the BOX's survival events on
                     # this tick's values (its boss: the Battle Log read above), BEFORE the runner's
                     box_pressed.clear()
@@ -9684,7 +9864,7 @@ def run(a: argparse.Namespace, *, hook: Any = None, session: tuple[Any, Any] | N
                     if why_bx is not None:  # the box ends the run: the NORMAL end
                         hs.reason = f"stopped: {why_bx}"
                         ev({"kind": "hook_stop", "why": why_bx})
-                        break
+                        return RUN_END
                 if frac is not None:
                     for what, why in sustain(st, tick, frac, spf, strat, calm, off=off_t):
                         if what == "fly":
@@ -9738,6 +9918,11 @@ def run(a: argparse.Namespace, *, hook: Any = None, session: tuple[Any, Any] | N
                             hs.ag_last = time.monotonic()
                             sv.save_ag_last(hs.ag_last)
                             hs.ag_absent = None
+
+            def step_engage() -> str | None:
+                """The fight signs, the Garm Baby alarm, the boss guard; the engage: mode fight."""
+                nonlocal boss_hit, box_line, dropped, garm_now, here_b, hit_now, n_w, near_, seen_
+                nonlocal skip_b, skip_s, sp_e, streak_, swing_now, u_w, v_w, wa_, wa_fits, wa_reach
                 # a fight?
                 hit_now = tick - hs.last_taken < FIGHT_TAKEN_S
                 swing_now = swing_engages(tick, hs.last_swing, hs.swing_floor)  # 9.1b, --miss-cue
@@ -9772,7 +9957,7 @@ def run(a: argparse.Namespace, *, hook: Any = None, session: tuple[Any, Any] | N
                         **({"box": box_fly is not None} if box_line else {})})  # fmt: skip
                     counts["boss_guard"] += 1
                     hs.boss_until = tick + BOSS_AVOID_S
-                    wa_: Cell | None = None
+                    wa_ = None
                     if boss_walk_on and hs.here is not None and not hs.sitting and \
                             boss_walk_allowed(boss_hit, boss_only, boss_walks, tick):  # fmt: skip
                         # dungeon@9.18 (Batt): walk away from a summon when we can
@@ -9814,11 +9999,11 @@ def run(a: argparse.Namespace, *, hook: Any = None, session: tuple[Any, Any] | N
                         hs.loot_list, hs.fight_ref = [], None
                         hs.mode = "search"
                         box_fight.clear()
-                        continue
+                        return TICK_DONE
                     if box_line:  # the box's Fly Wing (if it flew) had the runner's own steps
                         if box_fly is not None:
                             box_fight.clear()
-                            continue
+                            return TICK_DONE
                     elif tick - hs.fly_at > 2.0:
                         if hs.sitting:
                             press("stand", "boss")
@@ -9831,7 +10016,7 @@ def run(a: argparse.Namespace, *, hook: Any = None, session: tuple[Any, Any] | N
                         hs.here, hs.last_taken = None, -1e9
                         box_fight.clear()
                         time.sleep(1.0)
-                        continue
+                        return TICK_DONE
                 if (boxes is not None and hs.mode != "fight" and not hs.sitting
                         and tick >= hs.boss_until):  # a box never  # fmt: skip
                     here_b = hs.here  # stands us up
@@ -9895,6 +10080,10 @@ def run(a: argparse.Namespace, *, hook: Any = None, session: tuple[Any, Any] | N
                     hs.fight_t0 = tick  # 9.16 part 2
                     if hs.fight_ref is None and hs.here is not None:  # the sweep's "before"
                         hs.fight_ref = {"img": img, "here": hs.here, "t": tick}
+
+            def step_ui() -> str | None:
+                """The UI watch (every UI_EVERY_S): the weight, the box's weight event, home."""
+                nonlocal cs, frs, red_now, sh_, w_now, why_bw, why_wh
                 # UI watch (the hard bar: an unknown UI state)
                 if tick - hs.last_ui >= UI_EVERY_S and hs.mode != "fight":
                     hs.last_ui = tick
@@ -9902,7 +10091,7 @@ def run(a: argparse.Namespace, *, hook: Any = None, session: tuple[Any, Any] | N
                     if cs["decision"]["do"] != "clear":
                         r.to_png(cs["frame"], out / "stop-ui.png")
                         hs.reason = f"hard_bar: unknown UI state {cs['decision']}"
-                        break
+                        return RUN_END
                     # Amendment I: the weight, read with the UI watch (no regen at >= 50 %)
                     frs = gm_state._frames(screen)
                     w_now = gm_state.weight_share(gm_state._weight(frs))
@@ -9931,7 +10120,7 @@ def run(a: argparse.Namespace, *, hook: Any = None, session: tuple[Any, Any] | N
                                 ev({"kind": "weight_home", "share": round(w_now, 4),
                                     "red": hs.red_seen, "limit": None, "by": "box",
                                     "why": why_bw})  # fmt: skip
-                                break
+                                return RUN_END
                     else:
                         why_wh = weight_home_due(getattr(a, "weight_home", None), hs.w_share,
                                                  hs.red_seen)  # fmt: skip
@@ -9940,7 +10129,11 @@ def run(a: argparse.Namespace, *, hook: Any = None, session: tuple[Any, Any] | N
                         sh_ = None if hs.w_share is None else round(hs.w_share, 4)
                         ev({"kind": "weight_home", "share": sh_, "red": hs.red_seen,
                             "limit": a.weight_home})  # fmt: skip
-                        break
+                        return RUN_END
+
+            def step_upkeep() -> str | None:
+                """Overweight; the idle clock; the recheck / memory ageing; the HUD; bare.tick."""
+                nonlocal overweight
                 overweight = hs.red_seen or (hs.w_share is not None and hs.w_share >= REGEN_STOP)
                 # Amendment E: a fight, a loot step or a rest is activity, never idle (run 3: a
                 # fight in place + a 25-s loot step read as 45 s of idle and cost a Fly Wing)
@@ -9962,6 +10155,12 @@ def run(a: argparse.Namespace, *, hook: Any = None, session: tuple[Any, Any] | N
                 # dungeon@9.27: a pending read-back, a target's end, the cues
                 if hs.bare is not None:
                     hs.bare.tick(tick, hs.lock is not None, hs.mode == "fight", img, frac)
+
+            def step_fight() -> str | None:
+                """Mode fight: the kill read, unlock, the quiet end, the strikes, the scans."""
+                nonlocal _res, act_u, added_q, approaching, c, c_q, cell_c, cells_q, found, got_b
+                nonlocal got_d, idle, lrel, n_lock, q, quiet, rel_b, rel_d, rel_q, res_q, since, t_h
+                nonlocal t_q, tr_u, u, u_b, u_d, u_l, u_q, v, v_b, v_d, v_l, v_q, verdict_q
                 # --- FIGHT: locked, or scan for the attacker
                 if hs.mode == "fight":
                     if q_on and boxes is not None:  # dungeon@9.30 (--queue): bookkeeping only
@@ -10022,7 +10221,7 @@ def run(a: argparse.Namespace, *, hook: Any = None, session: tuple[Any, Any] | N
                                         time.sleep(1.0)
                                     else:  # no other walk click meanwhile
                                         hs.last_walk = tick + UNREACH_GRACE_S
-                                    continue
+                                    return TICK_DONE
                             hs.lock = None
                         elif getattr(a, "quick_drop", False) and last_strike and quick_no_hit(
                                 last_strike.get("arrow_t"), hs.last_ours, last_strike["t_click"],
@@ -10042,7 +10241,7 @@ def run(a: argparse.Namespace, *, hook: Any = None, session: tuple[Any, Any] | N
                             box_fight.clear()  # dungeon@9.13b: never looked at -> not a miss
                         else:
                             box_fight_done()
-                        continue
+                        return TICK_DONE
                     if mr and hs.lock is not None and hs.here is not None \
                             and hs.last_ours != hs.ours_used \
                             and tick - hs.last_ours <= MR_AFTER_HIT_S:  # fmt: skip
@@ -10149,15 +10348,24 @@ def run(a: argparse.Namespace, *, hook: Any = None, session: tuple[Any, Any] | N
                             ev({"kind": "fight_end", "kills": len(kills_seen)})
                             box_fight_done()
                     time.sleep(max(0.0, 1.0 / READ_HZ - (time.monotonic() - tick)))
-                    continue
+                    return TICK_DONE
+
+            def step_hold() -> str | None:
+                """A lock without a fight waits; the loot recheck; the loot memory."""
                 if hs.mode == "fight" or (hs.lock is not None):
-                    continue
+                    return TICK_DONE
                 # dungeon@9.36 (--loot-recheck): a late drop in a pending kill's cells, while calm
                 if rk_on and rk_pending and recheck_tick(tick, calm):
-                    continue  # it hovered (or a fight began): a fresh tick reads the signs first
+                    # it hovered (or a fight began): a fresh tick reads the signs first
+                    return TICK_DONE
                 # dungeon@9.37 (--loot-memory): no kill came, she is calm, remembered cells left
                 if lm_on and lm_mem and memory_tick(tick, calm):
-                    continue  # it hovered (or a fight began): a fresh tick reads the signs first
+                    # it hovered (or a fight began): a fresh tick reads the signs first
+                    return TICK_DONE
+
+            def step_loot() -> str | None:
+                """Mode after: the queue cleared; the loot step."""
+                nonlocal clicks0_, got_
                 # --- AFTER a fight: loot, then rest or search
                 if hs.mode == "after":
                     queue.clear()
@@ -10172,9 +10380,12 @@ def run(a: argparse.Namespace, *, hook: Any = None, session: tuple[Any, Any] | N
                         hs.loot_settle_t = time.monotonic()  # 9.13d: wait for a fresh position
                     hs.idle_since = time.monotonic()
                     if got_ == "fight":
-                        continue
+                        return TICK_DONE
                     hs.loot_list, hs.fight_ref = [], None
                     empty_cells.clear()  # loot v2: a new fight series starts clean
+
+            def step_after() -> str | None:
+                """The queue pick due; overweight; the rest decision; after becomes search."""
                 # dungeon@9.30 (--queue): the fight and its loot step
                 if q_on and hs.mode == "after":
                     bq_st["due"] = {"t": hs.swing_floor, "fly": hs.fly_at}  # ended: a pick is due
@@ -10206,6 +10417,10 @@ def run(a: argparse.Namespace, *, hook: Any = None, session: tuple[Any, Any] | N
                         hs.hplan, hs.house_fb, hs.house_tries = None, False, 0
                 if hs.mode == "after":
                     hs.mode = "search"
+
+            def step_ready() -> str | None:
+                """--bare-ready's idle swap; --queue's next target."""
+                nonlocal got_r, ready_hold
                 # dungeon@9.27b (--bare-ready): the dagger comes off while IDLE -- right after the
                 # loot step (this tick's "after" became "search" above), after a fight with
                 # nothing to loot, or on any search tick (bare_idle, BareCtl.ready_tick)
@@ -10217,12 +10432,18 @@ def run(a: argparse.Namespace, *, hook: Any = None, session: tuple[Any, Any] | N
                                   tick - hs.fly_at, tick < hs.boss_until, unread_active()),
                         tick - last_click_t[0] >= BARE_READY_SETTLE_S, frac)  # fmt: skip
                     if got_r == "swap":
-                        continue  # the swap took ~2 s: a fresh tick reads the fight signs first
+                        # the swap took ~2 s: a fresh tick reads the fight signs first
+                        return TICK_DONE
                     ready_hold = got_r == "hold"
                 # dungeon@9.30 (--queue): the next target from the fight's queue, AFTER its loot
                 # step and the rest decision and --bare-ready's idle swap, BEFORE the search walk
                 if q_on and bq_st["due"] is not None and queue_next(tick, ready_hold):
-                    continue  # struck: a fresh tick reads the fight's signs first
+                    return TICK_DONE  # struck: a fresh tick reads the fight's signs first
+
+            def step_rest() -> str | None:
+                """Mode rest: sitting, the house rest, the walk to a rest spot."""
+                nonlocal at_spot, cell_h, end_h, fb_why, full, got_h, h_, n_r, read_h, sit_why, spot
+                nonlocal still_
                 # --- REST (B / C): to the nearest spot, sit until HP 100 %
                 if hs.mode == "rest":
                     if hs.sitting:
@@ -10234,12 +10455,12 @@ def run(a: argparse.Namespace, *, hook: Any = None, session: tuple[Any, Any] | N
                                 "pct": pct, "sp_pct": spp})  # fmt: skip
                             hs.mode, hs.goal_path = "search", None  # dungeon@4: back into the area
                         time.sleep(max(0.0, 1.0 / READ_HZ - (time.monotonic() - tick)))
-                        continue
+                        return TICK_DONE
                     if hs.here is not None and trip is not None and not hs.house_fb:
                         # --rest house (gef10-house-rest.md): walk to the chosen house's approach
                         # cell on the route grid, ONE door click from a standstill there, rest
                         # inside, ONE exit click, back on the patrol; anything else -> field rest
-                        fb_why: str | None = None
+                        fb_why = None
                         if hs.hplan is None:
                             hs.hplan = plan_house(hs.here, frac)
                             if hs.hplan is None:
@@ -10253,7 +10474,8 @@ def run(a: argparse.Namespace, *, hook: Any = None, session: tuple[Any, Any] | N
                                 if got_h == "inside":
                                     end_h = house_inside(h_)
                                     if end_h == "time_box":
-                                        continue  # the time box ended inside: run_end, warp home
+                                        # the time box ended inside: run_end, warp home
+                                        return TICK_DONE
                                     cell_h, read_h = house_leave(h_)
                                     hs.here, hs.last_pos_t, hs.last_taken = (
                                         cell_h,
@@ -10274,7 +10496,7 @@ def run(a: argparse.Namespace, *, hook: Any = None, session: tuple[Any, Any] | N
                                         wp_st["i"] = None
                                     ev({"kind": "house_back", "house": h_.name, "at": list(hs.here),
                                         "read": read_h, "expected": list(h_.back)})  # fmt: skip
-                                    continue
+                                    return TICK_DONE
                                 if got_h == "none":
                                     hs.house_tries += 1
                                     if hs.house_tries >= HOUSE_DOOR_TRIES:
@@ -10285,7 +10507,7 @@ def run(a: argparse.Namespace, *, hook: Any = None, session: tuple[Any, Any] | N
                                     ev({"kind": "house_fallback", "why": f"door {got_h}"})
                                 if got_h in ("hit", "fight"):
                                     hs.hplan = None  # the fight first; the rest decides again
-                                    continue
+                                    return TICK_DONE
                             elif tick - hs.rest_since > HOUSE_WALK_MAX_S:
                                 fb_why = "approach not reached"
                             elif hs.goal_path is None or hs.goal_path[-1] != hs.hplan["approach"]:
@@ -10311,7 +10533,7 @@ def run(a: argparse.Namespace, *, hook: Any = None, session: tuple[Any, Any] | N
                             ev({"kind": "rest_start", "cell": list(hs.here), "pct": pct,
                                 "sp_pct": spp, "spot": None if spot is None else list(spot),
                                 "fallback": not at_spot, "why": sit_why})  # fmt: skip
-                            continue
+                            return TICK_DONE
                         if hs.goal_path is None or hs.goal_path[-1] != spot:
                             hs.goal_path = route(okr, carved, hs.here, spot) if spot else None
                             ev(
@@ -10323,6 +10545,10 @@ def run(a: argparse.Namespace, *, hook: Any = None, session: tuple[Any, Any] | N
                             )
                             if hs.goal_path is None:
                                 hs.mode = "search"
+
+            def step_idle() -> str | None:
+                """The idle watchdog: uncarve, or a Fly Wing."""
+                nonlocal why_s
                 # Amendment D: the IDLE watchdog -- searching with no walk click, no fight and no
                 # move for IDLE_MAX_S = stuck (the routing fails, or the client will not walk)
                 if hs.here != hs.idle_pos or hs.mode != "search":
@@ -10340,7 +10566,7 @@ def run(a: argparse.Namespace, *, hook: Any = None, session: tuple[Any, Any] | N
                         hs.last_uncarve = tick
                         wp_st["skips"] = 0
                         hs.idle_pos, hs.idle_since, hs.goal_path = None, tick, None
-                        continue
+                        return TICK_DONE
                     ev(
                         {
                             "kind": "stuck",
@@ -10356,7 +10582,11 @@ def run(a: argparse.Namespace, *, hook: Any = None, session: tuple[Any, Any] | N
                     hs.loot_list, hs.fight_ref = [], None
                     hs.here, hs.last_taken = None, -1e9  # Amendment F
                     time.sleep(1.0)
-                    continue
+                    return TICK_DONE
+
+            def step_plant() -> str | None:
+                """The White Plant sweep."""
+                nonlocal _rp, c_p, cells_p, found_p, i_p, u_p, v_p
                 # --- dungeon@4: the WHITE PLANT sweep when passing a spawn area (both searches)
                 if hs.mode == "search" and hs.here is not None and hs.lock is None and plant_areas \
                         and a.plant_sweep and (frac is None or frac >= 0.6):  # fmt: skip
@@ -10376,7 +10606,14 @@ def run(a: argparse.Namespace, *, hook: Any = None, session: tuple[Any, Any] | N
                             hs.lock = {"t": time.monotonic(), "rel": c_p,
                                     "cell": [hs.here[0] + c_p[0], hs.here[1] + c_p[1]]}  # fmt: skip
                             hs.mode, hs.goal_path = "fight", None
-                        continue
+                        return TICK_DONE
+
+            def step_search() -> str | None:
+                """The goal; the walk click (pick, dodge, trust, stall, carve); melee-ring."""
+                nonlocal _i, _r2, act_, ahead_, aim, bx_, c, c2, c_w, dodge, ext_, fits, fits_plain
+                nonlocal fits_q, found, free_, fwd, goal, near_end, ni_, nxt_, pick_how, reach_w
+                nonlocal rec_w, rel, res, res_w, ring_on, st_, tw_, u, u2, u_w, usable, v, v2, v_w
+                nonlocal why_w, wt_
                 # --- SEARCH: the heading walk (or dungeon@4's patrol route)
                 near_end = (hs.here is not None and hs.goal_path is not None
                             and len(hs.goal_path) >= 2
@@ -10539,7 +10776,7 @@ def run(a: argparse.Namespace, *, hook: Any = None, session: tuple[Any, Any] | N
                                             -1e9
                                         )  # dungeon@9.1: a jump, the old swings gone
                                         time.sleep(1.0)
-                                        continue
+                                        return TICK_DONE
                                     # monsters that only MISS write no log line: look around
                                     # (9.17: only after damage in the last 5 s -- the Miss cue
                                     # reads the misses now)
@@ -10560,7 +10797,7 @@ def run(a: argparse.Namespace, *, hook: Any = None, session: tuple[Any, Any] | N
                                                 "cell": None,
                                             }
                                         hs.mode = "fight"
-                                    continue
+                                    return TICK_DONE
                                 click_at(u, v, "walk")
                                 hs.last_walk_click = tick
                                 note_move(rel, "walk")  # 9.22: the way she came
@@ -10577,7 +10814,7 @@ def run(a: argparse.Namespace, *, hook: Any = None, session: tuple[Any, Any] | N
                                 ev(rec_w)
                             elif act_ == "engage":
                                 ev({"kind": "engage", "by": "walk_sword", "name": None})
-                                aim: tuple[float, float] | None = (u, v)
+                                aim = (u, v)
                                 if getattr(a, "still_strike", False) and not ring1(rel):
                                     aim = still_retarget(u, v, rel)  # dungeon@9.4 (4S)
                                 if aim is not None:
@@ -10628,6 +10865,9 @@ def run(a: argparse.Namespace, *, hook: Any = None, session: tuple[Any, Any] | N
                                            "cell": [hs.here[0] + c_w[0],
                                                     hs.here[1] + c_w[1]]}  # fmt: skip
                                 hs.mode, hs.goal_path = "fight", None
+
+            def step_position() -> str | None:
+                """The unread position's Fly Wing; 30 s unread ends the run."""
                 # dungeon@8.1 (4.05 a5, 2026-10-26 00:21): the readout sat over a bright roof and
                 # never read, and the run stopped at 30 s; s2's had failed over sunlit grass. A
                 # Fly Wing (a same-map teleport) gives the readout a new background: after
@@ -10647,8 +10887,45 @@ def run(a: argparse.Namespace, *, hook: Any = None, session: tuple[Any, Any] | N
                 # every Fly Wing restarts the 30 s (s2: a fly after a read gap ended the run)
                 if hs.here is None and tick - max(hs.last_pos_t, hs.fly_at) > 30.0:
                     hs.reason = "position unread for 30 s"
-                    break
+                    return RUN_END
+
+            def step_pace() -> str | None:
+                """The sleep to READ_HZ."""
                 time.sleep(max(0.0, 1.0 / READ_HZ - (time.monotonic() - tick)))
+
+            hunt_steps = (
+                ("begin", step_begin),
+                ("sense", step_sense),
+                ("hook", step_hook),
+                ("vitals", step_vitals),
+                ("battle_log", step_battle_log),
+                ("survive", step_survive),
+                ("engage", step_engage),
+                ("ui", step_ui),
+                ("upkeep", step_upkeep),
+                ("fight", step_fight),
+                ("hold", step_hold),
+                ("loot", step_loot),
+                ("after", step_after),
+                ("ready", step_ready),
+                ("rest", step_rest),
+                ("idle", step_idle),
+                ("plant", step_plant),
+                ("search", step_search),
+                ("position", step_position),
+                ("pace", step_pace),
+            )
+
+            def hunt_tick() -> str | None:
+                for _name, step_ in hunt_steps:
+                    sig_ = step_()
+                    if sig_ is not None:
+                        return sig_
+                return None
+
+            while time.monotonic() < t_end:
+                if hunt_tick() == RUN_END:
+                    break
         except r.Stop as exc:
             hs.reason = f"stop: {exc}"
             raise
