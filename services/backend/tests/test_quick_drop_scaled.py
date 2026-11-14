@@ -128,7 +128,7 @@ def test_the_default_path_is_unchanged() -> None:
     assert "burst_s = QUICK_ARROW_S if quick else BURST_MAX_S" in SRC
     call = ('                        elif getattr(a, "quick_drop", False) and last_strike and '
             "quick_no_hit(\n"
-            '                                last_strike.get("arrow_t"), last_ours, '
+            '                                last_strike.get("arrow_t"), hs.last_ours, '
             'last_strike["t_click"],\n'
             '                                tick, last_strike.get("hit_s", QUICK_HIT_S)):'
             "  # fmt: skip\n")  # fmt: skip

@@ -2,13 +2,15 @@
 behaviour, shown BY EXECUTION on a small program with each hazard (a closure's nonlocal, a
 shadowing parameter, a default read at def time, a lambda, a comprehension with a walrus, an
 except-as, break / continue in a loop of its own, a for-else, a continue inside try / finally);
-the checker names each kind of wrong rewrite (a verifier proves a positive case)."""
+the checker names each kind of wrong rewrite (a verifier proves a positive case); and the
+committed dungeon_hunt.run() IS the rewrite of its base."""
 
 from __future__ import annotations
 
 import ast
 import contextlib
 import io
+import subprocess
 import sys
 from pathlib import Path
 from typing import Any
@@ -230,3 +232,18 @@ def test_the_preconditions_refuse_what_the_rewrite_cannot_keep() -> None:
     ri2 = hc.parse_run(twice)
     assert any(b.startswith("flags: an alias needs exactly one binding")
                for b in hc.conditions(ri2, hc.lifted_names(ri2, (), ()), ALIASED))  # fmt: skip
+
+
+# --- the real runner ------------------------------------------------------------------------------
+def test_the_committed_runner_is_the_rewrite_of_its_base() -> None:
+    try:
+        base = hc.git_show(hc.BASE_REV, hc.TARGET)
+    except (subprocess.CalledProcessError, OSError):
+        pytest.skip(f"git cannot show {hc.BASE_REV} here (a shallow checkout)")
+    out = io.StringIO()
+    with contextlib.redirect_stdout(out):
+        rc = hc.check(base, hc.TARGET.read_text())
+    text = out.getvalue()
+    assert rc == 0, text
+    assert "LIFT/ALIAS preconditions: all hold" in text and "OUTLINE conditions: all hold" in text
+    assert "the module outside run(): the same" in text

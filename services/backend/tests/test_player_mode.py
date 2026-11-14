@@ -208,7 +208,7 @@ def test_the_player_mode_steps_come_before_any_input_and_the_db_is_not_read() ->
               "why_pw = player_weight_refused(share, overweight_red(fr1[0]))"):  # fmt: skip
         assert run_src.index(s) < i_start, s
     # the death dialog's click and @alive / @heal are the lab's; a player's is left to the person
-    assert 'if reason == "death" and not player:' in run_src
+    assert 'if hs.reason == "death" and not player:' in run_src
     assert '"kind": "player_end"' in run_src
 
 
@@ -430,7 +430,7 @@ def test_the_boss_spawns_come_from_the_kb_as_the_boss_walk_names_them(tmp_path: 
 def test_the_boss_warning_is_printed_before_any_input_and_never_refuses() -> None:
     run_src = ast.get_source_segment(SRC, _func("run")) or ""
     i_blk = run_src.index("pb_rec: dict[str, Any] | None = None")
-    i_end = run_src.index("counts: Counter[str] = Counter()", i_blk)
+    i_end = run_src.index("counts = hs.counts = Counter()", i_blk)
     blk = run_src[i_blk:i_end]
     assert i_end < run_src.index("with r.session(")  # printed before any input
     assert "    if player:\n" in blk and "print(pb_line, flush=True)" in blk

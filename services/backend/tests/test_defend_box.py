@@ -54,4 +54,4 @@ def test_the_near_mode_skips_the_value_repick_and_the_walk_up() -> None:
     body = SRC[i0 : SRC.index("        def ", i0 + 50)]
     assert "if radius_px is not None:  # dungeon@9.39 (--defend-box): the box beside us" in body
     assert "and near_b is not None and radius_px is None:  # 9.28 (4CB)" in body
-    assert 'getattr(a, "far_approach", False) and here is not None and radius_px is None' in body
+    assert 'getattr(a, "far_approach", False) and hs.here is not None and radius_px is None' in body

@@ -451,8 +451,8 @@ def test_the_box_plays_once_a_tick_before_the_runners_own_survival() -> None:
     assert len(at) == 1  # ONE top-level statement of the loop: every tick that gets there
     st = body[at[0]]
     assert isinstance(st, ast.If) and ast.unparse(st.test) == "box_on"
-    assert "HuntTick(tick, pct, spp, bool(dead), here, mode, MappingProxyType(counts), img, " \
-           "boss_hit)" in ast.unparse(st)  # fmt: skip
+    assert "HuntTick(tick, pct, spp, bool(dead), hs.here, hs.mode, MappingProxyType(counts), " \
+           "img, boss_hit)" in ast.unparse(st)  # fmt: skip
     own = next(
         i
         for i, x in enumerate(body)
@@ -477,9 +477,9 @@ def test_a_box_fly_takes_the_runners_own_after_the_fly_steps() -> None:
         for n in ast.walk(_loop())
         if isinstance(n, ast.If) and ast.unparse(n.test) == "what == 'fly'"
     )  # the runner's own sustain fly
-    want = _assigned(own) - {"sitting"}  # its stand-up is box_press's (before the press)
-    assert want == {"fly_at", "lock", "goal_path", "loot_list", "fight_ref", "mode", "here",
-                    "last_taken"}  # fmt: skip
+    want = _assigned(own) - {"hs.sitting"}  # its stand-up is box_press's (before the press)
+    assert want == {"hs.fly_at", "hs.lock", "hs.goal_path", "hs.loot_list", "hs.fight_ref",
+                    "hs.mode", "hs.here", "hs.last_taken"}  # fmt: skip
     assert want <= _assigned(after) and "st.fly" in _assigned(after)
     assert "time.sleep(1.0)" in ast.unparse(after) and "time.sleep(1.0)" in ast.unparse(own)
     # on a boss line the box decided, its Fly Wing ends the tick as the runner's boss fly does

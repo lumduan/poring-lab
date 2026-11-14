@@ -162,30 +162,32 @@ def test_unreach_escape_is_wired_only_behind_its_flag() -> None:
     clear, or presses the Fly Wing through press(); no other input."""
     src = Path(dh.__file__).read_text()
     assert src.count("unreach_on") == 5  # its definition + 4 guarded uses
-    assert "                if unreach_on and dropped:\n                    ua_drop_t = tick" in src
+    assert (
+        "                if unreach_on and dropped:\n                    hs.ua_drop_t = tick" in src
+    )
     # the no-hit unlock: the event first, then the record + trigger, then the lock goes
     nh = _body(src, '                            ev({"kind": "unlock", "why": "no hits" if since',
                "                        elif getattr(a, \"quick_drop\", False)")  # fmt: skip
     i_on = nh.index("if unreach_on and since <= LOCK_MAX_S:  # dungeon@9.26 (Study S-UA)")
-    i_rec = nh.index("ua_locks.append(ua_lock(lock, tick))")
+    i_rec = nh.index("ua_locks.append(ua_lock(hs.lock, tick))")
     i_tr = nh.index("tr_u = unreach_trigger(ua_locks, ours_ticks)")
     i_clear = nh.index("ua_locks.clear()")
     i_esc = nh.index("act_u = unreach_escape(tr_u, tick)")
-    i_mode = nh.index('mode = "search"')
+    i_mode = nh.index('hs.mode = "search"')
     i_cont = nh.index("continue")
     i_lock = nh.rindex("lock = None")
     assert i_on < i_rec < i_tr < i_clear < i_esc < i_mode < i_cont < i_lock
-    assert "last_walk = tick + UNREACH_GRACE_S" in nh and "fly_at = time.monotonic()" in nh
+    assert "hs.last_walk = tick + UNREACH_GRACE_S" in nh and "hs.fly_at = time.monotonic()" in nh
     # the scan's skip and the box path's skip
     sc = _body(src, "        def scan(purpose: str, cells: Sequence[Cell], stop_on: str",
                "        def read_here()")  # fmt: skip
     i_ws = sc.index("kept = drop_false(cells, false_rel, t_s)")
-    i_ua = sc.index('if purpose == "defend" and unreach_on and ua_marks:')
-    assert i_ws < i_ua < sc.index("uv = project(here, cells)")
-    assert "unreach_scan_cells(cells, here, ua_marks, t_s)" in sc
+    i_ua = sc.index('if purpose == "defend" and unreach_on and hs.ua_marks:')
+    assert i_ws < i_ua < sc.index("uv = project(hs.here, cells)")
+    assert "unreach_scan_cells(cells, hs.here, hs.ua_marks, t_s)" in sc
     ur = _body(src, "        def unreachable(here_: Cell | None, foot: Sequence[float]) -> bool:",
                "        def box_fight_done()")  # fmt: skip
-    i_m = ur.index("if unreach_on and unreach_marked(ua_marks, sp_, time.monotonic()):")
+    i_m = ur.index("if unreach_on and unreach_marked(hs.ua_marks, sp_, time.monotonic()):")
     assert ur.index("sp_ = reach_pick[kp_]") < i_m < ur.index("key_ = (here_, sp_)")
     # the escape: hover -> clear -> click_at; else the Fly Wing; no direct input
     es = _body(src, "        def unreach_escape(tr: Mapping[str, Any], tick_: float) -> str:",

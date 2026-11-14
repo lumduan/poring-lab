@@ -211,13 +211,13 @@ def test_recheck_visit_is_the_loot_steps_visit_step_for_step() -> None:
     visit = v1[v1.index("            def visit(c: Cell, why: str) -> str:") :]
     visit = visit[: visit.index("\n            seen_items")]
     visit_r = _nested("recheck_visit")
-    steps = ("rel = (c[0] - here[0], c[1] - here[1])", "u, v = project(here, [rel])[0]",
+    steps = ("rel = (c[0] - hs.here[0], c[1] - hs.here[1])", "u, v = project(hs.here, [rel])[0]",
              "if not in_view(u, v):", 'return "off"', "if guard_tick():", 'return "escape"',
              '== "sword":', 'strike(u, v - BODY_UP, rel, "loot_sword")',
-             'lock = {"t": time.monotonic(), "rel": rel, "cell": list(c)}', 'mode = "fight"',
+             'hs.lock = {"t": time.monotonic(), "rel": rel, "cell": list(c)}', 'hs.mode = "fight"',
              'if pickup_seen(res', "d_ = max(abs(rel[0]), abs(rel[1]))", 'click_at(u, v, "loot")',
              'counts["loot_click"] += 1', "time.sleep(0.45 + 0.2 * d_)",
-             "here = read_here() or c", 'return "ok"')  # fmt: skip
+             "hs.here = read_here() or c", 'return "ok"')  # fmt: skip
     for body in (visit, visit_r):
         at = [body.index(s) for s in steps]
         assert at == sorted(at), body[:80]  # every step, in the loot step's order
@@ -229,7 +229,7 @@ def test_the_loot_step_is_unchanged_and_the_kills_are_registered_at_both_kill_si
     v1 = SRC[SRC.index("        def loot_step_v1(") : SRC.index("        def tadv(")]
     assert "rk_" not in v1 and "recheck" not in v1  # 9.33's loot step: no hook inside it
     assert SRC.count("kill_aim_set(tick)") == 2  # 9.32's pin: unchanged
-    reg = "rk_pending.append(PendingKill(here, tick))"
+    reg = "rk_pending.append(PendingKill(hs.here, tick))"
     assert SRC.count(reg) == 2
     i_exp = SRC.index('ev({"kind": "kill", "by": "exp_line"')
     i_gap = SRC.index('ev({"kind": "kill", "by": "hit_gap"')
@@ -238,16 +238,16 @@ def test_the_loot_step_is_unchanged_and_the_kills_are_registered_at_both_kill_si
     for i_ in (i_1, i_2):
         assert "if rk_on:" in SRC[i_ - 120 : i_]  # behind the flag
     # the scan's pickup is not a kill: no pending entry there
-    i_hand = SRC.index("loot_list.append((here, time.monotonic()))")
+    i_hand = SRC.index("hs.loot_list.append((hs.here, time.monotonic()))")
     assert reg not in SRC[i_hand - 400 : i_hand + 200]
 
 
 def test_the_hook_runs_after_the_fight_branch_before_the_after_block() -> None:
-    i_fight = SRC.index("                if mode == \"fight\" or (lock is not None):\n"
+    i_fight = SRC.index("                if hs.mode == \"fight\" or (hs.lock is not None):\n"
                         "                    continue\n")  # fmt: skip
     i_hook = SRC.index("if rk_on and rk_pending and recheck_tick(tick, calm):")
     i_after = SRC.index("                # --- AFTER a fight: loot, then rest or search")
-    i_loot = SRC.index("got_ = loot_step(loot_list, fight_ref)")
+    i_loot = SRC.index("got_ = loot_step(hs.loot_list, hs.fight_ref)")
     i_last = SRC.index('rk_st["last"] = time.monotonic()')
     assert i_fight < i_hook < i_after < i_loot < i_last
     assert SRC.index('if getattr(a, "kill_gap", False) and counts["loot_click"] > clicks0_:') \
@@ -266,7 +266,7 @@ def test_the_hook_runs_after_the_fight_branch_before_the_after_block() -> None:
         "LOOT_MAX_HOVERS",
         "LOOT_TRIM_HOVERS",
         "LOOT_MAX_S",
-        "time.monotonic() - last_taken < 1.0",
+        "time.monotonic() - hs.last_taken < 1.0",
     ):  # the loot step's own bounds
         assert cap in tick_, cap
     for kind in ('"kind": "recheck"', '"kill_age_s"', '"seen"', '"looted"', '"picks"', '"end"'):
