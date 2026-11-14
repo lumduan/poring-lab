@@ -380,6 +380,20 @@ GARM_FRESH_S = 1.5
 # one false garm_baby box (a Cruiser under the Rogue) stood in a single detection of 1,568; N = 1
 # is 9.19 unchanged.
 GARM_CONFIRM = 1
+# --alarm-fast (dungeon@9.53, live-blocks.md 11; Batt 2026-11-14 ~14:0x, translated: "Fly Wing away
+# [from the Stormy Knight], or walk around it; I recommend the Fly Wing"). Last night's 10 deaths in
+# 30 runs (packets): the knight's party -- 6 Christmas Goblins and the knight, no Garm Baby left --
+# came into view 2.4-6.4 s before each death, the Goblins first and nearest; the deployed model has
+# no Goblin class, but it boxes some of them as garm_baby. The runner flew in none: (1) the alarm
+# read only the watcher's ~1-s detections, not the HUD twin's (4x more); (2) it was read only
+# between steps, never inside a target's settle wait or a strike (1.5-2.5 s each, right when the
+# party came); (3) --garm-confirm 2 asks two boxes in a row. Under the flag: the HUD twin's
+# detections feed the alarm too (one streak over both streams, in grab order); guard_tick reads it
+# inside long actions and flies there; and ONE box at score >= --alarm-solo passes without the
+# streak. Offline on the 30 runs (7.66 h): 5 of 11 deaths flown >= 1.5 s before (today 0), 1.7 false
+# flies an hour (no party member in view, +-2 s), at --alarm-solo 0.7 with --garm-confirm 2.
+ALARM_FAST_VERSION = "9.53"
+ALARM_SOLO_SCORE = 0.7
 # --far-single (dungeon@9.8, rogue-xmas02.md 4Z, pilot p18; Amendment J item 2a, "why far strikes
 # miss"): on p16 the strikes 2-6 cells away missed 5 of 41, 7-8 cells 19 of 30, 9-12 cells 33 of
 # 35. The packets: a click on a monster out of reach makes the CLIENT walk to it first (a walk
@@ -3725,6 +3739,9 @@ def fixes_of(a: argparse.Namespace) -> dict[str, Any]:
         out["garm_fly"] = [list(ALARM_CLASSES), GARM_FRESH_S, "9.19"]
         if getattr(a, "garm_confirm", GARM_CONFIRM) != GARM_CONFIRM:
             out["garm_fly"] = [list(ALARM_CLASSES), GARM_FRESH_S, "9.19b", int(a.garm_confirm)]
+    if getattr(a, "alarm_fast", False) and getattr(a, "garm_fly", False):  # dungeon@9.53
+        out["alarm_fast"] = [float(getattr(a, "alarm_solo", ALARM_SOLO_SCORE)),
+                             bool(getattr(a, "hud_fast", None)), ALARM_FAST_VERSION]  # fmt: skip
     if getattr(a, "boss_walk", False):  # dungeon@9.18 (rogue-xmas02.md 4AZ)
         out["boss_walk"] = [BOSS_WALK_R, BOSS_WALK_MIN, BOSS_WALK_GRACE_S, BOSS_WALK_MAX,
                             BOSS_WALK_WINDOW_S, "9.18"]  # fmt: skip
@@ -3932,15 +3949,23 @@ def boss_spawn_names(map_name: str, spawns: Mapping[str, Any],
 
 def alarm_seen(alarm: tuple[float, Sequence[Any]], now: float,
                fresh_s: float | None = None, streak: int = 1,
-               need: int = GARM_CONFIRM) -> Any | None:  # fmt: skip
+               need: int = GARM_CONFIRM, solo: float | None = None) -> Any | None:  # fmt: skip
     """PURE (--garm-fly, 9.19): the first box of an alarm class in a detection at most ``fresh_s``
     old (``alarm``: the box watcher's (grab time, alarm boxes)), else None. 9.19b: also None while
-    fewer than ``need`` consecutive detections (``streak``, the latest included) held one."""
+    fewer than ``need`` consecutive detections (``streak``, the latest included) held one.
+    9.53 (--alarm-fast): ``solo`` > 0 -- a box scoring at least ``solo`` passes on its own (the
+    highest-scoring box is returned then)."""
     fresh_s = GARM_FRESH_S if fresh_s is None else fresh_s  # 9.44: at call time (--tune)
     t, boxes = alarm
-    if not boxes or now - t > fresh_s or streak < need:
+    if not boxes or now - t > fresh_s:
         return None
-    return boxes[0]
+    if streak >= need:
+        return boxes[0]
+    if solo:
+        best = max(boxes, key=lambda b: float(b.score))
+        if float(best.score) >= solo:
+            return best
+    return None
 
 
 def alarm_streak(prev: int, has_alarm: bool) -> int:
@@ -4405,6 +4430,8 @@ class BoxWatch:
         self.alarm: tuple[float, list[Any]] = (0.0, [])  # 9.19: boxes of ALARM_CLASSES
         self.hist: deque[tuple[float, list[Any]]] = deque(maxlen=LOOT_AIM_HIST)  # 9.32
         self.alarm_n = 0  # 9.19b: consecutive detections that held one (alarm_streak)
+        self.alarm_hud = False  # 9.53 (--alarm-fast): the HUD twin's detections feed it too
+        self.n_alarm_hud = 0  # 9.53: the HUD detections that held an alarm box
         # dungeon@8.9 (--box-now): a detection on demand. kick() numbers the request; the loop's
         # next detection takes it (its grab starts after the kick) and records the number
         self.kick_ev = threading.Event()
@@ -4448,8 +4475,7 @@ class BoxWatch:
             with self.cond:
                 self.last = (t, got)
                 self.hist.append((t, got))  # dungeon@9.32 (--loot-aim): the recent detections
-                self.alarm = (t, alarm)
-                self.alarm_n = alarm_streak(self.alarm_n, bool(alarm))
+                self._feed_alarm(t, alarm)
                 self.meta = {"kick": seq, "t": t, "t_done": time.monotonic(), "path": path,
                              "ms": self.det.last_ms, "prefer": prefer,
                              "reason": getattr(self.det, "last_reason", None)}  # fmt: skip
@@ -4472,6 +4498,8 @@ class BoxWatch:
                 with self.lock:
                     self.hud_last = (t_h, [b for b in raw_h if b.cls == "monster"])
                     self.n_hud += 1
+                    if getattr(self, "alarm_hud", False):  # 9.53 (--alarm-fast)
+                        self._feed_alarm(t_h, [b for b in raw_h if b.cls in ALARM_CLASSES], True)
             self.kick_ev.wait(max(0.0, every - (time.monotonic() - t)))
             self.kick_ev.clear()
 
@@ -4586,6 +4614,17 @@ class BoxWatch:
                                        name="hud-watch", daemon=True)  # fmt: skip
         self.hud_th.start()
 
+    def _feed_alarm(self, t: float, alarm: list[Any], hud: bool = False) -> None:
+        """One detection's alarm boxes into ``alarm`` / ``alarm_n`` (the caller holds the lock).
+        9.53: the two streams in GRAB order -- a detection grabbed before the alarm's own is late
+        and changes nothing (the streak counts the detections as they were grabbed)."""
+        if t < self.alarm[0]:
+            return
+        self.alarm = (t, alarm)
+        self.alarm_n = alarm_streak(self.alarm_n, bool(alarm))
+        if hud and alarm:
+            self.n_alarm_hud = getattr(self, "n_alarm_hud", 0) + 1
+
     def _hud_loop(self, every: float) -> None:
         """dungeon@9.29c: the HUD twin's detections, one every ``every`` s, into hud_last only
         (last / alarm / meta / n are the decisions'). A frame the server skipped, or any call
@@ -4602,12 +4641,15 @@ class BoxWatch:
             with self.lock:
                 self.hud_last = (t_h, [b for b in raw_h if b.cls == "monster"])
                 self.n_hud += 1
+                if getattr(self, "alarm_hud", False):  # 9.53 (--alarm-fast): its alarm too
+                    self._feed_alarm(t_h, [b for b in raw_h if b.cls in ALARM_CLASSES], True)
 
     def hud_info(self) -> dict[str, Any] | None:
         """dungeon@9.29c: for the run's end event, the HUD twin's detections (None without)."""
         if self.hud_det is None:
             return None
-        return {"n_hud": self.n_hud, **self.hud_det.info()}
+        fast = {"n_alarm_hud": self.n_alarm_hud} if getattr(self, "alarm_hud", False) else {}
+        return {"n_hud": self.n_hud, **fast, **self.hud_det.info()}  # 9.53: with --alarm-fast
 
     def stop(self) -> None:
         self.halt.set()
@@ -6989,6 +7031,8 @@ def run(a: argparse.Namespace, *, hook: Any = None, session: tuple[Any, Any] | N
                                   ttl_ms=(HUD_FAST_TTL_MS if hud_fast
                                           else oh.DEFAULT_TTL_MS))  # fmt: skip
             if hud_fast and boxes is not None:  # dungeon@9.29c: the GPU's in a thread of its own
+                boxes.alarm_hud = bool(getattr(a, "alarm_fast", False)
+                                       and getattr(a, "garm_fly", False))  # 9.53  # fmt: skip
                 boxes.start_hud(float(hud_fast), out / "detections_hud.jsonl")
         queue: list[dict[str, Any]] = []  # MELEE-RING: SWORD cells seen while fighting
         qscan_i = 0
@@ -7450,6 +7494,31 @@ def run(a: argparse.Namespace, *, hook: Any = None, session: tuple[Any, Any] | N
 
         escaped = [False]
         last_quick = [0.0]
+        alarm_fast_on = bool(getattr(a, "alarm_fast", False) and getattr(a, "garm_fly", False))
+        alarm_solo = float(getattr(a, "alarm_solo", ALARM_SOLO_SCORE)) if alarm_fast_on else None
+
+        def alarm_inside(now_: float) -> bool:
+            """dungeon@9.53 (--alarm-fast): the alarm read INSIDE a long action (guard_tick): a
+            fresh confirmed alarm box flies at once -- the runner's own press("fly"): the dagger
+            first when bare, its count, its record -- and the caller stops (escaped). Not within
+            2 s of a Fly Wing (its teleport still landing), never twice in one action."""
+            if not alarm_fast_on or boxes is None or escaped[0] or now_ - fly_at <= 2.0:
+                return False
+            seen_q = alarm_seen(boxes.alarm, now_, streak=boxes.alarm_n, need=a.garm_confirm,
+                                solo=alarm_solo)  # fmt: skip
+            if seen_q is None:
+                return False
+            ev({"kind": "garm_seen", "cls": seen_q.cls, "score": round(float(seen_q.score), 3),
+                "box": [round(float(v_), 1) for v_ in (seen_q.x0, seen_q.y0, seen_q.x1, seen_q.y1)],
+                "age_s": round(now_ - boxes.alarm[0], 2), "streak": boxes.alarm_n,
+                "inside": True, "mode": mode})  # fmt: skip
+            counts["garm_seen"] += 1
+            counts["garm_inside"] += 1
+            press("fly", "garm")
+            st.fly = time.monotonic()  # the HP-rate fly waits 3 s after it
+            ev({"kind": "escape", "how": "fly", "why": "garm", "inside": True})
+            escaped[0] = True
+            return True
 
         def guard_tick() -> bool:
             """Sustain INSIDE a long action (a scan's hovers, a strike's burst): a fresh HP / SP
@@ -7459,6 +7528,8 @@ def run(a: argparse.Namespace, *, hook: Any = None, session: tuple[Any, Any] | N
             if now_ - last_quick[0] < QUICK_S:
                 return escaped[0]
             last_quick[0] = now_
+            if alarm_inside(now_):  # dungeon@9.53 (--alarm-fast): the party seen mid-action
+                return True
             img_ = frame()
             p_, s_ = hpp.read(img_, glyphs), hpp.read(img_, glyphs, hpp.SP_DY)
             ev({"kind": "hp_read", "pct": p_, "sp_pct": s_, "quick": True})
@@ -9490,8 +9561,8 @@ def run(a: argparse.Namespace, *, hook: Any = None, session: tuple[Any, Any] | N
                 if boss_hit is None and getattr(a, "garm_fly", False) and boxes is not None:
                     streak_ = boxes.alarm_n  # 9.19b: --garm-confirm's consecutive detections
                     seen_ = alarm_seen(
-                        boxes.alarm, tick, streak=streak_, need=a.garm_confirm
-                    )  # dungeon@9.19: a Garm Baby IN VIEW
+                        boxes.alarm, tick, streak=streak_, need=a.garm_confirm, solo=alarm_solo
+                    )  # dungeon@9.19: a Garm Baby IN VIEW (9.53: --alarm-solo's one box)
                     if seen_ is not None:
                         ev({"kind": "garm_seen", "cls": seen_.cls,
                             "score": round(float(seen_.score), 3),
@@ -10681,6 +10752,21 @@ def build_parser() -> argparse.ArgumentParser:
         default=GARM_CONFIRM,
         help="dungeon@9.19b (rogue-xmas02.md 4BD; with --garm-fly): the Fly Wing waits for alarm "
         "boxes in this many CONSECUTIVE detections (default 1 = 9.19 unchanged)",
+    )
+    t.add_argument(
+        "--alarm-fast",
+        action=argparse.BooleanOptionalAction,
+        default=False,
+        help="dungeon@9.53 (live-blocks.md 11; OFF by default; with --garm-fly): the HUD twin's "
+        "detections feed the alarm too (--hud-fast), the alarm is read inside long actions "
+        "(guard_tick) and flies there, and one alarm box at score >= --alarm-solo passes alone",
+    )
+    t.add_argument(
+        "--alarm-solo",
+        type=float,
+        default=ALARM_SOLO_SCORE,
+        help="dungeon@9.53 (with --alarm-fast): one alarm box at this score or higher flies "
+        "without --garm-confirm's streak (0 = off; default %(default)s)",
     )
     t.add_argument(
         "--boss-walk",

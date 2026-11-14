@@ -208,6 +208,8 @@ FLOWS: dict[str, Flow] = {
             "npc_guard": True,
             "garm_fly": True,
             "garm_confirm": 2,
+            "alarm_fast": True,  # dungeon@9.53 (Batt 2026-11-14: "Fly Wing away"; live-blocks 11)
+            "alarm_solo": 0.7,
             "boss_walk": False,
             "unread_step": False,
             "box_detector": "gpu",
