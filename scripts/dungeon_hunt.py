@@ -6354,6 +6354,354 @@ class HuntState:
     counts: Counter[str]
 
 
+# --- live-blocks 5b-2 (docs/planning/live-blocks.md 13.4 and 14): the steps as LIVE BLOCKS --------
+HUNT_BLOCKS_VERSION = "9.55"  # the box's hunt loop plays run()'s steps through hook.drive; no
+# behaviour of the runner's own (runner_flow_export.NOT_FEATURES); recorded in the `drive` record
+# hunt_steps' names, in their order (huntstate_check.py drive pins them to run()'s tuple)
+STEP_NAMES = ("begin", "sense", "hook", "vitals", "battle_log", "survive", "engage", "ui",
+              "upkeep", "fight", "hold", "loot", "after", "ready", "rest", "idle", "plant",
+              "search", "position", "pace")  # fmt: skip
+# COMMON steps run on every tick whichever block plays (perception and safety: no block skips
+# them); the rest are MODE steps, run only by the block that OWNS them
+COMMON_STEPS = STEP_NAMES[: STEP_NAMES.index("fight")]
+MODE_STEPS = STEP_NAMES[len(COMMON_STEPS) :]
+# a block hands back only BEFORE one of these steps (the tick's common steps have run there); the
+# fight step starts a tick's mode work, the after step the search's
+HANDBACK_AT = ("fight", "after")
+# a mode step whose body acts only in that mode (huntstate_check.py drive proves it from the AST):
+# with another mode it does nothing, so the cursor calls it whoever plays (the driver's trace)
+STEP_GUARD = {"fight": "fight", "loot": "after"}
+# the mode steps each block runs; a mode step the playing block does not own, in the mode its
+# guard names (or with no guard), is PASSED: the only way a block program plays unlike the driver
+BLOCK_OWNS: dict[str, tuple[str, ...]] = {
+    "explore": ("hold", "after", "ready", "rest", "idle", "plant", "search", "position", "pace"),
+    "walk_to_target": ("fight",),
+    "strike": ("fight",),
+    "wait_steal": ("fight",),
+    "wait_kill": ("fight",),
+    "loot": ("fight", "hold", "loot"),
+    "look": (),
+    "choose_target": (),
+    "use_skill": (),
+}
+DRIVE_SPIN_MAX = 50  # block calls in a row that call no step: the box's loop would spin; it ends
+# the run normally (the lint refuses such a loop before any input; this is the run time's own)
+DRIVE_SKILL_ROLES = ("potion",)  # use_skill's keys: a role key the start's slot check reads and
+# a block may press between two steps (the Fly Wing, the Butterfly Wing and the Knife keys have
+# moments of the runner's own: its after-the-fly steps, the way home, the swap's read-backs)
+DRIVE_HOOK = ("tick", "survive", "call", "recipe", "event")  # what a driving hook also plays
+
+
+@dataclass(frozen=True)
+class HuntTarget:
+    """live-blocks 5b-2: a monster as a VALUE of the box's hunt loop (explore()'s and
+    choose_target()'s): what the runner engaged -- its cell (the lock's, else the engage box's
+    spot), the detector's species of the box the runner struck (None: not known, e.g. an engage by
+    a hit before any box strike) and that box."""
+
+    cell: tuple[int, int] | None
+    species: str | None
+    box: tuple[float, ...] | None = None
+
+
+class HuntView:
+    """live-blocks 5b-2: what the cursor's blocks READ of the hunt (never written): the mode, the
+    lock, the target, the bare-steal phase, the kills and loot clicks so far, the tick's reads."""
+
+    def __init__(self, hs: Any, reads: Callable[[], dict[str, Any]],
+                 clock: Callable[[], float] = time.monotonic) -> None:  # fmt: skip
+        self.hs, self._reads, self.clock = hs, reads, clock
+
+    def mode(self) -> str:
+        return str(self.hs.mode)
+
+    def locked(self) -> bool:
+        return self.hs.lock is not None
+
+    def target(self) -> HuntTarget | None:
+        """The engaged target (None: no fight)."""
+        if self.hs.mode != "fight":
+            return None
+        lock = self.hs.lock or {}
+        bf = self.hs.box_fight
+        cell = lock.get("cell") or bf.get("spot")
+        box = bf.get("box")
+        return HuntTarget(None if not cell else (int(cell[0]), int(cell[1])), self.hs.box_sp[0],
+                          tuple(float(x) for x in box) if box else None)  # fmt: skip
+
+    def bare_phase(self) -> str:
+        """The Knife's phase: "none" (no bare-steal in this run), "on" (a bare phase runs: the
+        steal's cue, its time box or the HP floor ends it), "stolen" / "over" (none runs)."""
+        b = self.hs.bare
+        if b is None:
+            return "none"
+        if b.st.t_bare is not None:
+            return "on"
+        return "stolen" if b.st.stolen else "over"
+
+    def kills(self) -> int:
+        return len(self.hs.kills_seen)
+
+    def loot_clicks(self) -> int:
+        return int(self.hs.counts["loot_click"])
+
+    def approach_over(self) -> bool:
+        """A far approach walked toward the target and its hold passed (the box path looks
+        again)."""
+        t_a = self.hs.box_fight.get("approach_t")
+        return t_a is not None and self.clock() - float(t_a) >= APPROACH_HOLD_S
+
+    def reads(self) -> dict[str, Any]:
+        return dict(self._reads())
+
+
+class HuntCursor:
+    """live-blocks 5b-2 (13.4, 14): THE TICK CURSOR -- run()'s hunt steps played by the box's
+    blocks, each one BOUNDED call. The cursor is (the tick, its next step). A block ADVANCES it
+    (the steps in STEP_NAMES' order, a new tick after `pace` or a TICK_DONE) until, at a HAND-BACK
+    point (before `fight` or `after`), its exit holds or its time box has passed, or until the run
+    ends (a RUN_END, the run's time box, a spin): then it hands back, and the next block resumes
+    the cursor where it stopped. Which steps run:
+
+    - a COMMON step: always, whichever block plays;
+    - a MODE step: when the playing block owns it (BLOCK_OWNS), or when its guard is false
+      (STEP_GUARD: its body then does nothing); else it is PASSED (not called; counted).
+
+    The box's canonical loop (`t = explore(); attack(t)`, attack = the recipe of t's species) calls
+    exactly the driver's step sequence, tick for tick (scripts/hunt_trace.py shows it on scripted
+    mode changes): explore owns the search's steps and hands back before `fight` once a fight
+    began; the recipe's blocks own `fight` and hand back on their exits, loot(t) owns the loot
+    step and hands back before `after`. ``press``: use_skill's key, the runner's own press."""
+
+    def __init__(self, steps: Sequence[tuple[str, Callable[[], str | None]]], view: HuntView, *,
+                 t_end: float, clock: Callable[[], float] = time.monotonic,
+                 press: Callable[[str, str], bool] | None = None,
+                 trace: bool = False) -> None:  # fmt: skip
+        names = tuple(n for n, _ in steps)
+        if names != STEP_NAMES:
+            raise ValueError(f"the hunt steps {names} are not {STEP_NAMES}")
+        self.fns = [f for _, f in steps]
+        self.view, self.t_end, self.clock, self._press = view, t_end, clock, press
+        self.i = 0  # the next step (0: a new tick)
+        self.tick = 0  # the ticks begun
+        self.ended: str | None = None  # "run_end", "time_box", "spin": every block hands back
+        self.calls: Counter[str] = Counter()  # the steps called
+        self.passed: Counter[str] = Counter()  # the mode steps passed
+        self.blocks: Counter[str] = Counter()  # the block calls
+        self.trace: list[tuple[int, str, str | None]] | None = [] if trace else None
+        self.loot_reached = 0  # the cursor reached the loot step (called or passed)
+        self.sensed = False  # a sense step ran (look()'s reads exist)
+        self.idle = 0  # block calls in a row that called no step
+
+    @property
+    def at(self) -> str:
+        """The next step's name."""
+        return STEP_NAMES[self.i]
+
+    def _step(self, owns: tuple[str, ...]) -> None:
+        name = STEP_NAMES[self.i]
+        if self.i == 0:
+            if self.clock() >= self.t_end:  # the driver's `while time.monotonic() < t_end`
+                self.ended = "time_box"
+                return
+            self.tick += 1
+        if name == "loot":
+            self.loot_reached += 1
+        guard = STEP_GUARD.get(name)
+        sig: str | None
+        if name in COMMON_STEPS or name in owns or (guard is not None
+                                                     and self.view.mode() != guard):  # fmt: skip
+            sig = self.fns[self.i]()
+            self.calls[name] += 1
+            if name == "sense":
+                self.sensed = True
+            if self.trace is not None:
+                self.trace.append((self.tick, name, sig))
+        else:
+            sig = None
+            self.passed[name] += 1
+            if self.trace is not None:
+                self.trace.append((self.tick, name, "passed"))
+        if sig == RUN_END:
+            self.ended = "run_end"
+        elif sig == TICK_DONE or self.i == len(STEP_NAMES) - 1:
+            self.i = 0
+        else:
+            self.i += 1
+
+    def play(self, block: str, done: Callable[[], tuple[bool, Any]],
+             max_s: float | None = None) -> tuple[str, Any]:  # fmt: skip
+        """``block`` advances the cursor until, at a hand-back point, ``done()`` says (True,
+        value), or ``max_s`` has passed there. (how, value): ("done", value), ("time", None) or
+        ("ended", None) -- the run ended (``ended`` says how)."""
+        owns = BLOCK_OWNS[block]
+        self.blocks[block] += 1
+        t0 = self.clock()
+        n0 = sum(self.calls.values())
+        how: str = "ended"
+        val: Any = None
+        while self.ended is None:
+            if STEP_NAMES[self.i] in HANDBACK_AT:
+                ok, v = done()
+                if ok:
+                    how, val = "done", v
+                    break
+                if max_s is not None and self.clock() - t0 >= max_s:
+                    how = "time"
+                    break
+            self._step(owns)
+        self._progress(n0)
+        return how, val
+
+    def _progress(self, n0: int) -> None:
+        if sum(self.calls.values()) != n0:
+            self.idle = 0
+            return
+        self.idle += 1
+        if self.idle > DRIVE_SPIN_MAX and self.ended is None:
+            self.ended = "spin"
+
+    @staticmethod
+    def _value(got: tuple[str, Any], on_time: Any = "timeout") -> Any:
+        how, v = got
+        return v if how == "done" else (on_time if how == "time" else "ended")
+
+    # -- the blocks (each one bounded call; its value) --
+    def explore(self, max_s: float | None = None) -> HuntTarget | None:
+        """The search (the walk, the rest, the plant sweep, the idle watchdog, ...) until a fight
+        began: the target engaged; None at its time box (or the run's end)."""
+        v = self.view
+        got = self.play("explore", lambda: (v.mode() == "fight", v.target()), max_s)
+        return got[1] if got[0] == "done" else None
+
+    def walk_to_target(self, max_s: float | None = None) -> str:
+        """The fight's approach until the target is in reach (the strike landed -- the client walks
+        up on it --, or a far approach's walk ended): "in_reach", or "gone" (no fight)."""
+        v = self.view
+
+        def done() -> tuple[bool, Any]:
+            if v.mode() != "fight":
+                return True, "gone"
+            return (True, "in_reach") if v.locked() or v.approach_over() else (False, None)
+
+        return str(self._value(self.play("walk_to_target", done, max_s)))
+
+    def strike(self, max_s: float | None = None) -> str:
+        """The fight until the runner's strike locked the target: "struck", or "gone"."""
+        v = self.view
+
+        def done() -> tuple[bool, Any]:
+            if v.mode() != "fight":
+                return True, "gone"
+            return (True, "struck") if v.locked() else (False, None)
+
+        return str(self._value(self.play("strike", done, max_s)))
+
+    def wait_steal(self, max_s: float | None = None) -> str:
+        """The fight while the Knife's bare phase runs: "stolen" (its cue came), "not_stolen" (its
+        time box or the HP floor), "no_knife" (no bare-steal in this run), or "gone"."""
+        v = self.view
+
+        def done() -> tuple[bool, Any]:
+            if v.mode() != "fight":
+                return True, "gone"
+            ph = v.bare_phase()
+            if ph == "on":
+                return False, None
+            return True, {"none": "no_knife", "stolen": "stolen"}.get(ph, "not_stolen")
+
+        return str(self._value(self.play("wait_steal", done, max_s)))
+
+    def wait_kill(self, max_s: float | None = None) -> str:
+        """The fight to its end (the runner's kill reads: the exp line, the kill gap): "killed" (a
+        kill was read meanwhile) or "lost"."""
+        v = self.view
+        k0 = v.kills()
+
+        def done() -> tuple[bool, Any]:
+            if v.mode() == "fight":
+                return False, None
+            return True, "killed" if v.kills() > k0 else "lost"
+
+        return str(self._value(self.play("wait_kill", done, max_s)))
+
+    def loot(self, max_s: float | None = None) -> int:
+        """The fight's loot step (and the fight first, if one still runs): the loot clicks it made.
+        At once (0) when there is nothing to loot: no fight, and no fight's end before the loot
+        step of this tick."""
+        v = self.view
+        if not (v.mode() == "fight" or (v.mode() == "after"
+                                        and self.i <= STEP_NAMES.index("loot"))):  # fmt: skip
+            self.blocks["loot"] += 1
+            self._progress(sum(self.calls.values()))
+            return 0
+        r0, c0 = self.loot_reached, v.loot_clicks()
+        got = self.play("loot", lambda: (self.loot_reached > r0, v.loot_clicks() - c0), max_s)
+        return int(got[1]) if got[0] == "done" else v.loot_clicks() - c0
+
+    def look(self) -> dict[str, Any] | None:
+        """The tick's reads (HP, SP, dead, her cell, the mode, the lock); the first tick's common
+        steps first when none has run yet."""
+        got = self.play("look", lambda: (self.sensed, None))
+        return self.view.reads() if got[0] == "done" else None
+
+    def choose_target(self) -> HuntTarget | None:
+        """At once: the target of the fight that runs (None: no fight)."""
+        self.blocks["choose_target"] += 1
+        self._progress(sum(self.calls.values()))
+        return self.view.target()
+
+    def use_skill(self, key: str, why: str) -> str:
+        """At once, between two steps: one press of ``key`` through the runner's own press of its
+        role (DRIVE_SKILL_ROLES): "pressed", or "refused"."""
+        self.blocks["use_skill"] += 1
+        self._progress(sum(self.calls.values()))
+        if self.ended is not None:
+            return "ended"
+        ok = self._press is not None and self._press(key, why)
+        return "pressed" if ok else "refused"
+
+    def doc(self) -> dict[str, Any]:
+        return {"ended": self.ended, "ticks": self.tick, "at": self.at, "steps": dict(self.calls),
+                "passed": dict(self.passed), "blocks": dict(self.blocks)}  # fmt: skip
+
+
+def hook_drives(hook: Any) -> bool:
+    """live-blocks 5b-2: the hook plays the hunt's steps itself (the box's hunt loop: hook.drive)
+    instead of run()'s driver loop. The CLI (no hook) and a hook without drive: never."""
+    return hook is not None and callable(getattr(hook, "drive", None))
+
+
+def drive_refused(hook: Any) -> str | None:
+    """PURE: why a driving hook cannot play (None: it can): it plays the tick hook, the box's
+    survival, its functions and recipes and the event mirror too (DRIVE_HOOK)."""
+    missing = [m for m in DRIVE_HOOK if not callable(getattr(hook, m, None))]
+    return f"a hook with drive but no {', '.join(missing)}" if missing else None
+
+
+def hunt_drive(hook: Any, cursor: HuntCursor, hs: Any,
+               ev: Callable[[dict[str, Any]], None]) -> None:  # fmt: skip
+    """live-blocks 5b-2: run()'s loop when the hook drives -- the box's hunt loop plays the steps
+    through ``cursor`` (hook.drive) until it returns or the run ends; then run()'s normal end runs
+    unchanged. Its reason: the step's (RUN_END), the time box, or the loop's end / spin."""
+    why = drive_refused(hook)
+    if why is not None:  # before any step: the normal end follows (no loop ran)
+        hs.reason = f"drive_refused: {why}"
+        ev({"kind": "drive", "what": "refused", "why": why})
+        return
+    ev({"kind": "drive", "what": "start", "version": HUNT_BLOCKS_VERSION})
+    words: str | None = None
+    try:
+        got = hook.drive(cursor)
+        words = None if got is None else str(got)[:300]
+        if cursor.ended is None:
+            hs.reason = f"drive_end: {words or 'the box hunt loop ended'}"
+        elif cursor.ended == "spin":
+            hs.reason = f"drive_spin: {DRIVE_SPIN_MAX} blocks in a row took no step of the hunt"
+    finally:
+        ev({"kind": "drive", "what": "end", "words": words, **cursor.doc()})
+
+
 def args_for(argv: Sequence[str], cmd: str = "run") -> argparse.Namespace:
     """dungeon@9.48: the runner's arguments from its CLI flags (the subcommand ``cmd``, "run" or
     the read-only "check", left out), parsed by the CLI's own parser with main()'s defaults: the
@@ -10923,9 +11271,32 @@ def run(a: argparse.Namespace, *, hook: Any = None, session: tuple[Any, Any] | N
                         return sig_
                 return None
 
-            while time.monotonic() < t_end:
-                if hunt_tick() == RUN_END:
-                    break
+            if hook_drives(hook):  # live-blocks 5b-2 (section 14): the box's hunt loop plays
+                skill_keys = {keys_[r_]: r_ for r_ in DRIVE_SKILL_ROLES if keys_.get(r_)}
+
+                def drive_press(key_: str, why_: str) -> bool:
+                    """use_skill(key): the runner's own press of that key's role, between steps."""
+                    role_ = skill_keys.get(key_)
+                    if role_ is None:
+                        counts["box_refused"] += 1
+                        ev({"kind": "box_refused", "key": key_, "why": why_, "role": "skill"})
+                        return False
+                    press(role_, why_)
+                    counts["drive_skill"] += 1
+                    return True
+
+                def drive_reads() -> dict[str, Any]:
+                    """The tick's reads (look()): after a sense step ran in the drive."""
+                    return {"hp_pct": pct, "sp_pct": spp, "dead": bool(dead), "mode": hs.mode,
+                            "pos": None if hs.here is None else list(hs.here),
+                            "locked": hs.lock is not None}  # fmt: skip
+
+                hunt_drive(hook, HuntCursor(hunt_steps, HuntView(hs, drive_reads), t_end=t_end,
+                                            press=drive_press), hs, ev)  # fmt: skip
+            else:
+                while time.monotonic() < t_end:
+                    if hunt_tick() == RUN_END:
+                        break
         except r.Stop as exc:
             hs.reason = f"stop: {exc}"
             raise
