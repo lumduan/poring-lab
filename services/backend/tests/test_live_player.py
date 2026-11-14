@@ -21,6 +21,7 @@ import dungeon_hunt as dh  # noqa: E402
 import flow_config as fc  # noqa: E402
 import flow_play as fp  # noqa: E402
 import flow_run as fr  # noqa: E402
+import huntstate_check as hc  # noqa: E402
 
 from poring_flow import catalogue, editor, ir, live  # noqa: E402
 from poring_flow import project as pj  # noqa: E402
@@ -555,11 +556,8 @@ def test_run_takes_an_optional_hook_and_session_and_the_cli_passes_neither() -> 
 
 
 def _loop(fn_src: str) -> ast.While:
-    tree = ast.parse(textwrap.dedent(fn_src))
-    loops = [n for n in ast.walk(tree) if isinstance(n, ast.While)
-             and ast.unparse(n.test) == "time.monotonic() < t_end"]  # fmt: skip
-    assert len(loops) == 1
-    return loops[0]
+    """The main loop as the driver plays it (5b-1: the steps' bodies in their order)."""
+    return hc.driver_loop(ast.parse(textwrap.dedent(fn_src)))
 
 
 def _loop_continues(stmts: list[ast.stmt]) -> list[ast.Continue]:

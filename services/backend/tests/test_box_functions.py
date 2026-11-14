@@ -746,17 +746,18 @@ def test_the_weight_read_calls_the_box_there_and_keeps_the_runners_red_rule() ->
     assert len(w) == 1
     box_part = ast.unparse(ast.Module(body=w[0].body, type_ignores=[]))
     own = ast.unparse(ast.Module(body=w[0].orelse, type_ignores=[]))
-    assert own == "why_wh = weight_home_due(getattr(a, 'weight_home', None), w_share, red_seen)"
-    assert "weight_home_due(getattr(a, 'weight_home', None), None, red_seen) if w_now is None" \
+    assert own == ("why_wh = weight_home_due(getattr(a, 'weight_home', None), hs.w_share, "
+                   "hs.red_seen)")  # fmt: skip
+    assert "weight_home_due(getattr(a, 'weight_home', None), None, hs.red_seen) if w_now is None" \
         in box_part  # fmt: skip
     assert "hook_survive(hook, HuntTick(" in box_part and "int(round(w_now * 100))" in box_part
-    assert "reason = f'weight_home: {why_bw}'" in box_part and "break" in box_part
+    assert "reason = f'weight_home: {why_bw}'" in box_part and "return RUN_END" in box_part
     # it sits in the UI watch (never mid-fight): after the weight read, inside `mode != 'fight'`
     ui = next(
         n
         for n in ast.walk(tree)
         if isinstance(n, ast.If)
-        and ast.unparse(n.test) == "tick - last_ui >= UI_EVERY_S and mode != 'fight'"
+        and ast.unparse(n.test) == "tick - hs.last_ui >= UI_EVERY_S and hs.mode != 'fight'"
     )
     assert w[0] in list(ast.walk(ui))
 

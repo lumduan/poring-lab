@@ -494,7 +494,7 @@ def test_the_runner_asks_the_box_only_at_the_lock_and_only_with_its_recipes() ->
     st = _fn("strike", tree)
     body = [ast.unparse(x) for x in st.body[1:]]  # past the docstring
     bare_if = next(x for x in st.body if isinstance(x, ast.If) and ast.unparse(x.test) ==
-                   "bare is not None")  # fmt: skip
+                   "hs.bare is not None")  # fmt: skip
     got = [ast.unparse(x) for x in bare_if.body]
     assert got[1] == "rcp_ = (lambda: recipe_knife(species, by)) if box_recipe_on else None"
     assert "bare.before_strike(by, hp_b, lambda: hover(u, v)['verdict'] == 'sword', rcp_)" in got[2]

@@ -15,6 +15,7 @@ ROOT = Path(__file__).resolve().parents[3]
 sys.path.insert(0, str(ROOT / "scripts"))
 
 import dungeon_hunt as dh  # noqa: E402
+import huntstate_check as hc  # noqa: E402
 
 A, B, C = (dh.STRATEGIES[k] for k in "ABC")
 
@@ -507,7 +508,7 @@ def test_the_run_end_warps_home_after_a_death_too() -> None:
     src = Path(dh.__file__).read_text()
     i = src.index('for cmd in ("@alive", "@heal"):')
     tail = src[i : i + 1500]
-    assert "@warp {CLEAR_STAND[0]}" in tail and 'if reason != "death"' not in tail
+    assert "@warp {CLEAR_STAND[0]}" in tail and 'if hs.reason != "death"' not in tail
 
 
 def test_an_unread_position_costs_a_fly_wing_before_it_ends_the_run() -> None:
@@ -518,8 +519,8 @@ def test_an_unread_position_costs_a_fly_wing_before_it_ends_the_run() -> None:
     src = Path(dh.__file__).read_text()
     i = src.index('"why": "pos_unread"})')
     block = src[i - 400 : i + 900]
-    assert 'press("fly", "pos_unread")' in block and "pos_flies += 1" in block
-    assert "tick - max(last_pos_t, fly_at) > 30.0" in block
+    assert 'press("fly", "pos_unread")' in block and "hs.pos_flies += 1" in block
+    assert "tick - max(hs.last_pos_t, hs.fly_at) > 30.0" in block
 
 
 def test_damage_while_sitting_never_presses_the_stand_toggle() -> None:
@@ -531,7 +532,8 @@ def test_damage_while_sitting_never_presses_the_stand_toggle() -> None:
     assert 'press("stand", "hit while sitting")' not in src
     i = src.index('"why": "damage (the server stood us up)"')
     block = src[i - 500 : i]
-    assert "if sitting and (tick - last_taken <= FIGHT_TAKEN_S or hp_dropped(" in block
+    assert ("if hs.sitting and (\n                    tick - hs.last_taken <= FIGHT_TAKEN_S"
+            " or hp_dropped(") in block  # fmt: skip
     assert 'press("stand"' not in block
 
 
@@ -571,7 +573,7 @@ def test_the_miss_cue_starts_a_fight_like_a_hit_but_never_while_sitting() -> Non
     the HP loop (not while sitting: no stand toggle on a miss, 8.2) and a swing within
     FIGHT_TAKEN_S starts a fight; OFF by default and recorded in the run's fixes."""
     src = (Path(dh.__file__)).read_text()
-    assert 'if miss_tpl is not None and not sitting and mode != "after":' in src
+    assert 'if miss_tpl is not None and not hs.sitting and hs.mode != "after":' in src
     assert "(hit_now or dropped or swing_now or near_ is not None)" in src
     assert '"by": "miss_cue"' in src
     a = dh.argparse.Namespace(plant_sweep=False, box_ignore=2, ag_match=40.0, walk_trust=False,
@@ -592,8 +594,8 @@ def test_a_miss_read_before_the_fights_end_never_restarts_it() -> None:
     assert dh.swing_engages(101.0, last_swing=100.9, swing_floor=end)  # a new read after it
     assert not dh.swing_engages(104.0, last_swing=101.4, swing_floor=end)  # older than 2.5 s
     src = (Path(dh.__file__)).read_text()
-    assert src.count('mode, swing_floor = "after", tick') == 2
-    assert "swing_now = swing_engages(tick, last_swing, swing_floor)" in src
+    assert src.count('hs.mode, hs.swing_floor = "after", tick') == 2
+    assert "swing_now = swing_engages(tick, hs.last_swing, hs.swing_floor)" in src
 
 
 def test_batts_no_rest_strategy_never_sits_and_drinks_below_40() -> None:
@@ -641,7 +643,7 @@ def test_the_end_flies_first_when_still_in_a_fight_or_low() -> None:
     assert not dh.end_escape_needed(now, 99.9, calm, "death")
     assert not dh.end_escape_needed(now, 99.9, calm, "hard_bar: unknown UI state {}")
     src = (Path(dh.__file__)).read_text()
-    assert "if end_escape_needed(time.monotonic(), last_taken, st.hist, reason):" in src
+    assert "if end_escape_needed(time.monotonic(), hs.last_taken, st.hist, hs.reason):" in src
 
 
 def test_loot_trim_caps_v1_hovers_at_nine_and_never_sweeps() -> None:
@@ -651,7 +653,7 @@ def test_loot_trim_caps_v1_hovers_at_nine_and_never_sweeps() -> None:
     src = (Path(dh.__file__)).read_text()
     assert 'loot_trim = a.loot == "trim"' in src
     assert "loot_trim and n_hov >= LOOT_TRIM_HOVERS" in src
-    assert "and here is not None and not loot_trim:" in src  # no sweep
+    assert "and hs.here is not None and not loot_trim:" in src  # no sweep
     assert src.count("n_hov += 1") == 1  # an out-of-view cell is not a hover
     assert '"trim"]' in src and 'default="v1"' in src  # OFF by default
 
@@ -687,8 +689,8 @@ def test_long_legs_continue_through_the_next_waypoint_and_stay_off_by_default() 
     src = (Path(dh.__file__)).read_text()
     # 9.15b split the call (ahead_ = MR_WALK_AHEAD if mr else a.walk_ahead): behaviour unchanged
     assert "ahead_ = MR_WALK_AHEAD if mr else a.walk_ahead" in src
-    assert "wt_ = walk_target(goal_path, ahead_, fits)" in src
-    assert "pass_waypoint(here)  # --walk-through: its waypoint is behind us now" in src
+    assert "wt_ = walk_target(hs.goal_path, ahead_, fits)" in src
+    assert "pass_waypoint(hs.here)  # --walk-through: its waypoint is behind us now" in src
     # the offline sim's bug (2026-10-26 21:2x): a through-leg ending NEAR its end must pass its
     # waypoint before the replan, or the replan routes back to it (oscillation at gef_fild10 wp 64)
     assert 'if patrol and near_end and wp_st["through"] is not None:' in src
@@ -705,7 +707,7 @@ def test_the_walk_timer_is_an_option_and_recorded_only_when_changed() -> None:
     assert dh.fixes_of(dh.argparse.Namespace(**base, walk_every=0.8))["walk_every"] == 0.8
     src = (Path(dh.__file__)).read_text()
     # 9.13d added "and not loot_settling(...)" after it (False unless --kill-gap looted)
-    assert "and tick - last_walk >= a.walk_every" in src and dh.WALK_EVERY_S == 1.2
+    assert "and tick - hs.last_walk >= a.walk_every" in src and dh.WALK_EVERY_S == 1.2
 
 
 def _ring_crop(
@@ -775,10 +777,11 @@ def test_dungeon87_a_walk_target_straight_north_moves_one_cell_aside() -> None:
         assert dh.column_dodge(here, c, None, every) == (c, None)
     assert dh.column_dodge(here, (13, 33), None, every)[1] == "side+1"  # 6 up: 5 / 6 unsent in p3
     src = (Path(dh.__file__)).read_text()
-    assert "c, dodge = column_dodge(here, c, nxt_, usable)" in src
+    assert "c, dodge = column_dodge(hs.here, c, nxt_, usable)" in src
     i_dodge = src.index("c, dodge = column_dodge(")
     between = src[i_dodge : src.index("res = hover(u, v)\n", i_dodge)]
-    assert "rel = (c[0] - here[0], c[1] - here[1])" in between  # the hover reads the moved cell
+    # the hover reads the moved cell
+    assert "rel = (c[0] - hs.here[0], c[1] - hs.here[1])" in between
     assert dh.VERSION == "dungeon@8.7"
 
 
@@ -788,7 +791,7 @@ def test_a_full_lap_of_routeless_skips_flies_at_once() -> None:
     assert not dh.dead_end(79, 80) and dh.dead_end(80, 80) and not dh.dead_end(5, 0)
     src = (Path(dh.__file__)).read_text()
     assert 'wp_st["skips"] += 1  # route-less skips in a row (dead_end)' in src
-    assert 'elif goal_path:\n                        wp_st["skips"] = 0' in src
+    assert 'elif hs.goal_path:\n                        wp_st["skips"] = 0' in src
     assert 'why_s = "dead_end" if patrol and dead_end(wp_st["skips"], len(wps)) else "idle"' in src
 
 
@@ -1301,7 +1304,7 @@ def test_boss_guard_names_and_fits() -> None:
     assert dh.boss_of(None, bosses, species) is None and dh.boss_of("Cruiser", (), species) is None
     assert dh.BOSS_AVOID_S == 30.0
     src = Path(dh.__file__).read_text()
-    assert 'press("fly", "boss")' in src and "and tick >= boss_until):  # a box never" in src
+    assert 'press("fly", "boss")' in src and "and tick >= hs.boss_until):  # a box never" in src
 
 
 def test_boss_guard_names_from_the_real_kb() -> None:
@@ -1377,9 +1380,11 @@ def test_far_approach_walks_toward_a_far_target_first() -> None:
     assert dh.fixes_of(dh.argparse.Namespace(**base, far_approach=True))["far_approach"] == [
         9, 4, 2, 3.0]  # fmt: skip
     src = Path(dh.__file__).read_text()
-    assert 'click_at(u_a, v_a, "approach")' in src and "last_walk_click = time.monotonic()" in src
-    assert "if lock is None and not approaching:  # dungeon@9.10: no scan mid-approach" in src
-    assert "nonlocal last_walk_click" in src
+    assert (
+        'click_at(u_a, v_a, "approach")' in src and "hs.last_walk_click = time.monotonic()" in src
+    )
+    assert "if hs.lock is None and not approaching:  # dungeon@9.10: no scan mid-approach" in src
+    assert "nonlocal last_walk_click" not in src  # 5b-1: HuntState, written by box_target
 
 
 def test_box_every_sets_the_watchers_rhythm() -> None:
@@ -1420,7 +1425,7 @@ def test_reach_check_skips_boxes_the_server_would_not_walk_to() -> None:
         17, 14, "9.12b"]  # fmt: skip
     src = Path(dh.__file__).read_text()
     assert "or unreachable(here_s, foot))" in src  # the trigger
-    assert "or unreachable(here, f)))" in src  # the box path (engage-screen)
+    assert "or unreachable(hs.here, f)))" in src  # the box path (engage-screen)
     assert 'raise SystemExit(f"dungeon@9.12 refused: --reach-check: {e}")' in src  # fail closed
     # 9.12b: the target cell is the client's picked cell under the box's foot
     assert "reach_pick[kp_] = picked_cell(camera, gat, here_, foot)" in src
@@ -1463,7 +1468,8 @@ def test_kill_gap_takes_a_stopped_hit_stream_as_the_kill() -> None:
     assert dh.fixes_of(dh.argparse.Namespace(**base, kill_gap=True))["kill_gap"] == [
         1.5, 5, "9.13d", 0.8]  # fmt: skip
     src = Path(dh.__file__).read_text()
-    assert 'if getattr(a, "kill_gap", False) and kill_gapped(n_lock, tick - last_ours):' in src
+    assert ('if getattr(a, "kill_gap", False) and kill_gapped(\n'
+            '                            n_lock, tick - hs.last_ours\n') in src  # fmt: skip
     assert 'ev({"kind": "kill", "by": "hit_gap"' in src
     assert "ours_ticks.append(tick)" in src
     # the quiet-kill end the exp line used (pilot 4) is what ends the fight after it
@@ -1498,7 +1504,7 @@ def test_walk_pick_needs_the_clients_picked_cell_near_and_walkable() -> None:
     src = Path(dh.__file__).read_text()
     assert "if not walk_pick_ok(pc_, c, okr):" in src
     # 9.15b: with no candidate passing the pick check, the plain fits (today's click)
-    assert "wt_ = walk_target(goal_path, ahead_, fits_plain)" in src
+    assert "wt_ = walk_target(hs.goal_path, ahead_, fits_plain)" in src
 
 
 def test_loot_settle_holds_walks_until_a_fresh_position() -> None:
@@ -1510,7 +1516,7 @@ def test_loot_settle_holds_walks_until_a_fresh_position() -> None:
     assert not dh.loot_settling(10.0, 9.0, 13.5)  # 3 s passed: walk anyway
     assert not dh.loot_settling(-1e9, 5.0, 11.0)  # no loot step: never holds
     src = Path(dh.__file__).read_text()
-    assert "and not loot_settling(loot_settle_t, last_pos_t, tick):" in src
+    assert "and not loot_settling(hs.loot_settle_t, hs.last_pos_t, tick):" in src
     assert 'counts["loot_click"] += 1' in src
 
 
@@ -1536,15 +1542,16 @@ def test_loot_first_holds_box_engages_and_ends_only_the_killing_fight() -> None:
     src = Path(dh.__file__).read_text()
     # part 1: only a box waits (a hit, an HP drop or a Miss still starts the fight)
     assert "if near_ is not None and not (hit_now or dropped or swing_now) \\" in src
-    assert "and box_engage_held(loot_first_on, mode, bool(loot_list)):" in src
+    assert ("and box_engage_held(loot_first_on, hs.mode,\n"
+            "                                            bool(hs.loot_list)):") in src  # fmt: skip
     # part 2: the fight's start is the engage's tick
-    assert "fight_t0 = tick  # 9.16 part 2" in src
-    assert "if lock is None and quiet and quiet_kill_ends(kills_seen, tick, fight_t0," in src
+    assert "hs.fight_t0 = tick  # 9.16 part 2" in src
+    assert "if hs.lock is None and quiet and quiet_kill_ends(kills_seen, tick, hs.fight_t0," in src
     # part 3: the defend scan's first hand, clicked only without a hit in the last 1 s
     assert 'if vd == "pickup" and purpose == "defend" and loot_first_on and hand_at is None:' in src
-    assert '"why": "scan_hand"' in src and "loot_list.append((here, time.monotonic()))" in src
+    assert '"why": "scan_hand"' in src and "hs.loot_list.append((hs.here, time.monotonic()))" in src
     # the loot step itself is unchanged: the trim's hovers, nearest to where she stands
-    assert "todo = sorted(plan - hovered, key=lambda c: (cheb2(c, here), c))" in src
+    assert "todo = sorted(plan - hovered, key=lambda c: (cheb2(c, hs.here), c))" in src
 
 
 def test_walk_pick_step_takes_the_pickable_step_nearest_the_goal() -> None:
@@ -1581,7 +1588,7 @@ def test_walk_pick_step_takes_the_pickable_step_nearest_the_goal() -> None:
     assert 'if wt_ is None and getattr(a, "walk_pick_step", False):' in src
     # the step is tried BEFORE 9.15b's plain click, which stays as it was
     i_step = src.index('if wt_ is None and getattr(a, "walk_pick_step", False):')
-    i_plain = src.index("wt_ = walk_target(goal_path, ahead_, fits_plain)")
+    i_plain = src.index("wt_ = walk_target(hs.goal_path, ahead_, fits_plain)")
     assert i_step < i_plain
     assert 'rec_w["pick"] = pick_how' in src
 
@@ -1644,7 +1651,7 @@ def test_boss_walk_walks_away_from_a_summon_and_flies_from_the_boss() -> None:
     assert rec["boss_walk"] == [14, 8, 2.5, 2, 60.0, "9.18"] and rec["stage_mob"] == "1515:2"
     src = Path(dh.__file__).read_text()
     assert '"dungeon@9.18 refused: --boss-walk goes with --engage-screen"' in src
-    assert "if boss_hit is not None and tick < boss_grace_until:" in src
+    assert "if boss_hit is not None and tick < hs.boss_grace_until:" in src
     assert 'setup.append(f"@monster {int(mob_id)} {int(n_mob or 1)}")' in src
     # without a walk-away the Fly Wing path is the one it always was
     assert 'press("fly", "boss")' in src
@@ -1823,7 +1830,7 @@ def test_late_confirm_is_only_for_late_reads_and_keeps_the_jump_bar() -> None:
     assert dh.is_jump((79, 93), far, 2.0)  # 21 cells in 2.0 s: the hard bar trips
     src = Path(dh.__file__).read_text()
     i_lf2 = src.index("pos, lf2_ = late_confirm(pos_ok, held, img_meta, newer_readout")
-    i_jump = src.index("if (here is not None and is_jump(here, p_, tick - last_pos_t)")
+    i_jump = src.index("if (hs.here is not None and is_jump(hs.here, p_, tick - hs.last_pos_t)")
     assert i_lf2 < src.index("rd_why = read_outcome(rd, pos)") < i_jump
     assert "if late_confirm_on and held is not None:" in src
     assert src.count("late_confirm(pos_ok") == 1  # the main HP read only (read_here() as today)
@@ -1868,7 +1875,8 @@ def test_lf1_each_hp_read_logs_the_held_read_and_the_age_of_here() -> None:
     cell and its gap to the read before, and the age of ``here`` (s since the last fresh read)."""
     src = Path(dh.__file__).read_text()
     assert 'lf_rec = {"held": list(held.cell), "held_dt": dt_h}' in src
-    hp = '"here_age_s": round(tick - last_pos_t, 2), **lf_rec,\n                    "rd": rd_why})'
+    hp = ('"here_age_s": round(tick - hs.last_pos_t, 2), **lf_rec,\n'
+          '                    "rd": rd_why})')  # fmt: skip
     assert hp in src
     # PosConfirm.accept is check()'s first half: the same answers as before (the X1b test above)
     from types import SimpleNamespace as R
@@ -2089,7 +2097,8 @@ def test_unread_step_is_wired_into_the_pos_unread_rule_only() -> None:
     src = Path(dh.__file__).read_text()
     i_rule = src.index("and not unread_held(tick)):")
     i_stuck = src.index('"why": "pos_unread"})')
-    assert src.index("and pos_flies < POS_FLY_MAX") < i_rule < i_stuck  # due first (short-circuit)
+    # due first (short-circuit)
+    assert src.index("and hs.pos_flies < POS_FLY_MAX") < i_rule < i_stuck
     assert src[i_stuck : i_stuck + 200].count('press("fly", "pos_unread")') == 1
     body = src[src.index("def unread_held(now: float) -> bool:") :]
     body = body[: body.index("\n        def ", 10)]
@@ -2103,11 +2112,14 @@ def test_unread_step_is_wired_into_the_pos_unread_rule_only() -> None:
     assert src.count('click_at(u_u, v_u, "unread_step")') == 1
     assert "unread_step" not in dh.NPC_GUARDED  # a walk-type click, as the walk's
     # (c): a fresh main read ends the escape, after the jump bar, before ``here`` moves
-    i_fresh = src.index('unread_end("fresh", at=list(p_)')
-    assert src.index("if (here is not None and is_jump(here, p_, tick - last_pos_t)") < i_fresh
-    assert i_fresh < src.index("here, last_pos_t = p_, tick")
+    i_fresh = src.index('"fresh", at=list(p_), held=None if hs.here is None')
+    assert (
+        src.index("if (hs.here is not None and is_jump(hs.here, p_, tick - hs.last_pos_t)")
+        < i_fresh
+    )
+    assert i_fresh < src.index("hs.here, hs.last_pos_t = p_, tick")
     # no search walk click while an escape runs; every other Fly Wing ends the escape
-    assert "and tick - last_walk >= a.walk_every and not unread_active() \\\n" in src
+    assert "and tick - hs.last_walk >= a.walk_every and not unread_active() \\\n" in src
     hook = 'if what == "fly" and why != "pos_unread":\n                unread_end("fly", why=why)'
     assert hook in src
     # the way she came: the walk click, the boss walk-away, the far approach, a far strike, and
@@ -2125,7 +2137,7 @@ def test_unread_step_is_wired_into_the_pos_unread_rule_only() -> None:
         assert end_ in body
     # LF-4 leaves the fight branch alone: the rule is still checked outside fights only
     fight_end = "time.sleep(max(0.0, 1.0 / READ_HZ - (time.monotonic() - tick)))\n"
-    assert fight_end + "                    continue" in src
+    assert fight_end + "                    return TICK_DONE" in src  # 5b-1: the step's continue
 
 
 # --- --still-target (dungeon@9.23, LS-2; rogue-xmas02.md Study S-LS) ------------------------------
@@ -2314,7 +2326,7 @@ def test_still_target_is_wired_at_the_box_targets_sword_only() -> None:
     body = body[: body.index("\n        def ", 10)]
     i_sword = body.index('if res_["verdict"] == "sword":')
     i_on = body.index("if still_target_on:  # dungeon@9.23 (LS-2)", i_sword)
-    assert i_sword < i_on < body.index("sp_ = box_spot(here, foot)", i_sword)
+    assert i_sword < i_on < body.index("sp_ = box_spot(hs.here, foot)", i_sword)
     assert body.count("still_target_on") == 1 and src.count("press_check(") == 2
     assert 'rec["press"], today_p, got_p = press_check(' in body
     assert 'near_b, meta, arm, bool(still_rec.get("still", False)))' in body
@@ -2499,7 +2511,7 @@ def test_lead_press_is_wired_in_press_checks_hold_only() -> None:
     i_self = la.index('gate = "self"')
     i_rec = la.index('prs["lead"] = {"v_px_s": r1(pl["v"]), "age_s": round(pl["age_s"], 3),')
     i_gate = la.index("if gate is not None:")
-    i_spot = la.index("sp_l = box_spot(here, foot_l)")
+    i_spot = la.index("sp_l = box_spot(hs.here, foot_l)")
     i_ret = la.index("return rel_l, (u_l, v_l)")
     assert i_dec < i_far < i_skip < i_off < i_self < i_rec < i_gate < i_spot < i_ret
     assert '"sword": "unchecked"' in la  # LS-1's known risk, in every lead record
@@ -3009,34 +3021,37 @@ def test_bare_steal_is_wired_off_by_default_at_strike_tick_escapes_and_end() -> 
     return; the dagger's key goes BEFORE every Fly Wing (press) and before both walk-aways; the
     tick runs before the fight branch; the run_end record carries the final state."""
     src = Path(dh.__file__).read_text()
-    assert src.count("bare = BareCtl(") == 1
+    assert src.count("hs.bare = BareCtl(") == 1
     i_on = src.index("        if bare_on:  # dungeon@9.27: every input is the runner's own")
-    assert i_on < src.index("bare = BareCtl(") < src.index("        def strike(u: float")
-    assert "bare: BareCtl | None = None" in src
+    assert i_on < src.index("hs.bare = BareCtl(") < src.index("        def strike(u: float")
+    assert "hs.bare = None" in src
     head = "        def strike(u: float, v: float, rel: Cell, by: str, species: str"  # 9.51
     body = src[src.index(head) :]
     body = body[: body.index("\n        def box_target(")]
     # dungeon@9.51: + the box's recipe at this decision (rcp_; test_box_recipes.py)
-    hook = 'if not bare.before_strike(by, hp_b, lambda: hover(u, v)["verdict"] == "sword",'
+    hook = 'if not hs.bare.before_strike(by, hp_b, lambda: hover(u, v)["verdict"] == "sword",'
     i_b = body.index(hook)
     assert i_b < body.index("if escaped[0]:\n                    return True") < body.index(
         "ref = frame()") < body.index('click_at(u, v, "strike")')  # fmt: skip
-    assert body.rstrip().endswith("bare.struck()  # dungeon@9.27: the caller holds this target's "
-                                  "lock now\n            return True")  # fmt: skip
+    assert body.rstrip().endswith("hs.bare.struck()  # dungeon@9.27: the caller holds this "
+                                  "target's lock now\n            return True")  # fmt: skip
     pb = src[src.index("        def press(what: str, why: str) -> None:") :]
     pb = pb[: pb.index("\n        def ", 10)]
-    assert pb.index("bare.escape()") < pb.index("agent_raw.keys(keys_[what])")
-    assert 'if what == "fly" and bare is not None:' in pb
-    assert src.count("bare.escape()") == 3  # press + the boss walk-away + the unreach walk
+    assert pb.index("hs.bare.escape()") < pb.index("agent_raw.keys(keys_[what])")
+    assert 'if what == "fly" and hs.bare is not None:' in pb
+    assert src.count("hs.bare.escape()") == 3  # press + the boss walk-away + the unreach walk
     for ind in (" " * 24, " " * 16):  # the boss guard's walk-away; --unreach-escape's walk
-        assert (f"{ind}bare.escape()  # dungeon@9.27: never walk away bare\n{ind}"
+        assert (f"{ind}hs.bare.escape()  # dungeon@9.27: never walk away bare\n{ind}"
                 'click_at(u_w, v_w, "walk")') in src  # fmt: skip
-    assert ('bare.tick(tick, lock is not None, mode == "fight", img, frac)\n'
-            "                # --- FIGHT: locked, or scan for the attacker") in src  # fmt: skip
-    i_end = src.index('bare_final = bare.run_end(dead=reason == "death")')
-    assert i_end < src.index('ev({"kind": "run_end", "reason": reason')
+    tick_ = hc.driver_loop(ast.parse(src)).body  # 5b-1: the tick as the driver plays its steps
+    i_bt = next(i for i, x in enumerate(tick_) if ast.unparse(x) == (
+        "if hs.bare is not None:\n    hs.bare.tick(tick, hs.lock is not None, hs.mode == 'fight', "
+        "img, frac)"))  # fmt: skip
+    assert ast.unparse(tick_[i_bt + 1].test) == "hs.mode == 'fight'"  # type: ignore[attr-defined]
+    i_end = src.index('bare_final = hs.bare.run_end(dead=hs.reason == "death")')
+    assert i_end < src.index('ev({"kind": "run_end", "reason": hs.reason')
     assert '**({"bare": bare_final} if bare_final is not None else {})' in src
-    assert 'ev({"kind": "bare_after_alive", **bare.run_end()})' in src
+    assert 'ev({"kind": "bare_after_alive", **hs.bare.run_end()})' in src
     # the I/O is the runner's own: the gate's window read, its chord, press(), ui_double_click
     assert "windows=lambda f_: ui_gate.windows_at_home(f_, bare_reg)" in src
     assert "chord=lambda: agent_raw.chord(*bare_keys)" in src
@@ -3304,19 +3319,21 @@ def test_without_bare_ready_the_merged_bare_steal_is_unchanged() -> None:
 
 def test_bare_ready_is_wired_after_the_loot_step_and_holds_only_the_search_walk() -> None:
     src = Path(dh.__file__).read_text()
-    i_loot = src.index("got_ = loot_step(loot_list, fight_ref)")
-    i_after = src.index('if mode == "after":\n                    mode = "search"\n')
-    i_hook = src.index("got_r = bare.ready_tick(")
+    i_loot = src.index("got_ = loot_step(hs.loot_list, hs.fight_ref)")
+    i_after = src.index('if hs.mode == "after":\n                    hs.mode = "search"\n')
+    i_hook = src.index("got_r = hs.bare.ready_tick(")
     i_rest = src.index("# --- REST (B / C): to the nearest spot, sit until HP 100 %")
     assert i_loot < i_after < i_hook < i_rest  # after the loot step and the rest decision
-    assert src.count("bare.ready_tick(") == 1
+    assert src.count("hs.bare.ready_tick(") == 1
     hook = src[i_hook - 400 : i_rest]
-    assert "if bare is not None and bare.ready:" in hook
-    assert ("bare_idle(mode, lock is not None, sitting, here is not None,\n"
-            "                                  tick - fly_at, tick < boss_until, unread_active())"
-            ) in hook  # fmt: skip
+    assert "if hs.bare is not None and hs.bare.ready:" in hook
+    assert ("bare_idle(hs.mode, hs.lock is not None, hs.sitting, hs.here is not None,\n"
+            "                                  tick - hs.fly_at, tick < hs.boss_until, "
+            "unread_active())") in hook  # fmt: skip
     assert "tick - last_click_t[0] >= BARE_READY_SETTLE_S, frac)" in hook
-    assert 'if got_r == "swap":\n                        continue' in hook
+    assert ('if got_r == "swap":\n                        # the swap took ~2 s: a fresh tick '
+            "reads the fight signs first\n"
+            "                        return TICK_DONE") in hook  # fmt: skip
     assert "and not ready_hold \\\n" in src[i_rest:]  # the search walk's click waits
     body = src[src.index("        def click_at(u: float, v: float, why: str) -> None:") :]
     body = body[: body.index("\n        def ", 10)]
@@ -3948,27 +3965,28 @@ def test_queue_is_wired_after_the_loot_step_before_the_search_walk_through_strik
     swap, before the REST block and the search walk; its input is ONE strike() by "queue" after a
     SWORD hover, through the box path's skips; no click path of its own."""
     src = Path(dh.__file__).read_text()
-    i_loot = src.index("got_ = loot_step(loot_list, fight_ref)")
-    i_due = src.index('if q_on and mode == "after":  # dungeon@9.30 (--queue)')
-    i_set = src.index('bq_st["due"] = {"t": swing_floor, "fly": fly_at}')
-    i_after = src.index('if mode == "after":\n                    mode = "search"\n')
-    i_ready = src.index("got_r = bare.ready_tick(")
+    i_loot = src.index("got_ = loot_step(hs.loot_list, hs.fight_ref)")
+    i_due = src.index('                # dungeon@9.30 (--queue): the fight and its loot step\n'
+                      '                if q_on and hs.mode == "after":\n')  # fmt: skip
+    i_set = src.index('bq_st["due"] = {"t": hs.swing_floor, "fly": hs.fly_at}')
+    i_after = src.index('if hs.mode == "after":\n                    hs.mode = "search"\n')
+    i_ready = src.index("got_r = hs.bare.ready_tick(")
     i_pick = src.index('if q_on and bq_st["due"] is not None and queue_next(tick, ready_hold):')
     i_rest = src.index("# --- REST (B / C): to the nearest spot, sit until HP 100 %")
     i_walk = src.index("and not ready_hold \\\n", i_rest)  # the search walk's click
     assert i_loot < i_due < i_set < i_after < i_ready < i_pick < i_rest < i_walk
-    assert src[i_loot:i_due].count("continue") == 1  # a loot SWORD (a new fight): no pick due
-    assert src[i_pick:i_rest].count("continue") == 1
+    assert src[i_loot:i_due].count("return TICK_DONE") == 1  # a loot SWORD (a new fight)
+    assert src[i_pick:i_rest].count("return TICK_DONE") == 1
     i_fight = src.index("                # --- FIGHT: locked, or scan for the attacker")
-    book = ('if mode == "fight":\n                    if q_on and boxes is not None:  # '
+    book = ('if hs.mode == "fight":\n                    if q_on and boxes is not None:  # '
             "dungeon@9.30 (--queue): bookkeeping only\n"
             '                        if bq_st["due"] is not None:  # a held pick (a swap\'s tick): '
             "a hit / a box\n"
             '                            counts["queue_skip_fight"] += 1  # started the next fight '
             "first\n"
             '                        bq_st["due"] = None  # a fight runs: no pick is due\n'
-            "                        q_book(taken_new is not None or last_swing == tick or dropped)"
-            '\n                    if lock is not None:\n')  # fmt: skip
+            "                        q_book(taken_new is not None or hs.last_swing == tick or "
+            'dropped)\n                    if hs.lock is not None:\n')  # fmt: skip
     assert src.index(book) == i_fight + len("                # --- FIGHT: locked, or scan for "
                                             "the attacker\n                ")  # fmt: skip
     assert src.count("q_book(") == 2 and src.count("queue_next(") == 2  # a def + one call each
@@ -3990,12 +4008,13 @@ def test_queue_is_wired_after_the_loot_step_before_the_search_walk_through_strik
     for skip in (
         "if not in_view(foot_[0], foot_[1] - BODY_UP):",
         "box_spots.ignored(sp_)",
-        "if unreachable(here, foot_):",
-        "cheb2(sp_, here) >= APPROACH_CELLS",
+        "if unreachable(hs.here, foot_):",
+        "cheb2(sp_, hs.here) >= APPROACH_CELLS",
     ):
         assert skip in qn, skip  # fmt: skip
     assert "bw_.fresh_now(" in qn and "bw_.wait_fresh(t_q, BOX_TARGET_WAIT_S)" in qn
-    assert "bare is not None and (bare.busy or bare.pending is not None)" in qn  # swaps hold
+    assert ("hs.bare is not None\n                                  and (hs.bare.busy or "
+            "hs.bare.pending is not None)") in qn  # swaps hold  # fmt: skip
     assert "counts[f\"queue_{got_['what']}\"] += 1" in qn  # queue_pick / _refind_fail / _empty
     assert '"kind": "queue", "what": got_["what"], "n": got_["n"],' in qn
     assert '"gap_ms": round((time.monotonic() - float(due_["t"])) * 1e3),' in qn
@@ -4089,8 +4108,10 @@ def test_swap_gap_marks_the_end_of_every_swap_and_restarts_the_no_hit_clocks() -
     assert dh.kill_gapped(9, ctl.swap_t + 0.1 - last_hit) is True  # without --swap-gap: a kill
     assert dh.kill_gapped(9, ctl.swap_t + 0.1 - max(last_hit, ctl.swap_t)) is False  # with it
     src = Path(dh.__file__).read_text()
-    i_hook = src.index("if swap_gap and bare is not None and bare.swap_t > last_ours:  # 9.27e")
-    assert i_hook < src.index("and kill_gapped(n_lock, tick - last_ours):")  # before the kill gap
+    i_hook = src.index("# 9.27e\n                        if swap_gap and hs.bare is not None "
+                       "and hs.bare.swap_t > hs.last_ours:")  # fmt: skip
+    assert i_hook < src.index("and kill_gapped(\n                            n_lock, "
+                              "tick - hs.last_ours")  # before the kill gap  # fmt: skip
     assert src.count("self.swap_t = self.io.clock()") == 5  # 4 swap sequences + the escape
     a = dh.argparse.Namespace(plant_sweep=False, box_ignore=2, ag_match=40.0, walk_trust=False,
                               rest="spot", npc_guard=False, bare_steal=True,
@@ -4127,8 +4148,8 @@ def test_loot_aim_is_wired_at_the_kills_and_in_the_trim_step() -> None:
     only re-orders / caps after them; recorded in the run's fixes."""
     src = Path(dh.__file__).read_text()
     assert src.count("kill_aim_set(tick)") == 2
-    assert "todo = sorted(plan - hovered, key=lambda c: (cheb2(c, here), c))" in src
-    i_sort = src.index("todo = sorted(plan - hovered, key=lambda c: (cheb2(c, here), c))")
+    assert "todo = sorted(plan - hovered, key=lambda c: (cheb2(c, hs.here), c))" in src
+    i_sort = src.index("todo = sorted(plan - hovered, key=lambda c: (cheb2(c, hs.here), c))")
     assert i_sort < src.index("todo = aim_order(todo, aims)") < src.index(
         'counts["loot_aim_capped"] += 1')  # fmt: skip
     assert "--loot-aim goes with --loot trim and --box-strike" in src
@@ -4196,7 +4217,7 @@ def test_loot_items_is_wired_before_the_aim_and_after_the_pinned_sort() -> None:
     assert body.count("item_det.detect(frame())") == 1
     assert '"end": "no_items"' in body and 'counts["loot_items_fail"] += 1' in body
     assert "if loot_aim and seen_items is None:" in body
-    i_sort = body.index("todo = sorted(plan - hovered, key=lambda c: (cheb2(c, here), c))")
+    i_sort = body.index("todo = sorted(plan - hovered, key=lambda c: (cheb2(c, hs.here), c))")
     assert i_sort < body.index("todo = [c for c in order_items if c not in hovered]")
     assert "--loot-items goes with --loot trim" in src
     i_def = src.index("item_det: Any = None")
@@ -4365,7 +4386,7 @@ def test_exp_first_is_on_by_default_and_recorded() -> None:
 
 def test_kill_gap_yields_to_exp_lines_in_the_source() -> None:
     src = (ROOT / "scripts" / "dungeon_hunt.py").read_text()
-    assert 'if getattr(a, "kill_gap", False) and not exp_seen' in src  # n_lock: 0 hits
+    assert 'if getattr(a, "kill_gap", False) and not hs.exp_seen' in src  # n_lock: 0 hits
     assert 'elif typ == "base_exp" or (exp_first and typ == "job_exp"):' in src
 
 

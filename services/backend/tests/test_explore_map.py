@@ -105,12 +105,12 @@ def test_the_runner_wires_explore_behind_its_flag() -> None:
     assert "explore" not in dh.fixes_of(dh.argparse.Namespace(**base))
     assert dh.fixes_of(dh.argparse.Namespace(**base, explore=True))["explore"][0] == em.REGION
     src = Path(dh.__file__).read_text()
-    assert "goal = explore_goal(here)" in src and "explore_block(here)" in src
+    assert "goal = explore_goal(hs.here)" in src and "explore_block(hs.here)" in src
     assert 'raise SystemExit("dungeon@9.14 refused: --explore goes with --search patrol")' in src
     assert "ev_hooks.append(ex_rec.on_event)" in src
     assert "merged_ = em.save_merged(ex_rec.know)" in src
     # the patrol loop's own paths are unchanged
-    assert "goal = patrol_goal(here)" in src and "skip_waypoint(here)  # carved off" in src
+    assert "goal = patrol_goal(hs.here)" in src and "skip_waypoint(hs.here)  # carved off" in src
 
 
 def test_coverage_and_the_cover_novelty() -> None:

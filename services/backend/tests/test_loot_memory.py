@@ -24,6 +24,7 @@ ROOT = Path(__file__).resolve().parents[3]
 sys.path.insert(0, str(ROOT / "scripts"))
 
 import dungeon_hunt as dh  # noqa: E402
+import huntstate_check as hc  # noqa: E402
 
 SRC = (ROOT / "scripts" / "dungeon_hunt.py").read_text()
 TREE = ast.parse(SRC)
@@ -31,8 +32,12 @@ LINES = SRC.split("\n")
 BASE = {"plant_sweep": False, "box_ignore": 2, "ag_match": 40.0, "walk_trust": False,
         "rest": "spot", "npc_guard": False}  # fmt: skip
 # loot_step_v1 as 9.36 left it (120 lines, commit 1ac1506c): 9.37 adds two `if lm_on ...` blocks
-# (each with its comment lines) and changes nothing else in it
-V1_936_SHA256 = "ea4fb46d28c7199109bd0d7f9a2e73e5b27c78fca9e5af928e8a79befb0d830d"
+# (each with its comment lines) and changes nothing else in it. Those lines hashed to
+# ea4fb46d28c7... until live-blocks 5b-1 (section 13) wrote run()'s rebound names as
+# HuntState's (`hs.here`, ...): the same lines after that rewrite, which
+# scripts/huntstate_check.py proves (run() == the rewrite of eb160ee1's run(), as ASTs), hash to
+# this
+V1_936_SHA256 = "66adb1b697a01dd5d9e780fb8cc83edc49723b93fd74cfd8fa2fdcd0b9432801"
 MEMORY_NAMES = {"lm_kills", "lm_mem", "lm_st", "memory_kill", "memory_prune", "memory_look",
                 "memory_tick", "memory_merge", "memory_clear"}  # fmt: skip
 
@@ -268,30 +273,28 @@ def test_the_look_never_sleeps_clicks_or_hovers() -> None:
 def test_the_look_runs_in_any_mode_but_sitting_before_the_fight_branch() -> None:
     hook = ("                if lm_on:\n"
             "                    memory_prune(tick)\n"
-            "                    if lm_kills and not sitting:\n"
+            "                    if lm_kills and not hs.sitting:\n"
             "                        memory_look(tick)\n")  # fmt: skip
     assert SRC.count(hook) == 1
     i_hook = SRC.index(hook)
     i_prune_936 = SRC.index("                    recheck_prune(tick)\n")
     i_fight = SRC.index("                # --- FIGHT: locked, or scan for the attacker")
-    i_fight_if = SRC.index('                if mode == "fight":\n', i_fight)
+    i_fight_if = SRC.index('                if hs.mode == "fight":\n', i_fight)
     assert i_prune_936 < i_hook < i_fight < i_fight_if  # before the fight branch: fights looked at
-    i_loop = SRC.index("            while time.monotonic() < t_end:")
-    assert i_loop < i_hook
+    i_steps = SRC.index("            def step_begin() -> str | None:")  # 5b-1: the loop's steps
+    assert i_steps < i_hook < SRC.index("            while time.monotonic() < t_end:")
     # no mode test guards it (search, fight, after, a walk to rest): only sitting stops it -- the
     # hook is a statement of the loop's own body, its one inner test `lm_kills and not sitting`
-    run_node = _fn("run")
-    loop = next(n for n in ast.walk(run_node) if isinstance(n, ast.While)
-                and "t_end" in _src(n.test))  # fmt: skip
+    loop = hc.driver_loop(_fn("run"))  # 5b-1: the tick as the driver plays its steps
     outer = [n for n in loop.body if isinstance(n, ast.If) and _src(n.test) == "lm_on"
              and "memory_look(tick)" in _src(n)]  # fmt: skip
     assert len(outer) == 1
     inner = [n for n in outer[0].body if isinstance(n, ast.If)]
-    assert [_src(n.test) for n in inner] == ["lm_kills and not sitting"]
+    assert [_src(n.test) for n in inner] == ["lm_kills and not hs.sitting"]
     assert "mode" not in hook
     look = _nested("memory_look")
-    assert "mode ==" not in look and "mode !=" not in look and "mode in" not in look
-    assert 'memory_look_due(tick_, lm_st["last"], lm_kills, sitting)' in look
+    assert "mode ==" not in look and "mode !=" not in look and "hs.mode in" not in look
+    assert 'memory_look_due(tick_, lm_st["last"], lm_kills, hs.sitting)' in look
     assert "not sitting" in _nested("memory_look_due")
 
 
@@ -313,7 +316,7 @@ def test_the_look_is_one_detection_on_a_fresh_frame_over_the_wide_grid() -> None
 
 
 def test_the_kills_are_registered_at_both_kill_sites_behind_the_flag() -> None:
-    reg = "memory_kill(here, tick)"
+    reg = "memory_kill(hs.here, tick)"
     assert SRC.count(reg) == 2
     i_exp = SRC.index('ev({"kind": "kill", "by": "exp_line"')
     i_gap = SRC.index('ev({"kind": "kill", "by": "hit_gap"')
@@ -321,14 +324,15 @@ def test_the_kills_are_registered_at_both_kill_sites_behind_the_flag() -> None:
     assert i_exp < i_1 < i_gap < i_2
     for i_ in (i_1, i_2):
         assert "if lm_on:" in SRC[i_ - 100 : i_]
-        assert "loot_list.append((here, tick))" in SRC[i_ - 700 : i_]  # where the loot list grows
+        # where the loot list grows
+        assert "hs.loot_list.append((hs.here, tick))" in SRC[i_ - 700 : i_]
     assert "lm_kills.append(PendingKill(cell_k, t_k))" in _nested("memory_kill")
     prune = _nested("memory_prune")
     assert "recheck_split(lm_kills, tick_, esc_t, MEMORY_S)" in prune  # pruned at MEMORY_S
     assert "memory_expire(lm_mem, tick_, esc_t)" in prune
     assert '"kind": "memory_expired", "cells": len(cells_)' in prune
     # the escapes are 9.36's own
-    assert "max(fly_at, house_click_t, max(boss_walks, default=-1e9)," in prune
+    assert "max(hs.fly_at, hs.house_click_t, max(boss_walks, default=-1e9)," in prune
 
 
 def test_the_loot_step_is_9_36s_plus_two_marked_blocks() -> None:
@@ -353,7 +357,7 @@ def test_the_loot_step_is_9_36s_plus_two_marked_blocks() -> None:
     # the merge sits after 9.33's own plan and before its "no_items" return
     i_own = v1.index("order_items = items_plan(seen_items, plan)")
     i_items = v1.index('out_["items"] = {"seen": [list(c_) for c_ in seen_items],')
-    i_merge = v1.index("order_items, lm_rem = memory_merge(order_items, lm_mem, here)")
+    i_merge = v1.index("order_items, lm_rem = memory_merge(order_items, lm_mem, hs.here)")
     i_none = v1.index("if not order_items:  # nothing near the kills: no hover at all")
     assert i_own < i_items < i_merge < i_none
     assert 'out_["items"]["remembered"] = [list(c_) for c_ in lm_rem]' in v1
@@ -367,26 +371,28 @@ def test_the_loot_step_is_9_36s_plus_two_marked_blocks() -> None:
 
 
 def test_the_calm_path_is_9_36s_after_the_fight_branch_before_the_after_block() -> None:
-    i_fight = SRC.index("                if mode == \"fight\" or (lock is not None):\n"
-                        "                    continue\n")  # fmt: skip
+    i_fight = SRC.index("                if hs.mode == \"fight\" or (hs.lock is not None):\n"
+                        "                    return TICK_DONE\n")  # fmt: skip
     i_rk = SRC.index("if rk_on and rk_pending and recheck_tick(tick, calm):")
     i_hook = SRC.index("if lm_on and lm_mem and memory_tick(tick, calm):")
     i_after = SRC.index("                # --- AFTER a fight: loot, then rest or search")
     assert i_fight < i_rk < i_hook < i_after
     tick_ = _nested("memory_tick")
     assert "item_det" not in tick_  # no detection: the hover itself checks the cell
-    i_calm = tick_.index("if not recheck_calm(mode, lock is not None, calm_, tick_ - last_taken,")
+    i_calm = tick_.index(
+        "if not recheck_calm(hs.mode, hs.lock is not None, calm_, tick_ - hs.last_taken,"
+    )
     i_visit = tick_.index("got_m = recheck_visit(todo_[0], rs)")
     assert i_calm < i_visit and tick_.count("recheck_visit(") == 1
     assert "hover(" not in tick_.replace("recheck_visit(", "")
     for cap in ("LOOT_MAX_PICKS", "LOOT_MAX_HOVERS", "LOOT_TRIM_HOVERS", "LOOT_MAX_S",
-                "time.monotonic() - last_taken < 1.0"):  # fmt: skip
+                "time.monotonic() - hs.last_taken < 1.0"):  # fmt: skip
         assert cap in tick_, cap
     assert "memory_merge([], lm_mem, h_)" in tick_
     assert 'kept_m = memory_clear(lm_mem, rs["hovered"])' in tick_
     assert '"kind": "memory_loot"' in tick_
     # the loot step's detection restarts the look clock (as 9.36's)
-    i_loot = SRC.index("got_ = loot_step(loot_list, fight_ref)")
+    i_loot = SRC.index("got_ = loot_step(hs.loot_list, hs.fight_ref)")
     i_clock = SRC.index('lm_st["last"] = time.monotonic()  # next look waits its 1 s')
     i_settle = SRC.index('if getattr(a, "kill_gap", False) and counts["loot_click"] > clicks0_:')
     assert i_loot < i_clock < i_settle
@@ -396,7 +402,7 @@ def test_the_flag_off_changes_nothing() -> None:
     """Every use of the memory's state and closures in the main loop, at the run's end and inside
     the loot step sits under an ``if lm_on ...`` test (False unless the flag): the default run is
     today's."""
-    run_node = _fn("run")
+    run_node = hc.inline_steps(_fn("run"))[0]  # 5b-1: the tick as the driver plays its steps
     parent = _parents(run_node)
     loop = next(n for n in ast.walk(run_node) if isinstance(n, ast.While)
                 and "t_end" in _src(n.test))  # fmt: skip
