@@ -127,18 +127,23 @@ test("the game is checked only while no run goes and no check reads", async () =
   assert.equal(canCheck(null, FLOW).can, false);
 });
 
-test("a start or a check carries the flow and the flow's keys; a stop nothing", async () => {
-  const { runBody, checkTime } = await import("./liverun.ts");
-  const keys = { heal_key: "F1", fly_key: "F8", home_key: "F9", knife_key: "F4", dagger_key: "F5" };
-  assert.deepEqual(runBody("start", FLOW, keys), { action: "start", flow: FLOW, keys });
-  assert.deepEqual(runBody("check", FLOW, null), { flow: FLOW }); // its own route (matpilot #16)
+test("a check carries the project and its node; a stop nothing (live-blocks.md 12)", async () => {
+  const { runBody, checkBody, checkTime } = await import("./liverun.ts");
+  const { xmasProject } = await import("./project.ts");
+  const p = xmasProject();
+  // 2026-11-14: the backend reads the node's keys (its functions) and its setting blocks from the
+  // project, as the Run does: the body names no flow, no keys, no values
+  assert.deepEqual(checkBody(p, "xmas_dun02"), { project: p, node: "xmas_dun02" });
+  assert.deepEqual(Object.keys(JSON.parse(JSON.stringify(checkBody(p, "xmas_dun02")))).sort(), ["node", "project"]);
   const { runPath } = await import("./liverun.ts");
-  assert.equal(runPath("check"), "/flows/run/check");
-  assert.equal(runPath("start"), "/flows/run");
-  assert.deepEqual(runBody("stop", FLOW, keys), { action: "stop" });
+  assert.equal(runPath("check"), "/flows/run/check"); // its own route (matpilot #16)
+  assert.equal(runPath("stop"), "/flows/run");
+  assert.deepEqual(runBody("stop"), { action: "stop" });
   assert.match(checkTime(CHECK.at), /^\d\d:\d\d:05$/);
   assert.equal(checkTime("not a time"), "not a time");
-  assert.ok(REFUSALS.keys_refused && REFUSALS.check_running);
+  assert.ok(REFUSALS.keys_refused && REFUSALS.check_running && REFUSALS.settings_refused && REFUSALS.no_hunt_core);
+  // the settings file's refusals went with it (GET / PUT /flows/config)
+  assert.equal(REFUSALS.config_file_broken, undefined);
 });
 
 // THE PROJECT RUN (Batt 2026-11-13 ~21:4x, live-blocks.md stage 1): the request the other half
@@ -150,8 +155,8 @@ test("the project run: POST /flows/run/project {project, node}; its status is th
   assert.equal(projectRunPath(), "/flows/run/project");
   assert.deepEqual(projectRunBody(p, "xmas_dun02"), { project: p, node: "xmas_dun02" });
   assert.deepEqual(Object.keys(JSON.parse(JSON.stringify(projectRunBody(p, "xmas_dun02")))).sort(), ["node", "project"]);
-  // Stop and the check are as before
-  assert.deepEqual(runBody("stop", PROJECT_FLOW), { action: "stop" });
+  // Stop is as before
+  assert.deepEqual(runBody("stop"), { action: "stop" });
   assert.equal(runPath("stop"), "/flows/run");
   // the buttons: a project run needs no entry in the helper's flow list; ASSIST and an idle helper still do
   assert.equal(PROJECT_FLOW, "project");

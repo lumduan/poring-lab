@@ -15,6 +15,7 @@ import { CREDENTIALS, DEF_BY_TYPE, DEFAULT_FAILS, DEFAULT_MAX_10, HOTKEYS, RUNNE
 import { argsText, callArgsText, ExprError, exprText, hasDo, parseArgs, parseCallArgs, parseExpr, parseParams } from "./expr.ts";
 import { fieldOf, HUNT_TYPE, type HuntRules, omitted, paramOf, params as huntParams } from "./hunt.ts";
 import { CLASS_KEY, DETECT_SENSOR, MODEL_KEY, SENSOR_BLOCK } from "./models.ts";
+import { SETTING_BY_VAR, settingFields, settingFromFields, settingLit, settingOfType, settingProblem, settingType } from "./settings.ts";
 import { blockWords, type Issue, type Loose, stackSize } from "./words.ts";
 import {
   type ActionStmt,
@@ -1027,7 +1028,7 @@ function hats(ws: Workspace, r: Reader): { main: WsBlock[]; events: Hat[]; defs:
   for (const b of ws.blocks?.blocks ?? []) {
     if (b.type === "pl_main") main.push(b);
     else if (b.type === "pl_def") defs.push(b);
-    else if (b.type === "pl_vardecl") vars.push(b);
+    else if (b.type === "pl_vardecl" || settingOfType(b.type)) vars.push(b); // a setting is a variable
     else if (HATS.has(b.type)) {
       const order = Number((b.extraState as { order?: number } | undefined)?.order);
       events.push({ b, order: Number.isFinite(order) ? order : Infinity, y: b.y ?? 0 });
@@ -1156,6 +1157,8 @@ export const TAB_TOP_Y = 90;
 export const FIRST_ROWS_Y = 3 * 56;
 /** An event block's extra height in workspace units: its trigger's eight rows (round 17 N4). */
 const EVENT_ROWS_Y = 6 * 48;
+/** A setting block's row and the gap under it (live-blocks.md 12: a tab of settings is a list). */
+export const SETTING_ROWS_Y = 60;
 
 /** One tab's blocks: the main hat (the main tab only), then its functions and events, then its
  * variables. A statement's node path is the engine's site inside the tab ("main.2", "heal.0"). */
@@ -1169,12 +1172,24 @@ export function tabToWorkspace(p: Project, scope: TabScope, opts: ConvertOptions
   const place = (b: WsBlock) => {
     b.x = 20;
     b.y = y;
-    y += 90 + 46 * height(b.inputs?.DO?.block) + (b.type === "pl_event" ? EVENT_ROWS_Y : 0);
+    const setting = settingOfType(b.type); // one row (two with a safety switch's warning)
+    y += setting ? (setting.warn ? SETTING_ROWS_Y * 2 : SETTING_ROWS_Y) : 90 + 46 * height(b.inputs?.DO?.block) + (b.type === "pl_event" ? EVENT_ROWS_Y : 0);
     top.push(b);
   };
   if (t.main) place({ type: "pl_main", id: ids.take("h:main"), inputs: chainInput("DO", t.main, "main", ids), extraState: {} });
   t.defs.forEach((d, i) => place(defHat(p, node, d, i, ids)));
-  for (const [name, v] of Object.entries(t.vars)) place({ type: "pl_vardecl", id: ids.take(`h:var:${name}`), fields: { NAME: name }, inputs: { VALUE: { block: exprBlock(v, name, ids) } }, extraState: {} });
+  // the variables: the ordinary ones in their order, then the SETTINGS in the registry's (the page's
+  // order, as the Python view prints them); a setting whose value its block cannot hold (out of its
+  // range, the wrong kind) stays a plain variable block, so it round-trips exactly and the lint says why
+  const rank = (k: string) => [...SETTING_BY_VAR.keys()].indexOf(k);
+  const entries = Object.entries(t.vars);
+  const plain = entries.filter(([k]) => !SETTING_BY_VAR.get(k)?.block);
+  const settings = entries.filter(([k]) => SETTING_BY_VAR.get(k)?.block).sort(([a], [b]) => rank(a) - rank(b));
+  for (const [name, v] of [...plain, ...settings]) {
+    const f = SETTING_BY_VAR.get(name);
+    if (f?.block && settingProblem(f, v.value) === null) place({ type: settingType(f), id: ids.take(`h:var:${name}`), fields: settingFields(f, v.value as string | number | boolean) });
+    else place({ type: "pl_vardecl", id: ids.take(`h:var:${name}`), fields: { NAME: name }, inputs: { VALUE: { block: exprBlock(v, name, ids) } }, extraState: {} });
+  }
   return { blocks: { languageVersion: 0, blocks: top } };
 }
 
@@ -1234,8 +1249,19 @@ export function tabFromWorkspace(p: Project, scope: TabScope, ws: Workspace, def
   t.defs = out_defs;
   const vs: Record<string, Lit> = {};
   for (const b of vars) {
+    const f = settingOfType(b.type);
+    if (f) {
+      // a SETTING block (live-blocks.md 12): its fields are its value; its node path is its name
+      r.under(b, f.var, () => {
+        const got = settingFromFields(f, b.fields);
+        if ("error" in got) r.err(`setting ${f.var}`, got.error);
+        else if (f.var in vs || seen.has(f.var)) r.err(`setting ${f.var}`, "this setting is on this tab twice (one block each)");
+        else vs[f.var] = settingLit(got.value);
+      });
+      continue;
+    }
     const nm = String(b.fields?.NAME ?? "").trim();
-    r.under(b, null, () => {
+    r.under(b, nm || null, () => {
       const name = r.name(b, "NAME", `variable ${nm || "?"}`);
       const v = r.expr(b.inputs?.VALUE?.block, `variable ${name}`, "its value");
       if (v.kind !== "lit") r.err(`variable ${name}`, "its first value must be a plain value (a number, a text, True / False)");

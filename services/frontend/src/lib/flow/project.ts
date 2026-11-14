@@ -15,6 +15,7 @@
 // character nodes are then optional and `edges` may be empty.
 import type { ActionStmt, CellRef, Entry, Expr, Handler, Lit, MapRef, MobRef, Stmt, Target, ZonesRef } from "./ir.ts";
 import { NAME, RUNTIME_DEFAULT_S, WHERE_BUDGET_DEFAULT } from "./ir.ts";
+import { withSettingTabs } from "./settings.ts";
 
 export const PROJECT_FORMAT = "poring-lab.project";
 export const PROJECT_VERSION = 3;
@@ -427,13 +428,15 @@ export const XMAS02_STRIKES = ["mystcase", "cruiser", "cookie", "cookie_xmas"] a
  * so the 30-50 % band where she neither drank nor swapped is closed; the keys tab's eat(key) is the
  * runner block's eat role, candy_cane / candy name the lab Rogue's slots (F6, F7: defaults only), and
  * the survival tab eats each the moment its slot shows one (eat_cane / eat_candy, at any HP). The box as
- * stage 4a left it is fixtures/project_xmas_dun02_stage4.json (stage4_ab.py's B4). */
+ * stage 4a left it is fixtures/project_xmas_dun02_stage4.json (stage4_ab.py's B4). Batt 2026-11-14
+ * ~15:2x (live-blocks.md 12: "no runner [page]; make them ALL blocks"): every runner setting the box
+ * runs with is a SETTING BLOCK in its group's tab, at our defaults (settings.ts; a Run reads them). */
 export function xmasProject(): Project {
   return {
     format: PROJECT_FORMAT,
     version: PROJECT_VERSION,
     name: "xmas_dun02",
-    description: "One box: a person puts the Rogue on xmas_dun02; the runner hunts. Tabs: keys; survival (drink under 50 %, fly_away, bag_full at 50 %, the candies eaten at once); knife; exits; monsters.",
+    description: "One box: a person puts the Rogue on xmas_dun02; the runner hunts. Tabs: keys; survival (drink under 50 %, candies); knife; exits; monsters; every runner setting a block in its tab.",
     target: { ...TARGET },
     max_runtime_s: 7200,
     where_budget: WHERE_BUDGET_DEFAULT,
@@ -451,7 +454,10 @@ export function xmasProject(): Project {
         ignore: [],
         zones: { map: "xmas_dun02", sha256: XMAS_ZONES_SHA },
         resume_here: true,
-        tabs: [
+        // live-blocks.md 12 (Batt 2026-11-14 ~15:2x: "make them ALL blocks"): every setting the box
+        // runs with is a block in its group's tab (knife, survival, exits: beside their functions;
+        // respawn ... loop: tabs of their own), at our defaults (settings.ts withSettingTabs)
+        tabs: withSettingTabs([
           mainTab([
             { kind: "action", block: "assert_save_point", concept: "core.assert_save_point", timeout_s: 1, on_fail: "stop", outcome_to: null, note: SAVE_NOTE, params: { cell: lit({ ...GEFFEN_SAVE }) } },
             modelBlock("xmas02", "the trained data: xmas_dun02's detector (its monsters are the recipes' names)"),
@@ -478,7 +484,7 @@ export function xmasProject(): Project {
             def("respawn_ok", [clickAt(714, 405, "this client's confirmation: OK")]),
           ]),
           tab(MONSTERS_TAB, XMAS02_STRIKES.map((sp) => recipeDef(sp))),
-        ],
+        ]),
       },
     ],
     edges: [],

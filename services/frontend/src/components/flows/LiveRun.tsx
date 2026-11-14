@@ -19,14 +19,16 @@
 //
 // THE PROJECT RUN (Batt 2026-11-13 ~21:4x, docs/planning/live-blocks.md stage 1): given a project
 // and a map node (``run``), a start is POST /flows/run/project {project, node} -- the live block
-// player plays the project's blocks from that node (/flows: the node shown; /maps: START) -- while
-// the check (the runner's read-only check, ``flow``) and Stop are as before. One hook for both
-// pages: the same amber button, the same press-twice confirm, the same live line.
+// player plays the project's blocks from that node (/flows: the node shown; /maps: START) -- and Stop
+// is as before. One hook for both pages: the same amber button, the same press-twice confirm, the
+// same live line. ➡️ 2026-11-14 (live-blocks.md 12: every setting is a block): the CHECK is the
+// project's too, POST /flows/run/check {project, node}: the backend reads the node's keys and setting
+// blocks from it, as the Run does (the runner page and its own Run are gone).
 
 import { useCallback, useEffect, useRef, useState } from "react";
 
-import { type ChecklistItem, checklistWithKeys, type RunKeys } from "@/lib/flow/config";
-import { ACTIVE, canCheck, checkStale, checkTime, liveButtons, liveLabel, liveLine, type LiveStatus, okTail, PROJECT_FLOW, type ProjectRun, projectRunBody, projectRunPath, refuseWarning, REFUSALS, runBody, runPath, tickFor } from "@/lib/flow/liverun";
+import { ACTIVE, canCheck, checkBody, checkStale, checkTime, liveButtons, liveLabel, liveLine, type LiveStatus, okTail, PROJECT_FLOW, type ProjectRun, projectRunBody, projectRunPath, refuseWarning, REFUSALS, runBody, runPath, tickFor } from "@/lib/flow/liverun";
+import { type ChecklistItem, checklistWithKeys, type RunKeys } from "@/lib/flow/settings";
 import { backendHttpBase } from "@/lib/ws";
 
 const POLL_MS = 2000;
@@ -38,18 +40,17 @@ export type Live = {
   st: LiveStatus | null;
   err: string | null;
   busy: boolean;
-  /** One request; ``keys`` (the flow's functions' five keys) go with a start or a check, else the
-   * hook's own ``keys``. */
-  send: (action: "start" | "stop" | "check", keys?: RunKeys | null) => Promise<void>;
+  /** One request: a start or a check of the project run (``run``), or Stop. */
+  send: (action: "start" | "stop" | "check") => Promise<void>;
   buttons: ReturnType<typeof liveButtons>;
   keys: RunKeys | null;
   /** the project run a start sends (null: the runner flow ``flow``) */
   run: ProjectRun | null;
 };
 
-/** ``keys``: the flow's functions' hotbar keys (all five), sent with every start and check of
- * this poller; null: the bot server's settings decide. ``run``: a PROJECT run (the project and the
- * map node it plays from): a start posts POST /flows/run/project instead of the runner flow's. */
+/** ``keys``: the project's functions' hotbar keys (all five) the checklist states (the backend
+ * reads them from the project itself). ``run``: the PROJECT run (the project and the map node it
+ * plays from): a start posts POST /flows/run/project, a check POST /flows/run/check, both with it. */
 export function useLiveRun(backendUrl: string | null, flow: string, enabled = true, keys: RunKeys | null = null, run: ProjectRun | null = null): Live {
   const base = backendHttpBase(backendUrl);
   const [st, setSt] = useState<LiveStatus | null>(null);
@@ -57,10 +58,6 @@ export function useLiveRun(backendUrl: string | null, flow: string, enabled = tr
   const [busy, setBusy] = useState(false);
   const csrf = useRef<string | null>(null);
   const refresh = useRef<() => void>(() => {});
-  const keysRef = useRef<RunKeys | null>(keys);
-  useEffect(() => {
-    keysRef.current = keys;
-  }, [keys]);
   const runRef = useRef<ProjectRun | null>(run);
   useEffect(() => {
     runRef.current = run;
@@ -93,9 +90,12 @@ export function useLiveRun(backendUrl: string | null, flow: string, enabled = tr
   }, [base, enabled]);
 
   const send = useCallback(
-    async (action: "start" | "stop" | "check", given?: RunKeys | null): Promise<void> => {
-      const k = given ?? keysRef.current;
-      const project = action === "start" ? runRef.current : null; // the project run: its own route
+    async (action: "start" | "stop" | "check"): Promise<void> => {
+      const project = action === "stop" ? null : runRef.current; // a start or a check: the project's
+      if (action !== "stop" && !project) {
+        setErr("Run and the check belong to a map node that plays the project");
+        return;
+      }
       setBusy(true);
       setErr(null);
       try {
@@ -105,12 +105,12 @@ export function useLiveRun(backendUrl: string | null, flow: string, enabled = tr
             if (!t.ok) throw new Error(`the security token was refused (HTTP ${t.status})`);
             csrf.current = ((await t.json()) as { token: string }).token;
           }
-          const r = await fetch(`${base}${project ? projectRunPath() : runPath(action)}`, {
+          const r = await fetch(`${base}${action === "start" ? projectRunPath() : runPath(action)}`, {
             method: "POST",
             cache: "no-store",
             headers: { "content-type": "application/json", "x-csrf-token": csrf.current },
-            // every other setting is the bot server's config
-            body: JSON.stringify(project ? projectRunBody(project.project, project.node) : runBody(action, flow, k)),
+            // the project itself: its blocks are its settings, its functions its keys
+            body: JSON.stringify(project ? (action === "start" ? projectRunBody(project.project, project.node) : checkBody(project.project, project.node)) : runBody("stop")),
           });
           if (r.ok) break;
           const body = (await r.json().catch(() => ({}))) as { detail?: { reason?: string; detail?: string } };
@@ -130,16 +130,16 @@ export function useLiveRun(backendUrl: string | null, flow: string, enabled = tr
         setBusy(false);
       }
     },
-    [base, flow],
+    [base],
   );
 
   return { base, flow, st, err, busy, send, buttons: liveButtons(st, run ? PROJECT_FLOW : flow), keys, run };
 }
 
 /** The header's Run / Stop, beside Simulate. Run arms on the first press and starts on a second
- * within ARM_MS; the armed button says what it will do. ``keys``: the flow's keys for this start
- * (else the poller's). A failed check's lines are in its title: the runner will refuse. */
-export function LiveRunButtons({ live, blocked = null, keys = null }: { live: Live; blocked?: string | null; keys?: RunKeys | null }) {
+ * within ARM_MS; the armed button says what it will do. A failed check's lines are in its title:
+ * the runner will refuse. */
+export function LiveRunButtons({ live, blocked = null }: { live: Live; blocked?: string | null }) {
   const [armed, setArmed] = useState(false);
   useEffect(() => {
     if (!armed) return;
@@ -168,7 +168,7 @@ export function LiveRunButtons({ live, blocked = null, keys = null }: { live: Li
               return;
             }
             setArmed(false);
-            void live.send("start", keys);
+            void live.send("start");
           }}
           title={blocked ?? (b.canStart ? (warn ?? (live.run ? `Run the project FOR REAL in the game, box by box from ${live.run.node}, where she stands (player mode). Press, then press again to confirm.` : "Run it FOR REAL in the game, on the map she stands on (player mode). Press, then press again to confirm.")) : (b.why ?? "Run is not available now"))}
           data-refuses={warn ? "true" : "false"}
@@ -204,8 +204,8 @@ export default function LiveRun({ live, checklist = [], minutes = null, keys = n
   useEffect(() => {
     if (!withCheck || auto.current || !cc.can || st?.check?.state === "checking") return;
     auto.current = true;
-    void send("check", runKeys);
-  }, [withCheck, cc.can, st?.check?.state, send, runKeys]);
+    void send("check");
+  }, [withCheck, cc.can, st?.check?.state, send]);
   return (
     <section className="notice" aria-label="Run in the game" data-testid="live-run">
       <p>
@@ -254,7 +254,7 @@ export default function LiveRun({ live, checklist = [], minutes = null, keys = n
             </li>
           </ul>
           <p className="notice-sub live-check-bar">
-            <button type="button" className="button" disabled={!cc.can || live.busy} onClick={() => void send("check", runKeys)} title={cc.why ?? "Read the game screen now: the runner's own start checks, read only (it presses nothing)"} data-testid="live-run-check">
+            <button type="button" className="button" disabled={!cc.can || live.busy} onClick={() => void send("check")} title={cc.why ?? "Read the game screen now: the runner's own start checks, read only (it presses nothing)"} data-testid="live-run-check">
               {st?.check?.state === "checking" ? "Checking the game…" : "Check the game"}
             </button>{" "}
             {check && check.state !== "checking" && (

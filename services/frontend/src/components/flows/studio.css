@@ -360,11 +360,9 @@
 /* THE MAP FLOW's page (matpilot's 2026-11-13 review: at 1440 x 900 the rows above left the canvas
    0-17 px): the canvas never goes under 22rem; when the rows and the panes need more, the page's
    own column scrolls (the NavBar stays) */
-.studio.runner-studio,
 .studio[data-testid="flows-app"] {
   overflow-y: auto; /* the studio too: the flows row above it takes height as well */
 }
-.runner-studio .studio-body,
 .studio[data-testid="flows-app"] .studio-body {
   /* matpilot's re-check: a 22rem BASIS, not "auto" -- with auto the row took the Python
      listing's whole height (4,372 px) and Simulate centred blocks ~2,500 px down the page. Now
@@ -372,29 +370,6 @@
   flex: 1 0 22rem;
   min-height: 22rem;
 }
-.runner-studio .studio-side {
-  overflow: hidden; /* the Python panel never draws over the panes under it */
-}
-.runner-studio .studio-drawer {
-  height: clamp(10rem, 28vh, 22rem);
-}
-.runner-about summary {
-  cursor: pointer;
-}
-/* (the phone rules of the map flow's page are at the END of this file: they must come after the
-   studio's own phone rules to win) */
-.runner-about-more {
-  color: var(--muted);
-}
-.runner-about .device-bar {
-  margin-top: 0.4rem;
-  padding: 0;
-  border: 0;
-}
-.runner-about > .notice {
-  margin-top: 0.5rem;
-}
-
 .live-follow {
   position: absolute;
   top: 0.5rem;
@@ -449,15 +424,6 @@
   height: auto;
   border: 1px solid var(--border);
   border-radius: 0.3rem;
-}
-
-/* the settings panel (ConfigPanel.tsx): a setting not in use is dimmed; a safety switch's warning */
-.config-panel [data-unused="true"] {
-  opacity: 0.55;
-}
-.config-warn {
-  color: var(--warn-text, #8a4b00);
-  font-weight: 600;
 }
 
 /* THE FLOWS ROW (Batt 2026-11-13: "on /flows I don't see this flow's name"): every flow by name, always
@@ -1561,7 +1527,7 @@
   }
 }
 
-/* --- a runner flow (RunnerView.tsx, 2026-11-12: the description of a live runner) -------------- */
+/* --- the code view's marked lines (CodeView.tsx) ------------------------------------------------ */
 .code-text[data-marked] {
   isolation: isolate; /* the band paints behind the text, inside the code */
 }
@@ -1578,103 +1544,8 @@
   font-weight: 700;
   background: var(--code-mark);
 }
-.runner-table {
-  width: 100%;
-  border-collapse: collapse;
-  font-size: 0.8rem;
-}
-.runner-table caption {
-  text-align: left;
-  padding-bottom: 0.25rem;
-}
-.runner-table th,
-.runner-table td {
-  padding: 0.2rem 0.4rem;
-  border-bottom: 1px solid var(--border);
-  text-align: left;
-  vertical-align: top;
-  overflow-wrap: anywhere;
-}
-.runner-list {
-  margin: 0;
-  padding-left: 1.1rem;
-  list-style: disc;
-}
-.runner-list li + li {
-  margin-top: 0.25rem;
-}
-.runner-steps {
-  margin: 0;
-  padding-left: 1.8rem;
-  list-style: decimal;
-  font-size: 0.82rem;
-}
-.runner-steps li {
-  padding: 0.05rem 0.3rem;
-  border-radius: 0.3rem;
-}
-.runner-steps li[data-active="true"] {
-  background: var(--code-mark);
-}
-.runner-steps .problem-link {
-  text-decoration: none;
-}
-.runner-steps li[data-tone="safety"] .problem-link {
-  color: var(--error-text);
-}
-.runner-steps li[data-tone="note"] .problem-link {
-  color: var(--muted);
-  font-style: italic;
-}
-.runner-steps li[data-tone="end"] .problem-link {
-  font-weight: 700;
-}
-.runner-command {
-  font-family: var(--font-mono);
-  font-size: 0.8rem;
-  overflow-wrap: anywhere;
-}
-.studio .runner-chip-button {
-  padding: 0;
-  border: 0;
-  background: none;
-  color: var(--accent);
-  font: inherit;
-  font-weight: 600;
-  white-space: nowrap;
-  cursor: pointer;
-}
-/* the Run settings' number inputs (the respawn button's x, y) */
-.run-settings-num {
-  width: 3.5rem;
-  padding: 0.1rem 0.3rem;
-  border: 1px solid var(--border);
-  border-radius: 0.3rem;
-  background: var(--bg);
-  color: var(--text);
-  font: inherit;
-}
-
 /* --- the phone, LAST so these win over the rules above (matpilot's checks, 2026-11-13) ---------- */
 @media (max-width: 48rem) {
-  /* the map flow: Simulate first and NAMED; Run last and smaller (a child taps the first big
-     button). .studio.runner-studio: one class more than ".studio .button-run .button-text" */
-  .studio.runner-studio .button-run .button-text {
-    position: static;
-    width: auto;
-    height: auto;
-    overflow: visible;
-    clip: auto;
-  }
-  .studio.runner-studio .button-live {
-    order: 6;
-    padding: 0.3rem 0.55rem;
-    font-size: 0.85rem;
-  }
-  /* the map flow's tabs get the whole row: the map's name is in the title and the binding strip */
-  .studio.runner-studio .block-tabs-trailing {
-    display: none;
-  }
   /* the studio: the map picker and the Maps link go to their own line under the tabs, so they
      never cover a tab ("events", "+ map block") */
   .studio .block-tabs-bar {
@@ -1696,9 +1567,6 @@
 .studio .run-pane {
   display: grid;
   gap: 0.5rem;
-}
-.studio .run-pane .config-panel {
-  max-height: none;
 }
 
 /* matpilot's review 2026-11-13 (safety, phone 390): the real game's Run was the first and biggest

@@ -17,8 +17,10 @@
 // stage 1, Batt 2026-11-13 ~21:4x), and only when every block a run from there can reach is live
 // (the catalogue's `live` flag, lib/flow/liveready.ts); else it is greyed with the blocks that are
 // not live yet. "hunt with the runner" is the runner's hunt (scripts/dungeon_hunt.py) played by the
-// player in-process; its keys are the node's functions. Everything else is SIMULATE (the flow
-// engine; no game, no input).
+// player in-process; its keys are the node's functions, its SETTINGS the node's setting blocks
+// (Batt 2026-11-14 ~15:2x, live-blocks.md 12: "no runner [page] ... make them ALL blocks"): one block
+// per setting in its group's tab, the node's over Global's over the default (lib/flow/settings.ts).
+// Everything else is SIMULATE (the flow engine; no game, no input).
 import "./studio.css";
 
 import dynamic from "next/dynamic";
@@ -29,16 +31,14 @@ import type { EditorApi, EditorState } from "@/components/flows/BlockEditor";
 import FlowFileDialogs, { type FileDialog, type Opened, useFileShortcuts } from "@/components/flowfile/FlowFileDialogs";
 import CodeView from "@/components/flows/CodeView";
 import NodeInspector from "@/components/maps/NodeInspector";
-import ConfigPanel, { useConfig } from "@/components/flows/ConfigPanel";
 import LiveRun, { LiveRunButtons, RunNotReady, useLiveRun } from "@/components/flows/LiveRun";
 import { DEFAULT_SIM, FlowSettings, HuntRulesPanel, LintPanel, PathPanel, scenarioOf, type SimForm, SimulatePanel } from "@/components/flows/Panels";
 import { ApiError, type CatalogueDoc, type Finding, FlowsApi, type LintDoc, type PythonFiles, type SimDoc, sitePath, type WorldSource } from "@/lib/flow/api";
 import type { ToolboxScope } from "@/lib/flow/blockdefs";
-import { boxedSettings, boxTabNote, boxTabShort } from "@/lib/flow/box";
-import { configClash, effectiveConfig, startChecklist } from "@/lib/flow/config";
+import { boxTabNote, boxTabShort } from "@/lib/flow/box";
 import { type FileMeta, newFileMeta, readFileMeta, writeFileMeta } from "@/lib/flow/file";
 import { canonical } from "@/lib/flow/ir";
-import { ACTIVE, busyWhy } from "@/lib/flow/liverun";
+import { ACTIVE, busyWhy, PROJECT_FLOW } from "@/lib/flow/liverun";
 import { liveReady } from "@/lib/flow/liveready";
 import { browserStorage, hasOldFlow, KEYS, pythonDefault, readChoice, readProjectText, writeChoice, writeProjectText } from "@/lib/flow/prefs";
 import {
@@ -65,7 +65,7 @@ import {
   xmasProject,
 } from "@/lib/flow/project";
 import { exportProject, importProject } from "@/lib/flow/projectfile";
-import { LIVE_FLOWS, runnerForMap } from "@/lib/flow/runners";
+import { groupOf, nodeSettings, RUNNER_MAPS, SETTING_TABS, settingTabNote, startChecklist } from "@/lib/flow/settings";
 import { lintLine } from "@/lib/flow/status";
 import { lintErrors, looseText, PROBLEM_HEADS, statusText, stripFoldLine, type StripPart } from "@/lib/flow/words";
 import { backendHttpBase } from "@/lib/ws";
@@ -108,6 +108,9 @@ const KIND_WORDS: Record<PNode["kind"], string> = { login: "login", character: "
  * first map), else the first map, else the first node. */
 function firstNode(p: Project, want: string | null): string {
   if (want && nodeById(p, want)) return want;
+  // the old runner page's link (/flows?runner=xmas_dun02, 2026-11-14): that map's node
+  const onMap = want ? mapNodes(p).find((n) => n.map.map === want) : undefined;
+  if (onMap) return onMap.id;
   const start = startMap(p)?.id ?? p.edges.find((e) => nodeById(p, e.to)?.kind === "map")?.to;
   return start ?? mapNodes(p)[0]?.id ?? p.nodes[0].id;
 }
@@ -131,7 +134,7 @@ function initialProject(): { project: Project; world: WorldSource; restored: boo
   return { ...READY.xmas_dun02(), restored: false, note };
 }
 
-export default function ProjectStudio({ backendUrl, initialNode = null, onRunner }: { backendUrl: string | null; initialNode?: string | null; onRunner?: (id: string) => void }) {
+export default function ProjectStudio({ backendUrl, initialNode = null }: { backendUrl: string | null; initialNode?: string | null }) {
   const [api] = useState<FlowsApi>(() => new FlowsApi(backendHttpBase(backendUrl)));
   const [start] = useState(initialProject);
   const [project, setProjectState] = useState<Project>(start.project);
@@ -183,28 +186,18 @@ export default function ProjectStudio({ backendUrl, initialNode = null, onRunner
   const toolboxScope: ToolboxScope = { node: node.kind, main: tab?.name === MAIN_TAB && node.kind !== "global", tab: tab?.name, model: modelOn(node) };
 
   // --- RUN: the PROJECT from this map node (the live block player), when every block it reaches is
-  // live; the runner's checklist, settings and read-only check where the node holds its block ------
-  const runDoc = node.kind === "map" && runnerBlockOn(node) ? runnerForMap(node.map.map) : null;
-  const runnerLive = !!runDoc && LIVE_FLOWS.includes(runDoc.id); // the Run helper plays this runner
+  // live; the runner's checklist and read-only check where the node holds its block. Its SETTINGS
+  // are the node's setting blocks (live-blocks.md 12): nodeSettings, the node's > Global's > default
+  const runnerMap = node.kind === "map" && runnerBlockOn(node) ? node.map.map : null;
+  const runnerLive = !!runnerMap && RUNNER_MAPS.includes(runnerMap); // the Run helper plays this runner
   const ready = node.kind === "map" ? liveReady(project, node.id, catalogue?.blocks ?? null) : null;
   const runnable = node.kind === "map" && ready?.ready === true && (!runnerBlockOn(node) || runnerLive);
   const keysR = runnerLive ? runnerKeysOn(project, node.id) : null;
   const runKeys = keysR?.ok ? keysR.keys : null;
   const projectRun = runnable ? { project, node: node.id } : null; // the hook keeps the latest in a ref
-  const live = useLiveRun(backendUrl, runDoc?.id ?? "", runnable || runnerLive, runKeys, projectRun);
-  const cs = useConfig(backendUrl, runDoc?.map ?? "");
-  const cdoc = runDoc?.config ?? null;
-  const runEff = cdoc && runDoc ? effectiveConfig(cdoc, cs.file, runDoc.map) : null;
-  const runValues = runEff ? (runKeys ? { ...runEff.values, ...runKeys } : runEff.values) : null;
-  const runWhy = !runnable && !runnerLive
-    ? null
-    : keysR && !keysR.ok
-      ? `the keys: ${keysR.problems.join("; ")}`
-      : cs.file?.broken
-        ? `the settings file cannot be used: ${cs.file.broken}`
-        : cdoc && runValues
-          ? configClash(cdoc, runValues)
-          : null;
+  const live = useLiveRun(backendUrl, PROJECT_FLOW, runnable || runnerLive, runKeys, projectRun);
+  const runValues = runnerLive ? nodeSettings(project, node.id).values : null;
+  const runWhy = !runnable && !runnerLive ? null : keysR && !keysR.ok ? `the keys: ${keysR.problems.join("; ")}` : null;
   const keysLine = keysR?.ok
     ? (["heal_key", "fly_key", "home_key", "knife_key", "dagger_key"] as const).map((k) => `${keysR.keys[k]} ${keysR.from[k]}()`).join(" · ")
     : (keysR?.problems.join("; ") ?? "");
@@ -216,8 +209,8 @@ export default function ProjectStudio({ backendUrl, initialNode = null, onRunner
       ? "Global is code every map shares: open a map node to Run"
       : node.kind !== "map"
         ? "login and choosing the character are not live yet: Run starts on a map node, where a person put her"
-        : runnerBlockOn(node) && !runDoc
-          ? `"hunt with the runner" plays only a map that has a runner (today xmas_dun02), not ${node.map.map}`
+        : runnerBlockOn(node) && !runnerLive
+          ? `"hunt with the runner" plays only a map that has a runner (today ${RUNNER_MAPS.join(", ")}), not ${node.map.map}`
           : ready && !ready.ready
             ? ready.why
             : "Run is not available on this node";
@@ -630,10 +623,13 @@ export default function ProjectStudio({ backendUrl, initialNode = null, onRunner
   const overrides = overridesOn(project, node.id);
   const strip = nodeStrip(project, node, overrides);
   // matpilot round 17 N1: what this node's box plays in a Run of the project, and what of the
-  // runner's (and of Before Run's settings) it replaces: the engine's takeovers (POST /flows/lint)
+  // runner's (and of its setting blocks) it replaces: the engine's takeovers (POST /flows/lint)
   const box = lintStale ? null : (lintDoc?.box?.[node.id] ?? null);
-  const boxNote = tab ? boxTabNote(box, node.id, tab.name, cdoc, runValues) : null;
+  const boxNote = tab ? boxTabNote(box, node.id, tab.name, runValues) : null;
   if (boxNote && tab) strip.push({ head: "IN A RUN", text: boxNote, short: boxTabShort(box, node.id, tab.name) });
+  // live-blocks.md 12: a settings tab says what its blocks are (the group's title, the name rule)
+  const settingsNote = tab ? settingTabNote(tab, node.kind) : null;
+  if (settingsNote) strip.push({ head: "SETTINGS", text: settingsNote });
 
   return (
     <main className="studio" data-view={view} data-testid="flows-app">
@@ -678,13 +674,6 @@ export default function ProjectStudio({ backendUrl, initialNode = null, onRunner
                 <button type="button" role="menuitem" className="studio-menu-item" onClick={() => ((loadGlobals.current = true), setMenu(false), setDialog("load"))} data-testid="load-globals">
                   Add the Global tabs of a saved project…<small>a shared module: its Global tabs join this project&apos;s Global (a tab name you have already keeps yours)</small>
                 </button>
-                {onRunner &&
-                  runDoc && (
-                    <button type="button" role="menuitem" className="studio-menu-item" onClick={() => (setMenu(false), flush(), onRunner(runDoc.id))} data-testid="load-inside">
-                      Inside {runDoc.script}
-                      <small>what the block “hunt with the runner” does, as blocks made from its code (read only)</small>
-                    </button>
-                  )}
               </div>
             )}
           </div>
@@ -707,7 +696,7 @@ export default function ProjectStudio({ backendUrl, initialNode = null, onRunner
             <PlayIcon />
             <span className="button-text">{simBusy ? "Simulating…" : "Simulate"}</span>
           </button>
-          {runnable ? <LiveRunButtons live={live} blocked={runWhy ?? lintBlock} keys={runKeys} /> : <RunNotReady why={notRunWhy} />}
+          {runnable ? <LiveRunButtons live={live} blocked={runWhy ?? lintBlock} /> : <RunNotReady why={notRunWhy} />}
         </div>
       </header>
 
@@ -778,11 +767,6 @@ export default function ProjectStudio({ backendUrl, initialNode = null, onRunner
         <Link href={`/maps?node=${encodeURIComponent(node.id)}`} className="device-chip robot-picker-link" onClick={flush} title="The maps graph: every node and how they link" data-testid="to-maps">
           ◂ Maps
         </Link>
-        {onRunner && runDoc && (
-          <button type="button" className="device-chip runner-chip-button" onClick={() => (flush(), onRunner(runDoc.id))} title={`What "hunt with the runner" does: ${runDoc.script} as blocks made from its code (read only)`} data-testid="inside-runner">
-            Inside the runner ↗
-          </button>
-        )}
       </div>
 
       <div className="studio-body" data-python-panel={pythonOpen ? "open" : "closed"}>
@@ -959,22 +943,23 @@ export default function ProjectStudio({ backendUrl, initialNode = null, onRunner
                     <p className="muted">Simulate (green) plays this map alone; /maps plays the whole chain.</p>
                   </div>
                 )}
-                {p === "run" && runnable && !runDoc && (
+                {p === "run" && runnable && !runnerLive && (
                   <div className="run-pane" data-testid="run-pane-blocks">
                     <p className="muted">Run (the amber button at the top) plays this project in the game from {node.id}, box by box, where she stands (the live block player; player mode, no GM line).</p>
                     <LiveRun live={live} check={false} blocked={runWhy ?? lintBlock} />
                   </div>
                 )}
-                {p === "run" && runDoc && (
+                {p === "run" && runnerLive && runnerMap && runValues && (
                   <div className="run-pane" data-testid="run-pane">
                     <p className="muted">
-                      Run (the amber button at the top) plays this project in the game from {node.id}, box by box, where she stands (the live block player; player mode, no GM line); its block &ldquo;hunt with the runner&rdquo; is <code>{runDoc.script}</code>&apos;s hunt on {runDoc.map}, in the same process. Its keys are this node&apos;s functions
+                      Run (the amber button at the top) plays this project in the game from {node.id}, box by box, where she stands (the live block player; player mode, no GM line); its block &ldquo;hunt with the runner&rdquo; is the runner&apos;s hunt on {runnerMap}, in the same process. Its keys are this node&apos;s functions
                       (its own first, then Global&apos;s): {keysLine}.
                     </p>
-                    <LiveRun live={live} checklist={cdoc && runValues ? startChecklist(cdoc, runValues, runDoc.map, runKeys ?? undefined) : []} minutes={runValues ? Number(runValues.minutes) : null} keys={runKeys} blocked={runWhy ?? lintBlock ?? (runnable ? null : notRunWhy)} />
-                    {/* matpilot #7: say where these are kept */}
-                    <p className="muted">The settings below are saved on the bot server the moment one changes (every browser sees them). The blocks and their functions are this browser&apos;s, until you Save.</p>
-                    {cdoc && <ConfigPanel d={cdoc} map={runDoc.map} cs={cs} problem={runWhy} replaced={{ keys: `${keysLine} (this node's functions)` }} boxed={boxedSettings(box)} />}
+                    <LiveRun live={live} checklist={startChecklist(runValues, runnerMap, runKeys ?? undefined)} minutes={Number(runValues.minutes)} keys={runKeys} blocked={runWhy ?? lintBlock ?? (runnable ? null : notRunWhy)} />
+                    {/* live-blocks.md 12 (Batt 2026-11-14: "make them ALL blocks"): the settings are blocks */}
+                    <p className="muted" data-testid="run-pane-settings">
+                      Its settings are BLOCKS: one per setting in the tabs {SETTING_TABS.filter((g) => tabs.some((t) => t.name === g)).join(", ") || "of its groups"} ({SETTING_TABS.map((g) => groupOf(g)?.title ?? g).join("; ")}). This node&apos;s block replaces Global&apos;s; a deleted one falls back to Global&apos;s, else the default. A Run and the check send the project: the blocks you see are what the runner gets (the Lint pane names any it cannot take, or does not use).
+                    </p>
                   </div>
                 )}
               </div>

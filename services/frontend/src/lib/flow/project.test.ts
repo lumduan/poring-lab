@@ -78,11 +78,12 @@ test("the ONE BOX (Batt 2026-11-13: START > map xmas_dun02): one map node, its m
   assert.equal(x.start, "xmas_dun02");
   assert.deepEqual(x.edges, []);
   const n = nodeById(x, "xmas_dun02")!;
-  assert.deepEqual(n.tabs.map((t) => t.name), ["main", "keys", "survival", "knife", "exits", "monsters"]);
+  // live-blocks.md 12 (Batt 2026-11-14: "make them ALL blocks"): the settings' tabs after the box's own
+  assert.deepEqual(n.tabs.map((t) => t.name), ["main", "keys", "survival", "knife", "exits", "monsters", "respawn", "start", "fight", "aim", "loot", "walk", "safety", "loop"]);
   // stage 4a (live-blocks.md 3.4): the trained data before the runner
   assert.deepEqual(n.tabs[0].main?.map((s) => (s.kind === "action" ? s.block : s.kind)), ["assert_save_point", "use_model", "dungeon_hunt", "stop"]);
   // stage 2 (live-blocks.md 3.2): the survival tab is two EVENTS, each calling its key's function
-  const ev = tabToWorkspace(x, { node: "xmas_dun02", tab: "survival" }).blocks.blocks;
+  const ev = tabToWorkspace(x, { node: "xmas_dun02", tab: "survival" }).blocks.blocks.filter((b) => b.type === "pl_event");
   assert.deepEqual(ev.map((b) => [b.type, b.fields?.NAME, b.fields?.MODE, b.fields?.PRIORITY]), [["pl_event", "drink", "insert", "survival"], ["pl_event", "fly_away", "preempt", "critical"], ["pl_event", "bag_full", "preempt", "upkeep"], ["pl_event", "eat_cane", "insert", "upkeep"], ["pl_event", "eat_candy", "insert", "upkeep"]]);
   assert.deepEqual(n.tabs[2].defs.map((d) => [d.name, d.on?.cooldown_s, d.body]), [["drink", 0.7, [call("heal")]], ["fly_away", 3, [call("fly_wing")]], ["bag_full", 0, [{ kind: "stop", reason: "home" }]], ["eat_cane", 1.5, [call("candy_cane")]], ["eat_candy", 1.5, [call("candy")]]]);
   // Batt 2026-11-14 (live-blocks.md 10): the drink under 50 % (it was 30 %), and each candy eaten the
@@ -309,7 +310,7 @@ test("an event block shows every trigger field the Python writes, and edits roun
   const x = xmasProject();
   const scope = { node: "xmas_dun02", tab: "survival" };
   const ws = JSON.parse(JSON.stringify(tabToWorkspace(x, scope))) as Workspace;
-  const ev = ws.blocks.blocks;
+  const ev = ws.blocks.blocks.filter((b) => b.type === "pl_event"); // (the tab's setting blocks follow: live-blocks.md 12)
   const lim = (b: (typeof ev)[number]) => [b.fields?.NAME, b.fields?.COOLDOWN, b.fields?.MAX_RUN, b.fields?.MAX_MIN, b.fields?.MAX_10, b.fields?.FAILS, b.fields?.ESCALATE];
   assert.deepEqual(ev.map(lim), [
     ["drink", 0.7, "", "", "", "", ""],

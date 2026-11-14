@@ -8,6 +8,11 @@
 // asks the Run helper's LIVE BLOCK PLAYER (scripts/flow_play.py, the feat/live-player branch) to
 // play the project's blocks in the game from that map node. Its status is GET /flows/run with the
 // flow id "project" (PROJECT_FLOW); Stop is POST /flows/run {action: "stop"}, as a runner's.
+//
+// ➡️ 2026-11-14 ~15:2x (live-blocks.md 12: the runner page is gone, every setting is a block): a
+// start is always a project's; the read-only CHECK is a project's too, POST /flows/run/check
+// {project, node}: the backend takes the node's keys (its functions) and settings (its setting
+// blocks) from the project, as the Run does.
 
 import type { Project } from "./project.ts";
 
@@ -99,12 +104,16 @@ export function liveLine(l: LiveSummary | null | undefined, minutes: number | nu
 
 export const ACTIVE: readonly string[] = ["starting", "running", "stopping"];
 
-/** The body of POST /flows/run: a start or a check names the flow (and the flow's keys, when its
- * functions gave them); a stop names nothing. */
-export function runBody(action: "start" | "stop" | "check", flow: string, keys?: Record<string, string> | null): Record<string, unknown> {
-  if (action === "stop") return { action };
-  if (action === "check") return keys ? { flow, keys } : { flow }; // POST /flows/run/check: no action
-  return keys ? { action, flow, keys } : { action, flow };
+/** The body of POST /flows/run: Stop names nothing else (a start and a check are a project's:
+ * projectRunBody, checkBody). */
+export function runBody(action: "stop"): Record<string, unknown> {
+  return { action };
+}
+
+/** The body of POST /flows/run/check (2026-11-14): the project and the map node it checks; the
+ * backend reads the node's keys and its setting blocks from it (no action, no keys, no values). */
+export function checkBody(project: Project, node: string): { project: Project; node: string } {
+  return { project, node };
 }
 
 /** Where a request goes: the read-only check has its OWN route (matpilot 2026-11-13 #16). */
@@ -239,10 +248,11 @@ export const REFUSALS: Record<string, string> = {
   origin_required: "Open the console from its own address to use Run.",
   lab_host_peer: "Run is refused from the bot server itself: use your own browser on the LAN.",
   rate_limited: "Too many requests: wait a moment.",
-  config_file_broken: "The settings file on the bot server cannot be read: a person looks at settings/flowrun/config.json first.",
-  config_refused: "Not saved: that value cannot run.",
-  config_engine_unavailable: "The bot server cannot read its settings list (scripts/flow_config.py) here.",
   keys_refused: "The flow's hotbar keys cannot be used",
+  // 2026-11-14 (live-blocks.md 12): a project's check
+  settings_refused: "A setting block cannot be used (Lint names it)",
+  no_hunt_core: "This node has no hunt with the runner: the check is the runner's.",
+  not_a_map_node: "Run and the check belong to a map node.",
   check_running: "The game is being checked already: a moment.",
   // the PROJECT run (POST /flows/run/project; the live block player)
   lint_errors: "The flow engine finds errors in the project: fix them first (Lint lists them).",

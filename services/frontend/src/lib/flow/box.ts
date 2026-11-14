@@ -1,15 +1,18 @@
 // WHAT THE BOX PLAYS in a box run, and which run settings that replaces (matpilot round 17 N1).
 //
 // Heal and the Fly Wing each showed two thresholds that differ: the survival tab's drink
-// (hp_percent() < 30; ➡️ < 50 since 2026-11-14, live-blocks.md 10) and fly_away (sees_boss() or hp_percent() < 25), and Before Run's settings
-// "heal at HP under 40 %" and "Fly Wing at HP under 20 %". Neither page said which one a live run
-// uses. The truth (live-blocks.md stage 2, dungeon@9.49; stages 3 and 4a): in a BOX run (Run of a
-// project: the live block player) the box's events and role functions decide what they play, and
-// the runner's own handler for it is off (its box_plays); the setting then applies to the runner
-// alone (the old Run path, and a box without that event). The rule is the engine's, ONE place:
-// POST /flows/lint's `box` (poring_flow.live.takeovers, from hunt_plan, the same plan the live
-// player plays), per map node. Pure functions; every word renders as text.
-import { type ConfigDoc, type ConfigField, type ConfigValue, shownValue } from "./config.ts";
+// (hp_percent() < 30; ➡️ < 50 since 2026-11-14, live-blocks.md 10) and fly_away (sees_boss() or
+// hp_percent() < 25), and the settings "heal at HP under 40 %" and "Fly Wing at HP under 20 %".
+// Neither page said which one a live run uses. The truth (live-blocks.md stage 2, dungeon@9.49;
+// stages 3 and 4a): in a BOX run (Run of a project: the live block player) the box's events and role
+// functions decide what they play, and the runner's own handler for it is off (its box_plays); the
+// setting then counts only in a box without that event. The rule is the engine's, ONE place: POST
+// /flows/lint's `box` (poring_flow.live.takeovers, from hunt_plan, the same plan the live player
+// plays), per map node. ➡️ 2026-11-14 (live-blocks.md 12): the settings are SETTING BLOCKS of the
+// project (settings.ts; Before Run's settings panel went with the runner page): the words name the
+// setting block, and the lint's info on that block says the same. Pure functions; every word renders
+// as text.
+import { SETTING_BY_NAME, type SettingValue, shownValue, unitOf } from "./settings.ts";
 
 /** One thing the box plays and what of the runner's it replaces (live.takeovers' rows). */
 export type BoxTakeover = {
@@ -26,59 +29,32 @@ export type BoxTakeover = {
 /** A map node's box (POST /flows/lint `box[node]`); `playable` false: Run refuses as it is. */
 export type BoxDoc = { plays: string[]; takeovers: BoxTakeover[]; stays: string[]; playable: boolean };
 
-const what = (t: BoxTakeover): string => {
-  if (t.kind === "event") return `the box's ${t.by} event (${t.when ?? "its condition"}${t.until ? `, until ${t.until}` : ""})`;
-  if (t.by === null) return "nothing: the box presses no confirmation (it has no respawn_confirm function)";
-  return `the box's ${t.by}${t.steps ? ` (${t.steps})` : ""}`;
-};
-
-/** PURE: each run setting the box replaces in this project -> the words its row says (Before
- * Run's settings): "in this project: replaced by the box's drink event (HP < 50 %, until HP >= 51 %);
- * this value is the runner's alone (the old Run path, a box without it)". Empty: no box, or it
- * replaces none. */
-export function boxedSettings(box: BoxDoc | null | undefined): Record<string, string> {
-  const out: Record<string, string> = {};
-  if (!box) return out;
-  const head = box.playable ? "in this project" : "in this project, once its box can play (Run refuses it as it is)";
-  for (const t of box.takeovers) {
-    for (const s of t.settings) {
-      if (s in out) continue;
-      out[s] = `${head}: replaced by ${what(t)}; this value is the runner's alone (the old Run path, a box without ${t.kind === "event" ? "that event" : "that function"})`;
-    }
-  }
-  return out;
-}
-
-/** A setting's value with its unit, as the settings rows show it ("40 %", "150 HP/s", "645,481"). */
-function valueText(f: ConfigField, v: ConfigValue | undefined): string {
-  if (v === undefined) return "";
-  return `${shownValue(f, v)}${f.kind === "share" ? " %" : f.unit ? ` ${f.unit}` : ""}`;
-}
-
-/** "heal at HP under 40 %": a setting's words and the value the next Run takes (or its words). */
-function settingText(name: string, d: ConfigDoc | null, values: Record<string, ConfigValue> | null): string {
-  const f = d?.fields.find((x) => x.name === name);
+/** "heal at HP under 40 % (potion_below)": a setting's words and the value the next Run takes. */
+function settingText(name: string, values: Record<string, SettingValue> | null): string {
+  const f = SETTING_BY_NAME.get(name);
   if (!f) return name;
   const v = values?.[name];
-  return v === undefined ? f.words : `${f.words} ${valueText(f, v)}`;
+  const u = unitOf(f);
+  return v === undefined ? `${f.words} (${f.var})` : `${f.words} ${shownValue(f, v)}${u ? ` ${u}` : ""} (${f.var})`;
 }
 
 /** PURE: the note on a tab whose events or functions the box plays in a Run of this project
- * ("survival": drink, fly_away, bag_full), or null: what each replaces of the runner's, with
- * Before Run's setting and its value, and what stays the runner's (the HP-rate fly). `node` and
- * `tab`: the tab shown (its rows' paths start "<node>/<tab>/"). */
-export function boxTabNote(box: BoxDoc | null | undefined, node: string, tab: string, d: ConfigDoc | null, values: Record<string, ConfigValue> | null): string | null {
+ * ("survival": drink, fly_away, bag_full), or null: what each replaces of the runner's, with the
+ * setting block it replaces and its value, and what stays the runner's (the HP-rate fly). `node`
+ * and `tab`: the tab shown (its rows' paths start "<node>/<tab>/"); `values`: the node's settings
+ * (settings.ts nodeSettings). */
+export function boxTabNote(box: BoxDoc | null | undefined, node: string, tab: string, values: Record<string, SettingValue> | null): string | null {
   if (!box) return null;
   const here = box.takeovers.filter((t) => t.path !== null && t.path.startsWith(`${node}/${tab}/`));
   if (!here.length) return null;
   const byName = new Map<string, BoxTakeover[]>();
   for (const t of here) byName.set(t.by ?? "", [...(byName.get(t.by ?? "") ?? []), t]);
   const parts = [...byName].map(([by, ts]) => {
-    const each = ts.map((t) => `${t.replaces}${t.settings.length ? ` (Before Run: ${t.settings.map((s) => settingText(s, d, values)).join("; ")})` : ""}`);
+    const each = ts.map((t) => `${t.replaces}${t.settings.length ? ` (the setting ${t.settings.map((s) => settingText(s, values)).join("; ")})` : ""}`);
     return `${by} replaces ${[...new Set(each)].join(" and ")}`;
   });
   const flies = here.some((t) => t.play === "fly_hp");
-  const stays = flies && box.stays.length ? ` The HP-rate fly stays the runner's (Before Run: ${box.stays.map((s) => settingText(s, d, values)).join(" ")}).` : "";
+  const stays = flies && box.stays.length ? ` The HP-rate fly stays the runner's (the settings ${box.stays.map((s) => settingText(s, values)).join(" ")}).` : "";
   const head = box.playable ? "In a Run of this project these play inside the hunt core, and the runner's own are off" : "Once this box can play (Run refuses it as it is), these play inside the hunt core, and the runner's own are off";
   return `${head}: ${parts.join("; ")}.${stays}`;
 }
@@ -97,12 +73,12 @@ export function boxTabShort(box: BoxDoc | null | undefined, node: string, tab: s
 }
 
 /** PURE: one name's words in a node's list of tabs and names (the /maps inspector), when the box
- * plays it in a Run of this project: "in a Run: replaces the runner's potion on HP (Before Run's
- * potion_below then applies to the runner alone)"; null: the box plays nothing of it. */
+ * plays it in a Run of this project: "in a Run: replaces the runner's potion on HP (the setting
+ * potion_below then counts only in a box without it)"; null: the box plays nothing of it. */
 export function boxNameWords(box: BoxDoc | null | undefined, path: string): string | null {
   const here = (box?.takeovers ?? []).filter((t) => t.path === path);
   if (!here.length) return null;
   const settings = [...new Set(here.flatMap((t) => t.settings))];
   const replaces = [...new Set(here.map((t) => t.replaces))].join(" and ");
-  return `in a Run: replaces ${replaces}${settings.length ? ` (Before Run's ${settings.join(", ")} then applies to the runner alone)` : ""}`;
+  return `in a Run: replaces ${replaces}${settings.length ? ` (the setting ${settings.join(", ")} then counts only in a box without it)` : ""}`;
 }

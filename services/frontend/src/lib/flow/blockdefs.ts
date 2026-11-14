@@ -14,6 +14,7 @@
 // (pl_detect_sees / pl_detect_count, models.ts; ADR-0020 Amendment B).
 
 export type FieldKind = "field_input" | "field_number" | "field_dropdown" | "field_label_serializable" | "field_label";
+import { groupOf, SETTING_BLOCKS, type SettingField, settingFields, settingTooltip, settingType, SETTINGS, unitOf } from "./settings.ts";
 import { BLOCK_STYLE } from "./theme.ts";
 
 export type ArgDef =
@@ -472,7 +473,73 @@ export const BLOCK_DEFS: BlockDef[] = [
   },
 ];
 
+/** THE SETTING BLOCKS (live-blocks.md 12; Batt 2026-11-14 ~15:2x: "make them ALL blocks"): one
+ * block type per setting of the runner's hunt core (settings.ts), a top-level block like a
+ * variable's: its words, its value by kind (a number / a share as a percent / a whole number with
+ * its range, step and unit; a switch on / off; a choice's options; a point's X and Y, or none), its
+ * variable's name, and for a safety switch a row its warning fills while it is off (the editor
+ * paints it). The IR is a plain variable of the tab: `knife_hp_min = 0.5`. */
+export function settingDef(f: SettingField): BlockDef {
+  const words: ArgDef = { type: "field_label", name: "WORDS", text: f.words };
+  const name: ArgDef = { type: "field_label", name: "VAR", text: `· ${f.var}`, class: "pl-setting-var" };
+  const unit = unitOf(f);
+  const pct = (v: number) => Math.round(v * 100 * 1e6) / 1e6;
+  const number = (): ArgDef =>
+    f.kind === "share"
+      ? { type: "field_number", name: "VALUE", value: pct(Number(f.default)), min: pct(f.lo), max: pct(f.hi), precision: pct(f.step) }
+      : { type: "field_number", name: "VALUE", value: Number(f.default), min: f.lo, max: f.hi, precision: f.kind === "int" ? 1 : f.step };
+  const xy: ArgDef[] = [
+    { type: "field_number", name: "X", value: 0, min: 0, max: SETTINGS.game_px[0] - 1, precision: 1 },
+    { type: "field_number", name: "Y", value: 0, min: 0, max: SETTINGS.game_px[1] - 1, precision: 1 },
+  ];
+  let message0: string;
+  let args0: ArgDef[];
+  switch (f.kind) {
+    case "switch":
+      message0 = "%1 %2 %3";
+      args0 = [words, { type: "field_dropdown", name: "VALUE", options: [["on", "on"], ["off", "off"]] }, name];
+      break;
+    case "choice":
+      message0 = "%1 %2 %3";
+      args0 = [words, { type: "field_dropdown", name: "VALUE", options: opts(f.options) }, name];
+      break;
+    case "point":
+      message0 = "%1 x %2 y %3 %4";
+      args0 = [words, ...xy, name];
+      break;
+    case "point_or_none":
+      message0 = "%1 %2 x %3 y %4 %5";
+      args0 = [words, { type: "field_dropdown", name: "AT", options: [["at", "at"], ["none", "none"]] }, ...xy, name];
+      break;
+    default:
+      message0 = unit ? "%1 %2 %3 %4" : "%1 %2 %3";
+      args0 = unit ? [words, number(), { type: "field_label", name: "UNIT", text: unit }, name] : [words, number(), name];
+  }
+  const def: BlockDef = { type: settingType(f), message0, args0, style: "mp_setup_blocks", inputsInline: true, tooltip: settingTooltip(f) };
+  if (f.warn) {
+    def.message1 = "%1";
+    def.args1 = [{ type: "field_label", name: "WARN", text: "", class: "pl-setting-warn" }];
+  }
+  return def;
+}
+export const SETTING_DEFS: BlockDef[] = SETTING_BLOCKS.map(settingDef);
+BLOCK_DEFS.push(...SETTING_DEFS);
+
 export const DEF_BY_TYPE: Record<string, BlockDef> = Object.fromEntries(BLOCK_DEFS.map((d) => [d.type, d]));
+
+/** The toolbox's Settings category: every setting block at our default, by its group (the tab it
+ * belongs in), the tab shown first; a block dragged in that the tab already holds is refused there
+ * ("used twice on this tab"). */
+export function settingItems(tab?: string): ToolboxItem[] {
+  const order = [...SETTINGS.tabs].sort((a, b) => Number(b === tab) - Number(a === tab));
+  const out: ToolboxItem[] = [lbl("A setting of the runner's hunt core: one block each, in its group's tab (a map node's replaces Global's; a deleted one falls back to Global's, else the default):")];
+  for (const g of order) {
+    const grp = groupOf(g);
+    out.push(lbl(`${grp?.title ?? g} (tab ${g}):`));
+    for (const f of SETTING_BLOCKS.filter((x) => x.group === g)) out.push({ kind: "block", type: settingType(f), fields: settingFields(f, f.default) });
+  }
+  return out;
+}
 
 /** A sentence block's field: the catalogue parameter it holds and how (blocks.ts converts). */
 export type SentenceField = { param: string; field: string; kind: "npc" | "map" | "items"; optional?: boolean };
@@ -736,6 +803,7 @@ export function toolbox(
       cat("Sensors", "mp_sensor_category", sensorItems),
       cat("Operators", "math_category", operators),
       cat("Variables", "variable_category", variables),
+      ...(onMap || scope.node === "global" ? [cat("Settings", "mp_setup_category", settingItems(scope.tab))] : []),
       cat("Functions", "mp_function_category", functions),
       cat("Advanced", "mp_setup_category", advanced),
     ],
