@@ -4439,7 +4439,7 @@ under the sk list, and the xw3 Goblin labels (from the 11-06 T2, which failed) s
    (MAP_MODELS, the alarm's Goblin rule, S2's "runner" paragraph, a live flee proof) is a later step
    of its own, decided by the parent / Batt on this result.
 
-#### S4.7 (2026-11-14 19:16 ICT from `date`, BEFORE the GPU step): the cache as built
+#### S4.7 (2026-11-14 19:15 ICT from `date`, BEFORE the GPU step): the cache as built
 
 S4.4's command, 19:07:14-19:13:30 (375.4 s; the guard watched no capture service, worst stall
 0.0 %): **`/mnt/poring-lab-datasets/.framecache/xmas02-sk-mask-o3h-t-20261114`**, 1,322 frames written
@@ -4451,3 +4451,10 @@ class list `b871a2f6...`. Read back through `poring_vision.shards.load_split` (t
 reader): TRAIN 3,613 frames, boxes 0: 3,613 / 3: 1,707 / 4: 956 / 5: 597 / 6: 473 / 7: 649 /
 **8: 1,138** / **9: 112**; VAL 1,106. sk2a 886 read from its shard: 4.65 % of its pixels are 114
 grey, its 4 YOLO lines our own box + cookie_xmas + Goblin + Garm Baby. Next: S4.5's launch.
+
+**S4.5 as launched (19:15:42 ICT, the unit `poring-train-xmas02sk`; the guard printed "host profile
+dedicated-intel is DEDICATED" and ran S4.5's command unchanged):** the trainer's log reads
+`Overriding model.yaml nc=8 with nc=10`, **`Remapped 8/10 cls head rows from pretrained weights by
+class name`** (g_gobline_xmas and knight_of_windstorm fresh), `Transferred 499/499 items`,
+`AdamW(lr=0.000714, momentum=0.9)`, `amp=False`, `Using 3613 train, 1106 val images`, `Using 2
+dataloader workers`, `Starting training for 10 epochs`. A watcher (S4.5) yields the worker to a Run.
