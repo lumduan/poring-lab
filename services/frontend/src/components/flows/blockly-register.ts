@@ -4,7 +4,7 @@
 // (lib/flow/blockly_headless.test.ts) registers exactly what the page does.
 import type * as BlocklyT from "blockly/core";
 
-import { registerPickers } from "./blockly-pickers.ts";
+import { registerPickers, wrapLineField } from "./blockly-pickers.ts";
 import { BLOCK_DEFS, LABEL_ROWS } from "../../lib/flow/blockdefs.ts";
 import { huntDef, type HuntRules } from "../../lib/flow/hunt.ts";
 import { wrapExpr } from "../../lib/flow/pickers.ts";
@@ -196,7 +196,7 @@ export function syncExprWrap(B: typeof BlocklyT, b: BlocklyT.Block): boolean {
       const name = `WRAP${k + 1}`;
       const f = b.getField(`${name}_T`);
       if (!f) {
-        b.appendDummyInput(name).appendField(new B.FieldLabel(line, "pl-expr-wrap"), `${name}_T`);
+        b.appendDummyInput(name).appendField(wrapLineField(B, line, "pl-expr-wrap"), `${name}_T`); // round 23: tappable
         changed = true;
       } else if (f.getValue() !== line) {
         f.setValue(line);

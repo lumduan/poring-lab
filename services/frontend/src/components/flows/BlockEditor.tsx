@@ -15,16 +15,17 @@ import type * as BlocklyT from "blockly/core";
 import { useEffect, useRef, useState } from "react";
 
 import { followModel, registerDetectorMenus } from "@/components/flows/blockly-fields";
-import { refreshPickers, setPickerSource } from "@/components/flows/blockly-pickers";
+import { keepDropDownsInside, refreshPickers, setPickerSource } from "@/components/flows/blockly-pickers";
 import { huntKey, register, registerHunt, setFlyoutNotes, syncExprWrap, syncLabelRows, syncSetting, themesOf } from "@/components/flows/blockly-register";
 import { registerSearch } from "@/components/flows/blockly-search";
 import type { CatalogueDoc, Finding, LintDoc, Trace } from "@/lib/flow/api";
 import { BADGE_TEXT, sitePath } from "@/lib/flow/api";
 import { boxReplaced } from "@/lib/flow/box";
 import { SENTENCE_BY_TYPE, titleLines, type Toolbox, toolbox, type ToolboxScope } from "@/lib/flow/blockdefs";
-import { type Defaults, type TabScope, tabFromWorkspace, tabToWorkspace, type Workspace } from "@/lib/flow/blocks";
+import { type Defaults, TAB_TOP_Y, type TabScope, tabFromWorkspace, tabToWorkspace, type Workspace } from "@/lib/flow/blocks";
 import { defaultFields, HUNT_TYPE, huntTooltip, omitted } from "@/lib/flow/hunt";
 import { canonical } from "@/lib/flow/ir";
+import { STACK_GAP, stackTops, type TopBox } from "@/lib/flow/layout";
 import { firstDetector, monstersOf, notAdopted } from "@/lib/flow/models";
 import type { MapsDoc, PickerData } from "@/lib/flow/pickers";
 import type { Project } from "@/lib/flow/project";
@@ -105,6 +106,7 @@ export default function BlockEditor(p: BlockEditorProps) {
     let disposed = false;
     let timer: ReturnType<typeof setTimeout> | null = null;
     let resize: ResizeObserver | null = null;
+    let unfit: (() => void) | null = null;
     const media = darkQuery();
     let onMedia: (() => void) | null = null;
 
@@ -208,12 +210,15 @@ export default function BlockEditor(p: BlockEditorProps) {
         w.addChangeListener(followModel(B, w, () => latest.current.catalogue?.models ?? null));
         w.addChangeListener((e: BlocklyT.Events.Abstract) => {
           if (e.isUiEvent) return;
+          settle(B, w); // round 23: a block whose height changed pushes the ones under it down
           if (timer) clearTimeout(timer);
           timer = setTimeout(() => {
             timer = null;
             convert();
           }, CONVERT_MS);
         });
+        // round 23: Blockly's own menus (on / off, the choices) stay inside the blocks area
+        unfit = keepDropDownsInside(B, () => w.getInjectionDiv()?.getBoundingClientRect() ?? null);
         resize = new ResizeObserver(() => B.svgResize(w));
         resize.observe(host.current);
         onMedia = () => w.setTheme(media?.matches ? th.dark : th.light);
@@ -234,6 +239,7 @@ export default function BlockEditor(p: BlockEditorProps) {
         convert(); // an edit not converted yet still lands in the flow
       }
       resize?.disconnect();
+      unfit?.();
       if (onMedia) media?.removeEventListener("change", onMedia);
       blockly.current?.DropDownDiv.hideWithoutAnimation(); // a picker open on this tab closes with it
       setPickerSource(null);
@@ -299,49 +305,79 @@ function toolboxOf(catalogue: CatalogueDoc | null, scope: ToolboxScope): Toolbox
 function decorate(B: typeof BlocklyT, w: BlocklyT.WorkspaceSvg, catalogue: CatalogueDoc | null, lint: LintDoc | null, notes: Record<string, SettingNote> | null, trace: Trace | null, paths: Record<string, string>, scope: TabScope, project: Project | null, issues: readonly Issue[] = []): void {
   const was = B.Events.isEnabled();
   if (was) B.Events.disable();
-  let grew: BlocklyT.BlockSvg[] = [];
   try {
-    grew = paint(B, w, catalogue, lint, notes, trace, paths, scope, project, issues);
+    paint(B, w, catalogue, lint, notes, trace, paths, scope, project, issues);
     // round 21: a reference that became known (a function written since, the map list arrived)
     // loses its ⚠, one that is gone gains it
     refreshPickers(w);
   } finally {
     if (was) B.Events.enable();
   }
-  // a setting block that gained rows (its warning, the lint's note) pushes the blocks under it down
-  // once Blockly has drawn it (its new height is known only then)
-  // (a statement block that grew moves its stack: the stack's top block is the one restacked)
-  if (grew.length) void B.renderManagement.finishQueuedRenders().then(() => restack(B, w, [...new Set(grew.map((b) => b.getRootBlock()))]), () => undefined);
+  // a block that gained rows (a setting's warning, the lint's note, a wrapped condition, the badge)
+  // pushes the blocks under it down once Blockly has drawn it (its height is known only then)
+  settle(B, w);
 }
 
-/** The gap kept between two setting blocks when one grew (workspace units). */
-const RESTACK_GAP = 16;
+/** Each workspace's top blocks' heights at its last settle (none yet: the tab just opened). */
+const settledHeights = new WeakMap<BlocklyT.WorkspaceSvg, Map<string, number>>();
+/** A settle waiting for Blockly's renders (true: asked again meanwhile, so it runs once more). */
+const settling = new WeakMap<BlocklyT.WorkspaceSvg, boolean>();
 
-/** matpilot round 20 #2: when a setting block grew (its warning, the lint's note) over the block
- * under it, every block under it moves down by the same amount (a list of settings stays a list, in
- * its order); a move, never an edit (no event, no undo step). Blocks beside it stay. */
-function restack(B: typeof BlocklyT, w: BlocklyT.WorkspaceSvg, grew: BlocklyT.BlockSvg[]): void {
-  if (grew.some((b) => b.isDisposed() || b.workspace !== w)) return; // the tab was closed meanwhile
+/** Round 23 (the reviewer: the survival tab's event blocks overlapped -- drink / fly_away 78 px at
+ * 390 and 97 at 1440, fly_away / bag_full 131 / 164, bag_full / eat_cane 78 / 96 -- and hid 8
+ * fields; supersedes round 20's restack, which moved only the blocks under a SETTING that grew):
+ * once Blockly has drawn the tab, its TOP blocks are stacked again with the heights Blockly
+ * MEASURED (getHeightWidth), STACK_GAP apart, in their order and at their x (layout.ts stackTops).
+ * The first time (the tab just opened) they are packed from the tab's top; afterwards, whenever a
+ * block's height changed (a picker's value, a note, a warning row, a wrapped condition, a block
+ * plugged in or taken out), a block only ever moves DOWN, as far as the ones above it need. A move,
+ * never an edit: no event, no undo step, nothing saved (a project keeps no block positions); not
+ * while a person drags. */
+function settle(B: typeof BlocklyT, w: BlocklyT.WorkspaceSvg): void {
+  if (settling.has(w)) {
+    settling.set(w, true);
+    return;
+  }
+  settling.set(w, false);
+  void B.renderManagement.finishQueuedRenders().then(
+    () => {
+      const again = settling.get(w);
+      settling.delete(w);
+      settleNow(B, w);
+      if (again) settle(B, w);
+    },
+    () => settling.delete(w),
+  );
+}
+
+function settleNow(B: typeof BlocklyT, w: BlocklyT.WorkspaceSvg): void {
+  try {
+    if (!w.rendered || !w.getParentSvg()?.isConnected) return; // the tab was closed meanwhile
+  } catch {
+    return;
+  }
+  if (B.Gesture.inProgress()) {
+    setTimeout(() => settle(B, w), 250); // after the drag
+    return;
+  }
+  const tops = w.getTopBlocks(false).filter((b) => !b.isDisposed() && !b.isInFlyout);
+  const boxes: TopBox[] = tops.map((b) => {
+    const at = b.getRelativeToSurfaceXY();
+    const hw = b.getHeightWidth();
+    return { id: b.id, x: at.x, y: at.y, w: hw.width, h: hw.height };
+  });
+  const last = settledHeights.get(w);
+  const grown = !last || boxes.some((b) => Math.abs((last.get(b.id) ?? b.h) - b.h) > 0.5);
+  settledHeights.set(w, new Map(boxes.map((b) => [b.id, b.h])));
+  if (!grown) return;
+  const ys = stackTops(boxes, last ? "push" : "pack", STACK_GAP, TAB_TOP_Y);
+  if (!ys.size) return;
   const was = B.Events.isEnabled();
   if (was) B.Events.disable();
   try {
-    const box = (b: BlocklyT.BlockSvg) => {
-      const at = b.getRelativeToSurfaceXY();
-      const hw = b.getHeightWidth();
-      return { x: at.x, y: at.y, w: hw.width, h: hw.height };
-    };
-    const tops = w.getTopBlocks(false).filter((b) => !b.isDisposed());
-    for (const a of [...grew].sort((x, y) => box(x).y - box(y).y)) {
-      const ab = box(a);
-      const below = tops.filter((b) => {
-        const bb = box(b);
-        return b !== a && bb.y >= ab.y && bb.x < ab.x + ab.w && ab.x < bb.x + bb.w;
-      });
-      if (!below.length) continue;
-      const first = Math.min(...below.map((b) => box(b).y));
-      const under = ab.y + ab.h + RESTACK_GAP;
-      if (first >= under) continue;
-      for (const b of below) b.moveBy(0, under - first);
+    for (const b of tops) {
+      const y = ys.get(b.id);
+      if (y !== undefined) b.moveBy(0, y - b.getRelativeToSurfaceXY().y);
     }
   } finally {
     if (was) B.Events.enable();

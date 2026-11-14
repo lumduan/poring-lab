@@ -229,6 +229,9 @@
   height: auto;
   touch-action: none;
   overflow: visible;
+  /* round 23: a drag never starts a text selection (which scrolls the picker under the pointer) */
+  -webkit-user-select: none;
+  user-select: none;
 }
 .pl-picker-lever:focus {
   outline: none;
@@ -323,7 +326,11 @@
   font-size: 15px;
   margin: 0 0 2px;
 }
+/* round 23: the compact picture is 176 x 99 (its box, not only its width: the drag maps from the
+   drawn picture, blockly-pickers.ts onDrag) */
 .pl-picker-compact .pl-picker-screen {
+  width: 176px;
+  height: 99px;
   max-width: 176px;
 }
 .pl-picker-compact .pl-picker-list {
@@ -333,6 +340,10 @@
   max-width: 200px;
 }
 /* round 22: a long condition's further lines, in the same white box as its first (dark words) */
+/* round 23: a wrapped condition's further lines open its picker too */
+.blocklyText.pl-expr-wrap {
+  cursor: pointer;
+}
 .blocklyText.pl-expr-wrap,
 .pl-expr-wrap .blocklyText {
   fill: #1f2937 !important;
