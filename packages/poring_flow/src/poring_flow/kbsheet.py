@@ -226,6 +226,51 @@ def build_sheet(
     return MapSheet(map=map_id, spawns=spawn_list, npcs=npcs, warps=warps, flags=None, walk=walk)
 
 
+# The IR's map id (ir.MAP_ID): a name the map pickers offer must be one a flow can hold.
+MAP_NAME = re.compile(r"^[A-Za-z0-9_@.\-]{1,40}$")
+
+
+def known_maps(server: str, kb_root: Path) -> tuple[list[dict[str, Any]], list[str]]:
+    """Round 21 (the map pickers, docs/planning/live-blocks.md 12.5): every map name the LOCAL KB
+    knows for `server`, sorted, each with whether a Kafra stands there (a save point can be set
+    there), and notes on what was missing. Read at RUN TIME, never written, never committed (the
+    names are client- and GPL-derived, CLAUDE.md rule 4): the generated sheet files' names, the L3
+    warps (both ends), the NPCs' and the Kafras' maps, and the spawn lines' maps."""
+    if not SAFE_NAME.match(server):
+        return [], [f"server id {server!r} cannot name local data"]
+    notes: list[str] = []
+    names: set[str] = set()
+    kafra: set[str] = set()
+    folder = kb_root / "maps" / server
+    if folder.is_dir():
+        names.update(p.stem for p in folder.glob("*.json") if not p.stem.startswith("_"))
+    l3 = _json(kb_root / "bindings" / f"{server}.json")
+    if isinstance(l3, dict):
+        by_map = ((l3.get("warp") or {}).get("cells") or {}).get("by_map") or {}
+        for m, warps in by_map.items() if isinstance(by_map, dict) else []:
+            names.add(m)
+            for w in warps if isinstance(warps, list) else []:
+                if isinstance(w, dict) and isinstance(w.get("to_map"), str):
+                    names.add(w["to_map"])
+        npc_l3 = l3.get("npc") or {}
+        for e in (npc_l3.get("positions") or {}).get("npcs") or []:
+            if isinstance(e, dict) and isinstance(e.get("map"), str):
+                names.add(e["map"])
+        for e in (npc_l3.get("kafra") or {}).get("npcs") or []:
+            if isinstance(e, dict) and isinstance(e.get("map"), str):
+                names.add(e["map"])
+                kafra.add(e["map"])
+    else:
+        notes.append(f"no L3 bindings for {server} (data/kb/bindings/{server}.json)")
+    spawns = _json(kb_root / "spawns.json")
+    if isinstance(spawns, dict):
+        names.update(k for k in spawns if isinstance(k, str))
+    if not names:
+        notes.append("the local KB names no maps here: the map pickers list the project's own")
+    out = [{"id": m, "kafra": m in kafra} for m in sorted(names) if MAP_NAME.match(m)]
+    return out, notes
+
+
 def load_local_world(
     server: str, maps: list[str], kb_root: Path, gat_dir: Path | None = None
 ) -> tuple[World, Labels]:

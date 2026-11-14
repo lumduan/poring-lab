@@ -481,9 +481,9 @@ function mapEventHat(ev: MapEvent, block: MapBlock, order: number, ids: Ids): Ws
 function height(b: WsBlock | undefined): number {
   let n = 0;
   for (let cur = b; cur; cur = cur.next?.block) {
-    // the hunt block is five lines tall; the runner's block fourteen (round 20: a role a row), the
-    // save point four
-    n += cur.type === HUNT_TYPE ? 4 : cur.type === "pl_dungeon_hunt" ? 11 : cur.type === "pl_save_point" ? 4 : 1;
+    // the hunt block is five lines tall; the runner's block fourteen (round 20: a role a row; round
+    // 21: sixteen, "Fly Wing:" and "Knife on:" on rows of their own), the save point four
+    n += cur.type === HUNT_TYPE ? 4 : cur.type === "pl_dungeon_hunt" ? 12 : cur.type === "pl_save_point" ? 4 : 1;
     for (const inp of Object.values(cur.inputs ?? {})) if (inp.block && !DEF_BY_TYPE[inp.block.type]?.output) n += height(inp.block);
   }
   return n;

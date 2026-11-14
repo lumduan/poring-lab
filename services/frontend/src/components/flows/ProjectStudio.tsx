@@ -40,6 +40,7 @@ import { type FileMeta, newFileMeta, readFileMeta, writeFileMeta } from "@/lib/f
 import { canonical } from "@/lib/flow/ir";
 import { ACTIVE, busyWhy, PROJECT_FLOW } from "@/lib/flow/liverun";
 import { liveReady } from "@/lib/flow/liveready";
+import type { MapsDoc } from "@/lib/flow/pickers";
 import { browserStorage, hasOldFlow, KEYS, pythonDefault, readChoice, readProjectText, writeChoice, writeProjectText } from "@/lib/flow/prefs";
 import {
   GLOBAL_ID,
@@ -147,6 +148,9 @@ export default function ProjectStudio({ backendUrl, initialNode = null }: { back
   const [tabName, setTabName] = useState<string>(MAIN_TAB);
   const [renaming, setRenaming] = useState<{ tab: string; text: string } | null>(null);
   const [catalogue, setCatalogue] = useState<CatalogueDoc | null>(null);
+  // round 21 (live-blocks.md 12.5): the map names the world knows, for the map pickers (the local
+  // KB at run time; never a committed list); null while it loads or where there is none
+  const [maps, setMaps] = useState<MapsDoc | null>(null);
   const [engineErr, setEngineErr] = useState<string | null>(null);
   const [lint, setLint] = useState<{ doc: LintDoc; for: string } | null>(null);
   const [sim, setSim] = useState<{ doc: SimDoc; for: string } | null>(null);
@@ -322,6 +326,17 @@ export default function ProjectStudio({ backendUrl, initialNode = null }: { back
       })
       .catch((e) => setEngineErr(e instanceof ApiError ? e.reason : String(e)));
   }, [api, project.target.client]);
+
+  useEffect(() => {
+    let live = true;
+    api
+      .maps(world, project.target.server)
+      .then((m) => live && setMaps(m))
+      .catch(() => live && setMaps(null));
+    return () => {
+      live = false;
+    };
+  }, [api, world, project.target.server]);
 
   const runLint = useCallback(
     async (p: Project, w: WorldSource) => {
@@ -855,6 +870,7 @@ export default function ProjectStudio({ backendUrl, initialNode = null }: { back
                 lint={lintStale ? null : lintDoc}
                 notes={lintDoc?.settings ?? null}
                 trace={simDoc && !simStale ? simDoc.trace : null}
+                maps={maps}
                 hidden={view === "python"}
                 onProject={fromBlocks}
                 onState={onEditorState}

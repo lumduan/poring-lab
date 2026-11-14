@@ -15,6 +15,7 @@ import type * as BlocklyT from "blockly/core";
 import { useEffect, useRef, useState } from "react";
 
 import { followModel, registerDetectorMenus } from "@/components/flows/blockly-fields";
+import { refreshPickers, setPickerSource } from "@/components/flows/blockly-pickers";
 import { huntKey, register, registerHunt, syncSetting, themesOf } from "@/components/flows/blockly-register";
 import { registerSearch } from "@/components/flows/blockly-search";
 import type { CatalogueDoc, Finding, LintDoc, Trace } from "@/lib/flow/api";
@@ -24,6 +25,7 @@ import { type Defaults, type TabScope, tabFromWorkspace, tabToWorkspace, type Wo
 import { defaultFields, HUNT_TYPE, huntTooltip, omitted } from "@/lib/flow/hunt";
 import { canonical } from "@/lib/flow/ir";
 import { firstDetector, monstersOf, notAdopted } from "@/lib/flow/models";
+import type { MapsDoc, PickerData } from "@/lib/flow/pickers";
 import type { Project } from "@/lib/flow/project";
 import { noteLines, SETTING_NOTE_ROWS, settingFallback, type SettingNote, settingOfType, settingTooltip } from "@/lib/flow/settings";
 import { runLine } from "@/lib/flow/status";
@@ -72,6 +74,9 @@ export type BlockEditorProps = {
    * kept while a new lint runs (the rows would blink on every edit otherwise). */
   notes: Record<string, SettingNote> | null;
   trace: Trace | null;
+  /** Round 21 (live-blocks.md 12.5): the map names the world knows (GET /flows/maps), the map
+   * pickers' list; null while it loads or where the world is not here. */
+  maps: MapsDoc | null;
   hidden: boolean;
   onProject: (project: Project) => void;
   onState: (state: EditorState) => void;
@@ -159,6 +164,16 @@ export default function BlockEditor(p: BlockEditorProps) {
         registerSearch(B, () => tbRef.current);
         registerDetectorMenus(B, () => latest.current.catalogue?.models ?? null);
         blockly.current = B;
+        // round 21: what the pickers list when one opens -- the project as converted last, this tab,
+        // the catalogue, the map list, and the functions written here and not converted yet
+        setPickerSource((): PickerData => ({
+          project: latest.current.getProject(),
+          node: latest.current.scope.node,
+          tab: latest.current.scope.tab,
+          catalogue: latest.current.catalogue,
+          maps: latest.current.maps,
+          extraDefs: (ws.current?.getBlocksByType("pl_def", false) ?? []).map((b) => String(b.getFieldValue("NAME") ?? "").trim()),
+        }));
         const cat = latest.current.catalogue;
         const hunt = registerHunt(B, cat?.hunt_rules ?? null) ? (cat?.hunt_rules ?? null) : null;
         const th = themesOf(B);
@@ -215,6 +230,8 @@ export default function BlockEditor(p: BlockEditorProps) {
       }
       resize?.disconnect();
       if (onMedia) media?.removeEventListener("change", onMedia);
+      blockly.current?.DropDownDiv.hideWithoutAnimation(); // a picker open on this tab closes with it
+      setPickerSource(null);
       ws.current?.dispose();
       ws.current = null;
       latest.current.onApi(null);
@@ -237,7 +254,7 @@ export default function BlockEditor(p: BlockEditorProps) {
     }
     if (blockly.current) decorate(blockly.current, ws.current, catalogue, lint, notes, trace, paths.current, scope, p.getProject());
     // the scopes as plain values: their objects are new on every render of the page
-  }, [ready, catalogue, lint, notes, trace, scope.node, scope.tab, p.toolboxScope.node, p.toolboxScope.main, p.toolboxScope.tab, p.toolboxScope.model]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [ready, catalogue, lint, notes, trace, p.maps, scope.node, scope.tab, p.toolboxScope.node, p.toolboxScope.main, p.toolboxScope.tab, p.toolboxScope.model]); // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
     <>
@@ -279,6 +296,9 @@ function decorate(B: typeof BlocklyT, w: BlocklyT.WorkspaceSvg, catalogue: Catal
   let grew: BlocklyT.BlockSvg[] = [];
   try {
     grew = paint(B, w, catalogue, lint, notes, trace, paths, scope, project);
+    // round 21: a reference that became known (a function written since, the map list arrived)
+    // loses its ⚠, one that is gone gains it
+    refreshPickers(w);
   } finally {
     if (was) B.Events.enable();
   }

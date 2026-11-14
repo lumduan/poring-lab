@@ -4,21 +4,29 @@
 // (components/flows/BlockEditor.tsx) registers them with Blockly in the browser.
 //
 // Field kinds that SAVE their value: field_input (text), field_number, field_dropdown,
-// field_label_serializable. A plain field_label is NOT saved: BADGE (the skill's verification badge)
-// and RUN (the last simulate run) are decorations the component fills in after loading; nor is a
-// field_image (the model blocks' eye).
+// field_label_serializable, and round 21's pickers (field_pl_text: a text, field_pl_num: a
+// number). A plain field_label is NOT saved: BADGE (the skill's verification badge) and RUN (the
+// last simulate run) are decorations the component fills in after loading; nor is a field_image
+// (the model blocks' eye).
 //
 // Since 2026-11-09 (the studio, docs/planning/flows-studio.md) the blocks carry MatPilot's words,
 // STYLES and categories (theme.ts): only words, colours and the toolbox changed; every type, field,
 // input and the IR they convert to stayed. Two blocks were added: the TRAINED MODELS as sensors
 // (pl_detect_sees / pl_detect_count, models.ts; ADR-0020 Amendment B).
 
-export type FieldKind = "field_input" | "field_number" | "field_dropdown" | "field_label_serializable" | "field_label";
+export type FieldKind = "field_input" | "field_number" | "field_dropdown" | "field_label_serializable" | "field_label" | typeof PICK_NUM | typeof PICK_TEXT;
+/** Round 21 (live-blocks.md 12.5, ADR-0020 Amendment K): a field that is not a NAME is a PICKER
+ * (components/flows/blockly-pickers.ts): `field_pl_num` saves a number as field_number did,
+ * `field_pl_text` a text as field_input did; its `pick` says what opens (lib/flow/pickers.ts). */
+export const PICK_NUM = "field_pl_num";
+export const PICK_TEXT = "field_pl_text";
 import { groupOf, SETTING_BLOCKS, SETTING_GEOMETRY, SETTING_NOTE_ROWS, SETTING_ROW_BUDGET, type SettingField, settingFields, settingRows, settingTooltip, settingType, SETTINGS, unitOf, varText, wrapUnits } from "./settings.ts";
+import { MAX_RANK } from "./ir.ts";
+import type { PickSpec, RefKind } from "./pickers.ts";
 import { BLOCK_STYLE } from "./theme.ts";
 
 export type ArgDef =
-  | { type: FieldKind; name: string; text?: string; value?: number; min?: number; max?: number; precision?: number; options?: [string, string][]; class?: string }
+  | { type: FieldKind; name: string; text?: string; value?: number; min?: number; max?: number; precision?: number; options?: [string, string][]; class?: string; pick?: PickSpec }
   | { type: "input_value" | "input_statement"; name: string; check?: string | string[] }
   | { type: "input_dummy" }
   | { type: "input_end_row"; name: string }
@@ -75,7 +83,23 @@ const text = (name: string, value = ""): ArgDef => ({ type: "field_input", name,
  * project.test.ts). An event block shows them as defaults (an empty field), not as values. */
 export const DEFAULT_MAX_10 = 10;
 export const DEFAULT_FAILS = 3;
-const num = (name: string, value = 0): ArgDef => ({ type: "field_number", name, value });
+// --- round 21: the pickers (the same saved value as the plain field: a number, a text) ------------
+/** A reference: a searchable list of what exists (`optional`: the word an empty field shows). */
+const ref = (name: string, kind: RefKind, title: string, value = "", more: { role?: string; optional?: string } = {}): ArgDef => ({ type: PICK_TEXT, name, text: value, pick: { kind: "ref", ref: kind, title, ...more } });
+/** Seconds: a stepper with a slider over `hi` (typing may go past it; the field's own min / max
+ * stay as they were, so a loaded value is never clamped). */
+const secs = (name: string, value: number, title: string, hi = 60, step = 0.5, presets = [0.5, 1, 2, 5, 10], more: { min?: number; max?: number } = {}): ArgDef => ({ type: PICK_NUM, name, value, ...more, pick: { kind: "stepper", lo: 0, hi, step, unit: "s", presets, title } });
+/** A map cell's x and y: two steppers, one picker for both. */
+const cell = (title: string): ArgDef[] => [
+  { type: PICK_NUM, name: "X", value: 0, pick: { kind: "cell", axis: "x", pair: "Y", title } },
+  { type: PICK_NUM, name: "Y", value: 0, pick: { kind: "cell", axis: "y", pair: "X", title } },
+];
+/** A whole number in a TEXT field where empty means none or the default (`empty`: what the empty
+ * field shows; `none`: the picker's button). */
+const optnum = (name: string, lo: number, hi: number, empty: string, none: string, title: string): ArgDef => ({ type: PICK_TEXT, name, text: "", pick: { kind: "optnum", lo, hi, step: 1, empty, none, title } });
+/** An expression's or a call's inputs as text, edited by the condition / inputs picker with the
+ * typed fallback that autocompletes. */
+const expr = (name: string, mode: "expr" | "args" | "callargs", value: string, title: string): ArgDef => ({ type: PICK_TEXT, name, text: value, pick: { kind: "expr", mode, title } });
 const opts = (vals: readonly string[]): [string, string][] => vals.map((v) => [v, v]);
 // Blockly only lets a MUTATOR add saveExtraState / loadExtraState (a plain extension that does is
 // refused), so the lossless state rides on mutators without a mutator UI.
@@ -120,12 +144,22 @@ export const RUNNER_ROLES = [
   { param: "eat", field: "EAT", words: "eat", fn: "eat", optional: true },
 ] as const;
 
+/** A runner role's slot: the functions of the node and Global, its usual one first. `value`: the
+ * field's default as before round 21 (home's is the Butterfly Wing's function; the other optional
+ * roles start empty). */
+function role(field: string, value: string): ArgDef {
+  const r = RUNNER_ROLES.find((x) => x.field === field)!;
+  return ref(field, "role", `the function for ${r.words}`, value, r.optional ? { role: r.param, optional: "none" } : { role: r.param });
+}
+/** An exit's arrival: a map node of the project, and one of its entries. */
+const arrive = (): ArgDef[] => [ref("TO_BLOCK", "node", "the map node she arrives on"), ref("TO_ENTRY", "entry", "where she arrives on it")];
+
 export const BLOCK_DEFS: BlockDef[] = [
   // --- MW2's palette: one block per skill (section 3) ---
   stmt({
     type: "pl_walk_to",
     message0: "walk to %1 x %2 y %3 %4 %5",
-    args0: [text("MAP"), num("X"), num("Y"), badge, run],
+    args0: [ref("MAP", "map", "the map"), ...cell("the cell to walk to"), badge, run],
     inputsInline: true,
     tooltip: "walk_to(cell): walk to a cell of this map",
   }),
@@ -144,7 +178,7 @@ export const BLOCK_DEFS: BlockDef[] = [
   stmt({
     type: "pl_open_window",
     message0: "open window %1 %2 %3",
-    args0: [text("WINDOW", "basic_info"), badge, run],
+    args0: [ref("WINDOW", "window", "the window to open", "basic_info"), badge, run],
     tooltip: "open_window(window): an L2 window name (ADR-0011 anchor map)",
   }),
   stmt({
@@ -165,7 +199,7 @@ export const BLOCK_DEFS: BlockDef[] = [
   stmt({
     type: "pl_kafra_teleport",
     message0: "teleport with the Kafra %1 to %2 %3 %4",
-    args0: [text("NPC"), text("TO"), badge, run],
+    args0: [text("NPC"), ref("TO", "map", "the map she arrives in"), badge, run],
     tooltip: "kafra_teleport(npc, to=map): pay the Kafra and arrive in that map",
   }),
   stmt({
@@ -201,14 +235,14 @@ export const BLOCK_DEFS: BlockDef[] = [
   stmt({
     type: "pl_wait",
     message0: "wait %1 seconds %2",
-    args0: [num("SECONDS", 1), run],
+    args0: [secs("SECONDS", 1, "seconds to wait"), run],
     tooltip: "wait: the IR's core wait statement (wait_until(False, timeout_s=N)); no input",
   }),
   // --- every other catalogue block, lossless: its parameters by name ---
   stmt({
     type: "pl_action",
     message0: "%1 ( %2 ) %3 %4",
-    args0: [label("BLOCK"), text("ARGS"), badge, run],
+    args0: [label("BLOCK"), expr("ARGS", "args", "", "its inputs"), badge, run],
     tooltip: "A catalogue block. Parameters by name, e.g. within=12 or npc=npc(\"n_k1\")",
   }),
   // --- control ---
@@ -239,25 +273,25 @@ export const BLOCK_DEFS: BlockDef[] = [
   stmt({
     type: "pl_wait_until",
     message0: "wait until %1 at most %2 s %3",
-    args0: [{ type: "input_value", name: "COND" }, num("TIMEOUT", 10), run],
+    args0: [{ type: "input_value", name: "COND" }, secs("TIMEOUT", 10, "seconds to wait at most", 120, 1, [5, 10, 30, 60]), run],
   }),
   stmt({
     type: "pl_set",
     message0: "set %1 to %2",
-    args0: [text("VAR", "x"), { type: "input_value", name: "VALUE" }],
+    args0: [ref("VAR", "variable", "the variable to set", "x"), { type: "input_value", name: "VALUE" }],
   }),
-  stmt({ type: "pl_call", message0: "call %1 ( %2 )", args0: [text("PROC", "my_function"), text("ARGS", "")], inputsInline: true,
+  stmt({ type: "pl_call", message0: "call %1 ( %2 )", args0: [ref("PROC", "function", "the function to call", "my_function"), expr("ARGS", "callargs", "", "its inputs")], inputsInline: true,
     tooltip: "call a function: this node's own, or Global's. Its inputs as in Python: F8, times=2" }),
   stmt({ type: "pl_return", message0: "return %1", args0: [{ type: "input_value", name: "VALUE" }],
     tooltip: "end the function here; with a value, the call gives it back (a function used as a value)" }),
-  value({ type: "pl_callv", message0: "%1 ( %2 )", args0: [text("PROC", "my_function"), text("ARGS", "")], inputsInline: true,
+  value({ type: "pl_callv", message0: "%1 ( %2 )", args0: [ref("PROC", "function", "the function whose value it is", "my_function"), expr("ARGS", "callargs", "", "its inputs")], inputsInline: true,
     tooltip: "a function's value: what its return gives back" }),
   // --- the session (the project model, 2026-11-13): a login node's and a character node's main;
   // simulated (the bot's real login is ro_agent's Python); the account is a CREDENTIAL NAME, never a secret
   stmt({
     type: "pl_login",
     message0: "log in to %1 as %2 %3 %4",
-    args0: [text("SERVER", "lab-rathena"), { type: "field_dropdown", name: "CREDENTIAL", options: opts(CREDENTIALS) }, badge, run],
+    args0: [ref("SERVER", "server", "the server", "lab-rathena"), { type: "field_dropdown", name: "CREDENTIAL", options: opts(CREDENTIALS) }, badge, run],
     tooltip: "login(server, credential): the server's id (the Settings page) and a credential by NAME (as n8n's): the password is never in a block",
   }),
   stmt({
@@ -274,9 +308,9 @@ export const BLOCK_DEFS: BlockDef[] = [
     // matpilot round 20 #2: two rows, so the main tab's first block shows whole at 390 px
     message0: "the save point is",
     message1: "on %1",
-    args1: [text("MAP", "geffen")],
+    args1: [ref("MAP", "save_map", "the save point's map (a Kafra's town)", "geffen")],
     message2: "x %1 y %2",
-    args2: [num("X"), num("Y")],
+    args2: cell("the save point's cell"),
     message3: "%1",
     args3: [run],
     inputsInline: true,
@@ -302,46 +336,49 @@ export const BLOCK_DEFS: BlockDef[] = [
     message0: "hunt with the runner",
     message1: "(dungeon_hunt.py) %1 %2 %3 %4",
     args1: [{ type: "input_end_row", name: "ROW_NAME" }, badge, { type: "input_end_row", name: "ROW_BADGE" }, run],
-    message2: "heal: call %1 %2 Fly Wing: call %3",
-    args2: [text("HEAL", "heal"), { type: "input_end_row", name: "ROW_HEAL" }, text("FLY", "fly_wing")],
-    message3: "Knife on: call %1 %2 Knife back: %3 call %4",
-    args3: [text("KNIFE_ON", "knife_on"), { type: "input_end_row", name: "ROW_KNIFE" }, { type: "input_end_row", name: "ROW_KNIFE_BACK" }, text("KNIFE_BACK", "knife_back")],
+    // round 21: a role is a picker (its ▾ widened "Fly Wing: call fly_wing ▾" to 309 units and
+    // "Knife on: call knife_on ▾" to 305, over the 300 budget): "Fly Wing:" and "Knife on:" on rows
+    // of their own, as "Knife back:"
+    message2: "heal: call %1 %2 Fly Wing: %3 call %4",
+    args2: [role("HEAL", "heal"), { type: "input_end_row", name: "ROW_HEAL" }, { type: "input_end_row", name: "ROW_FLY" }, role("FLY", "fly_wing")],
+    message3: "Knife on: %1 call %2 %3 Knife back: %4 call %5",
+    args3: [{ type: "input_end_row", name: "ROW_KNIFE_ON" }, role("KNIFE_ON", "knife_on"), { type: "input_end_row", name: "ROW_KNIFE" }, { type: "input_end_row", name: "ROW_KNIFE_BACK" }, role("KNIFE_BACK", "knife_back")],
     message4: "home (Butterfly Wing): %1 call %2",
-    args4: [{ type: "input_end_row", name: "ROW_HOME" }, text("HOME", "butterfly_wing")],
+    args4: [{ type: "input_end_row", name: "ROW_HOME" }, role("HOME", "butterfly_wing")],
     message5: "after a death: %1 call %2",
-    args5: [{ type: "input_end_row", name: "ROW_RESPAWN" }, text("RESPAWN", "")],
+    args5: [{ type: "input_end_row", name: "ROW_RESPAWN" }, role("RESPAWN", "")],
     message6: "then confirm: %1 call %2",
-    args6: [{ type: "input_end_row", name: "ROW_RESPAWN_OK" }, text("RESPAWN_OK", "")],
+    args6: [{ type: "input_end_row", name: "ROW_RESPAWN_OK" }, role("RESPAWN_OK", "")],
     message7: "eat (from the hotbar): %1 call %2",
-    args7: [{ type: "input_end_row", name: "ROW_EAT" }, text("EAT", "")],
+    args7: [{ type: "input_end_row", name: "ROW_EAT" }, role("EAT", "")],
     tooltip: "dungeon_hunt(...): the Rogue's runner hunts this map (only a map that has a runner: xmas_dun02). Each role names the function it calls: a function of one key press is the key the runner presses; a function of presses and waits (the Knife swap, the way home) plays at the runner's own moment. home: the Butterfly Wing it flies home on when the bag is half full or on Stop (empty: the map's item warp by function). after a death: the functions that click the death dialog's button and its confirmation (click_at; empty: the runner's own points, the respawn tab's setting blocks). eat: the function your events call to eat a food item from the hotbar, e.g. eat(key) pressing its input, called as eat(\"F6\") (empty: nothing is eaten in the hunt); hotbar_count(key=\"F6\") reads that slot's count. Its other settings: the setting blocks in this node's tabs (the toolbox's Settings)",
   }),
-  stmt({ type: "pl_stop", message0: "stop %1 %2", args0: [text("REASON", "done"), run] }),
+  stmt({ type: "pl_stop", message0: "stop %1 %2", args0: [ref("REASON", "stop", "why it stops (the run's end words)", "done"), run] }),
   stmt({ type: "pl_break", message0: "break" }),
   stmt({ type: "pl_continue", message0: "continue" }),
   // --- exits (13.1): they leave the map block ---
   stmt({
     type: "pl_exit_walk",
     message0: "walk exit at %1 x %2 y %3, arrive on %4 at %5 %6",
-    args0: [text("MAP"), num("X"), num("Y"), text("TO_BLOCK"), text("TO_ENTRY"), run],
+    args0: [ref("MAP", "map", "the map of the warp"), ...cell("the warp's cell"), ...arrive(), run],
     tooltip: "walk_exit: walk onto an L3 warp of this map; arrive at <block>.<entry>",
   }),
   stmt({
     type: "pl_exit_npc",
     message0: "npc warp: talk to %1 choose %2, arrive on %3 at %4 %5",
-    args0: [text("NPC"), text("OPTIONS"), text("TO_BLOCK"), text("TO_ENTRY"), run],
+    args0: [text("NPC"), text("OPTIONS"), ...arrive(), run],
     tooltip: "npc_warp: talk to the NPC, choose each option key (comma separated) in order",
   }),
   stmt({
     type: "pl_exit_item",
     message0: "item warp: use %1, arrive on %2 at %3 %4",
-    args0: [text("ITEM"), text("TO_BLOCK"), text("TO_ENTRY"), run],
+    args0: [text("ITEM"), ...arrive(), run],
     tooltip: "item_warp: e.g. a Butterfly Wing, to the SAVE POINT (never 'the previous map')",
   }),
   stmt({
     type: "pl_exit_item_fn",
     message0: "item warp: call %1, arrive on %2 at %3 %4",
-    args0: [text("FN", "butterfly_wing"), text("TO_BLOCK"), text("TO_ENTRY"), run],
+    args0: [ref("FN", "function", "the function that presses the wing's key", "butterfly_wing"), ...arrive(), run],
     tooltip: "item_warp by a function: call the function that presses the Butterfly Wing's key; she lands on the SAVE POINT",
   }),
   stmt({
@@ -357,7 +394,7 @@ export const BLOCK_DEFS: BlockDef[] = [
     args0: [label("TEXT")],
     tooltip: "Not editable as blocks in MW2 (kept exactly): edit it in the JSON view",
   }),
-  value({ type: "pl_expr", message0: "%1", args0: [text("TEXT", "hp_percent() < 50")],
+  value({ type: "pl_expr", message0: "%1", args0: [expr("TEXT", "expr", "hp_percent() < 50", "the value")],
     tooltip: "An expression in the Python view's form, e.g. hp_percent() < 50, sees(mob=mob(9109), within=15)" }),
   value({
     type: "pl_compare",
@@ -377,7 +414,7 @@ export const BLOCK_DEFS: BlockDef[] = [
   value({
     type: "pl_do",
     message0: "%1 ( %2 ) %3",
-    args0: [label("BLOCK"), text("ARGS"), badge],
+    args0: [label("BLOCK"), expr("ARGS", "args", "", "its inputs"), badge],
     inputsInline: true,
     tooltip: "An action used as a value: its outcome (OK, FAILED, ...)",
   }),
@@ -421,7 +458,9 @@ export const BLOCK_DEFS: BlockDef[] = [
   {
     type: "pl_def",
     message0: "function %1 ( %2 )",
-    args0: [text("NAME", "my_function"), text("PARAMS", "")],
+    // a function's NAME and its inputs are names it DEFINES: free text (on the monsters tab the name
+    // suggests attack_<class> for each monster of the node's model)
+    args0: [{ type: PICK_TEXT, name: "NAME", text: "my_function", pick: { kind: "name", title: "the function's name (on the monsters tab: a monster's recipe)" } }, text("PARAMS", "")],
     message1: "%1",
     args1: [{ type: "input_statement", name: "DO" }],
     style: st("pl_def"),
@@ -447,7 +486,7 @@ export const BLOCK_DEFS: BlockDef[] = [
     args0: [label("SCOPE"), { type: "input_value", name: "WHEN" }],
     message1: "event %1 class %2 rank %3",
     args1: [text("NAME", "my_event"), { type: "field_dropdown", name: "PRIORITY", options: opts(PRIORITY_OPTIONS) },
-      text("RANK")], // IR 2 (ADR-0020 #13): 1..99 inside the class; empty = 13.6.3's table order
+      optnum("RANK", 1, MAX_RANK, "auto", "the table order (13.6.3)", "its rank inside its class (1 runs first)")], // IR 2 (ADR-0020 #13): 1..99 inside the class; empty = 13.6.3's table order
     message2: "mode %1 then %2",
     args2: [{ type: "field_dropdown", name: "MODE", options: opts(MODE_OPTIONS) }, { type: "field_dropdown", name: "THEN", options: opts(THEN_OPTIONS) }],
     message3: "until %1",
@@ -455,14 +494,14 @@ export const BLOCK_DEFS: BlockDef[] = [
     message4: "rearm %1",
     args4: [{ type: "input_value", name: "REARM" }],
     message5: "pause %1 s after each run · at most %2 a run",
-    args5: [{ type: "field_number", name: "COOLDOWN", value: 0, min: 0, max: 3600 }, text("MAX_RUN")],
+    args5: [secs("COOLDOWN", 0, "the pause after each run", 30, 0.1, [0, 0.5, 1, 3, 10], { min: 0, max: 3600 }), optnum("MAX_RUN", 1, 100, "—", "no limit", "at most this many runs in a run of the flow")],
     // matpilot round 18 #3: the runaway guard and the insert failure limit are the ENGINE's defaults
     // when nobody set them (poring_flow's Trigger: 10 and 3; the Python view omits them then), so
     // their fields stay EMPTY for a default and the row names the default; a number = one a person set
     message6: `at most %1 a minute · %2 per 10 min (default ${DEFAULT_MAX_10})`,
-    args6: [text("MAX_MIN"), text("MAX_10")],
+    args6: [optnum("MAX_MIN", 1, 60, "—", "no limit", "at most this many runs a minute"), optnum("MAX_10", 1, 100, "default", `the default (${DEFAULT_MAX_10})`, "the runaway guard: runs per 10 minutes")],
     message7: `%1 failed inserts (default ${DEFAULT_FAILS}): escalate to %2`,
-    args7: [text("FAILS"), text("ESCALATE")],
+    args7: [optnum("FAILS", 1, 10, "default", `the default (${DEFAULT_FAILS})`, "an insert's failures before it escalates"), ref("ESCALATE", "escalate", "the function it escalates to", "", { optional: "none" })],
     message8: "do %1",
     args8: [{ type: "input_statement", name: "DO" }],
     inputsInline: false,
@@ -508,15 +547,20 @@ export function settingDef(f: SettingField): BlockDef {
   rows.words.forEach((w, i) => args.push({ type: "field_label", name: i === 0 ? "WORDS" : `WORDS${i}`, text: w }, endRow(`ROW_WORDS${i}`)));
   const unit = unitOf(f, f.default);
   const pct = (v: number) => Math.round(v * 100 * 1e6) / 1e6;
+  // round 21 (live-blocks.md 12.5): the value's picker -- a share on the lever bar (an HP share fills
+  // like an HP bar, the bag's the other way round), a number on a stepper over its range and step;
+  // the field's min / max / precision are the registry's, as before
+  const bar = /\bbag\b|weight|regen/i.test(`${f.words} ${f.var}`) ? "weight" : /\bHP\b|hp_|fly|potion/.test(`${f.words} ${f.var}`) ? "hp" : "level";
+  const step = f.kind === "int" ? Math.max(1, f.step) : f.step;
   const number = (): ArgDef =>
     f.kind === "share"
-      ? { type: "field_number", name: "VALUE", value: pct(Number(f.default)), min: pct(f.lo), max: pct(f.hi), precision: pct(f.step) }
-      : { type: "field_number", name: "VALUE", value: Number(f.default), min: f.lo, max: f.hi, precision: f.kind === "int" ? 1 : f.step };
+      ? { type: PICK_NUM, name: "VALUE", value: pct(Number(f.default)), min: pct(f.lo), max: pct(f.hi), precision: pct(f.step), pick: { kind: "percent", lo: pct(f.lo), hi: pct(f.hi), step: pct(f.step), title: f.words, bar } }
+      : { type: PICK_NUM, name: "VALUE", value: Number(f.default), min: f.lo, max: f.hi, precision: f.kind === "int" ? 1 : f.step, pick: { kind: "stepper", lo: f.lo, hi: f.hi, step, unit: f.unit, one: SETTINGS.singular[f.unit], title: f.words } };
   const xy: ArgDef[] = [
     { type: "field_label", name: "X_LABEL", text: "x" },
-    { type: "field_number", name: "X", value: 0, min: 0, max: SETTINGS.game_px[0] - 1, precision: 1 },
+    { type: PICK_NUM, name: "X", value: 0, min: 0, max: SETTINGS.game_px[0] - 1, precision: 1, pick: { kind: "point", axis: "x", pair: "Y", title: f.words } },
     { type: "field_label", name: "Y_LABEL", text: "y" },
-    { type: "field_number", name: "Y", value: 0, min: 0, max: SETTINGS.game_px[1] - 1, precision: 1 },
+    { type: PICK_NUM, name: "Y", value: 0, min: 0, max: SETTINGS.game_px[1] - 1, precision: 1, pick: { kind: "point", axis: "y", pair: "X", title: f.words } },
   ];
   switch (f.kind) {
     case "switch":

@@ -4,6 +4,7 @@
 // (lib/flow/blockly_headless.test.ts) registers exactly what the page does.
 import type * as BlocklyT from "blockly/core";
 
+import { registerPickers } from "./blockly-pickers.ts";
 import { BLOCK_DEFS } from "../../lib/flow/blockdefs.ts";
 import { huntDef, type HuntRules } from "../../lib/flow/hunt.ts";
 import { SETTING_NOTE_ROWS, settingOfType, unitOf } from "../../lib/flow/settings.ts";
@@ -28,6 +29,10 @@ export function registerHunt(B: typeof BlocklyT, rules: HuntRules | null): boole
 }
 
 export function register(B: typeof BlocklyT): void {
+  // round 21 (live-blocks.md 12.5): the picker fields the block types name (field_pl_num,
+  // field_pl_text), before any block is made; they keep this page's Blockly (a hot reload
+  // registers nothing twice)
+  registerPickers(B);
   // once per page load; Blockly's registries outlive a hot-reloaded copy of this module
   if (registered || B.Extensions.isRegistered("pl_state")) return;
   registered = true;

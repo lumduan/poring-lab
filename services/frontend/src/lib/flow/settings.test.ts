@@ -10,6 +10,7 @@ import { test } from "node:test";
 import { BLOCK_DEFS, categoryOf, DEF_BY_TYPE, settingDef, toolbox, toolboxBlocks } from "./blockdefs.ts";
 import { tabFromWorkspace, tabToWorkspace, type Workspace } from "./blocks.ts";
 import { canonical, clone } from "./ir.ts";
+import { closedText, type PickSpec } from "./pickers.ts";
 import { BOX_PLAYS_THEM, GLOBAL_ID, nodeById, type Project, tab, xmasProject } from "./project.ts";
 import { matchEntries } from "./search.ts";
 import {
@@ -333,7 +334,8 @@ test("matpilot round 20 #2: the main tab's program shows whole at 390 too: its t
           row = [];
         }
         else if (a.type === "field_label") row.push(textUnits(values[a.name ?? ""] ?? a.text ?? ""));
-        else if (a.type.startsWith("field_")) row.push(textUnits(values[a.name ?? ""] ?? "") + G.field);
+        // round 21: a picker shows what closedText says (a reference adds " ▾")
+        else if (a.type.startsWith("field_")) row.push(textUnits(closedText((a as { pick?: PickSpec }).pick, values[a.name ?? ""] ?? "", values[a.name ?? ""] ?? "")) + G.field);
       }
       if (row.length) out.push(rowUnits(row));
     }
@@ -341,6 +343,7 @@ test("matpilot round 20 #2: the main tab's program shows whole at 390 too: its t
   };
   const hunt = rowsOf("pl_dungeon_hunt");
   assert.ok(hunt.length >= 12, String(hunt.length));
+  if (process.env.PL_ROWS) console.log("hunt rows", hunt.map(Math.round), "save point rows", rowsOf("pl_save_point").map(Math.round));
   for (const [i, w] of [...hunt, ...rowsOf("pl_save_point")].entries()) assert.ok(w + 32 <= SETTING_ROW_BUDGET, `row ${i}: ${Math.round(w)} + 32 units`);
 });
 

@@ -62,3 +62,231 @@
 .injectionDiv svg[display="none"] {
   display: none;
 }
+
+/* Round 21 (live-blocks.md 12.5): the PICKERS (blockly-pickers.ts) in Blockly's DropDownDiv, in the
+   block's own colour with white words, as matpilot's (src/lib/blocks/fields/common.ts at 4022c87,
+   MIT; THIRD_PARTY.md). Touch targets are 40 px; inputs are 16 px so a phone does not zoom in; the
+   picker is never wider than the screen and scrolls inside rather than past the blocks area. */
+.blocklyDropDownDiv .blocklyDropDownContent:has(> .pl-picker) {
+  max-height: calc(100vh - 24px);
+  overflow: auto;
+}
+.pl-picker {
+  color: #fff;
+  font: 14px/1.35 system-ui, -apple-system, "Segoe UI", sans-serif;
+  padding: 4px 6px;
+  width: min(86vw, 330px);
+  box-sizing: border-box;
+  -webkit-user-select: none;
+  user-select: none;
+}
+.pl-picker-title {
+  font-weight: 650;
+  text-align: center;
+  margin: 0 0 6px;
+}
+.pl-picker-readout {
+  font-size: 19px;
+  font-weight: 700;
+  text-align: center;
+  margin: 2px 0 6px;
+}
+.pl-picker-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  justify-content: center;
+  align-items: center;
+  margin-top: 6px;
+}
+.pl-picker-button {
+  font: inherit;
+  color: #fff;
+  cursor: pointer;
+  min-width: 40px;
+  min-height: 40px;
+  padding: 2px 12px;
+  background: rgba(0, 0, 0, 0.24);
+  border: 1.5px solid rgba(255, 255, 255, 0.6);
+  border-radius: 999px;
+  touch-action: manipulation;
+}
+.pl-picker-button:hover {
+  background: rgba(0, 0, 0, 0.36);
+}
+.pl-picker-button:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+.pl-picker-button[aria-pressed="true"] {
+  background: #fff;
+  color: #15181c;
+  border-color: #fff;
+}
+.pl-picker-done {
+  font-weight: 700;
+}
+.pl-picker :focus-visible {
+  outline: 3px solid #fff;
+  outline-offset: 2px;
+}
+.pl-picker input,
+.pl-picker select {
+  font-size: 16px;
+  color: #15181c;
+  background: #fff;
+  border: 1px solid rgba(0, 0, 0, 0.3);
+  border-radius: 8px;
+  min-height: 38px;
+  padding: 4px 8px;
+  box-sizing: border-box;
+  max-width: 100%;
+  -webkit-user-select: text;
+  user-select: text;
+}
+.pl-picker input[type="range"] {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  accent-color: #fff;
+  min-height: 32px;
+}
+.pl-picker-search,
+.pl-picker-typed,
+.pl-picker-slider,
+.pl-picker-arg {
+  width: 100%;
+}
+.pl-picker-typed,
+.pl-picker-arg {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+.pl-picker-number {
+  width: 6.5em;
+  text-align: center;
+}
+.pl-picker-unit {
+  font-weight: 600;
+}
+.pl-picker-list {
+  list-style: none;
+  margin: 6px 0 0;
+  padding: 0;
+  max-height: 15rem;
+  overflow-y: auto;
+  border-radius: 8px;
+  background: rgba(0, 0, 0, 0.28);
+}
+.pl-picker-list:empty {
+  display: none;
+}
+.pl-picker-option,
+.pl-picker-none {
+  display: flex;
+  flex-direction: column;
+  padding: 8px 10px;
+  min-height: 40px;
+  box-sizing: border-box;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.12);
+}
+.pl-picker-option {
+  cursor: pointer;
+}
+.pl-picker-option[aria-selected="true"] {
+  background: #fff;
+  color: #15181c;
+}
+.pl-picker-label {
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+.pl-picker-note {
+  font-size: 12px;
+  opacity: 0.9;
+  overflow-wrap: anywhere;
+}
+.pl-picker-current .pl-picker-label::after {
+  content: " ✓";
+}
+.pl-picker-refused {
+  opacity: 0.6;
+  cursor: default;
+}
+.pl-picker-warn {
+  font-size: 12px;
+  font-weight: 600;
+  color: #fde68a;
+  margin: 6px 0 0;
+}
+.pl-picker-warn:empty {
+  display: none;
+}
+.pl-picker-lever,
+.pl-picker-screen {
+  display: block;
+  margin: 4px auto;
+  max-width: 100%;
+  height: auto;
+  touch-action: none;
+  overflow: visible;
+}
+.pl-picker-lever:focus {
+  outline: none;
+}
+.pl-picker-lever:focus-visible .pl-focus-ring {
+  stroke: #fff;
+  stroke-width: 3;
+}
+.pl-picker-axis {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 4px;
+}
+.pl-picker-axis-name {
+  font-weight: 700;
+  width: 1.2em;
+  text-align: center;
+}
+.pl-picker-axis .pl-picker-stepper {
+  flex: 1;
+  min-width: 0;
+}
+.pl-picker-cond {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.pl-picker-cond select,
+.pl-picker-cond input {
+  flex: 1 1 8em;
+  min-width: 0;
+}
+.pl-picker-argrow {
+  display: grid;
+  grid-template-columns: minmax(4em, auto) minmax(0, 1fr);
+  gap: 4px 8px;
+  align-items: center;
+  margin-top: 6px;
+}
+.pl-picker-argname {
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+.pl-picker-argrow .pl-picker-note {
+  grid-column: 2;
+}
+.pl-picker-typed-label {
+  display: block;
+  font-size: 12px;
+  margin: 8px 0 2px;
+  opacity: 0.92;
+}
+.pl-picker-bad {
+  outline: 2px solid #fca5a5;
+}
+/* a reference on its block that is not one of what exists (⚠): kept, marked; the lint names it */
+.pl-pick-unknown .blocklyText {
+  fill: #92400e !important;
+  font-weight: 700;
+}
