@@ -3627,10 +3627,10 @@ export const XMAS_DUN02_ROGUE: RunnerDoc = {
                 },
                 {
                   "param": "cmd.alarm_solo",
-                  "shown": "0.7"
+                  "shown": "70"
                 },
                 {
-                  "text": " sure: escape at once"
+                  "text": " % sure: escape at once"
                 }
               ],
               "body": [
@@ -3707,7 +3707,7 @@ export const XMAS_DUN02_ROGUE: RunnerDoc = {
             197,
             200
           ],
-          "why": "--garm-fly: the boss's summon (it hits hard and chases far) is a class of the detector; seeing it in a fresh detection (1.5 s old at most) is enough to fly away BEFORE it reaches her. --garm-confirm: 2 detections in a row, so one false box does not waste a Fly Wing. --alarm-fast (dungeon@9.53, Batt 2026-11-14: \"Fly Wing away\"): the HUD's detections feed the alarm too, it is read INSIDE a strike or a wait as well (where the knight's party arrived on 11-13/14), and one box at least 0.7 sure is enough.",
+          "why": "--garm-fly: the boss's summon (it hits hard and chases far) is a class of the detector; seeing it in a fresh detection (1.5 s old at most) is enough to fly away BEFORE it reaches her. --garm-confirm: 2 detections in a row, so one false box does not waste a Fly Wing. --alarm-fast (dungeon@9.53, Batt 2026-11-14: \"Fly Wing away\"): the HUD's detections feed the alarm too, it is read INSIDE a strike or a wait as well (where the knight's party arrived on 11-13/14), and one box at least 70 % sure is enough.",
           "flags": [
             "--garm-fly",
             "--garm-confirm",

@@ -1026,7 +1026,7 @@ def safety() -> Node:
                 [
                     Branch(
                         "a Garm Baby box in {cmd.garm_confirm} detections in a row, or one box "
-                        "at least {cmd.alarm_solo} sure: escape at once",
+                        "at least {cmd.alarm_solo:pct} % sure: escape at once",
                         "if alarm_seen(boxes.alarm, now, streak=boxes.alarm_n, "
                         "need=$(cmd.garm_confirm), solo=$(cmd.alarm_solo)):",
                         [
@@ -1047,7 +1047,7 @@ def safety() -> Node:
                 "detections in a row, so one false box does not waste a Fly Wing. --alarm-fast "
                 '(dungeon@9.53, Batt 2026-11-14: "Fly Wing away"): the HUD\'s detections feed '
                 "the alarm too, it is read INSIDE a strike or a wait as well (where the knight's "
-                "party arrived on 11-13/14), and one box at least {cmd.alarm_solo} sure is "
+                "party arrived on 11-13/14), and one box at least {cmd.alarm_solo:pct} % sure is "
                 "enough.",
                 flags=["--garm-fly", "--garm-confirm", "--alarm-fast", "--alarm-solo"],
                 code=["alarm_seen", "alarm_streak"],
