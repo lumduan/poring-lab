@@ -16,6 +16,7 @@
 // setting another tab's event or function plays (respawn: the exits tab's respawn_button) says so
 // too. Pure functions; every word renders as text.
 import { SETTING_BY_NAME, type SettingValue, settingValueText } from "./settings.ts";
+import type { StripPart } from "./words.ts";
 
 /** One thing the box plays and what of the runner's it replaces (live.takeovers' rows). */
 export type BoxTakeover = {
@@ -87,6 +88,18 @@ export function boxTabNote(box: BoxDoc | null | undefined, node: string, tab: st
   const other = away.map((t) => `${t.by} (tab ${tabOfPath(t.path)}) replaces ${t.replaces}${unusedHere(t)}`);
   const tail = other.length ? `${head ? " " : `${soon}, `}${head ? "And " : ""}${other.join("; ")}${parts.length ? "" : "; the other settings here stay the runner's"}.` : "";
   return `${head}${tail}`;
+}
+
+/** PURE (round 24): the strip's IN A RUN part for a tab, from the LAST lint's box -- also while
+ * the lint is checking an edit (`stale`: the part says so, its words the last ones). Before round
+ * 24 the part went as soon as an edit made the lint stale and came back with the new lint: on a
+ * wide screen the strip is unfolded over the canvas, so the canvas -- and a picker open in it,
+ * which Blockly keeps inside the canvas -- jumped up by the part's lines at the first change and
+ * the first drag in a point picker read 719 from 55 % on (live-blocks.md 12.8). */
+export function boxStripPart(box: BoxDoc | null | undefined, stale: boolean, node: string, tab: string, values: Record<string, SettingValue> | null): StripPart | null {
+  const text = boxTabNote(box, node, tab, values);
+  if (!text) return null;
+  return { head: "IN A RUN", text, short: boxTabShort(box, node, tab), ...(stale ? { stale: true } : {}) };
 }
 
 /** PURE (matpilot round 18 #4): the IN A RUN note in one short line, for the strip folded on a

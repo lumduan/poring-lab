@@ -637,6 +637,11 @@
 .map-binding-toggle {
   display: none;
 }
+/* round 24: the IN A RUN words of the last check, while the lint checks an edit (same words, so
+   the strip keeps its height and the canvas under it never jumps) */
+.map-binding-part[data-stale="true"] {
+  opacity: 0.6;
+}
 .map-binding[data-kind="plain"] {
   background: var(--warn-bg);
   color: var(--warn-text);

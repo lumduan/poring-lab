@@ -113,7 +113,8 @@ export type StatusIn = {
 
 /** One part of the strip under /flows' tabs (what the node is, what it imports, IN A RUN ...);
  * ``short``: its words folded to one line on a phone. */
-export type StripPart = { head: string; text: string; short?: string | null };
+/** `stale` (round 24): words from the last lint, shown while the lint is checking an edit. */
+export type StripPart = { head: string; text: string; short?: string | null; stale?: boolean };
 
 /** PURE (matpilot round 18 #4): the strip's ONE line while folded on a phone (the whole strip was
  * 366 x 204 px at 390 wide, halving the blocks' area): the IN A RUN part's short words when the

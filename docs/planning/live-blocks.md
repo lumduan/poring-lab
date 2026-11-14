@@ -1635,7 +1635,7 @@ with the parent's decision and what was done:
 | # | Finding (the reviewer's measure) | Decision | Done how |
 |---|---|---|---|
 | A | The survival tab's event blocks OVERLAPPED: drink / fly_away by 78 px at 390 and 97 at 1440, fly_away / bag_full 131 / 164, bag_full / eat_cane 78 / 96; 8 fields hidden under the next block | after a tab's blocks are drawn, stack its TOP blocks again from their MEASURED heights, a fixed gap apart, in their order and at their x; again whenever a block's height changes; never change the fixtures' saved positions; save positions only when a person moves a block; a test that no two top blocks' boxes intersect -- headless real Blockly if it can give heights, else the width / height model held to the measured heights (say which) | FIXED; the test is the MODEL (node cannot draw Blockly: no SVG layout, so `getHeightWidth` has nothing to measure). The page: `BlockEditor settle` -- once Blockly has drawn the tab (`finishQueuedRenders`), its top blocks' boxes from `getRelativeToSurfaceXY` + `getHeightWidth`, stacked by `layout.ts stackTops`: the tab just opened, PACKED from its top (90 units), `STACK_GAP` 24 apart; afterwards, whenever a top block's measured height changed (a picker's value, a note, a warning row, a wrapped condition, a block plugged in or taken out: every non-UI event and every decoration settles), a block only ever moves DOWN, as far as the ones above it need. Moves are made with events off: no undo step, no conversion, nothing saved (a project keeps no block positions; the frozen fixtures are untouched); not during a drag (it waits for the gesture's end). Round 20's `restack` (only the blocks under a SETTING that grew) is gone. The first placement (`blocks.ts tabToWorkspace`) now uses `layout.ts blockHeight` (rows, statement inputs with what they hold, wrapped conditions) + 24 instead of the fixed `EVENT_ROWS_Y` (11 x 48 = 528 units, which made drink 710 units apart while it is 840 tall). The model against the reviewer (f3898e8b's placements + the overlaps at scale 0.6 / 0.75 give the heights): drink 858 vs 840 (+2.1 %), fly_away 962 vs 928 (+3.7 %), bag_full 810 vs 793 (+2.1 %); layout.test.ts holds it in [measured, measured x 1.06], proves its own positive case (f3898e8b's steps with the measured heights overlap by the reviewer's pixels, within 1 px at 390 and 1.5 at 1440; this round's are >= 24 units apart), and finds no intersection on any tab of the ready-made projects and the FROZEN ones (project_xmas_dun02.json, stage 2-4, sample, session), the blocks in their order |
-| B | The point picker's drag, right at 390, was wrong at 1440: respawn_at's picker opened COMPACT (176 x 99 picture at (702, 505)); a press at 50 % read y 360, moving to 55 % read 719 and stuck (mouse and touch); the focused x box showed 645 while the readout and the block said 128 | fix the mapping in compact mode; keep focused boxes in sync; test both layouts | FIXED in the code, the cause NOT reproduced here (no browser). Two faults found by reading: (1) the compact CSS set only `max-width: 176px` on a picture whose box kept its 144-px height attribute, and (2) the drag's scroll lock held `.blocklyDropDownContent`, while the compact (capped) picker scrolls in its OWN root -- a drag could scroll that root under the pointer, the picture rising and the reading running to 719 (the likeliest cause). Now the picture's box is 176 x 99 (width and height), a drag holds the nearest scrolling picker root, the svg pieces are not text-selectable, and every place is mapped from the DRAWN picture's own screen box (`getBoundingClientRect` of its background rect, at each move) onto its extent (`pickers.ts toArea`), whatever size, letterboxing or scroll; the lever the same on its bar. A stepper's box follows the value unless the person is TYPING in it (first key to Enter, change or leaving; focus alone no longer freezes it). pickers.test.ts: full 255 x 143 and compact 175 x 98 read the same places (50 / 55 / 90 % -> 360 / 396 / 646; past the edge 719), the lever's middle |
+| B | The point picker's drag, right at 390, was wrong at 1440: respawn_at's picker opened COMPACT (176 x 99 picture at (702, 505)); a press at 50 % read y 360, moving to 55 % read 719 and stuck (mouse and touch); the focused x box showed 645 while the readout and the block said 128 | fix the mapping in compact mode; keep focused boxes in sync; test both layouts | FIXED in the code, the cause NOT reproduced here (no browser; ➡️ round 24, 12.8: the first drag at 1440 still read 719 -- the cause was the canvas rising under the picker after the press, when the strip lost its IN A RUN lines; the drag is now read against the picture as pressed). Two faults found by reading: (1) the compact CSS set only `max-width: 176px` on a picture whose box kept its 144-px height attribute, and (2) the drag's scroll lock held `.blocklyDropDownContent`, while the compact (capped) picker scrolls in its OWN root -- a drag could scroll that root under the pointer, the picture rising and the reading running to 719 (the likeliest cause). Now the picture's box is 176 x 99 (width and height), a drag holds the nearest scrolling picker root, the svg pieces are not text-selectable, and every place is mapped from the DRAWN picture's own screen box (`getBoundingClientRect` of its background rect, at each move) onto its extent (`pickers.ts toArea`), whatever size, letterboxing or scroll; the lever the same on its bar. A stepper's box follows the value unless the person is TYPING in it (first key to Enter, change or leaving; focus alone no longer freezes it). pickers.test.ts: full 255 x 143 and compact 175 x 98 read the same places (50 / 55 / 90 % -> 360 / 396 / 646; past the edge 719), the lever's middle |
 | C | Undo after a cancel was enabled, and Ctrl+Z RE-APPLIED the cancelled value (stepper 3.5 -> 4, percent 50 -> 51, cell 119 -> 120, a condition "< 50" -> "<= 50") | a cancelled session leaves the undo stack exactly as before the picker opened (Undo greyed on a fresh page); a kept session stays ONE undo step; test every kind, Ctrl+Z included | FIXED. The cause: Blockly fires its events on the next animation frame (`requestAnimationFrame` then a timeout), so round 22's clean-up timeout ran BEFORE the session's events reached the undo stack. Now `session.run` (the live preview) records NO undo step (Blockly's `recordUndo` off); `cancel` puts every field back the same way; `commit` (the picker closes any way but Escape / Cancel: Done, Enter, a tap outside, a pick from a list) sets the fields back to their values from before, unrecorded, then forward to the kept values, RECORDED, in a group of its own -- its own because Blockly merges a queued change into the one before it of the same group, block and field and keeps the first one's undo flag (in one group, "back" and "forward" became one unrecorded no-op). blockly_pickers.test.ts, with a browser's frames given to node (16-ms `requestAnimationFrame`): for stepper, percent, cell, point, condition, optnum and reference -- the preview leaves no step, Cancel leaves the stack empty and Ctrl+Z (`ws.undo(false)`) re-applies nothing; a kept session is one group, Ctrl+Z gives back the value from before and redo the kept one, also when everything happens in one frame. Both halves proved by their positive case: a recorded preview fails the first test, a commit in the preview's group the second |
 | D1 | A wrapped condition's second row was plain text: tapping it opened nothing | every wrapped row opens the same picker | FIXED: a further line is a `WrapLine` label (`blockly-pickers.ts wrapLineField`) whose editor is the block's TEXT field's (its picker); not saved; cursor pointer. blockly_pickers.test.ts: each row clickable and opening the TEXT field's editor, the saved fields still the text alone |
 | D2 | The lever's tick labels were not round (END_FLY_BELOW 5 / 28 / 50 / 73 / 95, REGEN_STOP 10 / 32 / 55 / 77 / 99) | the same round values as the presets | FIXED: the ticks ARE the presets (`presetsOf`), each where it sits on the bar: END_FLY_BELOW 10 / 25 / 50 / 75 / 90, REGEN_STOP 20 / 40 / 50 / 75 / 90 |
@@ -1668,6 +1668,77 @@ either passes `s.run` where it passed `s.group`.
 - D2-D4: the ticks of END_FLY_BELOW and REGEN_STOP, END_HOT_S's presets, the message after "< ";
 - D5: npc_guard's and quick_drop_scaled's menus at 390, the four menus and keys' call-argument
   picker at 1440, inside the blocks area (and the arrow still at the field).
+
+### 12.8 Round 24: the point picker's first drag at 1440 (written 2026-11-15 01:03 ICT from `date`; branch fix/round24 from c26d96c0; offline only)
+
+The reviewer re-measured round 23 live on main c26d96c0 (no frontend change since round 23).
+A, C and D pass. B was still open at 1440: respawn_at's picker opened COMPACT (the picture
+176 x 99 at about (702, 505)). The FIRST drag after it opened, by mouse or by touch, read y 360 at
+50 %, then 719 at 55 %, and stayed 719 at 90 %. A second drag in the same picker read 360 / 396 /
+648. x was right in every drag, the x and y boxes followed the value, and at 390 both drags were
+right.
+
+**The cause: the likeliest one, NOT proven in a browser (none here).** It was found by reading
+Blockly 13.3's source and the studio's layout.
+- The DropDownDiv lives INSIDE Blockly's injection div. Blockly's `common.getParentContainer`
+  defaults to the main workspace's injection div, so a picker moves with the canvas.
+- On a wide screen the node strip over the canvas is unfolded. Its **IN A RUN** part came from
+  the lint only while the lint was fresh (`lintStale ? null : ...`).
+- The first press changes the value. 120 ms later the edit is converted, the project's key
+  changes and the lint becomes stale.
+- The IN A RUN part (two or three lines on the respawn tab) then left the strip. The canvas, and
+  the picker inside it, rose by those lines, and stayed up until a new lint came back.
+- Round 23 read the picture's box again at every move. So the moves were read against the risen
+  picture: the pointer was below it, and the reading was 719.
+- At 390 the strip is folded to ONE line, so nothing rose. A later drag found the strip already
+  settled and the picture measured where it then was.
+- "Compact" was incidental. It is how respawn_at's picker opens at that place on that screen.
+- The other candidates were checked against the source:
+  - Blockly's slide is 16 px (`PADDING_Y`, 0.25 s), and keepDropDownsInside's nudge is at most
+    12 px. Together they cannot carry 55 % past the picture's bottom, which needs 45 px or more.
+  - A scroll of the picker's root was already undone by round 23's hold before each read.
+  - Focus at the press: Chrome does not move focus when pointerdown is cancelled, and a touch
+    drag never focuses.
+- The tests below replay this sequence. Round 23's per-move read reproduces the reviewer's
+  numbers exactly: 360 / 719 / 719.
+
+**The fix: four parts.**
+1. **The drag is read against the picture AS IT WAS PRESSED** (`blockly-pickers.ts onDrag`).
+   - The drawn box, or the screen matrix without one, is read once, at the press.
+   - Nothing that moves the picker after the press can change what a move reads: the strip,
+     Blockly's slide, the nudge, a scroll.
+   - The next press reads the box again.
+2. **The strip keeps its height.** While the lint checks an edit, the IN A RUN part keeps the last
+   check's words, shown faded (`box.ts boxStripPart`, `data-stale`, studio.css). The canvas, and a
+   picker open in it, no longer jump at an edit.
+3. **A drag holds both scroll boxes.** It holds the scroll of the picker's root AND of Blockly's
+   content box. keepDropDownsInside waits until no drag is in progress, so it never moves a
+   picker under a finger.
+4. **Focus at open never scrolls** (`focusFirst` uses `preventScroll`).
+
+**The tests:**
+- blockly_pickers.test.ts runs the real drag code on a fake picture whose box moves when the
+  page does.
+  - Test 1, the reviewer's sequence. After the slide, the picture sits at (702, 505), 175 x 98.
+    The press is at 50 %. Then the strip's three IN A RUN lines go (56 px). Then the moves at
+    55 % and 90 % of where the picture was measured. It reads 360 / 396 / 646, x 640. A second
+    drag, measured where the picture now is, reads the same.
+  - Test 2. The press lands mid-slide, then the slide's end, the nudge and a root scroll land
+    before the first move. It reads 360 / 396, and the root's scroll stays at its press value.
+  - Both are proven by their positive case. With round 23's per-move read put back, test 1 reads
+    360 / 719 / 719 (the reviewer's numbers) and test 2 reads 425.
+- box.test.ts: the part keeps the same words while checking, marked stale.
+
+**Superseded:** 12.7 B said "the likeliest cause" was the scroll lock and the compact picture's
+box. Both fixes stay, but they were not this cause.
+
+**Not measured here (no browser): the re-measure list.**
+- At 1440, respawn_at's compact picker, opened fresh:
+  - the FIRST drag by mouse and by touch reads 360 / 396 / about 648;
+  - the strip over the canvas keeps its height after the first change (IN A RUN faded while
+    checking, then normal);
+  - the canvas does not jump.
+- At 390, both drags as before.
 
 ## 13. Stage 5b-1: HuntState and the loop as steps (design written 2026-11-14 18:3x ICT from `date`, before any 5b code; offline only)
 
