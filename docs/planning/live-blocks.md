@@ -1,13 +1,13 @@
 ---
 doc_type: design
 hypothesis: null
-status: "DECIDED 2026-11-13 ~21:4x (Batt): build the live block player first; one box (START > xmas_dun02); break the runner into blocks. Stage 1 BUILT and PASSED live (section 6). Stages 2, 3 and 4a BUILT 2026-11-14 and their live A/Bs RUN 2026-11-14 00:4x-09:52 ICT: all three INCONCLUSIVE by their pre-registered bars (too few valid pairs: the Stormy Knight killed her in 10 of 30 played runs), the box's survival, Knife, home, respawn and recipes proven live (sections 7-9). Batt's 2026-11-14 ~14:0x answers: the Knight -> a Fly Wing away (section 11: dungeon@9.53 --alarm-fast BUILT; the Goblin class proposed); the HP band -> the drink raised to 50 % and the candies eaten at once (section 10); the Knife question delegated to the agent -> answer (a) KEPT (section 11.3). Batt's 2026-11-14 ~15:2x ask ("no runner [page]; make them ALL blocks"): stage 5a BUILT and MERGED 2026-11-14 17:2x (section 12: every runner setting a block in the project's tabs, the Run and the check read them, the runner page and the settings file gone); 5b (the loop as playable blocks) planned, not built. The live A/B s5ab-1114 (B4 the stage-4a box vs B5 the one box, both with the fast alarm; 15:10-17:19 ICT): FAIL by its pre-registered bar on line 2 only (time under 50 % HP: B4 0.000, B5 0.003; B4 never went under 50 %), deaths 0 in 6 (last night 10 in 30), eats B5 10, the alarm 8 fires (5 true, 3 false, each a Fly Wing in <= 0.42 s) (section 10.2)."
+status: "DECIDED 2026-11-13 ~21:4x (Batt): build the live block player first; one box (START > xmas_dun02); break the runner into blocks. Stage 1 BUILT and PASSED live (section 6). Stages 2, 3 and 4a BUILT 2026-11-14 and their live A/Bs RUN 2026-11-14 00:4x-09:52 ICT: all three INCONCLUSIVE by their pre-registered bars (too few valid pairs: the Stormy Knight killed her in 10 of 30 played runs), the box's survival, Knife, home, respawn and recipes proven live (sections 7-9). Batt's 2026-11-14 ~14:0x answers: the Knight -> a Fly Wing away (section 11: dungeon@9.53 --alarm-fast BUILT; the Goblin class proposed); the HP band -> the drink raised to 50 % and the candies eaten at once (section 10); the Knife question delegated to the agent -> answer (a) KEPT (section 11.3). Batt's 2026-11-14 ~15:2x ask ("no runner [page]; make them ALL blocks"): stage 5a BUILT and MERGED 2026-11-14 17:2x (section 12: every runner setting a block in the project's tabs, the Run and the check read them, the runner page and the settings file gone); 5b (the loop as playable blocks) planned, not built. The live A/B s5ab-1114 (B4 the stage-4a box vs B5 the one box, both with the fast alarm; 15:10-17:19 ICT): FAIL by its pre-registered bar on line 2 only (time under 50 % HP: B4 0.000, B5 0.003; B4 never went under 50 %), deaths 0 in 6 (last night 10 in 30), eats B5 10, the alarm 8 fires (5 true, 3 false, each a Fly Wing in <= 0.42 s) (section 10.2). Stage 5b-1 (section 13; 5b, Batt 2026-11-14 18:1x: "go on"): the runner's loop state on one HuntState object and its loop as 20 steps run by a driver, BUILT 2026-11-14 (feat/huntstate, offline only), proven the same program as eb160ee1's run() by scripts/huntstate_check.py (as ASTs); its live A/B (13.5, stage5b_ab.py) pre-registered, not run; 5b-2 (the steps as live blocks) designed (13.4), not built."
 role: null
 verdict_date: null
 verdict_ticket: null
 supersedes: null
 related: [project-model.md, player-mode.md, ADR-0020, ../../scripts/dungeon_hunt.py, ../../scripts/runner_flow_export.py, ../../packages/poring_flow/src/poring_flow/runtime.py]
-next_action: "Batt decides the drink threshold: 50 % cost 10 White Potions in B5's hour (about 12,100 z / h) with no dip below 41 % and none in B4 (10.2); it is one number on the drink block now. The Christmas Goblin class (11.4) waits on Batt. Section 12 (5a): a browser re-measure of the setting blocks (block widths, the phone layout, /maps' tab rows). Then 5b: the loop as playable blocks (dungeon_hunt split into steps), checked by a live A/B against today's runner."
+next_action: "5b-1 (section 13): review feat/huntstate (huntstate_check.py check), merge before any other change to scripts/dungeon_hunt.py, deploy, then the live A/B s5b1-ab (13.5: stage5b_ab.py plan / run / score); only after it holds, 5b-2 (13.4). Earlier: Batt decides the drink threshold: 50 % cost 10 White Potions in B5's hour (about 12,100 z / h) with no dip below 41 % and none in B4 (10.2); it is one number on the drink block now. The Christmas Goblin class (11.4) waits on Batt. Section 12 (5a): a browser re-measure of the setting blocks (block widths, the phone layout, /maps' tab rows). Then 5b: the loop as playable blocks (dungeon_hunt split into steps), checked by a live A/B against today's runner."
 title: "Live blocks: the player that plays a project's blocks in the game, and the runner broken into blocks"
 date: 2026-11-13
 owner: Batt
@@ -1681,3 +1681,96 @@ change (the driver's calls): 10 ms is 5 % of the 200-ms tick, far above the expe
 microseconds and far below anything that changes play; the record kinds and the runner errors
 catch a refactor slip that the rates would hide. No line is a strict "<" against an arm that may
 read 0 (10.2's lesson), and deaths count over every run that played (section 7's).
+
+### 13.6 ➡️ 5b-1 BUILT 2026-11-14 (feat/huntstate; offline only, NOT run live; the A/B of 13.5 not run)
+
+As designed in 13.1-13.3, but for five things found while building it, each AST-neutral and each
+checked by `huntstate_check.py check`:
+1. **The tick's reads are DECLARED in run().** A name bound only inside the loop (155 of them:
+   `tick`, `img`, `pct`, `near_`, ...) had no binding left in run() once its statements moved into
+   the steps, so the steps' `nonlocal` was a SyntaxError (the rule test found it). OUTLINE now
+   writes one bare annotation per such name before the steps (`tick: Any`; it binds nothing, so a
+   read before any assignment is still a NameError, as the unbound local was). The checker
+   verifies the declared set is EXACTLY the names only the steps bind (an extra one could shadow a
+   global).
+2. **A loop-level annotated assignment loses its annotation to that declaration** (`boss_hit: str
+   | None = None` becomes `boss_hit = None` in its step; `boss_hit: str | None` is declared):
+   Python forbids annotating a `nonlocal` name; a local's annotation is never evaluated.
+3. **Comments moved, never code:** a line that the rewrite pushed past 100 columns only because of
+   its trailing comment got the comment on its own line above (16 in LIFT, 5 in OUTLINE); 16
+   format-skipped statements were re-wrapped by hand; every other wrap is ruff format's own.
+4. **Each step has a one-line docstring** (`huntstate_check.STEP_DOCS`, from 13.2's table) and a
+   long `nonlocal` list is several `nonlocal` statements.
+5. **A helper for tests:** `huntstate_check.driver_loop(run)` = the loop as the driver plays it
+   (the steps' bodies inlined in hunt_steps' order, the signals back to continue / break): the
+   tests that reason about "the loop's statements" (the hook's place, the box's survival tick, the
+   flag-off counts of 9.36 / 9.37) assert their facts on it.
+
+**The commits:** a5102f9b (this section's design, before code), 12003e99 (the tool and its rule
+tests), bb623c04 (LIFT + ALIAS: HuntState), 4737c272 (OUTLINE: the steps), cd1af906 (the A/B
+tools), then this note. The full Python suite at bb623c04 and at 4737c272: every test passes but
+the three known to fail in a /dev/shm worktree only (test_mapcache_paths, test_dungeon_hunt's
+dagger-worn start check, test_patrol_sim's gef_fild10 laps: client data a worktree lacks); 5,806
+passed at 4737c272; ruff check, ruff format --check and mypy clean. run() is 4,741 lines now (+347: the 155 declarations, the step
+heads and docstrings, the driver; the HuntState class is outside it); dungeon_hunt.py 11,932.
+
+**Re-derive it** (the reviewer's check; the base must be eb160ee1's runner):
+
+    cd /home/bot/docker/poring-lab
+    .venv/bin/python scripts/huntstate_check.py check      # prints every line below, rc 0
+
+    LIFT (49) / ALIAS (49) / OUTLINE (20 steps): begin sense hook vitals battle_log survive engage
+      ui upkeep fight hold loot after ready rest idle plant search position pace
+    resolver vs symtable (each table's locals; each lifted Name's binding): the same
+    LIFT/ALIAS preconditions: all hold;  OUTLINE conditions: all hold
+    HuntState.__slots__: missing none, extra none;  signals: ['RUN_END', 'TICK_DONE']
+    run() == OUTLINE(ALIAS(LIFT(base))): YES;  the module outside run(): the same
+
+If scripts/dungeon_hunt.py changes on main before the merge, 5b-1 is re-derived on the new base
+(`derive`, then `derive --steps`, ruff format, the long lines by hand, `check --base <new>`), and
+BASE_REV / stage5b_ab.A_SHA256 move with it.
+
+**The evidence and its limits:**
+- PROVEN offline, every path: the committed run() is the three rewrites of eb160ee1's run() (the
+  check above), under preconditions the checker verifies; the rewrite rules' semantics shown BY
+  EXECUTION on a program with every hazard (services/backend/tests/test_huntstate_check.py: the
+  same traces on three inputs that reach a continue inside try / finally, a for-else, the loop's
+  break, an except-as, a walrus in a comprehension, a lambda default, a shadowing parameter, a
+  closure's nonlocal); and each kind of wrong rewrite NAMED by the checker (a shadowed parameter
+  renamed -- and it plays differently --, a step binding a name without nonlocal, the steps
+  reordered, a signal swapped, a slot missing, a new top-level statement, a wrong resolver against
+  symtable, locals() / except NameError / a twice-bound alias refused).
+- Run-time sanity: HuntState() takes its 98 slots; an unset read and a misspelt write raise
+  AttributeError; the runner's feature version stays dungeon@9.53.
+- NOT shown offline (13.3): the driver's cost per tick, the real I/O interleaving, the launcher
+  live -- the A/B of 13.5 is their check. No whole-run fake environment was built (13.3's
+  reasons).
+
+**The tests changed** (the same fact on the new text; listed by test in the 5b-1 report): in
+LIFT, 49 test functions in 11 files (the fragments re-written through the rewrite's own edits, by
+hand where a line moved; test_loot_memory's 9.36 hash re-pinned on the rewritten lines, its
+provenance in the comment; test_dungeon_hunt's `'if reason != "death"' not in` -- which the rename
+made vacuous -- now names `hs.reason`; `"nonlocal last_walk_click" in src` now says the closure
+writes `hs.last_walk_click` with no nonlocal); in OUTLINE, 14 in 9 files and two helpers (`_loop`
+in test_live_player.py and test_survival_events.py now return driver_loop) (`continue` / `break`
+written as the steps' signals; the AST tests read driver_loop). Every assertion kept its fact; the
+negative ones were scanned for a rename that would make them vacuous (one found, above). New:
+test_huntstate_check.py (12 test functions, 14 cases), test_stage5b_ab.py (10).
+
+**The A/B tools (13.5) BUILT, not run:** scripts/stage5b_ab.py (plan / run / score; BAR as 13.5)
+and scripts/runner_pin.py (the launcher). `plan` refuses unless A's text is eb160ee1's (sha256
+a1bb5728...) and B is its 5b-1 rewrite (huntstate_check), and unless the Run config has the fast
+alarm on. One change from 13.5's words: the plan does not test `git diff eb160ee1 <head>`; every
+module but the runner is the checkout's own for BOTH arms by construction (the launcher pins only
+dungeon_hunt), so the one thing to prove is that B's text is A's rewrite, which is the stronger
+check. Each run's `<label>.runner.json` records the text's sha256, its size and whether it has
+HuntState; series.json records the base revision and both sha256s.
+
+**Still fixed / left for later** (none needed for 5b-2's first step):
+- the 155 declarations: a name that one step alone binds and reads (most of them) could be that
+  step's own local, but only with a liveness proof (no read before its write within a tick, none
+  across ticks); 5b-1 keeps them run()'s;
+- the one-item cells (`escaped[0]`, `n_strike[0]`, ...) and the 49 aliases could be plain `hs.`
+  attributes (more rename churn in the tests, no behaviour);
+- HuntTick could be built from hs (the hook's view), and the steps could move out of run() to take
+  (hs, io): later stages.
