@@ -1,7 +1,7 @@
 ---
 doc_type: design
 hypothesis: null
-status: "DECIDED 2026-11-13 ~21:4x (Batt): build the live block player first; one box (START > xmas_dun02); break the runner into blocks. Stage 1 BUILT and PASSED live (section 6). Stages 2, 3 and 4a BUILT 2026-11-14 and their live A/Bs RUN 2026-11-14 00:4x-09:52 ICT: all three INCONCLUSIVE by their pre-registered bars (too few valid pairs: the Stormy Knight killed her in 10 of 30 played runs), the box's survival, Knife, home, respawn and recipes proven live (sections 7-9). Batt's 2026-11-14 ~14:0x answers: the Knight -> a Fly Wing away (section 11: dungeon@9.53 --alarm-fast BUILT; the Goblin class proposed); the HP band -> the drink raised to 50 % and the candies eaten at once (section 10); the Knife question delegated to the agent -> answer (a) KEPT (section 11.3). Batt's 2026-11-14 ~15:2x ask ("no runner [page]; make them ALL blocks"): stage 5a BUILT and MERGED 2026-11-14 17:2x (section 12: every runner setting a block in the project's tabs, the Run and the check read them, the runner page and the settings file gone); 5b (the loop as playable blocks) planned, not built. The live A/B s5ab-1114 (B4 the stage-4a box vs B5 the one box, both with the fast alarm; 15:10-17:19 ICT): FAIL by its pre-registered bar on line 2 only (time under 50 % HP: B4 0.000, B5 0.003; B4 never went under 50 %), deaths 0 in 6 (last night 10 in 30), eats B5 10, the alarm 8 fires (5 true, 3 false, each a Fly Wing in <= 0.42 s) (section 10.2). Stage 5b-1 (section 13; 5b, Batt 2026-11-14 18:1x: "go on"): the runner's loop state on one HuntState object and its loop as 20 steps run by a driver, BUILT 2026-11-14 (feat/huntstate, offline only), proven the same program as eb160ee1's run() by scripts/huntstate_check.py (as ASTs); its live A/B (13.5, stage5b_ab.py) pre-registered, not run; 5b-2 (the steps as live blocks) designed (13.4), ➡️ BUILT 2026-11-14 20:1x-20:5x ICT (section 14, feat/hunt-blocks, offline only): a map node's hunt_loop(t) (its tab hunt) drives the runner's steps through a tick cursor, each block one bounded call (find_target, choose_target, walk_to_target, strike, wait_steal, wait_kill, loot, look, use_skill, fight(t) = the monster's recipe); with no hunt loop run() is 5b-1's program (huntstate_check.py drive: AST identity), and the canonical loop calls the driver's step sequence tick for tick (hunt_trace.py: 223 scripted scenarios); its live A/B (14.7, stage5b2_ab.py) pre-registered, not run."
+status: "DECIDED 2026-11-13 ~21:4x (Batt): build the live block player first; one box (START > xmas_dun02); break the runner into blocks. Stage 1 BUILT and PASSED live (section 6). Stages 2, 3 and 4a BUILT 2026-11-14 and their live A/Bs RUN 2026-11-14 00:4x-09:52 ICT: all three INCONCLUSIVE by their pre-registered bars (too few valid pairs: the Stormy Knight killed her in 10 of 30 played runs), the box's survival, Knife, home, respawn and recipes proven live (sections 7-9). Batt's 2026-11-14 ~14:0x answers: the Knight -> a Fly Wing away (section 11: dungeon@9.53 --alarm-fast BUILT; the Goblin class proposed); the HP band -> the drink raised to 50 % and the candies eaten at once (section 10); the Knife question delegated to the agent -> answer (a) KEPT (section 11.3). Batt's 2026-11-14 ~15:2x ask ("no runner [page]; make them ALL blocks"): stage 5a BUILT and MERGED 2026-11-14 17:2x (section 12: every runner setting a block in the project's tabs, the Run and the check read them, the runner page and the settings file gone); 5b (the loop as playable blocks) planned, not built. The live A/B s5ab-1114 (B4 the stage-4a box vs B5 the one box, both with the fast alarm; 15:10-17:19 ICT): FAIL by its pre-registered bar on line 2 only (time under 50 % HP: B4 0.000, B5 0.003; B4 never went under 50 %), deaths 0 in 6 (last night 10 in 30), eats B5 10, the alarm 8 fires (5 true, 3 false, each a Fly Wing in <= 0.42 s) (section 10.2). Stage 5b-1 (section 13; 5b, Batt 2026-11-14 18:1x: "go on"): the runner's loop state on one HuntState object and its loop as 20 steps run by a driver, BUILT 2026-11-14 (feat/huntstate, offline only), proven the same program as eb160ee1's run() by scripts/huntstate_check.py (as ASTs); its live A/B (13.5, stage5b_ab.py) pre-registered, not run; 5b-2 (the steps as live blocks) designed (13.4), ➡️ BUILT 2026-11-14 20:1x-20:5x ICT (section 14, feat/hunt-blocks, offline only): a map node's hunt_loop(t) (its tab hunt) drives the runner's steps through a tick cursor, each block one bounded call (find_target, choose_target, walk_to_target, strike, wait_steal, wait_kill, loot, look, use_skill, fight_target(t) = the monster's recipe); with no hunt loop run() is 5b-1's program (huntstate_check.py drive: AST identity), and the canonical loop calls the driver's step sequence tick for tick (hunt_trace.py: 223 scripted scenarios); its live A/B (14.7, stage5b2_ab.py) pre-registered, not run."
 role: null
 verdict_date: null
 verdict_ticket: null
@@ -1591,7 +1591,7 @@ The live A/B (13.5) is the check of those.
 ### 13.4 5b-2 (designed, NOT built): the steps as live blocks
 
 ➡️ **BUILT 2026-11-14 (section 14, feat/hunt-blocks; offline only), with 12 refinements (14.2)
-that SUPERSEDE parts of this design: `explore()` is `find_target()` and `attack(t)` is `fight(t)`
+that SUPERSEDE parts of this design: `explore()` is `find_target()` and `attack(t)` is `fight_target(t)`
 (#1), the loop is `def hunt_loop(t)` (#2), a block hands back only before the fight or the after
 step (#3), guarded steps are called whoever plays (#4), the ownership table below (#5: find_target
 owns hold too; loot owns fight, hold and loot), the exits (#6), loot's time box (#7), the recipe
@@ -1831,7 +1831,7 @@ it only after 5b-1's A/B (13.5): `stage5b_ab.py` refuses the 5b-2 runner as its 
     def hunt_loop(t):
         while True:
             t = find_target()       # 13.4's explore()
-            fight(t)                # 13.4's attack(t): the monsters tab's recipe for t's species
+            fight_target(t)                # 13.4's attack(t): the monsters tab's recipe for t's species
 
 ### 14.1 What was built
 
@@ -1841,20 +1841,22 @@ it only after 5b-1's A/B (13.5): `stage5b_ab.py` refuses the 5b-2 runner as its 
 | The drive branch | run(): `if hook_drives(hook): ... hunt_drive(hook, HuntCursor(hunt_steps, ...), hs, ev) else: <5b-1's driver loop>` | `hunt_drive` refuses a driving hook without tick / survive / call / recipe / event (`drive_refused`, before any step), records `drive` start / end (the cursor's counts), sets the reason when the loop returns (`drive_end: ...`) or spins (`drive_spin: ...`); a step's RUN_END and the time box keep their own reasons; run()'s normal end follows unchanged |
 | The proof of "no drive = 5b-1" | `scripts/huntstate_check.py drive` (`drive_check`, `undrive`, `guard_problems`, `DRIVE_ADDED`) | 14.3 |
 | The rules | `packages/poring_flow/src/poring_flow/huntloop.py` (the ONE place), `lint/huntloop.py` (findings), `live.problems` / `live.hunt_plan` (`HuntPlan.loop`, `skill_keys`; not a play: run() gets the same arguments), `lint/loops.py` (a hunt loop's `while True` is bounded by the hunt core), `lint/structure.py` (a hunt block's value is any value), `recipes.py` (the recipe primitives may stand in the loop) | 14.4 |
-| The blocks | blocks.yaml: `find_target`, `choose_target`, `walk_to_target`, `look`, `fight` (new, `live: true`); `use_skill` live (in the loop only) | 14.5 |
-| The player | `scripts/flow_play.py`: `RunnerPlan.loop` / `skill_keys`, `DriveHook` (a HuntHook with `drive`, only for a box with a hunt loop), `LivePlayer.hunt_drive` / `_drive_block` / `_drive_fight`, the lock's recipe answer remembered (`_lock_answer`) | the loop played synchronously inside run() (no engine tick between blocks: a statement that would wait is refused before any input); the box's survival events keep playing through the tick hook inside the common steps; records `drive` (start / end) and `fight` (the species, the recipe, each step's value) |
+| The blocks | blocks.yaml: `find_target`, `choose_target`, `walk_to_target`, `look`, `fight_target` (new, `live: true`); `use_skill` live (in the loop only) | 14.5 |
+| The player | `scripts/flow_play.py`: `RunnerPlan.loop` / `skill_keys`, `DriveHook` (a HuntHook with `drive`, only for a box with a hunt loop), `LivePlayer.hunt_drive` / `_drive_block` / `_drive_fight`, the lock's recipe answer remembered (`_lock_answer`) | the loop played synchronously inside run() (no engine tick between blocks: a statement that would wait is refused before any input); the box's survival events keep playing through the tick hook inside the common steps; records `drive` (start / end) and `fight_target` (the species, the recipe, each step's value) |
 | The step-trace harness | `scripts/hunt_trace.py` (`check`) | 14.3 |
 | The editor | blockdefs.ts (additive: `pl_hunt_take`, `pl_hunt_step`, the Hunt category on a tab named `hunt`), blocks.ts (one converter case each way), theme.ts, search.ts, liveready.ts (Run's readiness reaches hunt_loop), project.ts `xmasHuntProject()` / `huntLoopDef()`, the Load lists of /flows and /maps | 14.5, 14.6 |
-| The fixture | `services/frontend/src/lib/flow/fixtures/project_xmas_dun02_hunt.json` (= `xmasHuntProject()`, canonical; sha256 prefix of its canonical form `dfc64d74492a`) | 14.6 |
+| The fixture | `services/frontend/src/lib/flow/fixtures/project_xmas_dun02_hunt.json` (= `xmasHuntProject()`, canonical; sha256 prefix of its canonical form `2ea8918c536d`) | 14.6 |
 | The A/B tool | `scripts/stage5b2_ab.py` (plan / run / score), tests | 14.7 |
 
 ### 14.2 Refinements of 13.4 (each found while building it)
 
-1. **`explore()` is `find_target()`, `attack(t)` is `fight(t)`.** The one box's walk tab has a
-   SETTING named `explore` (its exploring rule), and a catalogue name cannot be a variable (the
-   names rule); the pre-commit locale-pack guard refuses that word as a quoted code literal (a
-   client UI string). `find_target` says what it returns (the monster engaged), `fight` what it
-   plays (the recipe).
+1. **`explore()` is `find_target()`, `attack(t)` is `fight_target(t)`.** The one box's walk tab has a
+   SETTING named `explore` (its exploring rule), and a catalogue name cannot be a variable or a
+   function (the names rule); the pre-commit locale-pack guard refuses the other word as a quoted
+   code literal (a client UI string), and a first `fight(t)` collided with a function `fight` that
+   existing test flows define (the full suite found it: test_rank, test_lint_matrix).
+   `find_target` says what it returns (the monster engaged), `fight_target` what it plays (the
+   recipe on t); with choose_target and walk_to_target the four read alike.
 2. **The loop takes its target as its one input: `def hunt_loop(t)`.** An assignment needs a
    declared variable or a function input, and an IR literal has no "none": the player calls the
    loop with t = none.
@@ -1888,9 +1890,9 @@ it only after 5b-1's A/B (13.5): `stage5b_ab.py` refuses the 5b-2 runner as its 
    over, loot(t) plays on to the step (the step's own budget, LOOT_MAX_S, bounds it), as the driver
    does. Every other time box hands over to a block that owns the same steps, so it never changes
    the steps run (the harness checks it with every time box at 1 s).
-8. **fight(t) chooses its recipe AT THE LOCK, after strike(t).** t's species is often unknown when
+8. **fight_target(t) chooses its recipe AT THE LOCK, after strike(t).** t's species is often unknown when
    the fight begins (an engage by a hit), and the runner asks `hook.recipe(species)` at a new
-   target's lock (BareCtl's decision); the player remembers that answer and fight(t) plays THAT
+   target's lock (BareCtl's decision); the player remembers that answer and fight_target(t) plays THAT
    recipe's remaining steps (both shapes begin with the strike after the Knife; no recipe for the
    species: the runner's own, the Knife shape). knife_on() / knife_back() play at the runner's
    moments (stage 3's calls: the same presses at the same moments), so at their place in the recipe
@@ -1903,7 +1905,7 @@ it only after 5b-1's A/B (13.5): `stage5b_ab.py` refuses the 5b-2 runner as its 
    cast and after-cast waits) is a follow-up.
 10. **A loop that could spin is refused statically** (`hunt_spin`): each `while` begins with
     `t = find_target()` and holds, at its top level, a block that plays the fight to its end on t
-    (fight, wait_kill, loot). Then every turn takes a step: find_target advances whenever no fight
+    (fight_target, wait_kill, loot). Then every turn takes a step: find_target advances whenever no fight
     runs, the fight player whenever one does. The cursor's spin guard is the run time's own
     backstop.
 11. **The hunt loop's language is small**: its blocks and if / while / repeat / for / set / break /
@@ -1922,7 +1924,7 @@ it only after 5b-1's A/B (13.5): `stage5b_ab.py` refuses the 5b-2 runner as its 
     cd /home/bot/docker/poring-lab
     .venv/bin/python scripts/huntstate_check.py drive    # the base: DRIVE_BASE bb6d41eb (5b-1 merged)
 
-    the drive branch: line 11291; its condition: hook_drives(hook); its else: 5b-1's driver loop
+    the drive branch: line 11292; its condition: hook_drives(hook); its else: 5b-1's driver loop
     run() without the drive branch == 5b-1's run() (as ASTs, docstrings included): YES
     the module outside run(): 5b-1's statements unchanged; added [the 16 names of DRIVE_ADDED]
     the additions == DRIVE_ADDED: YES
@@ -1950,7 +1952,7 @@ it only after 5b-1's A/B (13.5): `stage5b_ab.py` refuses the 5b-2 runner as its 
 **The canonical loop calls the driver's step sequence, tick for tick** (`hunt_trace.py check`,
 rc 0): run()'s driver loop (A) and the hunt loop played by the REAL live player through the
 cursor (B: `LivePlayer.hunt_drive` on the fixture's hunt_loop, the engine's interpreter,
-find_target / fight / the recipe answered at the fake lock) over the same FAKE steps -- the real
+find_target / fight_target / the recipe answered at the fake lock) over the same FAKE steps -- the real
 steps' names, order and mode semantics (14.2's guards; the after step turns after into search; the
 hold step ends the tick on a lock or a fight), with effects drawn per (seed, tick, step, mode), so
 the same call in the same state has the same effect in both runs:
@@ -1989,7 +1991,7 @@ the same call in the same state has the same effect in both runs:
 
 | Rule | What | Words (abridged) |
 |---|---|---|
-| hunt_primitive | find_target, choose_target, walk_to_target, look, fight, use_skill outside the hunt loop (strike / wait_steal / wait_kill / loot(t) outside a recipe and the loop: 4a's recipe_primitive) | "find_target plays live only in the hunt core's hunt loop (a map node's function hunt_loop(t), its tab hunt; stage 5b-2)" |
+| hunt_primitive | find_target, choose_target, walk_to_target, look, fight_target, use_skill outside the hunt loop (strike / wait_steal / wait_kill / loot(t) outside a recipe and the loop: 4a's recipe_primitive) | "find_target plays live only in the hunt core's hunt loop (a map node's function hunt_loop(t), its tab hunt; stage 5b-2)" |
 | hunt_loop_place | a hunt loop on a node whose main runs no dungeon_hunt | "hunt_loop is a hunt core's loop: its map node's main runs dungeon_hunt" |
 | hunt_loop_input | not `def hunt_loop(t)` | "hunt_loop takes one input, the target its blocks work on (none at the start)" |
 | hunt_statement | a wait, press_key, call, stop, exit, another block, a call's value in the loop | "a wait in hunt_loop: the hunt core waits for its blocks and plays nothing else there ..." |
@@ -1997,7 +1999,7 @@ the same call in the same state has the same effect in both runs:
 | hunt_target | a block's target that is not a variable | "its target is a variable holding find_target()'s value" |
 | hunt_spin | a while not beginning with t = find_target(), or with no fight player on t at its top level | "... else it could spin while no step runs" |
 | hunt_skill | use_skill without a declared role key (the heal key) | "use_skill in hunt_loop presses a DECLARED role key the start's slot check reads ..." |
-| (4a, unchanged) | a recipe order the cursor cannot play: recipes.SHAPES, widened only with a trace test per new shape; use_skill in a recipe (still "4b"); a recipe called by a block (fight(t) is the way) | |
+| (4a, unchanged) | a recipe order the cursor cannot play: recipes.SHAPES, widened only with a trace test per new shape; use_skill in a recipe (still "4b"); a recipe called by a block (fight_target(t) is the way) | |
 | (the runner's) | a driving hook without tick / survive / call / recipe / event (`drive_refused`) | |
 
 A common step cannot be left out (it has no block). The cursor ends a spin at run time
@@ -2011,7 +2013,7 @@ A common step cannot be left out (it has no block). The cursor ends a spin at ru
 | `t = choose_target()` | `pl_hunt_take` | the fight's monster, or none | at once |
 | `r = look()` | `pl_hunt_take` | the tick's reads | at once (the first tick's common steps first) |
 | `walk_to_target(t)` | `pl_hunt_step`: BLOCK, ARGS, TIMEOUT | "in_reach" / "gone" | 30 s |
-| `fight(t)` | `pl_hunt_step` | wait_kill's value ("killed" / "lost") | 300 s (its steps: their own) |
+| `fight_target(t)` | `pl_hunt_step` | wait_kill's value ("killed" / "lost") | 300 s (its steps: their own) |
 | `strike(t)`, `wait_steal(t)`, `wait_kill(t)`, `loot(t)` | `pl_action` (as in 4a) | "struck" / "gone"; "stolen" / "not_stolen" / "no_knife" / "gone"; "killed" / "lost"; the loot clicks | 60 / 10 / 120 / 30 s |
 | `use_skill(key="F1")` | `pl_action` | "pressed" / "refused" | at once |
 
@@ -2037,7 +2039,7 @@ Python view:
     def hunt_loop(t):
         while True:
             t = find_target()
-            fight(t)
+            fight_target(t)
 
 The round trip is exact: project JSON -> the Python files -> the project (test_hunt_loop.py), and
 every tab -> Blockly -> the project, in the converter and in the real Blockly (project.test.ts,
@@ -2096,7 +2098,7 @@ against an arm that may read 0 (10.2's lesson); deaths count over every run that
 
 Only once 14.7 holds. **First: no Knife swap on the Christmas Cookie and the Cookie** -- B5b-2 vs
 B5b-2' where `attack_cookie` and `attack_cookie_xmas` are `strike(t); wait_kill(t); loot(t)` (4a's
-PLAIN_SHAPE, already playable: the runner strikes those species without the Knife, and fight(t)
+PLAIN_SHAPE, already playable: the runner strikes those species without the Knife, and fight_target(t)
 plays that recipe's steps). It needs no new shape, so no new trace test; its bar would be the
 openers / h and the steals / h per species (the Cookies carry no steal worth the swap time, 2b),
 the kills / h within the noise, deaths not more. **Next: no loot(t) for the Christmas Cookie**

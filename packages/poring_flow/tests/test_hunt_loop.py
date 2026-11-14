@@ -96,7 +96,8 @@ def test_the_python_view_of_the_hunt_tab_and_its_round_trip() -> None:
     files = {f.path: f.text for f in pp.print_files(p)}
     src = files["xmas_dun02/hunt.py"]
     assert (
-        "def hunt_loop(t):\n    while True:\n        t = find_target()\n        fight(t)\n" in src
+        "def hunt_loop(t):\n    while True:\n        t = find_target()\n"
+        "        fight_target(t)\n" in src
     )
     assert P.canonical_json(pp.parse_files(files)) == P.canonical_json(p)
     # every ready-made project round-trips (the one box has no hunt tab: unchanged)

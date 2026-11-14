@@ -921,8 +921,9 @@ def document(cat: Catalogue | None = None) -> dict[str, Any]:
                 "statements": list(hl.STATEMENTS),
                 "words": "a map node's hunt_loop(t) is its hunt core's loop: each block is the "
                 "runner's own steps, one bounded call (its timeout_s) that hands back on its exit, "
-                "at the run's end or on Stop; t = find_target() then fight(t) plays the runner's "
-                "own sequence; use_skill presses the hunt core's heal key between two steps",
+                "at the run's end or on Stop; t = find_target() then fight_target(t) plays the "
+                "runner's own sequence; use_skill presses the hunt core's heal key between two "
+                "steps",
             },
             # stage 4a: the box's model and its monsters' recipes (poring_flow.recipes)
             "recipes": {

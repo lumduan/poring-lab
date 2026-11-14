@@ -8,7 +8,7 @@ tab hunt)
     def hunt_loop(t):
         while True:
             t = find_target()
-            fight(t)               # the monsters tab's recipe for t's species (today's: the Knife)
+            fight_target(t)         # the monsters tab's recipe for t's species (today's: the Knife)
 
 must call EXACTLY the step sequence run()'s driver loop calls, tick for tick. Both play the same
 FAKE hunt: 20 step closures with the real steps' names, order and MODE SEMANTICS (the guards the
@@ -23,7 +23,7 @@ effect in both runs. Then:
 - A (the driver): run()'s loop exactly (`while clock() < t_end: if hunt_tick() == RUN_END: break`);
 - B (the blocks): dungeon_hunt.HuntCursor over the same steps, driven by the REAL live player
   (flow_play.LivePlayer.hunt_drive) playing the fixture's hunt_loop -- the engine's interpreter,
-  find_target / fight / the recipe dispatch at the lock (the fake lock asks the player's
+  find_target / fight_target / the recipe dispatch at the lock (the fake lock asks the player's
   hunt_recipe as run() does);
 
 and the two traces of (tick, step, signal) must be equal, with no step PASSED in B.
@@ -445,13 +445,14 @@ def compare(scn: Scenario, text: str, node: str = NODE) -> Compared:
 
 
 def short_boxes(text: str, s: float = 1.0) -> str:
-    """The same project with every hunt block's time box (its timeout_s: find_target's, fight's,
-    the recipes' steps') at ``s`` seconds: a block then hands back on its time box all the time,
-    and the next block takes over at that point (13.4: a time box never changes the steps run)."""
+    """The same project with every hunt block's time box (its timeout_s: find_target's,
+    fight_target's, the recipes' steps') at ``s`` seconds: a block then hands back on its time
+    box all the time, and the next block takes over at that point (13.4: a time box never changes
+    the steps run)."""
     import json
 
     d = json.loads(text)
-    blocks = {"find_target", "fight", "strike", "wait_steal", "wait_kill", "loot"}
+    blocks = {"find_target", "fight_target", "strike", "wait_steal", "wait_kill", "loot"}
 
     def walk(stmts: list[Any]) -> None:
         for st in stmts:

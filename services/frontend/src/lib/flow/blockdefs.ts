@@ -570,7 +570,7 @@ BLOCK_DEFS.push(...SETTING_DEFS);
 export const HUNT_LOOP_TAB = "hunt";
 export const HUNT_LOOP_FN = "hunt_loop";
 /** The hunt loop's own blocks (blocks.yaml; 13.4's explore() is find_target, its attack(t) fight). */
-export const HUNT_LOOP_BLOCKS = ["find_target", "choose_target", "walk_to_target", "look", "fight"] as const;
+export const HUNT_LOOP_BLOCKS = ["find_target", "choose_target", "walk_to_target", "look", "fight_target"] as const;
 BLOCK_DEFS.push(
   stmt({
     type: "pl_hunt_take",
@@ -584,7 +584,7 @@ BLOCK_DEFS.push(
     message0: "%1 ( %2 ) · at most %3 s %4 %5",
     args0: [label("BLOCK"), text("ARGS"), num("TIMEOUT", 300), badge, run],
     inputsInline: true,
-    tooltip: "A block of the hunt loop (the runner's own steps, one bounded call) -- fight(t): the monsters tab's recipe for t's species; walk_to_target(t): until t is in reach. It hands back at once on the run's end or on Stop.",
+    tooltip: "A block of the hunt loop (the runner's own steps, one bounded call) -- fight_target(t): the monsters tab's recipe for t's species; walk_to_target(t): until t is in reach. It hands back at once on the run's end or on Stop.",
   }),
 );
 
@@ -679,7 +679,7 @@ const OWN_BLOCK: Record<string, string> = { press_key: "pl_press_key", dungeon_h
  * `monsters` tab -- never under "More skills". */
 export const RECIPE_TAB = "monsters";
 export const RECIPE_STEPS = ["strike", "wait_steal", "wait_kill", "loot"] as const;
-const RECIPE_ONLY = new Set<string>([...RECIPE_STEPS, "use_model", "use_skill", "find_target", "choose_target", "walk_to_target", "look", "fight"]);
+const RECIPE_ONLY = new Set<string>([...RECIPE_STEPS, "use_model", "use_skill", "find_target", "choose_target", "walk_to_target", "look", "fight_target"]);
 /** The model a node's recipes name (its use_model's models.yaml entry): its monsters the runner
  * strikes and their mob ids (the KB names them at run time). */
 export type Monsters = { model: string; strikes: string[]; mobs: Record<string, number[]> };
@@ -787,7 +787,7 @@ export function toolbox(
       { kind: "block", type: "pl_while", inputs: { COND: exprBlock("True") } },
       lbl("Each turn: find a target, then fight it (the monsters tab's recipe for its species):"),
       ...own("pl_hunt_take", "find_target", { VAR: "t", ARGS: "", TIMEOUT: blocks.find_target.timeout_s }),
-      ...own("pl_hunt_step", "fight", { ARGS: "target=t", TIMEOUT: blocks.fight?.timeout_s ?? 300 }),
+      ...own("pl_hunt_step", "fight_target", { ARGS: "target=t", TIMEOUT: blocks.fight_target?.timeout_s ?? 300 }),
       lbl("Or the fight's steps one by one (the runner's own, each until its exit):"),
       ...own("pl_hunt_step", "walk_to_target", { ARGS: "target=t", TIMEOUT: blocks.walk_to_target?.timeout_s ?? 30 }),
     );

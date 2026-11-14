@@ -2730,7 +2730,7 @@ section 14 (built offline; its live A/B pre-registered there, not run).
   Without one, run() is 5b-1's program (an AST identity, `huntstate_check.py drive`).
 - **New blocks** (blocks.yaml, `live: true`, live ONLY in the hunt loop): `find_target()` (the
   search until a fight begins: the monster engaged), `choose_target()`, `walk_to_target(t)`,
-  `look()`, `fight(t)` (the monsters tab's recipe for the species the runner locked, played as
+  `look()`, `fight_target(t)` (the monsters tab's recipe for the species the runner locked, played as
   blocks); the recipe primitives (Amendment H) may stand in the loop too, and `use_skill(key)`
   plays there with the hunt core's heal key. Each is ONE bounded call through the TICK CURSOR (the
   tick and its next step; its time box the IR's timeout_s) that hands back on its exit, at the
@@ -2741,6 +2741,6 @@ section 14 (built offline; its live A/B pre-registered there, not run).
   input t, a statement the runner cannot wait for (a wait, a press, a call, a stop, an exit), a
   sensor in its conditions (known() alone), a target that is no variable, a `while` that could spin
   (it begins with `t = find_target()` and holds a fight player on t), use_skill with another key.
-- The canonical loop `t = find_target(); fight(t)` calls the runner's own step sequence tick for
+- The canonical loop `t = find_target(); fight_target(t)` calls the runner's own step sequence tick for
   tick (scripts/hunt_trace.py, on scripted mode changes).
 

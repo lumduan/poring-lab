@@ -25,7 +25,7 @@ function all(blocks: readonly WsBlock[]): WsBlock[] {
 
 const CAT = {
   find_target: { concept: "combat.hunt", timeout_s: 120 },
-  fight: { concept: "combat.attack_target", timeout_s: 300 },
+  fight_target: { concept: "combat.attack_target", timeout_s: 300 },
   walk_to_target: { concept: "combat.attack_target", timeout_s: 30 },
   choose_target: { concept: "core.choose_target", timeout_s: 1, kind: "core" },
   look: { concept: "core.look", timeout_s: 1, kind: "core" },
@@ -56,7 +56,7 @@ test("the hunt tab's blocks show the value's variable and the time box, and roun
   const take = blocks.find((b) => b.type === "pl_hunt_take");
   const step = blocks.find((b) => b.type === "pl_hunt_step");
   assert.deepEqual(take?.fields, { VAR: "t", BLOCK: "find_target", ARGS: "", TIMEOUT: 120 });
-  assert.deepEqual(step?.fields, { BLOCK: "fight", ARGS: "target=t", TIMEOUT: 300 });
+  assert.deepEqual(step?.fields, { BLOCK: "fight_target", ARGS: "target=t", TIMEOUT: 300 });
   // every field the converter writes is the type's (the contract)
   for (const b of [take, step]) for (const f of Object.keys(b?.fields ?? {})) assert.ok(namesOf(b!.type).saved.has(f), `${b?.type}.${f}`);
   const back = tabFromWorkspace(p, scope, ws);
@@ -88,7 +88,7 @@ test("the toolbox's Hunt category is offered on the hunt tab only, the canonical
     ["pl_def", "hunt_loop"],
     ["pl_while", ""],
     ["pl_hunt_take", "find_target"],
-    ["pl_hunt_step", "fight"],
+    ["pl_hunt_step", "fight_target"],
   ]);
   const offered = new Set(items.map((i) => (i.fields as Record<string, unknown>)?.BLOCK).filter(Boolean));
   for (const b of [...HUNT_LOOP_BLOCKS, "strike", "wait_steal", "wait_kill", "loot", "use_skill"]) assert.ok(offered.has(b), b);
@@ -103,7 +103,7 @@ test("the toolbox's Hunt category is offered on the hunt tab only, the canonical
 test("Run's readiness reaches the hunt loop from the hunt core", () => {
   const p = xmasHuntProject();
   const got = reachable(p, "xmas_dun02");
-  for (const b of ["find_target", "fight"]) assert.ok(got.blocks.includes(b), b);
+  for (const b of ["find_target", "fight_target"]) assert.ok(got.blocks.includes(b), b);
   assert.ok(!reachable(xmasProject(), "xmas_dun02").blocks.includes("find_target"));
   assert.equal(huntLoopDef().params[0].name, "t");
 });

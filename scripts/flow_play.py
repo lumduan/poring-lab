@@ -93,8 +93,8 @@ calls its ``drive(cursor)`` INSTEAD of its own driver loop (dungeon_hunt.hook_dr
 a hunt loop gets the plain HuntHook, and run() plays exactly 5b-1's program). The player plays the
 function's statements NOW, inside run(), with the engine's interpreter (LivePlayer.hunt_drive): each
 block -- find_target, choose_target, walk_to_target, strike, wait_steal, wait_kill, loot, look,
-use_skill (the hunt core's heal key, between two steps), fight(t) (the monsters tab's recipe for the
-species the runner locked) -- is ONE bounded call through the runner's tick cursor
+use_skill (the hunt core's heal key, between two steps), fight_target(t) (the monsters tab's
+recipe for the species the runner locked) -- is ONE bounded call through the runner's tick cursor
 (dungeon_hunt.HuntCursor), and hands back on its exit, at the run's end or on Stop. No engine tick
 sits between two blocks; the box's survival events keep playing through the tick hook inside the
 runner's common steps. poring_flow.huntloop refuses, before any input, what the loop cannot play.
@@ -1157,7 +1157,7 @@ class LivePlayer(Sim):
         once per target (`recipe`: the species, the function, its node path, its steps)."""
         plan = self.prep.runners.get(self.block)
         r = None if plan is None or species is None else plan.recipes.get(species)
-        self._lock_answer = (species, r)  # 5b-2: fight(t) plays THIS target's recipe after it
+        self._lock_answer = (species, r)  # 5b-2: fight_target(t) plays THIS target's recipe
         rec: dict[str, Any] = {"kind": "recipe", "species": species, "why": why, "in": "hunt"}
         if r is None:
             self.rec.ev({**rec, "function": None, "default": True})
@@ -1243,8 +1243,8 @@ class LivePlayer(Sim):
         return v
 
     def _drive_fight(self, a: ir.ActionStmt) -> str:
-        """fight(t): the monsters tab's recipe for the species the runner LOCKED at its strike
-        (its answer to the lock, LivePlayer.hunt_recipe; no recipe for it: the runner's own,
+        """fight_target(t): the monsters tab's recipe for the species the runner LOCKED at its
+        strike (its answer to the lock, LivePlayer.hunt_recipe; no recipe for it: the runner's own,
         rc.DEFAULT_SHAPE), played as blocks -- strike first (both shapes begin with it after the
         Knife, which plays at the runner's moment), then its steps; knife_on() / knife_back() play
         at the runner's moments (stage 3's calls), so here they take no step."""
@@ -1263,7 +1263,7 @@ class LivePlayer(Sim):
             play = {rc.WAIT_STEAL: c.wait_steal, rc.WAIT_KILL: c.wait_kill, rc.LOOT: c.loot}[s]
             got.append([s, play(self._limit(fn_name, s))])
         path = (self.c.where(fn_name).path or fn_name) if fn_name else None
-        self.rec.ev({"kind": "fight", "species": species, "function": fn_name, "node": path,
+        self.rec.ev({"kind": "fight_target", "species": species, "function": fn_name, "node": path,
                      "default": r is None, "steps": got, "in": "hunt",
                      "recipes_known": bool(plan and plan.recipes)})  # fmt: skip
         kill = next((x[1] for x in got if x[0] == rc.WAIT_KILL), None)

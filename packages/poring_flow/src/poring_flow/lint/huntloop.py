@@ -3,8 +3,9 @@ Batt 2026-11-13: "break the runner into blocks"; docs/planning/live-blocks.md 13
 rules are poring_flow.huntloop's (the ONE place the live player reads too); here they become
 findings, each an error named by its rule, on the block it is about:
 
-- hunt_primitive: a hunt block (find_target, choose_target, walk_to_target, look, fight, use_skill)
-  outside the hunt loop (the recipe primitives outside a recipe and the loop: recipe_primitive);
+- hunt_primitive: a hunt block (find_target, choose_target, walk_to_target, look, fight_target,
+  use_skill) outside the hunt loop (the recipe primitives outside a recipe and the loop:
+  recipe_primitive);
 - hunt_loop_place / hunt_loop_input: hunt_loop(t) on a map node whose main runs dungeon_hunt, with
   one input, the target;
 - hunt_statement: in the loop, its blocks and if / while / repeat / for / set / break / continue /
@@ -12,7 +13,8 @@ findings, each an error named by its rule, on the block it is about:
 - hunt_sensor: no sensor in its conditions but known(t);
 - hunt_target: a block's target is a variable (find_target()'s value);
 - hunt_spin: every while begins with t = find_target() and holds, at its top level, a block that
-  plays the fight to its end on t (fight, wait_kill, loot): else it could spin with no step taken;
+  plays the fight to its end on t (fight_target, wait_kill, loot): else it could spin with no
+  step taken;
 - hunt_skill: use_skill presses a declared role key (dungeon_hunt's heal key) between two steps.
 """
 

@@ -501,7 +501,7 @@ export function xmasProject(): Project {
 
 /** Live blocks 5b-2 (live-blocks.md 14): the hunt tab -- hunt_loop(t), the hunt core's loop as its
  * own steps (poring_flow.huntloop). The canonical loop: t = find_target() (13.4's explore()), then
- * fight(t) (13.4's attack(t): the monsters tab's recipe for t's species), until the run ends. */
+ * fight_target(t) (13.4's attack(t): the monsters tab's recipe for t's species), until the run ends. */
 export const HUNT_TAB = "hunt";
 export const huntLoopDef = (): Def =>
   def(
@@ -512,7 +512,7 @@ export const huntLoopDef = (): Def =>
         cond: lit(true),
         body: [
           { kind: "action", block: "find_target", concept: "combat.hunt", params: {}, timeout_s: 120, ...rest, outcome_to: "t" },
-          { kind: "action", block: "fight", concept: "combat.attack_target", params: { target: { kind: "var", name: "t" } }, timeout_s: 300, ...rest },
+          { kind: "action", block: "fight_target", concept: "combat.attack_target", params: { target: { kind: "var", name: "t" } }, timeout_s: 300, ...rest },
         ],
         max_iter: null,
         max_s: null,
@@ -533,7 +533,7 @@ export function xmasHuntProject(): Project {
   return {
     ...p,
     name: "xmas_dun02_hunt",
-    description: "One box with its hunt loop (live-blocks 5b-2): the box of project_xmas_dun02.json plus the tab hunt, whose hunt_loop(t) the hunt core plays instead of its own loop: t = find_target(), then fight(t).",
+    description: "One box with its hunt loop (live-blocks 5b-2): the one box plus the tab hunt, whose hunt_loop(t) the hunt core plays instead of its own: t = find_target(), then fight_target(t).",
   };
 }
 

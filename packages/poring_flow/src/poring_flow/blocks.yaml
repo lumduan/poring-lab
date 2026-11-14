@@ -332,9 +332,10 @@ blocks:
     timeout_s: 1
     live: true  # stage 5b-2: in the hunt loop only (the tick's reads)
     note: the tick's reads (HP, SP, dead, her cell, the mode); no input of its own; live only in the hunt loop
-  fight:
+  fight_target:
     # (13.4 called it attack(t): the locale-pack guard refuses that word as a code literal -- a
-    # client UI string -- so the block that plays t's recipe is fight)
+    # client UI string -- and `fight` alone is a function name flows already use (a catalogue name
+    # cannot be one), so the block that plays t's recipe is fight_target)
     concept: combat.attack_target
     params: [{name: target, type: mob, required: true, positional: true, note: "the hunt loop's target t (find_target's value)"}]
     timeout_s: 300

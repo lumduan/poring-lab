@@ -6469,11 +6469,12 @@ class HuntCursor:
     - a MODE step: when the playing block owns it (BLOCK_OWNS), or when its guard is false
       (STEP_GUARD: its body then does nothing); else it is PASSED (not called; counted).
 
-    The box's canonical loop (`t = find_target(); fight(t)`, fight = the recipe of t's species)
-    calls exactly the driver's step sequence, tick for tick (scripts/hunt_trace.py shows it on
-    scripted mode changes): find_target owns the search's steps and hands back before `fight` once
-    a fight began; the recipe's blocks own `fight` and hand back on their exits, loot(t) owns the
-    loot step and hands back before `after`. ``press``: use_skill's key, the runner's own press."""
+    The box's canonical loop (`t = find_target(); fight_target(t)`, the latter the recipe of t's
+    species) calls exactly the driver's step sequence, tick for tick (scripts/hunt_trace.py shows
+    it on scripted mode changes): find_target owns the search's steps and hands back before
+    `fight` once a fight began; the recipe's blocks own `fight` and hand back on their exits,
+    loot(t) owns the loot step and hands back before `after`. ``press``: use_skill's key, the
+    runner's own press."""
 
     def __init__(self, steps: Sequence[tuple[str, Callable[[], str | None]]], view: HuntView, *,
                  t_end: float, clock: Callable[[], float] = time.monotonic,

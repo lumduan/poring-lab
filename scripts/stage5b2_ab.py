@@ -9,7 +9,7 @@ with the same runner settings (the boxes' setting blocks and keys, stage2_ab.sam
 - A (B5b-1): services/frontend/src/lib/flow/fixtures/project_xmas_dun02.json -- no hunt tab, so
   run() takes its own driver loop, which IS 5b-1's program (huntstate_check.py drive);
 - B (B5b-2): fixtures/project_xmas_dun02_hunt.json -- the same box plus the tab hunt, the canonical
-  loop (t = find_target(); fight(t)): run() calls the player's hook.drive.
+  loop (t = find_target(); fight_target(t)): run() calls the player's hook.drive.
 `plan` refuses before any input unless: the two boxes take the same runner settings and keys and
 the Run config has the fast alarm on (both arms: section 11); A has no hunt loop and B the
 canonical one, and B is A plus that tab and nothing else; the checkout's run() without its drive
@@ -84,8 +84,8 @@ def _quiet(f: Any, *a: Any) -> tuple[int, str]:
 
 
 def canonical_loop(body: Sequence[Mapping[str, Any]]) -> bool:
-    """PURE: the hunt loop's body is the canonical one: `while True: t = find_target(); fight(t)`
-    (their default time boxes)."""
+    """PURE: the hunt loop's body is the canonical one: `while True: t = find_target();
+    fight_target(t)` (their default time boxes)."""
     if len(body) != 1 or body[0].get("kind") != "while":
         return False
     w = body[0]
@@ -97,7 +97,7 @@ def canonical_loop(body: Sequence[Mapping[str, Any]]) -> bool:
     a, b = steps
     return (a.get("kind") == b.get("kind") == "action" and a.get("block") == "find_target"
             and a.get("outcome_to") == "t" and a.get("timeout_s") == 120 and not a.get("params")
-            and b.get("block") == "fight" and b.get("params") == {"target": {"kind": "var",
+            and b.get("block") == "fight_target" and b.get("params") == {"target": {"kind": "var",
                                                                              "name": "t"}}
             and b.get("timeout_s") == 300 and b.get("outcome_to") is None)  # fmt: skip
 
@@ -122,7 +122,10 @@ def box_difference(a: Mapping[str, Any], b: Mapping[str, Any]) -> str | None:
     ):
         return "B's hunt tab holds more than hunt_loop(t)"
     if defs[0]["params"] != [{"name": "t", "default": None}] or not canonical_loop(defs[0]["body"]):
-        return "B's hunt_loop is not the canonical loop (while True: t = find_target(); fight(t))"
+        return (
+            "B's hunt_loop is not the canonical loop (while True: t = find_target(); "
+            "fight_target(t))"
+        )
     for d in (a, b):
         d.pop("name", None)
         d.pop("description", None)

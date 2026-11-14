@@ -62,7 +62,7 @@ PRIORITY_MAX = 10.0
 SKILL_WORDS = (
     "cannot play live yet (4b): in 4a the runner has no skill press at the strike (a declared "
     "role key the start's slot check reads, its SP, its cast and after-cast waits)"
-)  # ➡️ 5b-2 (live-blocks.md 14): still so in a recipe (fight(t) knows t's recipe only at the
+)  # ➡️ 5b-2 (live-blocks.md 14): still so in a recipe (fight_target(t) knows t's recipe only at the
 # runner's lock, after its strike); use_skill(key) plays in the hunt loop (poring_flow.huntloop)
 PRIMITIVE_WORDS = (
     "plays live only inside a monster's recipe (a function attack_<monster>(t) the hunt core asks "

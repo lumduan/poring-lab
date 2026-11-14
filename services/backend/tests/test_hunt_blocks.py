@@ -1,6 +1,6 @@
 """live-blocks 5b-2 (docs/planning/live-blocks.md 14): the box's HUNT LOOP played live -- the player
-side (scripts/flow_play.py: the plan, DriveHook, LivePlayer.hunt_drive, fight(t)'s recipe at the
-lock) and the STEP-TRACE EQUIVALENCE (scripts/hunt_trace.py): run()'s driver against the hunt
+side (scripts/flow_play.py: the plan, DriveHook, LivePlayer.hunt_drive, fight_target(t)'s recipe
+at the lock) and the STEP-TRACE EQUIVALENCE (scripts/hunt_trace.py): run()'s driver against the hunt
 loop played as blocks, on scripted mode changes -- with the negative controls that show the
 comparison names a program that plays differently (a verifier proves a positive case)."""
 
@@ -40,7 +40,7 @@ def _with_loop(body: list[Any]) -> str:
 
 
 def _act(block: str, out: str | None = None, timeout_s: float = 120, **params: Any) -> Any:
-    concept = {"find_target": "combat.hunt", "fight": "combat.attack_target",
+    concept = {"find_target": "combat.hunt", "fight_target": "combat.attack_target",
                "strike": "combat.attack_target", "use_skill": "combat.use_skill",
                "loot": "loot.pick_up"}.get(block, f"core.{block}")  # fmt: skip
     return {"kind": "action", "block": block, "concept": concept, "params": params,
@@ -134,7 +134,7 @@ def test_a_box_without_a_hunt_loop_gets_no_drive() -> None:
     res, log, recs, seen = _play(ONE, ht.hand_scenarios()[0])
     assert not dh.hook_drives(seen["hook"]) and "cursor" not in seen
     assert res.drive is None and recs == []
-    assert not any(r.get("kind") in ("drive", "fight") for r in log.recs)
+    assert not any(r.get("kind") in ("drive", "fight_target") for r in log.recs)
 
 
 def test_the_hunt_loop_drives_the_steps_and_attack_plays_the_locked_species_recipe() -> None:
@@ -145,10 +145,10 @@ def test_the_hunt_loop_drives_the_steps_and_attack_plays_the_locked_species_reci
     assert [r["what"] for r in recs] == ["start", "end"] and recs[1]["ended"] == "time_box"
     assert res.reason == "time_box" and res.drive is not None and res.drive["passed"] == {}
     kinds = [r["kind"] for r in log.recs]
-    assert kinds.count("drive") == 2 and "fight" in kinds and "recipe" in kinds
-    att = next(r for r in log.recs if r["kind"] == "fight")
+    assert kinds.count("drive") == 2 and "fight_target" in kinds and "recipe" in kinds
+    att = next(r for r in log.recs if r["kind"] == "fight_target")
     rec = next(r for r in log.recs if r["kind"] == "recipe")
-    # the lock asked the box's recipe for the struck species; fight(t) played THAT recipe
+    # the lock asked the box's recipe for the struck species; fight_target(t) played THAT recipe
     assert att["species"] == rec["species"] and att["function"] == f"attack_{rec['species']}"
     assert [s[0] for s in att["steps"]] == ["strike", "wait_steal", "knife_back", "wait_kill",
                                             "loot"]  # fmt: skip
@@ -162,7 +162,7 @@ def test_the_hunt_loop_drives_the_steps_and_attack_plays_the_locked_species_reci
 def test_use_skill_presses_a_declared_key_through_the_runner_between_two_steps() -> None:
     body = [{"kind": "while", "cond": {"kind": "lit", "value": True}, "max_iter": None,
              "max_s": None, "body": [_act("find_target", "t"), _act("use_skill", key={"kind":
-             "lit", "value": "F1"}), _act("fight", timeout_s=300, target=T)]}]  # fmt: skip
+             "lit", "value": "F1"}), _act("fight_target", timeout_s=300, target=T)]}]  # fmt: skip
     pressed: list[tuple[str, str]] = []
     res, log, _recs, _seen = _play(_with_loop(body), ht.hand_scenarios()[0],
                                    press=lambda k, w: pressed.append((k, w)) or True)  # fmt: skip
@@ -172,7 +172,7 @@ def test_use_skill_presses_a_declared_key_through_the_runner_between_two_steps()
 
 
 def test_a_loop_that_returns_ends_the_run_normally_with_words() -> None:
-    body = [_act("find_target", "t"), _act("fight", timeout_s=300, target=T)]  # no while: once
+    body = [_act("find_target", "t"), _act("fight_target", timeout_s=300, target=T)]  # once
     res, _log, recs, seen = _play(_with_loop(body), ht.hand_scenarios()[0])
     assert seen["cursor"].ended is None and recs[-1]["what"] == "end"
     assert res.reason == "drive_end: the box hunt loop ended"

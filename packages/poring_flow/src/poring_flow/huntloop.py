@@ -12,7 +12,7 @@ exit holds, its time box passes, or the run ends). The canonical loop
     def hunt_loop(t):
         while True:
             t = find_target()
-            fight(t)               # the monsters tab's recipe for t's species (stage 4a)
+            fight_target(t)               # the monsters tab's recipe for t's species (stage 4a)
 
 plays exactly the runner's own step sequence, tick for tick (scripts/hunt_trace.py). The blocks:
 
@@ -30,8 +30,9 @@ plays exactly the runner's own step sequence, tick for tick (scripts/hunt_trace.
 - ``look()``: the tick's reads; ``use_skill(key)``: one press of a DECLARED role key between two
   steps -- the hunt core's heal key (dungeon_hunt.DRIVE_SKILL_ROLES), the one a start's slot check
   reads that a block may press there;
-- ``fight(t)``: t's RECIPE (the species the runner locked at its strike; its own recipe where the
-  box has none), played as those blocks; knife_on() / knife_back() play at the runner's moments.
+- ``fight_target(t)``: t's RECIPE (the species the runner locked at its strike; its own recipe
+  where the box has none), played as those blocks; knife_on() / knife_back() play at the
+  runner's moments.
 
 Each one hands back at once on the run's end (a RUN_END, the run's time box), on a safety step's
 change of mode (a Fly Wing: the target is gone) and on Stop (the tick hook). Everything here reads
@@ -47,8 +48,9 @@ share one definition. Refused before any input (the backend's not_live says the 
   ``known(t)`` alone);
 - ``hunt_target``: a block's target that is not a variable (find_target()'s value);
 - ``hunt_spin``: a ``while`` whose first statement is not find_target(), or with no block at its top
-  level that plays a fight to its end (fight, wait_kill or loot of find_target()'s value): it could
-  spin without the hunt core taking a step (the cursor also ends a spin at run time);
+  level that plays a fight to its end (fight_target, wait_kill or loot of find_target()'s
+  value): it could spin without the hunt core taking a step (the cursor also ends a spin at run
+  time);
 - ``hunt_skill``: use_skill without a declared role key.
 A recipe's order the cursor cannot play is 4a's (recipes.SHAPES), widened only with a trace test per
 new shape; a common step cannot be left out (it has no block); a driving hook without the others is
@@ -68,12 +70,12 @@ VERSION = "9.55"  # scripts/dungeon_hunt.py HUNT_BLOCKS_VERSION (test_hunt_loop.
 HUNT_LOOP = rc.HUNT_LOOP
 HUNT_TAB = "hunt"  # the editor's tab of the hunt loop (the Hunt category is offered there)
 EXPLORE, CHOOSE, WALK = "find_target", "choose_target", "walk_to_target"
-LOOK, ATTACK = "look", "fight"
+LOOK, ATTACK = "look", "fight_target"
 NEW_BLOCKS = (EXPLORE, CHOOSE, WALK, LOOK, ATTACK)
 TARGETED = (WALK, *rc.PRIMITIVES, ATTACK)  # each takes the target t (its first parameter)
 BLOCKS = (*NEW_BLOCKS, *rc.PRIMITIVES, rc.SKILL)
 # each plays a fight to its end: it owns the fight step and hands back only once the fight ended
-# (fight through its recipe's wait_kill; loot(t) through its loot step) -- with find_target()
+# (fight_target through its recipe's wait_kill; loot(t) through its loot step) -- with find_target()
 # first, a loop that holds one takes a step on every turn (dungeon_hunt.BLOCK_OWNS)
 FIGHT_PLAYERS = (ATTACK, rc.WAIT_KILL, rc.LOOT)
 STATEMENTS = ("action", "if", "while", "repeat", "for", "set", "break", "continue", "return")
@@ -88,7 +90,8 @@ PRIMITIVE_WORDS = (
 SPIN_WORDS = (
     "the hunt core plays this loop instead of its own: each turn must take a step of the hunt, so "
     "it begins with t = find_target() and holds, at its top level, a block that plays the fight "
-    "to its end on t (fight(t), wait_kill(t) or loot(t)) -- else it could spin while no step runs"
+    "to its end on t (fight_target(t), wait_kill(t) or loot(t)) -- else it could spin while no "
+    "step runs"
 )
 
 
@@ -210,7 +213,7 @@ def _body(flow: ir.Flow, name: str, blk: str | None, skill: tuple[str, ...], bad
             if not is_hunt_block(a):
                 bad(path, a.block, "hunt_statement", f"{a.block} in {HUNT_LOOP}: the hunt core "
                     "presses and clicks itself there; its blocks are find_target, choose_target, "
-                    "walk_to_target, strike, wait_steal, wait_kill, loot, look, fight and "
+                    "walk_to_target, strike, wait_steal, wait_kill, loot, look, fight_target and "
                     "use_skill (a declared key)", blk)  # fmt: skip
                 continue
             if a.block in TARGETED and _target_var(a) is None:

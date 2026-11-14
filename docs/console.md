@@ -413,8 +413,8 @@ Amendment B); a not-adopted model is never offered.
   readiness reads the monsters' functions too.
   ➡️ **2026-11-14 (stage 5b-2, [planning/live-blocks.md](planning/live-blocks.md) 14):** a tab named
   `hunt` of a map node offers a **Hunt** category: `def hunt_loop(t)`, `while True`, `t =
-  find_target()` and `fight(t)` (the canonical loop: the hunt core then plays this loop instead of
-  its own, `fight(t)` being the monsters tab's recipe for t's species), walk_to_target, the recipe
+  find_target()` and `fight_target(t)` (the canonical loop: the hunt core then plays this loop instead of
+  its own, `fight_target(t)` being the monsters tab's recipe for t's species), walk_to_target, the recipe
   steps, choose_target, look, use_skill (the heal key) and `if known(value=t)`. The hunt loop's own
   blocks show their value's variable and their time box ("t = find_target ( ) · at most 120 s").
   The Load lists of /flows and /maps offer **xmas_dun02_hunt** (the one box plus that tab); the

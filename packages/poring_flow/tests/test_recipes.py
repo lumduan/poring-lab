@@ -298,8 +298,8 @@ def test_use_skill_in_a_recipe_is_linted_and_refused_live_as_4b() -> None:
     assert got == [("recipe_skill", "warning")]  # expressible: not a design error
     words = not_live(d)
     # ➡️ 5b-2 (live-blocks.md 14): use_skill plays in the hunt loop now (the catalogue's live set),
-    # so in a recipe the refusal is the recipe's own words (fight(t) knows t's recipe only at the
-    # lock, after the strike): still refused before any input
+    # so in a recipe the refusal is the recipe's own words (fight_target(t) knows t's recipe only
+    # at the lock, after the strike): still refused before any input
     assert any("use_skill(key='F6') in attack_mystcase cannot play live yet (4b)" in w
                for w in words), words  # fmt: skip
     # without its hotbar key it is an error (the key is what 4b presses)
