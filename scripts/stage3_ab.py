@@ -93,22 +93,10 @@ def project_file(arm: str, folder: Path) -> Path:
     return folder / f"project-{arm}.json"
 
 
-def run_vals(minutes: float, config_dir: Path = fr.CONFIG_DIR) -> dict[str, Any] | str:
-    """The runner settings BOTH arms take (stage2_ab.run_vals on each box): the same, or refused."""
-    from poring_flow import project as pj
-
-    keys = {}
-    for arm, path in PROJECTS.items():
-        rk = pj.runner_keys(pj.from_json(path.read_text()), NODE)
-        if rk.keys is None:
-            return f"{arm}'s keys: {'; '.join(rk.problems)}"
-        keys[arm] = rk.keys
-    if keys["B2"] != keys["B3"]:
-        return f"the two boxes' keys differ: B2 {keys['B2']}, B3 {keys['B3']}"
-    vals, _src, _ks, why = fr.run_values(fr.FLOWS[s2.FLOW_ID], keys["B3"], config_dir)
-    if why:
-        return why
-    return {**vals, "minutes": minutes}
+def run_vals(minutes: float) -> dict[str, Any] | str:
+    """The runner settings BOTH arms take (stage2_ab.same_vals: each box's setting blocks and
+    keys): the same, or refused."""
+    return s2.same_vals(PROJECTS, minutes)
 
 
 def commands(r: s2.Run, folder: Path, minutes: float, hashes: Mapping[str, str]) -> list[str]:
@@ -120,15 +108,15 @@ def commands(r: s2.Run, folder: Path, minutes: float, hashes: Mapping[str, str])
                            folder / "runner-config.json")  # fmt: skip
 
 
-def plan_doc(label: str, pairs: int, minutes: float, order: str, folder: Path,
-             config_dir: Path = fr.CONFIG_DIR) -> dict[str, Any] | str:  # fmt: skip
-    """PURE but for reads (the config, the fixtures): everything a series will do, before any
+def plan_doc(label: str, pairs: int, minutes: float, order: str,
+             folder: Path) -> dict[str, Any] | str:  # fmt: skip
+    """PURE but for reads (the fixtures): everything a series will do, before any
     screen is read or any input path opened; a refusal: its words."""
     import flow_play as fp
 
     from poring_flow import project as pj
 
-    vals = run_vals(minutes, config_dir)
+    vals = run_vals(minutes)
     if isinstance(vals, str):
         return f"refused before any input: {vals}"
     hashes: dict[str, str] = {}

@@ -10,7 +10,18 @@ WHAT IT RUNS: the proven runner (scripts/dungeon_hunt.py run), never a new execu
 FIXED entry of FLOWS below: its whole command line lives here, in the repo. A request names a flow
 by its id and says start, check or stop; nothing in a request becomes an argument, except the
 flow's five hotbar keys (2026-11-13, Batt: every key from a FUNCTION of the flow): ``keys``, all
-five of flow_config.KEY_FIELDS, each F1-F9, over the config file's for THAT run or check only.
+five of flow_config.KEY_FIELDS, each F1-F9, over the settings for THAT run or check only.
+
+➡️ 2026-11-14 ~15:2x (Batt: "there should be no runner [page] ... make them ALL blocks";
+docs/planning/live-blocks.md section 12): every SETTING is a block of the project
+(poring_flow.settings), so a run takes the settings from the CHECKED PROJECT (the map node's blocks
+> Global's > the default), never from a file: settings/flowrun/config.json and GET / PUT
+/flows/config are gone (the file was empty). The runner-only Run (a start of the flow
+"xmas_dun02_rogue" from the runner page) went with that page: a start is a PROJECT run (below), and
+a check of "project" carries the settings the backend computed from the project's blocks
+(``vals``, checked again here). FLOWS stays: the map's runner (its fixed part, its flags; its
+``defaults`` derived from the settings' defaults) the live block player and the stage tools build
+the hunt core's argv from.
 
 THE CHANNEL: the backend writes ``settings/flowrun/request.json`` (POST /flows/run, behind
 routes_settings.write_gate: a console browser on the LAN, never the lab host or the Windows host,
@@ -42,12 +53,13 @@ checks the file's hash against the request's, copies it into the run's folder an
 BLOCK PLAYER (scripts/flow_play.py play) instead of the runner -- the same busy rules, ASSIST, the
 detect server when a hunt core plays, the stop file, status.json (its flow id "project", titled
 with the project's name). A check of the flow "project" is the runner's check (PROJECT_CHECK_FLOW)
-for now.
+with that project's keys and setting blocks.
 A CHECK (dungeon@9.45, Batt 2026-11-13 "do it": /flows' start checklist ticked from the game screen)
-runs ``dungeon_hunt.py check`` with the SAME argv a start would build (the config, the keys): the
-runner's preamble, then the player start's checks READ from the screen -- it sends no input. It is
-refused while a run starts or runs (the start's busy rule), time-boxed (CHECK_TIMEOUT_S), and its
-result goes into status.json's "check"; a Run pressed meanwhile ends it (its process group).
+runs ``dungeon_hunt.py check`` with the SAME argv a start would build (the project's settings and
+keys the request carries, 2026-11-14): the runner's preamble, then the player start's checks READ
+from the screen -- it sends no input. It is refused while a run starts or runs (the start's busy
+rule), time-boxed (CHECK_TIMEOUT_S), and its result goes into status.json's "check"; a Run pressed
+meanwhile ends it (its process group).
 """
 
 from __future__ import annotations
@@ -110,19 +122,6 @@ class Flow:
     defaults: dict[str, Any] = field(default_factory=dict)
 
 
-# THE CONFIG (Batt 2026-11-13; scripts/flow_config.py): every setting of a run comes from ONE file
-# in the human-only settings store, settings/flowrun/config.json, written only by the backend
-# (PUT /flows/config, the Settings write gate). At each start the run takes, per setting, the
-# flow's default < every map's < its map's own; a request names a flow and nothing else; a broken
-# file, or two settings on one hotbar key, refuses the run before any input.
-CONFIG_DIR = DIR
-
-
-def config_of(flow: Flow, cfg: Mapping[str, Any]) -> tuple[dict[str, Any], dict[str, str]]:
-    """PURE: a run's values and where each came from (flow_config.effective on its map)."""
-    return fc.effective(flow.defaults, cfg, flow.map)
-
-
 # rogue-xmas02.md 4DQ (2026-11-13): the Knife on arm B's fast loot JOINED THE BASE -- the highest
 # common-item z/h with every bar passed (67,269); Batt chose it for the Run button, played until
 # Stop or until the stock runs low, a 2-h cap.
@@ -137,85 +136,11 @@ FLOWS: dict[str, Flow] = {
         "home; a death -> the death dialog's move to saved location",
         map="xmas_dun02",
         # Batt 2026-11-13: "the Butterfly Wing on F9, the Fly Wing on F8"; "nothing fixed, we only
-        # put the defaults": each one a DEFAULT, set again on /flows (every map, or this map's own).
-        # The heal and escape numbers are its --strategy P2's own (test_flow_run pins them).
-        defaults={
-            "heal_key": "F1",
-            "fly_key": "F8",
-            "home_key": "F9",
-            "knife_key": "F4",
-            "dagger_key": "F5",
-            "knife_max_s": 8.0,
-            "knife_hp_min": 0.50,
-            "potion_below": 0.40,
-            "fly_below": 0.20,
-            "fly_rate": 150,
-            "fly_rate_below": 0.50,
-            "weight_home": 0.50,
-            "respawn_at": "645,481",
-            "respawn_confirm_at": "714,405",
-            # the runner numbers it reads from flags of their own (flow_config: a --tune would miss)
-            "WALK_AHEAD": 7,
-            "WALK_EVERY_S": 1.2,
-            "BOX_EVERY_S": 1.0,
-            # every TECHNIQUE (2026-11-13 ~15:2x): the night chain's base, as it ran (4DQ)
-            "minutes": 120,
-            "knife_swap": True,
-            "bare_ready": True,
-            "steal_cue": "popup",
-            "swap_gap": True,
-            "weight_exit": True,
-            "respawn": True,
-            "engage_screen": True,
-            "reach_check": True,
-            "unreach_escape": False,
-            "miss_cue": True,
-            "late_confirm": True,
-            "exp_first": True,
-            "kill_gap": True,
-            "quiet_scan": True,
-            "defend_box": False,
-            "quick_drop": False,
-            "quick_drop_scaled": False,
-            "value_target": True,
-            "box_strike": True,
-            "box_now": True,
-            "queue": False,
-            "self_recheck": True,
-            "still_strike": True,
-            "still_target": True,
-            "lead_press": True,
-            "far_single": True,
-            "near_single": False,
-            "near_single_still": False,
-            "far_approach": True,
-            "skip_own_cells": False,
-            "walk_stop": False,
-            "box_ignore": 2,
-            "loot": "trim",
-            "loot_items": "xmas02fi5",
-            "loot_memory": True,
-            "loot_recheck": False,
-            "loot_aim": False,
-            "loot_first": True,
-            "search": "patrol",
-            "explore": True,
-            "explore_cover": False,
-            "walk_through": False,
-            "walk_pick": True,
-            "walk_pick_step": True,
-            "walk_trust": True,
-            "npc_guard": True,
-            "garm_fly": True,
-            "garm_confirm": 2,
-            "alarm_fast": True,  # dungeon@9.53 (Batt 2026-11-14: "Fly Wing away"; live-blocks 11)
-            "alarm_solo": 0.7,
-            "boss_walk": False,
-            "unread_step": False,
-            "box_detector": "gpu",
-            "hud": True,
-            "hud_fast": 0.2,
-        },
+        # put the defaults": each one a DEFAULT. ➡️ 2026-11-14 (live-blocks.md 12): DERIVED from
+        # the settings' own defaults (poring_flow.settings.DEFAULTS: every setting but the runner
+        # constants), set again as BLOCKS of a project (the map node's, Global's); test_flow_run
+        # pins them to the dict this was before (the night chain's base 4DQ, P2's numbers)
+        defaults=fc.flag_defaults(),
     ),
 }
 
@@ -223,7 +148,7 @@ FLOWS: dict[str, Flow] = {
 # THE PROJECT RUN (live-blocks.md stage 1): its flow id in requests and status.json, the files
 PROJECT = "project"
 PROJECT_FILE = "project.json"  # settings/flowrun/: the backend's checked project (canonical JSON)
-PROJECT_CHECK_FLOW = "xmas_dun02_rogue"  # a check of "project" is this runner's check (for now)
+PROJECT_CHECK_FLOW = "xmas_dun02_rogue"  # a check of "project" is this runner's read-only check
 PROJECT_LABEL = "flowplay"
 NODE_ID = re.compile(r"[A-Za-z][A-Za-z0-9_]{0,39}")  # poring_flow.ir.NAME
 HASH = re.compile(r"[0-9a-f]{64}")
@@ -236,7 +161,8 @@ def command(flow: Flow, label: str, stop_file: Path | None = None,
             vals: Mapping[str, Any] | None = None, sub: str = "run") -> list[str]:  # fmt: skip
     """PURE: the runner's argv for ``flow`` (the label names its session; ``stop_file`` is the
     runner's --stop-file: its Stop ends the run through the normal end, with the packets;
-    ``vals``: config_of's values, else the flow's defaults; ``sub``: "run", or dungeon@9.45's
+    ``vals``: the run's values (a project's settings, the keys over them), else the flow's
+    defaults; ``sub``: "run", or dungeon@9.45's
     read-only "check", which takes run's own flags)."""
     if sub not in ("run", "check"):
         raise ValueError(f"not a runner command: {sub!r}")
@@ -259,21 +185,30 @@ def play_command(project_file: Path, node: str, label: str, stop_file: Path, max
             *rc]  # fmt: skip
 
 
-def run_values(flow: Flow, keys: Mapping[str, str] | None, config_dir: Path = CONFIG_DIR,
-               ) -> tuple[dict[str, Any], dict[str, str], str, str | None]:  # fmt: skip
-    """A start's (and a check's) values: the config file (default < every map < this map), the
-    flow's keys over it when given, then the clash rule -- (vals, src, keys_src, why). The live
-    player's hunt core takes the same values (scripts/flow_play.py)."""
+def values_of(vals: Mapping[str, Any], src: Mapping[str, str], keys: Mapping[str, str] | None,
+              ) -> tuple[dict[str, Any], dict[str, str], str, str | None]:  # fmt: skip
+    """PURE: a start's (and a check's) values: the settings, the flow's keys over them when
+    given, then the clash rule -- (vals, src, keys_src, why)."""
     keys_src = fc.KEYS_SRC["flow" if keys else "config"]
-    cfg = fc.read_config(config_dir)  # 2026-11-13: default < every map < this map
-    if isinstance(cfg, str):
-        return {}, {}, keys_src, f"refused before any input: {cfg}"
-    vals, src = config_of(flow, cfg)
+    out, where = dict(vals), dict(src)
     if keys:
-        vals = fc.with_keys(vals, keys)
-        src = {**src, **{k: "flow" for k in fc.KEY_FIELDS}}
-    clash = fc.clash(vals)
-    return vals, src, keys_src, (f"refused before any input: {clash}" if clash else None)
+        out = fc.with_keys(out, keys)
+        where = {**where, **{k: "flow" for k in fc.KEY_FIELDS}}
+    clash = fc.clash(out)
+    return out, where, keys_src, (f"refused before any input: {clash}" if clash else None)
+
+
+def project_values(doc: Mapping[str, Any], node: str, keys: Mapping[str, str] | None,
+                   ) -> tuple[dict[str, Any], dict[str, str], str, str | None]:  # fmt: skip
+    """PURE (2026-11-14, live-blocks.md 12): the hunt core's values on ``node`` of a project (its
+    JSON as a dict): the node's setting blocks > Global's > the defaults
+    (poring_flow.settings.node_values), the flow's keys over them, the clash rule. A setting block
+    whose value cannot be used refuses (the backend's lint refused it first)."""
+    nv = fc.node_values(fc.doc_levels(doc, node))
+    if nv.problems:
+        keys_src = fc.KEYS_SRC["flow" if keys else "config"]
+        return {}, {}, keys_src, f"refused before any input: a setting block: {nv.problems[0]}"
+    return values_of(nv.vals, nv.src, keys)
 
 
 def check_command(flow: Flow, vals: Mapping[str, Any] | None = None) -> list[str]:
@@ -283,9 +218,12 @@ def check_command(flow: Flow, vals: Mapping[str, Any] | None = None) -> list[str
 
 
 def parse_request(text: str) -> dict[str, Any] | str:
-    """PURE: a valid request ({"id", "action", "flow"}, and "keys" when the flow's functions gave
-    them) or why it is not one. It names a flow and nothing else: every setting comes from the
-    config file (Batt 2026-11-13 ~14:4x), but the five hotbar keys a flow's functions may give."""
+    """PURE: a valid request or why it is not one. A START is a project run ({"id", "action":
+    "start", "flow": "project", "node", "project_hash", "max_s", "keys"?}: the checked project
+    file decides everything). A CHECK of "project" carries the five keys and the settings the
+    backend computed from the project's blocks ({"keys", "vals"}: 2026-11-14, live-blocks.md 12),
+    each checked here again; it runs the runner's read-only check (PROJECT_CHECK_FLOW). A STOP
+    names nothing else. The runner-only start (a flow of FLOWS) went with the runner page."""
     try:
         req = json.loads(text)
     except ValueError:
@@ -297,7 +235,14 @@ def parse_request(text: str) -> dict[str, Any] | str:
         return "bad request id"
     if action not in ("start", "stop", "check"):
         return f"unknown action {action!r}"
-    if action == "start" and flow == PROJECT:  # live-blocks.md stage 1: the live block player
+    if action == "stop":
+        if req.get("keys") is not None:
+            return "keys go with start or check, not stop"
+        return {"id": rid, "action": action, "flow": flow}
+    if flow != PROJECT:  # 2026-11-14: a start or a check is a project's (the runner page is gone)
+        return f"unknown flow {flow!r}: a start or a check is a project's (flow {PROJECT!r})"
+    keys = req.get("keys")
+    if action == "start":  # live-blocks.md stage 1: the live block player
         node, h, max_s = req.get("node"), req.get("project_hash"), req.get("max_s")
         if not isinstance(node, str) or not NODE_ID.fullmatch(node):
             return "a project run names its map node"
@@ -309,27 +254,28 @@ def parse_request(text: str) -> dict[str, Any] | str:
             return "a project run carries nothing else"
         out_p: dict[str, Any] = {"id": rid, "action": action, "flow": flow, "node": node,
                                  "project_hash": h, "max_s": max_s}  # fmt: skip
-        keys_p = req.get("keys")
-        if keys_p is not None:  # shown only: the player reads the keys from the project itself
-            why = fc.keys_problem(keys_p)
+        if keys is not None:  # shown only: the player reads the keys from the project itself
+            why = fc.keys_problem(keys)
             if why is not None:
                 return why
-            out_p["keys"] = {k: keys_p[k] for k in fc.KEY_FIELDS}
+            out_p["keys"] = {k: keys[k] for k in fc.KEY_FIELDS}
         return out_p
-    if action == "check" and flow == PROJECT:  # for now: the runner's check (PROJECT_CHECK_FLOW)
-        flow = PROJECT_CHECK_FLOW
-    if action in ("start", "check") and flow not in FLOWS:
-        return f"unknown flow {flow!r}"
-    out: dict[str, Any] = {"id": rid, "action": action, "flow": flow}
-    keys = req.get("keys")
-    if keys is not None:
-        if action == "stop":
-            return "keys go with start or check, not stop"
-        why = fc.keys_problem(keys)
-        if why is not None:
-            return why
-        out["keys"] = {k: keys[k] for k in fc.KEY_FIELDS}
-    return out
+    # a check of a project: the runner's read-only check with the project's keys and settings
+    if set(req) - {"id", "action", "flow", "node", "keys", "vals", "at"}:
+        return "a project check carries its node, keys and settings, nothing else"
+    node = req.get("node")
+    if not isinstance(node, str) or not NODE_ID.fullmatch(node):
+        return "a project check names its map node"
+    why = fc.keys_problem(keys)
+    if why is not None:
+        return why
+    vals = fc.check_level(req.get("vals"))
+    if isinstance(vals, str):
+        return f"the check's settings: {vals}"
+    if set(vals) != {f.name for f in fc.FIELDS if f.block}:
+        return "the check's settings must name every setting block (and no hotbar key)"
+    return {"id": rid, "action": action, "flow": flow, "node": node,
+            "keys": {k: keys[k] for k in fc.KEY_FIELDS}, "vals": vals}  # fmt: skip
 
 
 def parse_check_output(text: str) -> dict[str, Any]:
@@ -672,7 +618,7 @@ class Helper:
         self.live: Live | None = None  # the run's live summary (its session events)
         self.live_off = 0
         self.end_png: str | None = None  # the session's end picture (GET /flows/run/end.png)
-        self.config: dict[str, Any] | None = None  # the run's values (config_of)
+        self.config: dict[str, Any] | None = None  # the run's values (the project's settings)
         self.config_src: dict[str, str] | None = None  # each one's level
         self.keys_src: str | None = None  # the run's keys: the flow's functions, or the settings
         self.check: dict[str, Any] | None = None  # dungeon@9.45: the last check (status "check")
@@ -769,61 +715,10 @@ class Helper:
                 else "a run is already going: press Stop first"
             )
             self.note(event=f"{act}_refused", why="busy", request=req["id"])
-        elif req["action"] == "check":
-            self.check_start(FLOWS[req["flow"]], req["id"], req.get("keys"))
-        elif req["flow"] == PROJECT:
-            self.start_project(req)
+        elif req["action"] == "check":  # a project's: the runner's read-only check
+            self.check_start(FLOWS[PROJECT_CHECK_FLOW], req["id"], req["keys"], req["vals"])
         else:
-            self.start(FLOWS[req["flow"]], req["id"], req.get("keys"))
-
-    def values_for(self, flow: Flow, keys: Mapping[str, str] | None
-                   ) -> tuple[dict[str, Any], dict[str, str], str, str | None]:  # fmt: skip
-        """A start's (and a check's) values: run_values on the helper's config file."""
-        return run_values(flow, keys, CONFIG_DIR)
-
-    # -- a run --
-    def start(self, flow: Flow, rid: str, keys: Mapping[str, str] | None = None) -> None:
-        self.check_cancel("Run was pressed: the runner's own start checks decide")
-        ps = subprocess.run(["ps", "-eo", "args"], capture_output=True, text=True).stdout
-        why = writer_busy(ps.splitlines())
-        vals: dict[str, Any] = {}
-        src: dict[str, str] = {}
-        keys_src = fc.KEYS_SRC["flow" if keys else "config"]
-        if why is None:
-            vals, src, keys_src, why = self.values_for(flow, keys)
-        if why is not None:
-            self.state, self.detail, self.request_id = "refused", why, rid
-            self.note(event="start_refused", why=why, request=rid, keys_src=keys_src)
-            return
-        self.keys_src = keys_src
-        self.state, self.flow, self.request_id = "starting", flow.id, rid
-        self.started, self.ended, self.rc = ict(), None, None
-        self.label = "flowrun-" + time.strftime("%m%d%H%M")
-        self.run_dir = SCRATCH / self.label
-        self.run_dir.mkdir(parents=True, exist_ok=True)
-        self.cap_s = float(vals.get("minutes", flow.minutes)) * 60 + CAP_GRACE_S
-        self.config, self.config_src = vals, src
-        self.live, self.live_off, self.end_png = Live(), 0, None
-        self.note(event="start", flow=flow.id, label=self.label, request=rid, config=vals,
-                  config_src=src, keys={k: vals.get(k) for k in fc.KEY_FIELDS},
-                  keys_src=keys_src)  # fmt: skip
-        if not self.detect_up():
-            return
-        self.detail = "the runner starts (its own checks first: ASSIST, the interlock, her cell)"
-        env = {**os.environ, "PYTHONDONTWRITEBYTECODE": "1", "TMPDIR": str(SCRATCH)}
-        self.stop_file = self.run_dir / STOP_NAME
-        self.stop_file.unlink(missing_ok=True)
-        self.stop_t = None
-        with open(self.run_dir / "run.log", "wb") as fh:
-            argv = command(flow, self.label, self.stop_file, self.config)
-            self.runner = subprocess.Popen(argv, cwd=ROOT, env=env, stdout=fh,
-                                           stderr=subprocess.STDOUT, stdin=subprocess.DEVNULL,
-                                           start_new_session=True)  # fmt: skip
-        self.t_start = time.monotonic()
-        # matpilot 2026-11-13: "playing" only once the runner's own start checks passed (its
-        # session's run_start event); until then it may still refuse (the chat open, the stock)
-        self.state, self.detail = "starting", "the runner's own start checks"
-        self.write_status()
+            self.start_project(req)
 
     def detect_up(self) -> bool:
         """The vision worker and the detect server (its time box: the run's cap + 150 s), as the
@@ -900,10 +795,9 @@ class Helper:
         self.run_dir.mkdir(parents=True, exist_ok=True)
         self.cap_s = float(runtime_s) + CAP_GRACE_S
         keys = req.get("keys")
-        flow = FLOWS.get(PROJECT_CHECK_FLOW)
-        if keys and flow is not None and flow.map == self.project["map"]:  # shown in the status
-            vals, src, _ks, _why = self.values_for(flow, keys)
-            self.config, self.config_src = vals, src
+        if keys and has_hunt_core(doc):  # shown in the status: the hunt core's settings (blocks)
+            vals, src, _ks, _why = project_values(doc, node, keys)
+            self.config, self.config_src = (vals, src) if vals else (None, None)
         else:
             self.config, self.config_src = None, None
         self.live, self.live_off, self.end_png = Live(), 0, None
@@ -929,7 +823,10 @@ class Helper:
         self.write_status()
 
     # -- a check (dungeon@9.45): the runner's read-only `check`, the start's own argv --
-    def check_start(self, flow: Flow, rid: str, keys: Mapping[str, str] | None = None) -> None:
+    def check_start(self, flow: Flow, rid: str, keys: Mapping[str, str] | None = None,
+                    settings: Mapping[str, Any] | None = None) -> None:  # fmt: skip
+        """A project's check: the runner's read-only check with the keys and the settings the
+        backend computed from the project's blocks (2026-11-14; parse_request checked them)."""
         if self.check_proc is not None:
             self.detail = "a check is already reading the game screen"
             return
@@ -938,8 +835,9 @@ class Helper:
         vals: dict[str, Any] = {}
         keys_src = fc.KEYS_SRC["flow" if keys else "config"]
         if why is None:
-            vals, _src, keys_src, why = self.values_for(flow, keys)
-        self.check = {"state": "checking", "at": iso_now(), "flow": flow.id, "items": [],
+            base = {**flow.defaults, **(settings or {})}
+            vals, _src, keys_src, why = values_of(base, {}, keys)
+        self.check = {"state": "checking", "at": iso_now(), "flow": PROJECT, "items": [],
                       "ok": None, "refuses": False, "keys_src": keys_src,
                       "keys": {k: vals.get(k) for k in fc.KEY_FIELDS}, "used": {},
                       "request_id": rid, "detail": "reading the game screen"}  # fmt: skip

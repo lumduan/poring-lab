@@ -83,13 +83,13 @@ def hunt_params(d: dict[str, Any]) -> dict[str, Any]:
 
 
 def prep(tmp_path: Path, d: dict[str, Any]) -> fp.Prepared:
-    got = fp.prepare(json.dumps(d), "xmas_dun02", 3600, config_dir=tmp_path)
+    got = fp.prepare(json.dumps(d), "xmas_dun02", 3600)
     assert isinstance(got, fp.Prepared), got
     return got
 
 
 def refused(tmp_path: Path, d: dict[str, Any]) -> str:
-    got = fp.prepare(json.dumps(d), "xmas_dun02", 3600, config_dir=tmp_path)
+    got = fp.prepare(json.dumps(d), "xmas_dun02", 3600)
     assert isinstance(got, str) and "refused before any input" in got, got
     c = pj.compile_project(pj.from_json(json.dumps(d)))
     assert c.flow is not None and live.problems(c.flow)  # the backend's not_live: the same
@@ -234,8 +234,18 @@ def test_the_one_box_eats_both_candies_drinks_under_50_and_hands_the_eat_keys_ov
 
 
 def test_the_one_box_is_its_stage_4a_self_but_for_the_drink_and_the_eat(tmp_path: Path) -> None:
-    """The one box = the stage-4a box with Batt's two answers and nothing else."""
+    """The one box = the stage-4a box with Batt's two answers and nothing else -- and, since
+    2026-11-14 (live-blocks.md 12), its setting blocks, every one at its default (the runner then
+    gets exactly the settings it got before: test_settings_blocks)."""
     d, d4 = box(), box(B4)
+    import flow_config as fc
+
+    for t in d["nodes"][0]["tabs"]:  # the setting blocks out: each was at its default
+        for k, v in list(t["vars"].items()):
+            assert v["value"] == fc.BY_VAR[k].default, k
+            del t["vars"][k]
+    d["nodes"][0]["tabs"] = [t for t in d["nodes"][0]["tabs"] if t["name"] not in fc.TABS
+                             or t["defs"] or t["main"] is not None]  # fmt: skip
     for t in (*d["nodes"][0]["tabs"], *d4["nodes"][0]["tabs"]):
         for x in t["defs"]:
             if x["name"] == "drink":
@@ -454,7 +464,7 @@ def test_the_other_shapes_inside_the_hunt_core_are_refused(tmp_path: Path) -> No
     for i, (mutate, words) in enumerate(cases):
         d = copy.deepcopy(box())
         mutate(d)
-        got = fp.prepare(json.dumps(d), "xmas_dun02", 3600, config_dir=tmp_path)
+        got = fp.prepare(json.dumps(d), "xmas_dun02", 3600)
         assert isinstance(got, str) and "refused before any input" in got, (i, got)
         assert words in got, (i, got)
     assert not list(tmp_path.glob("*"))  # pure: no session, no input path

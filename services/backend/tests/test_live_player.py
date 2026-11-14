@@ -193,7 +193,7 @@ def ok_check(_p: Any, _io: Any) -> dict[str, Any]:
 
 
 def prep(tmp_path: Path, field_main: list[Any], **kw: Any) -> fp.Prepared:
-    got = fp.prepare(json.dumps(project(field_main, **kw)), "field", 3600, config_dir=tmp_path)
+    got = fp.prepare(json.dumps(project(field_main, **kw)), "field", 3600)
     assert isinstance(got, fp.Prepared), got
     return got
 
@@ -247,8 +247,7 @@ def test_the_live_set_is_one_place_and_the_catalogue_serves_it() -> None:
 def test_a_block_without_a_live_binding_refuses_before_any_input(tmp_path: Path) -> None:
     walk = action("walk_to", "nav.walk_to", {"cell": lit({"kind": "cell", "map": "xmas_dun02",
                                                           "x": 10, "y": 10})}, 120.0)  # fmt: skip
-    got = fp.prepare(json.dumps(project([press("F2"), walk, wing_exit()])), "field", 3600,
-                     config_dir=tmp_path)  # fmt: skip
+    got = fp.prepare(json.dumps(project([press("F2"), walk, wing_exit()])), "field", 3600)
     assert isinstance(got, str) and "refused before any input" in got
     assert "walk_to cannot play live yet (stage 4) at field/main/main.1" in got
     # the ready-made sample: every block it cannot play is named, with its node path
@@ -270,14 +269,12 @@ def test_a_node_that_is_no_map_node_or_a_time_box_above_the_maximum_refuses(
     tmp_path: Path,
 ) -> None:
     text = json.dumps(project([press("F2")]))
-    assert "no map node" in str(fp.prepare(text, "login", 3600, config_dir=tmp_path))
-    assert "above the configured maximum 300" in str(fp.prepare(text, "field", 300,
-                                                                config_dir=tmp_path))  # fmt: skip
-    assert "no configured maximum" in str(fp.prepare(text, "field", None, config_dir=tmp_path))
-    h = fp.prepare(text, "field", 3600, config_dir=tmp_path)
+    assert "no map node" in str(fp.prepare(text, "login", 3600))
+    assert "above the configured maximum 300" in str(fp.prepare(text, "field", 300))
+    assert "no configured maximum" in str(fp.prepare(text, "field", None))
+    h = fp.prepare(text, "field", 3600)
     assert isinstance(h, fp.Prepared)
-    assert "not the checked" in str(fp.prepare(text, "field", 3600, config_dir=tmp_path,
-                                               want_hash="0" * 64))  # fmt: skip
+    assert "not the checked" in str(fp.prepare(text, "field", 3600, want_hash="0" * 64))
 
 
 # --- it plays exactly the input expected ---------------------------------------------------------
@@ -351,7 +348,7 @@ def test_stop_ends_the_running_block_releases_and_ends(tmp_path: Path) -> None:
 
 def test_the_time_box_is_the_projects_capped_by_the_settings_maximum(tmp_path: Path) -> None:
     text = json.dumps(project([forever([wait(1.0)])]))
-    p = fp.prepare(text, "field", 3600, config_dir=tmp_path)
+    p = fp.prepare(text, "field", 3600)
     assert isinstance(p, fp.Prepared) and p.cap_s == 600.0  # the project's max_runtime_s
     io_ = FakeIO()
     demo = tmp_path / "demo"
@@ -653,9 +650,26 @@ def test_a_project_request_names_its_node_and_hash_and_nothing_else() -> None:
     keys = {"heal_key": "F1", "fly_key": "F8", "home_key": "F9", "knife_key": "F4",
             "dagger_key": "F5"}  # fmt: skip
     assert fr.parse_request(json.dumps({**base, "keys": keys}))["keys"] == keys  # type: ignore[index]
-    # a check of "project" is the runner's check (for now)
-    ck = fr.parse_request(json.dumps({"id": "a1b2c3d4e5", "action": "check", "flow": "project"}))
-    assert isinstance(ck, dict) and ck["flow"] == fr.PROJECT_CHECK_FLOW
+    # 2026-11-14 (live-blocks.md 12): a check of "project" carries its node, the keys and EVERY
+    # setting block's value (the backend computed them from the project); checked here again
+    vals = {f.name: f.default for f in fc.FIELDS if f.block}
+    chk = {"id": "a1b2c3d4e5", "action": "check", "flow": "project", "node": "xmas_dun02",
+           "keys": keys, "vals": vals}  # fmt: skip
+    ck = fr.parse_request(json.dumps(chk))
+    assert isinstance(ck, dict) and ck["flow"] == fr.PROJECT and ck["vals"] == vals
+    for bad, words in (({**chk, "vals": {**vals, "knife_hp_min": 5.0}}, "is not from"),
+                       ({**chk, "vals": {**vals, "heal_key": "F1"}}, "every setting block"),
+                       ({**chk, "vals": {k: v for k, v in vals.items() if k != "minutes"}},
+                        "every setting block"),
+                       ({**chk, "keys": None}, "keys must be"),
+                       ({**chk, "argv": ["--clear-map"]}, "nothing else"),
+                       ({**chk, "flow": "xmas_dun02_rogue"}, "unknown flow")):  # fmt: skip
+        got = fr.parse_request(json.dumps(bad))
+        assert isinstance(got, str) and words in got, (got, words)
+    # the runner-only start went with the runner page
+    old = fr.parse_request(json.dumps({"id": "a1b2c3d4e5", "action": "start",
+                                       "flow": "xmas_dun02_rogue"}))  # fmt: skip
+    assert isinstance(old, str) and "unknown flow" in old
     player = "/home/bot/docker/poring-lab/.venv/bin/python scripts/flow_play.py play --project x"
     assert "live block player" in str(fr.busy_reason([player]))
 

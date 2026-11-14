@@ -1259,6 +1259,11 @@ def _project_rules(
             add("empty_main", "error", Where(n.id, MAIN), f"the main of {n.id} is empty: it "
                 "needs at least one block (every path ends in take_exit or stop)")  # fmt: skip
     _session_rules(p, add, envs)
+    # the setting blocks (live-blocks.md 12): their values, typos, the clash rule, what is not used
+    from poring_flow.lint import settings as setting_rules
+
+    for rule, sev, where, text, layer in setting_rules.findings(p, c):
+        add(rule, sev, where, text, layer)
     for node, key in sorted(c.dispatched):
         g = gdefs.get(key)
         add("dispatch", "info", Where(node), f"Global's event {key} runs on {node} with {node}'s "

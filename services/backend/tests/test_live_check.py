@@ -351,9 +351,9 @@ def test_the_split_stock_rules_are_the_old_one() -> None:
 
 
 def test_the_check_ids_are_the_pages_checklist_ids() -> None:
-    """/flows' checklist (lib/flow/config.ts startChecklist) has a line for each id the check
-    ticks, with the same id."""
-    ts = (ROOT / "services/frontend/src/lib/flow/config.ts").read_text()
+    """/flows' checklist (lib/flow/settings.ts startChecklist; lib/flow/config.ts until
+    2026-11-14, live-blocks.md 12) has a line for each id the check ticks, with the same id."""
+    ts = (ROOT / "services/frontend/src/lib/flow/settings.ts").read_text()
     body = ts[ts.index("export const CHECKLIST_IDS") : ts.index("];", ts.index("CHECKLIST_IDS"))]
     assert re.findall(r'"([a-z_]+)"', body) == list(dh.CHECK_IDS)
     assert dh.CHECK_MARK == fr.CHECK_MARK

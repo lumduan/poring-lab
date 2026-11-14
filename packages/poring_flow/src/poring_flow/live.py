@@ -733,7 +733,9 @@ def _role_calls(
 # box's events and functions decide what they play (hunt_plan's `plays`), and the runner's own
 # handler for it is off; its setting then applies to the runner alone (the old Run path, and a box
 # without that event). The settings are scripts/flow_config.py FIELDS' names (drift-tested in
-# services/backend/tests/test_live_player.py).
+# services/backend/tests/test_live_player.py). ➡️ 2026-11-14 (live-blocks.md 12): those settings
+# are SETTING BLOCKS of the project now (poring_flow.settings); the lint says on each one the box
+# replaces that it is not used in a Run of this box (lint/settings.py, settings_use).
 PLAY_SETTINGS: dict[str, tuple[str, ...]] = {
     "potion": ("potion_below",),
     "fly_hp": ("fly_below",),
