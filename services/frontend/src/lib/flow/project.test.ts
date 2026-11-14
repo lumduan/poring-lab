@@ -13,6 +13,7 @@ import {
   clickAt,
   def,
   globalOf,
+  hotbarCount,
   isMapStart,
   keyOfCall,
   mapNodes,
@@ -23,6 +24,7 @@ import {
   overriddenBy,
   overridesOn,
   pressKey,
+  pressKeyOf,
   type Project,
   resolve,
   roleKeyOf,
@@ -81,8 +83,15 @@ test("the ONE BOX (Batt 2026-11-13: START > map xmas_dun02): one map node, its m
   assert.deepEqual(n.tabs[0].main?.map((s) => (s.kind === "action" ? s.block : s.kind)), ["assert_save_point", "use_model", "dungeon_hunt", "stop"]);
   // stage 2 (live-blocks.md 3.2): the survival tab is two EVENTS, each calling its key's function
   const ev = tabToWorkspace(x, { node: "xmas_dun02", tab: "survival" }).blocks.blocks;
-  assert.deepEqual(ev.map((b) => [b.type, b.fields?.NAME, b.fields?.MODE, b.fields?.PRIORITY]), [["pl_event", "drink", "insert", "survival"], ["pl_event", "fly_away", "preempt", "critical"], ["pl_event", "bag_full", "preempt", "upkeep"]]);
-  assert.deepEqual(n.tabs[2].defs.map((d) => [d.name, d.on?.cooldown_s, d.body]), [["drink", 0.7, [call("heal")]], ["fly_away", 3, [call("fly_wing")]], ["bag_full", 0, [{ kind: "stop", reason: "home" }]]]);
+  assert.deepEqual(ev.map((b) => [b.type, b.fields?.NAME, b.fields?.MODE, b.fields?.PRIORITY]), [["pl_event", "drink", "insert", "survival"], ["pl_event", "fly_away", "preempt", "critical"], ["pl_event", "bag_full", "preempt", "upkeep"], ["pl_event", "eat_cane", "insert", "upkeep"], ["pl_event", "eat_candy", "insert", "upkeep"]]);
+  assert.deepEqual(n.tabs[2].defs.map((d) => [d.name, d.on?.cooldown_s, d.body]), [["drink", 0.7, [call("heal")]], ["fly_away", 3, [call("fly_wing")]], ["bag_full", 0, [{ kind: "stop", reason: "home" }]], ["eat_cane", 1.5, [call("candy_cane")]], ["eat_candy", 1.5, [call("candy")]]]);
+  // Batt 2026-11-14 (live-blocks.md 10): the drink under 50 % (it was 30 %), and each candy eaten the
+  // moment its slot shows one (hotbar_count), until the slot reads empty, at any HP
+  assert.deepEqual(n.tabs[2].defs[0].on?.when, { kind: "cmp", op: "<", left: { kind: "sense", sensor: "hp_percent", args: {} }, right: { kind: "lit", value: 50 } });
+  assert.deepEqual(n.tabs[2].defs[3].on?.when, { kind: "cmp", op: ">", left: hotbarCount("F6"), right: { kind: "lit", value: 0 } });
+  assert.deepEqual([n.tabs[2].defs[3].on?.max_fires_per_10min, n.tabs[2].defs[3].on?.rank, n.tabs[2].defs[4].on?.rank], [30, 51, 52]);
+  // the keys tab: eat(key) presses its input; the two items' functions give it the lab Rogue's slots
+  assert.deepEqual(n.tabs[1].defs.slice(5).map((d) => [d.name, d.params.map((q) => q.name), d.body]), [["eat", ["key"], [pressKeyOf("key")]], ["candy_cane", [], [call("eat", [{ kind: "lit", value: "F6" }])]], ["candy", [], [call("eat", [{ kind: "lit", value: "F7" }])]]]);
   // stage 3 (live-blocks.md 3.3): the weight home fires once a run; the knife swap's two functions
   // call the keys' functions; the way home and the death dialog's two clicks
   assert.equal(n.tabs[2].defs[2].on?.max_per_run, 1);
@@ -94,7 +103,7 @@ test("the ONE BOX (Batt 2026-11-13: START > map xmas_dun02): one map node, its m
   assert.deepEqual([use?.type, use?.fields?.BLOCK, use?.fields?.ARGS], ["pl_action", "use_model", 'model="xmas02"']);
   const hunt = use?.next?.block;
   assert.equal(hunt?.type, "pl_dungeon_hunt");
-  assert.deepEqual(hunt?.fields, { HEAL: "heal", FLY: "fly_wing", KNIFE_ON: "knife_on", KNIFE_BACK: "knife_back", HOME: "fly_home", RESPAWN: "respawn_button", RESPAWN_OK: "respawn_ok" });
+  assert.deepEqual(hunt?.fields, { HEAL: "heal", FLY: "fly_wing", KNIFE_ON: "knife_on", KNIFE_BACK: "knife_back", HOME: "fly_home", RESPAWN: "respawn_button", RESPAWN_OK: "respawn_ok", EAT: "eat" });
   // the start is the map: no login, no character, its first entry
   const sp = sessionPath(x);
   assert.deepEqual([sp.login, sp.character, sp.map?.id, sp.entry, sp.problems], [null, null, "xmas_dun02", "here", []]);
@@ -306,6 +315,8 @@ test("an event block shows every trigger field the Python writes, and edits roun
     ["drink", 0.7, "", "", "", "", ""],
     ["fly_away", 3, "", "", "", "", ""],
     ["bag_full", 0, "1", "", "", "", ""],
+    ["eat_cane", 1.5, "", "", "30", "", ""],
+    ["eat_candy", 1.5, "", "", "30", "", ""],
   ]);
   // matpilot round 18 #3: 10 and 3 are the engine's defaults (the Python view omits them): the
   // block leaves their fields empty and its rows name the defaults, so the block and the Python agree

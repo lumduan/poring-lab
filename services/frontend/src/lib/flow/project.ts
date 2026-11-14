@@ -154,6 +154,10 @@ export const HOME_ROLE = "home";
  * respawn roles (functions of click_at: the death exit's two presses). */
 export const BODY_ROLES: readonly string[] = ["knife_on", "knife_back", HOME_ROLE];
 export const RESPAWN_ROLES: readonly string[] = ["respawn", "respawn_confirm"];
+/** 2026-11-14 (live-blocks.md 10, Batt: "the moment we get a Candy Cane or a Candy, eat it"): the
+ * runner block's OPTIONAL eat role -- the function the box's events call, inside the hunt core, to eat
+ * a food item from the hotbar (one press_key of its input, the item's key). Not a Run key. */
+export const EAT_ROLE = "eat";
 const MAX_DEPTH = 6;
 
 /** Every statement of a body, nested ones too. */
@@ -307,6 +311,8 @@ export function runnerKeysOn(p: Project, nodeId: string): KeysResult {
 // --- building blocks ------------------------------------------------------------------------------
 const rest = { on_fail: "stop" as const, outcome_to: null, note: null };
 export const pressKey = (key: string): ActionStmt => ({ kind: "action", block: "press_key", concept: "ui.press_hotkey", params: { key: { kind: "lit", value: key } }, timeout_s: 2, ...rest });
+/** press_key(key) of a function's INPUT (the project model: every call gives it a literal key). */
+export const pressKeyOf = (input: string): ActionStmt => ({ kind: "action", block: "press_key", concept: "ui.press_hotkey", params: { key: { kind: "var", name: input } }, timeout_s: 2, ...rest });
 export const call = (proc: string, args: Expr[] = [], kwargs: Record<string, Expr> = {}): Stmt => ({ kind: "call", proc, args, kwargs });
 export const def = (name: string, body: Stmt[], extra: Partial<Def> = {}): Def => ({ name, params: [], varargs: null, kwargs: null, body, on: null, ...extra });
 export const mainTab = (main: Stmt[], defs: Def[] = []): Tab => ({ name: MAIN_TAB, main, defs, vars: {} });
@@ -342,6 +348,11 @@ const sense = (sensor: string): Expr => ({ kind: "sense", sensor, args: {} });
 /** click_at(x, y): one click at a point of the game picture (stage 3; live only in the death exit). */
 export const clickAt = (x: number, y: number, note: string | null = null): ActionStmt => ({ kind: "action", block: "click_at", concept: "ui.press_button", params: { x: lit(x), y: lit(y) }, timeout_s: 2, ...rest, note });
 const below = (sensor: string, v: number): Expr => ({ kind: "cmp", op: "<", left: sense(sensor), right: lit(v) });
+/** hotbar_count(key): the count drawn on a row-1 hotbar slot (2026-11-14; live inside a hunt core). */
+export const hotbarCount = (key: string): Expr => ({ kind: "sense", sensor: "hotbar_count", args: { key: lit(key) } });
+/** The one box's eat event for an item: eaten the moment its slot shows one, until it reads empty. */
+const eatEvent = (name: string, fn: string, key: string, rank: number): Def =>
+  def(name, [call(fn)], { on: trigger({ kind: "cmp", op: ">", left: hotbarCount(key), right: lit(0) }, { until: { kind: "cmp", op: "==", left: hotbarCount(key), right: lit(0) }, priority: "upkeep", rank, cooldown_s: 1.5, max_fires_per_10min: 30 }) });
 /** An event's trigger with the engine's defaults (a repeating event: `until`; a one-shot: `rearm`,
  * or its condition going false; both paced by `cooldown_s`). */
 export const trigger = (when: Expr, extra: Partial<Trigger> = {}): Trigger => ({
@@ -397,7 +408,8 @@ export const XMAS02_STRIKES = ["mystcase", "cruiser", "cookie", "cookie_xmas"] a
  * itself flies home on the Butterfly Wing (the bag half full, or Stop: its settings). Its tab keys:
  * every key a function. Its tab survival (stage 2, Batt 2026-11-13: "Heal: press F1 when HP < 30 %.
  * Fly Wing: press F8 when a boss is seen or HP < 25 %"; live-blocks.md 3.2): two EVENTS that play
- * inside the hunt core on every runner tick -- drink (repeating while HP is under 30 %, a potion
+ * inside the hunt core on every runner tick -- drink (repeating while HP is under 30 % -- ➡️ 50 % since
+ * 2026-11-14, below --, a potion
  * every 0.7 s at most, as the runner paces its own) and fly_away (once per sighting or per fall
  * under 25 %, re-armed 3 s after its Fly Wing, the runner's own Fly Wing pace). Stage 3
  * (live-blocks.md 3.3, Batt 2026-11-13: "The Knife swap (Damascus): a function: press F4, wait
@@ -409,13 +421,19 @@ export const XMAS02_STRIKES = ["mystcase", "cruiser", "cookie", "cookie_xmas"] a
  * (live-blocks.md 3.4, Batt 2026-11-13: "break the core into functions, e.g. attack_myst_case,
  * attack_cookie; on some we may not swap the knife at all"): use_model("xmas02") in the main (the
  * trained data) and the tab monsters, one recipe per monster the runner strikes, each TODAY's
- * technique (the Knife swap on every one, priority 1: the values as they are). */
+ * technique (the Knife swap on every one, priority 1: the values as they are). Batt 2026-11-14 ~14:0x
+ * (live-blocks.md 10: "Raise the drink. And the moment we get a Candy Cane or a Candy, eat it to add
+ * HP right away; that also cuts the weight"): drink under 50 % (until 51 %), the Knife's own HP floor,
+ * so the 30-50 % band where she neither drank nor swapped is closed; the keys tab's eat(key) is the
+ * runner block's eat role, candy_cane / candy name the lab Rogue's slots (F6, F7: defaults only), and
+ * the survival tab eats each the moment its slot shows one (eat_cane / eat_candy, at any HP). The box as
+ * stage 4a left it is fixtures/project_xmas_dun02_stage4.json (stage4_ab.py's B4). */
 export function xmasProject(): Project {
   return {
     format: PROJECT_FORMAT,
     version: PROJECT_VERSION,
     name: "xmas_dun02",
-    description: "One box: a person puts the Rogue on xmas_dun02; the runner hunts. Tabs: keys; survival (drink, fly_away, bag_full at 50 %); knife (the swap); exits (home, respawn); monsters (a recipe per monster).",
+    description: "One box: a person puts the Rogue on xmas_dun02; the runner hunts. Tabs: keys; survival (drink under 50 %, fly_away, bag_full at 50 %, the candies eaten at once); knife; exits; monsters.",
     target: { ...TARGET },
     max_runtime_s: 7200,
     where_budget: WHERE_BUDGET_DEFAULT,
@@ -437,14 +455,21 @@ export function xmasProject(): Project {
           mainTab([
             { kind: "action", block: "assert_save_point", concept: "core.assert_save_point", timeout_s: 1, on_fail: "stop", outcome_to: null, note: SAVE_NOTE, params: { cell: lit({ ...GEFFEN_SAVE }) } },
             modelBlock("xmas02", "the trained data: xmas_dun02's detector (its monsters are the recipes' names)"),
-            { kind: "action", block: "dungeon_hunt", concept: "combat.hunt", timeout_s: 600, ...rest, params: { heal: lit("heal"), fly: lit("fly_wing"), knife_on: lit("knife_on"), knife_back: lit("knife_back"), home: lit("fly_home"), respawn: lit("respawn_button"), respawn_confirm: lit("respawn_ok") } },
+            { kind: "action", block: "dungeon_hunt", concept: "combat.hunt", timeout_s: 600, ...rest, params: { heal: lit("heal"), fly: lit("fly_wing"), knife_on: lit("knife_on"), knife_back: lit("knife_back"), home: lit("fly_home"), respawn: lit("respawn_button"), respawn_confirm: lit("respawn_ok"), eat: lit("eat") } },
             { kind: "stop", reason: "home" },
           ]),
-          tab("keys", [def("heal", [pressKey("F1")]), def("fly_wing", [pressKey("F8")]), def("butterfly_wing", [pressKey("F9")]), def("wield_knife", [pressKey("F4")]), def("wield_damascus", [pressKey("F5")])]),
+          tab("keys", [
+            def("heal", [pressKey("F1")]), def("fly_wing", [pressKey("F8")]), def("butterfly_wing", [pressKey("F9")]), def("wield_knife", [pressKey("F4")]), def("wield_damascus", [pressKey("F5")]),
+            def(EAT_ROLE, [pressKeyOf("key")], { params: [{ name: "key", default: null }] }),
+            def("candy_cane", [call(EAT_ROLE, [lit("F6")])]), // the Candy Cane (item 530): the lab Rogue's F6
+            def("candy", [call(EAT_ROLE, [lit("F7")])]), // the Candy (item 529): her F7
+          ]),
           tab("survival", [
-            def("drink", [call("heal")], { on: trigger(below("hp_percent", 30), { until: { kind: "cmp", op: ">=", left: sense("hp_percent"), right: lit(31) }, cooldown_s: 0.7 }) }),
+            def("drink", [call("heal")], { on: trigger(below("hp_percent", 50), { until: { kind: "cmp", op: ">=", left: sense("hp_percent"), right: lit(51) }, cooldown_s: 0.7 }) }),
             def("fly_away", [call("fly_wing")], { on: trigger({ kind: "or", terms: [sense("sees_boss"), below("hp_percent", 25)] }, { cooldown_s: 3, priority: "critical", mode: "preempt" }) }),
             def("bag_full", [{ kind: "stop", reason: "home" }], { on: trigger({ kind: "cmp", op: ">=", left: sense("weight_percent"), right: lit(50) }, { priority: "upkeep", mode: "preempt", max_per_run: 1 }) }),
+            eatEvent("eat_cane", "candy_cane", "F6", 51),
+            eatEvent("eat_candy", "candy", "F7", 52),
           ]),
           tab("knife", [def("knife_on", [call("wield_knife")]), def("knife_back", [call("wield_damascus")])]),
           tab("exits", [

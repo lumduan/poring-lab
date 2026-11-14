@@ -13,7 +13,7 @@
 // only as the item warp by a function (stage 1: "the item warp by a function, its arrival read on
 // the minimap"); a walk exit, an NPC warp and an item warp by an item are not live yet. Pure, tested.
 import type { Exit, Expr, Stmt } from "./ir.ts";
-import { HOME_ROLE, globalOf, mainOf, namesOf, nodeById, type PNode, type Project, RECIPE_PREFIX, RESPAWN_ROLES, resolve, RUNNER_ROLE_KEYS } from "./project.ts";
+import { EAT_ROLE, HOME_ROLE, globalOf, mainOf, namesOf, nodeById, type PNode, type Project, RECIPE_PREFIX, RESPAWN_ROLES, resolve, RUNNER_ROLE_KEYS } from "./project.ts";
 
 /** GET /flows/catalogue's `blocks`, as far as this reads it. */
 export type LiveCatalogue = Record<string, { spec?: { live?: boolean } } | undefined>;
@@ -27,8 +27,9 @@ export type Reach = {
   nodes: string[];
 };
 
-// stage 3 (live-blocks.md 3.3): the respawn roles' functions play too (their click_at, live there)
-const ROLE_PARAMS: readonly string[] = [...RUNNER_ROLE_KEYS.map((r) => r.param), HOME_ROLE, ...RESPAWN_ROLES];
+// stage 3 (live-blocks.md 3.3): the respawn roles' functions play too (their click_at, live there);
+// 2026-11-14 (live-blocks.md 10): the eat role's function (the box's events call it in the hunt core)
+const ROLE_PARAMS: readonly string[] = [...RUNNER_ROLE_KEYS.map((r) => r.param), HOME_ROLE, ...RESPAWN_ROLES, EAT_ROLE];
 
 /** The exit's name when the player cannot play it yet, else null (an item warp by a function). */
 export function exitNotLive(x: Exit): string | null {

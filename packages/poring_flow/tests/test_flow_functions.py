@@ -349,7 +349,8 @@ def test_the_runner_maps_and_roles_are_flow_runs() -> None:
     assert [(p["name"], p["type"], p["required"]) for p in params] == [
         ("heal", "proc", True), ("fly", "proc", True), ("knife_on", "proc", True),
         ("knife_back", "proc", True), ("home", "proc", False),
-        ("respawn", "proc", False), ("respawn_confirm", "proc", False)]  # fmt: skip  # stage 3
+        ("respawn", "proc", False), ("respawn_confirm", "proc", False),
+        ("eat", "proc", False)]  # fmt: skip  # stage 3; 2026-11-14: eat (live-blocks.md 10)
     # the fifth role (the one box): its default is the runner's home key
     assert functions.ALL_ROLES["home"] == "home_key" and defaults["home_key"] == "F9"
     spec = doc["blocks"]["dungeon_hunt"]["spec"]

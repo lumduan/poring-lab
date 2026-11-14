@@ -796,7 +796,8 @@ def test_the_cli_and_the_old_run_path_are_unchanged() -> None:
     assert sig.parameters["box_plays"].default == () and sig.parameters["box_roles"].default is None
     assert "return run(a)" in inspect.getsource(dh.main)  # no hook, no box
     assert dh.VERSION == "dungeon@8.7" and dh.BOX_FUNCTIONS_VERSION == "9.50"
-    assert dh.BOX_RECIPES_VERSION == live.VERSION == "9.51"  # stage 4a (test_box_recipes.py)
+    assert dh.BOX_RECIPES_VERSION == "9.51"  # stage 4a (test_box_recipes.py)
+    assert dh.BOX_EAT_VERSION == live.VERSION == "9.52"  # 2026-11-14 (test_box_eat.py)
     assert dh.BOX_PLAYS == live.PLAYS and set(STAGE3_PLAYS) < set(dh.BOX_PLAYS)
     # opener_seq's default reads exactly as before; "armed" only with the box's other answer
     assert inspect.signature(dh.opener_seq).parameters["ends"].default == "opener"

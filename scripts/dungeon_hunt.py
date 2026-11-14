@@ -5841,8 +5841,19 @@ BOX_FUNCTIONS_VERSION = "9.50"
 # species, or an unknown species: exactly as before. A recipe's priority weighs its species'
 # --value-target value (1, or none written: the values as they are). Neither: exactly as 9.50.
 BOX_RECIPES_VERSION = "9.51"
+# --- dungeon@9.52 (Batt 2026-11-14 ~14:0x: "the moment we get a Candy Cane or a Candy, eat it to
+# add HP right away; that also cuts the weight"; docs/planning/live-blocks.md section 10): the BOX
+# EATS from the hotbar. ``box_eat`` (run()): the row-1 keys the box's events eat through its eat
+# function (poring_flow.live.hunt_plan, decided before any input; the live player reads each slot's
+# count from the tick's frame, HuntTick.frame). BOX_PLAYS "eat": box_press presses an eat key
+# through the runner's OWN press path (agent_raw.keys: the mux; its count box_eat, a press record
+# with the key and the why) and still refuses every other key. The eat keys are not the run's keys:
+# the start's slot check and the stock never read them, and the stock-out end never counts them;
+# box_plays_refused refuses one that is another key of the run, and --heal-candy beside it (one
+# candy eater). The runner's own --heal-candy (HEAL_CANDY_KEYS) is untouched. None: exactly as 9.51.
+BOX_EAT_VERSION = "9.52"
 BOX_PLAYS = ("potion", "fly_hp", "boss_fly", "knife", "respawn", "weight_home", "home_end",
-             "model", "recipes")  # fmt: skip
+             "model", "recipes", "eat")  # fmt: skip
 # == poring_flow.recipes.SHAPES (test_box_recipes.py): the two orders the runner plays
 RECIPE_SHAPES = (("knife_on", "strike", "wait_steal", "knife_back", "wait_kill", "loot"),
                  ("strike", "wait_kill", "loot"))  # fmt: skip
@@ -5919,12 +5930,16 @@ def box_plays_refused(plays: Sequence[str], hook: Any, *, heal_candy: bool, boss
                       respawn: bool = True, home_key: str | None = "F9",
                       model: Mapping[str, Any] | None = None,
                       recipes: Mapping[str, Mapping[str, Any]] | None = None,
-                      value_target: bool = True) -> str | None:  # fmt: skip
-    """PURE (dungeon@9.49; 9.50: the box's functions; 9.51: its model and recipes): why the box
-    cannot play these handlers in this run (None: it can). ``roles``: the roles its functions play
-    (box_roles), with where knife_on's body leaves her; ``model`` / ``recipes``: box_model /
-    box_recipes; ``player`` / ``knife_swap`` (--bare-steal + --steal-opener) / ``bare_ready`` /
-    ``respawn`` / ``home_key`` / ``value_target``: this run's. Every refusal is before any input."""
+                      value_target: bool = True, eat: Sequence[str] = (),
+                      keys: Mapping[str, str] | None = None,
+                      opener: str | None = None) -> str | None:  # fmt: skip
+    """PURE (dungeon@9.49; 9.50: the box's functions; 9.51: its model and recipes; 9.52: the keys
+    it eats): why the box cannot play these handlers in this run (None: it can). ``roles``: the
+    roles its functions play (box_roles), with where knife_on's body leaves her; ``model`` /
+    ``recipes``: box_model / box_recipes; ``eat``: box_eat; ``player`` / ``knife_swap``
+    (--bare-steal + --steal-opener) / ``bare_ready`` / ``respawn`` / ``home_key`` /
+    ``value_target`` / ``keys`` (the run's whole key map) / ``opener`` (--steal-opener): this
+    run's. Every refusal is before any input."""
     roles = dict(roles or {})
     bad = sorted(set(plays) - set(BOX_PLAYS))
     if bad:
@@ -5933,6 +5948,9 @@ def box_plays_refused(plays: Sequence[str], hook: Any, *, heal_candy: bool, boss
                              value_target=value_target)  # fmt: skip
     if why_rc:
         return why_rc
+    why_eat = eat_refused(plays, eat, keys or {}, opener, heal_candy=heal_candy)
+    if why_eat:
+        return why_eat
     known = {r for rs in BOX_CALL_ROLES.values() for r in rs} | set(BOX_OPTIONAL_ROLES)
     stray = sorted(set(roles) - known)
     if stray:
@@ -5979,6 +5997,33 @@ def box_plays_refused(plays: Sequence[str], hook: Any, *, heal_candy: bool, boss
             "the box plays the boss fly on sees_boss(), but this run reads no boss (no "
             "--engage-screen, or no boss on the map): the event would never see one"
         )
+    return None
+
+
+def eat_refused(plays: Sequence[str], eat: Sequence[str], keys: Mapping[str, str],
+                opener: str | None, *, heal_candy: bool) -> str | None:  # fmt: skip
+    """PURE (dungeon@9.52): why the box cannot eat these keys in this run (None: it can, or it eats
+    none) -- each a row-1 hotbar key, none of them another key of the run (``keys``: its whole key
+    map, the heal, Fly Wing, dagger and Butterfly Wing keys among them; ``opener``: the Knife's),
+    and never beside --heal-candy (the runner's own candies: one candy eater). Before any input."""
+    eat = list(eat)
+    if ("eat" in plays) != bool(eat):
+        return "box_plays 'eat' goes with box_eat (the keys the box eats), and only with them"
+    if not eat:
+        return None
+    for k in eat:
+        try:
+            hotbar_slot(k)
+        except ValueError:
+            return f"the box eats {k!r}: not a row-1 hotbar key (F1-F9)"
+    if len(set(eat)) != len(eat):
+        return f"box_eat {eat}: each key once"
+    if heal_candy:
+        return ("the box eats from the hotbar, but --heal-candy eats the runner's own candies: "
+                "one candy eater (the box's or the runner's)")  # fmt: skip
+    why = keys_clash({**keys, **{f"the box's eat ({k})": k for k in eat}}, opener)
+    if why:
+        return f"the box's eat keys: {why}"
     return None
 
 
@@ -6126,6 +6171,7 @@ def run(a: argparse.Namespace, *, hook: Any = None, session: tuple[Any, Any] | N
         box_plays: Sequence[str] = (), box_roles: Mapping[str, str] | None = None,
         box_model: Mapping[str, Any] | None = None,
         box_recipes: Mapping[str, Mapping[str, Any]] | None = None,
+        box_eat: Sequence[str] = (),
         ) -> int:  # noqa: PLR0915, C901  # fmt: skip
     """The runner. ``hook`` / ``session`` (dungeon@9.48, the live block player only): an object
     whose ``tick(HuntTick)`` is called once per tick of the loop (a str back ends the run there)
@@ -6137,8 +6183,9 @@ def run(a: argparse.Namespace, *, hook: Any = None, session: tuple[Any, Any] | N
     ``call`` plays at the runner's own moments, each with where its body leaves her. ``box_model``
     / ``box_recipes`` (dungeon@9.51, the box's use_model and its monsters' recipes;
     BOX_RECIPES_VERSION's comment): the model its box detector must be, and the recipe per
-    species the hook's ``recipe`` answers at each lock. All None / empty: the CLI's run,
-    unchanged."""
+    species the hook's ``recipe`` answers at each lock. ``box_eat`` (dungeon@9.52,
+    BOX_EAT_VERSION's comment): the hotbar keys the box's events eat. All None / empty: the CLI's
+    run, unchanged."""
     import bench
     import crusader as cr
     import cursor_sword as csw
@@ -6320,6 +6367,7 @@ def run(a: argparse.Namespace, *, hook: Any = None, session: tuple[Any, Any] | N
     box_model_ = dict(box_model) if box_model is not None else None  # dungeon@9.51: use_model
     box_recipes_ = {str(k): dict(v) for k, v in (box_recipes or {}).items()}  # its recipes
     box_recipe_on = "recipes" in box_set
+    box_eat_ = [str(k) for k in box_eat]  # dungeon@9.52: the hotbar keys the box eats
     stock_items = {**STOCK_ITEMS, **(HEAL_CANDY_ITEMS if heal_candy else {})}  # 9.31
     why_hk = player_home_refused(a, conf, keys_, opener_key)  # dungeon@9.35b: before any input
     if why_hk:
@@ -6353,9 +6401,13 @@ def run(a: argparse.Namespace, *, hook: Any = None, session: tuple[Any, Any] | N
         model=box_model_,
         recipes=box_recipes_,
         value_target=vt_values is not None,
+        eat=box_eat_,
+        keys=keys_,
+        opener=opener_key,
     )
     if why_bx:
-        version = (BOX_RECIPES_VERSION if box_model_ is not None or box_recipes_
+        version = (BOX_EAT_VERSION if box_eat_ or "eat" in box_set
+                   else BOX_RECIPES_VERSION if box_model_ is not None or box_recipes_
                    else BOX_FUNCTIONS_VERSION if box_roles_ or box_weight
                    else SURVIVAL_EVENTS_VERSION)  # fmt: skip
         raise SystemExit(f"dungeon@{version} refused: {why_bx}")
@@ -6886,6 +6938,8 @@ def run(a: argparse.Namespace, *, hook: Any = None, session: tuple[Any, Any] | N
                if box_model_ is not None else {}),
             **({"box_recipes": box_recipes_, "box_version": BOX_RECIPES_VERSION}
                if box_recipes_ else {}),
+            # dungeon@9.52: the hotbar keys the box eats (none: absent)
+            **({"box_eat": box_eat_, "box_version": BOX_EAT_VERSION} if box_eat_ else {}),
             **({"player_map": None if map_read is None else map_read.record()} if player
                else {}),
             **({"player_slots": slot_read} if player else {}),  # dungeon@9.47
@@ -7147,6 +7201,8 @@ def run(a: argparse.Namespace, *, hook: Any = None, session: tuple[Any, Any] | N
             box_keys[keys_["potion"]] = "potion"
         if box_set & {"fly_hp", "boss_fly"}:
             box_keys[keys_["fly"]] = "fly"
+        if "eat" in box_set:  # dungeon@9.52: the hotbar keys the box eats (none a run key)
+            box_keys.update({k: "eat" for k in box_eat_})
         box_pressed: list[tuple[str, str]] = []  # one survive call's (role, why), in press order
         box_stop: list[str | None] = [None]  # a stop the box asked for inside a long action
 
@@ -7154,7 +7210,9 @@ def run(a: argparse.Namespace, *, hook: Any = None, session: tuple[Any, Any] | N
             """dungeon@9.49: a press of the box's event body (through the hook): the runner's OWN
             press of that role -- a Fly Wing stands her up first if she sits, then press()'s own
             before-steps (the unread escape's end, the dagger before flying bare), its count, its
-            record and the stock read after it. Another key is not pressed (None)."""
+            record and the stock read after it. dungeon@9.52: an eat key (box_eat) goes out on the
+            same key path (agent_raw.keys), counted and recorded, with no stock read after it.
+            Another key is not pressed (None)."""
             nonlocal sitting
             what_ = box_keys.get(code)
             if what_ is None:
@@ -7164,7 +7222,12 @@ def run(a: argparse.Namespace, *, hook: Any = None, session: tuple[Any, Any] | N
             if what_ == "fly" and sitting:
                 press("stand", "escape")
                 sitting = False
-            press(what_, why)
+            if what_ == "eat":  # dungeon@9.52: the runner's own key path, no stock read after it
+                agent_raw.keys(code)
+                counts["eat"] += 1
+                ev({"kind": "press", "what": "eat", "key": code, "why": why})
+            else:
+                press(what_, why)
             counts[f"box_{what_}"] += 1
             box_pressed.append((what_, why))
             return what_

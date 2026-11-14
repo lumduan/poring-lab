@@ -75,6 +75,17 @@ PLAYS:
 A box without use_model and recipes plays exactly as stage 3 (run() gets no box_model, no
 box_recipes).
 
+2026-11-14 (Batt ~14:0x: "the moment we get a Candy Cane or a Candy, eat it to add HP right away;
+that also cuts the weight"; live-blocks.md section 10): the box EATS from the hotbar inside the
+hunt core. The new sensor `hotbar_count(key)` is the count drawn on a row-1 slot, read by the live
+player from the runner's tick frame with the runner's own reader (only for the keys the box's events
+name, at most once a second a key; elsewhere unknown). The new optional role `eat` names the
+function the box's events call to eat (one press_key of its input, the item's key, or of one key);
+every press inside a call of it is an EAT press. PLAYS gains "eat": an event that eats; the runner
+presses an eat key through its own press path and still refuses any other key. Its keys are not Run
+keys (the start's slot check and the stock never read them) and none may be another role's key; an
+event that reads hotbar_count must eat from the slots it reads.
+
 Everything the compiled flow holds is checked (every map node's main, events and extensions,
 every function, every Global event), not only what one path reaches: a relocation can land on any
 map node, and a person reads one refusal list before Run, not a surprise mid-run.
@@ -92,10 +103,11 @@ from poring_flow import recipes as rc
 from poring_flow.catalogue import Catalogue, catalogue
 
 STAGE = 4
-# scripts/dungeon_hunt.py BOX_RECIPES_VERSION (stage 4a; stage 3 was 9.50, its
+# scripts/dungeon_hunt.py BOX_EAT_VERSION (2026-11-14: the box eats from the hotbar, section 10;
+# stage 4a was 9.51, its BOX_RECIPES_VERSION = recipes.VERSION; stage 3 9.50, its
 # BOX_FUNCTIONS_VERSION; stage 2 9.49, its SURVIVAL_EVENTS_VERSION; stage 1 9.48, its
 # LIVE_BLOCKS_VERSION); test_live_player.py pins them together
-VERSION = rc.VERSION
+VERSION = "9.52"
 STATEMENTS = (
     "action",
     "if",
@@ -137,7 +149,10 @@ LATER_DEFAULT = "a later stage"
 HELPER_SENSORS = ("known",)  # `known(x)`: no read of its own (runtime.Sim._sense)
 # Stage 2: what an event may read and do while the HUNT CORE plays (its tick hook, the module
 # docstring). The sensors a hunt tick carries (dungeon_hunt.HuntTick: hp_pct, sp_pct, boss)
-HUNT_SENSORS = ("hp_percent", "sp_percent", "sees_boss", "weight_percent")
+HUNT_SENSORS = ("hp_percent", "sp_percent", "sees_boss", "weight_percent", fn.HOTBAR_SENSOR)
+# the sensors whose values only a tick WITH an HP read or a boss line carries (an event that reads
+# one is evaluated only then: stage 2's rule); hotbar_count is read from the tick's frame instead
+VITAL_SENSORS = ("hp_percent", "sp_percent", "sees_boss")
 # stage 3: weight_percent is the runner's weight read at its UI watch (HuntTick.weight_pct): only
 # the WEIGHT event reads it, there (the runner's own moment, never mid-fight)
 WEIGHT_SENSOR = "weight_percent"
@@ -148,7 +163,7 @@ HUNT_STATEMENTS = ("action", "call", "if", "set", "return")
 HUNT_ROLES = ("heal", "fly")
 # stage 3 adds the role functions the hunt core CALLS and the weight home (the module docstring)
 PLAYS = ("potion", "fly_hp", "boss_fly", "knife", "respawn", "weight_home", "home_end",
-         "model", "recipes")  # fmt: skip  # stage 4a: the box's model and its monsters' recipes
+         "model", "recipes", "eat")  # fmt: skip  # stage 4a: model, recipes; 2026-11-14: eat
 CALL_ROLES = ("knife_on", "knife_back", "home", "respawn", "respawn_confirm")
 
 
@@ -371,6 +386,12 @@ class HuntPlan:
     # boss_fly, weight_home) or the role functions (knife, home_end, respawn) -- for the pages'
     # words (takeovers); nothing here changes what plays
     play_by: dict[str, tuple[str, ...]] = field(default_factory=dict)
+    # 2026-11-14 (live-blocks.md 10): the keys the box's events eat through dungeon_hunt's eat
+    # function (its name), and every key their hotbar_count reads name (the live player reads only
+    # these, from the runner's tick frame)
+    eat_keys: tuple[str, ...] = ()
+    eat_name: str | None = None
+    hotbar_keys: tuple[str, ...] = ()
 
 
 def _sensors(e: Any) -> set[str]:
@@ -381,9 +402,10 @@ def hunt_plan(flow: ir.Flow, block: str, cat: Catalogue | None = None) -> HuntPl
     """PURE: the user events active on `block` (its own and Global's; the always-on safety three
     keep stage 1's rule) and what they take over from its hunt core. An event plays inside the
     hunt core when it reads only HUNT_SENSORS, presses only the heal / fly role keys (literal
-    keys, through calls with literal arguments), holds only HUNT_STATEMENTS and resumes. PLAYS:
-    `potion` when one presses the heal key; `fly_hp` / `boss_fly` when one presses the fly key on
-    a condition (`when`) that reads hp_percent / sees_boss."""
+    keys, through calls with literal arguments) or eats through the eat role's function, holds only
+    HUNT_STATEMENTS and resumes. PLAYS: `potion` when one presses the heal key; `fly_hp` /
+    `boss_fly` when one presses the fly key on a condition (`when`) that reads hp_percent /
+    sees_boss; `eat` (2026-11-14) when one eats."""
     from poring_flow.effective import merge
 
     cat = cat or catalogue()
@@ -401,10 +423,15 @@ def hunt_plan(flow: ir.Flow, block: str, cat: Catalogue | None = None) -> HuntPl
     allowed = set(keys.values())
     shown = " and ".join(f"{r} ({k})" for r, k in keys.items()) or "no role key"
     readable = set(HUNT_SENSORS) | set(HELPER_SENSORS)
+    hotbar = set(fn.hotbar_keys())
     out: list[NotLive] = []
     events: list[str] = []
     plays: set[str] = set()
     by: dict[str, list[str]] = {}
+    hot: set[str] = set()  # every key a hotbar_count read names (the live player reads these)
+    eat_keys: set[str] = set()
+    hpath = next((s.path for s in ir.sites(flow)
+                  if any(a is hunt for a in ir.actions_in(s.stmt))), block)  # fmt: skip
 
     def took(play: str, who: str) -> None:
         plays.add(play)
@@ -413,17 +440,46 @@ def hunt_plan(flow: ir.Flow, block: str, cat: Catalogue | None = None) -> HuntPl
     def bad(path: str, what: str, text: str) -> None:
         out.append(NotLive(path, what, text))
 
-    def expr(path: str, e: Any) -> None:
+    # 2026-11-14 (live-blocks.md 10): the eat role's function, and every other role's key (an eat
+    # key must be its own: never the heal, Fly Wing, Knife, dagger or Butterfly Wing key)
+    eat_fn = fn.role_functions(hunt, (fn.EAT_ROLE,)).get(fn.EAT_ROLE)
+    if fn.EAT_ROLE in hunt.params and eat_fn is None:
+        bad(hpath, fn.EAT_ROLE, "dungeon_hunt's eat takes a function's name (a text naming one)")
+    elif eat_fn is not None:
+        why_e = fn.eat_shape(flow, eat_fn)
+        if why_e is not None:
+            bad(hpath, fn.EAT_ROLE, f"dungeon_hunt's eat ({eat_fn}): {why_e}")
+            eat_fn = None
+    taken: dict[str, str] = {k: r for r, k in keys.items()}
+    for role in ("knife_on", "knife_back", fn.HOME_ROLE):
+        name = roles.get(role)
+        if name is not None and name in flow.procedures:
+            k = fn.role_key(flow, name, role)[0]
+            if k is not None:
+                taken.setdefault(k, role)
+    eat_txt = f", and what its eat function {eat_fn}() eats" if eat_fn else ""
+
+    def expr(path: str, e: Any, reads: set[str] | None = None) -> None:
         for x in ir.sub_exprs(e):
             if isinstance(x, ir.Sense) and x.sensor not in readable:
                 bad(path, x.sensor, f"{x.sensor}() cannot be read inside the hunt core: there an "
                     f"event reads only {', '.join(HUNT_SENSORS)} (stage 2)")  # fmt: skip
+            elif isinstance(x, ir.Sense) and x.sensor == fn.HOTBAR_SENSOR:
+                k = fn.hotbar_key(x)
+                if k is None or k not in hotbar:
+                    bad(path, x.sensor, "hotbar_count() inside the hunt core reads a literal "
+                        "row-1 hotbar key (F1-F9): the slots it reads are known before the "
+                        "run")  # fmt: skip
+                else:
+                    hot.add(k)
+                    if reads is not None:
+                        reads.add(k)
             elif isinstance(x, ir.Do | ir.CallV):
                 what = x.action.block if isinstance(x, ir.Do) else x.proc
                 bad(path, what, f"{what} as a value cannot play inside the hunt core (stage 2)")
 
     def body(path: str, stmts: list[Any], env: dict[str, Any], depth: int,
-             pressed: list[str]) -> None:  # fmt: skip
+             pressed: list[str], eaten: list[str], eating: bool = False) -> None:  # fmt: skip
         for st in stmts:
             if st.kind not in HUNT_STATEMENTS:
                 bad(
@@ -444,15 +500,26 @@ def hunt_plan(flow: ir.Flow, block: str, cat: Catalogue | None = None) -> HuntPl
                 if not known or not isinstance(v, str):
                     bad(path, fn.PRESS, "a press_key inside the hunt core needs its key known "
                         "before the run (a literal, or an input given one)")  # fmt: skip
+                elif eating and v not in hotbar:
+                    bad(path, fn.EAT_ROLE, f"eats {v} through {eat_fn}(): not a row-1 hotbar key "
+                        "(F1-F9)")  # fmt: skip
+                elif eating and v in taken:
+                    bad(path, fn.EAT_ROLE, f"eats {v} through {eat_fn}() inside the hunt core: "
+                        f"{v} is dungeon_hunt's {taken[v]} key ({fn.ROLE_WORDS[taken[v]]}); an "
+                        "eat key must be its own, never the heal, Fly Wing, Knife, dagger or "
+                        "Butterfly Wing key")  # fmt: skip
+                elif eating:
+                    pressed.append(v)
+                    eaten.append(v)
                 elif v not in allowed:
                     bad(path, fn.PRESS, f"presses {v} inside the hunt core: there the box presses "
-                        f"only dungeon_hunt's {shown} keys (the knife, the dagger and the way "
-                        "home stay the runner's in stage 2)")  # fmt: skip
+                        f"only dungeon_hunt's {shown} keys{eat_txt} (the knife, the dagger and "
+                        "the way home stay the runner's in stage 2)")  # fmt: skip
                 else:
                     pressed.append(v)
             elif isinstance(st, ir.If):
-                body(path, list(st.then), env, depth, pressed)
-                body(path, list(st.orelse), env, depth, pressed)
+                body(path, list(st.then), env, depth, pressed, eaten, eating)
+                body(path, list(st.orelse), env, depth, pressed, eaten, eating)
             elif isinstance(st, ir.CallProc):
                 vals = [fn.literal_value(a, env) for a in st.args]
                 kws = {k: fn.literal_value(a, env) for k, a in st.kwargs.items()}
@@ -470,7 +537,8 @@ def hunt_plan(flow: ir.Flow, block: str, cat: Catalogue | None = None) -> HuntPl
                     bad(path, st.proc, f"{st.proc}() cannot be followed inside the hunt core "
                         "(its inputs do not fit, or its calls go too deep)")  # fmt: skip
                     continue
-                body(path, list(flow.procedures.get(st.proc, [])), inner, depth + 1, pressed)
+                body(path, list(flow.procedures.get(st.proc, [])), inner, depth + 1, pressed,
+                     eaten, eating or (eat_fn is not None and st.proc == eat_fn))  # fmt: skip
 
     weights: list[str] = []
     for e in merge(flow, b).active():
@@ -490,24 +558,35 @@ def hunt_plan(flow: ir.Flow, block: str, cat: Catalogue | None = None) -> HuntPl
         if h.escalate is not None:
             bad(e.label, "escalate", f"{e.key} escalates to {h.escalate}: not inside the hunt "
                 "core (stage 2)")  # fmt: skip
+        reads: set[str] = set()  # the hotbar keys its conditions read
         for cond in (h.when, h.until, h.rearm):
             if cond is not None:
-                expr(e.label, cond)
+                expr(e.label, cond, reads)
         pressed: list[str] = []
+        eaten: list[str] = []
         n_bad = len(out)
-        body(e.label, [*e.extension, *h.body], {}, 0, pressed)
+        body(e.label, [*e.extension, *h.body], {}, 0, pressed, eaten)
         if not pressed and len(out) == n_bad:
             bad(e.label, "event", f"{e.key} presses no key inside the hunt core: there an event "
-                f"plays dungeon_hunt's {shown} keys (stage 2)")  # fmt: skip
+                f"plays dungeon_hunt's {shown} keys{eat_txt} (stage 2)")  # fmt: skip
+        if eaten:
+            eat_keys.update(eaten)
+            took("eat", e.label)
+            other = sorted(set(eaten) - reads)
+            if reads and other:
+                bad(e.label, "when", f"{e.key} eats {', '.join(other)} but its condition reads "
+                    f"hotbar_count of {', '.join(sorted(reads))}: the count it reads is not the "
+                    "slot it eats from -- write the same key in its condition and in the "
+                    "function it eats through")  # fmt: skip
         if keys.get("heal") in pressed:
             took("potion", e.label)
         if keys.get("fly") in pressed:
-            reads = _sensors(h.when)
-            if "hp_percent" in reads:
+            reads_ = _sensors(h.when)
+            if "hp_percent" in reads_:
                 took("fly_hp", e.label)
-            if "sees_boss" in reads:
+            if "sees_boss" in reads_:
                 took("boss_fly", e.label)
-            if not reads & {"hp_percent", "sees_boss"}:
+            if not reads_ & {"hp_percent", "sees_boss"}:
                 bad(
                     e.label,
                     "when",
@@ -515,8 +594,6 @@ def hunt_plan(flow: ir.Flow, block: str, cat: Catalogue | None = None) -> HuntPl
                     "hunt core on a condition that reads neither hp_percent() nor sees_boss(): "
                     "there the box's Fly Wing replaces the runner's on HP or on a boss (stage 2)",
                 )
-    hpath = next((s.path for s in ir.sites(flow)
-                  if any(a is hunt for a in ir.actions_in(s.stmt))), block)  # fmt: skip
     calls, names, ends = _role_calls(flow, hunt, plays, out, hpath)
     for play, roles_ in (("knife", ("knife_on", "knife_back")), ("home_end", ("home",)),
                          ("respawn", ("respawn", "respawn_confirm"))):  # fmt: skip
@@ -537,7 +614,8 @@ def hunt_plan(flow: ir.Flow, block: str, cat: Catalogue | None = None) -> HuntPl
                     tuple(weights), ends, None if rp is None else rp.model,
                     None if rp is None else rp.model_doc(), {} if rp is None else dict(rp.recipes),
                     () if rp is None else rp.default,
-                    {k: tuple(v) for k, v in by.items()})  # fmt: skip
+                    {k: tuple(v) for k, v in by.items()}, tuple(sorted(eat_keys)),
+                    eat_fn if eat_keys else None, tuple(sorted(hot)))  # fmt: skip
 
 
 def _weight_event(e: Any, conds: list[Any], out: list[NotLive]) -> None:
@@ -674,7 +752,12 @@ PLAY_WORDS: dict[str, str] = {
     "home_end": "the runner's Butterfly Wing press at the end",
     "model": "the hunt core's model (the map's own detector)",
     "recipes": "the runner's own technique per monster",
+    "eat": "nothing of the runner's (a play of the box's own: it eats what its events name, from "
+    "the hotbar)",
 }
+# the plays that replace nothing of the runner's: in `plays`, never a takeover row (the pages' "IN A
+# RUN" words list only what is switched off; 2026-11-14: the box's eat)
+OWN_PLAYS = ("eat",)
 # the survival settings that stay the runner's in a box run (stage 2: the HP-RATE fly)
 RUNNER_STAYS = ("fly_rate", "fly_rate_below")
 _OPS = {"<": "<", "<=": "<=", ">": ">", ">=": ">=", "==": "=", "!=": "≠"}
@@ -693,6 +776,9 @@ def cond_words(e: Any) -> str | None:
         num = isinstance(v, int | float) and not isinstance(v, bool)
         if num and e.op in _OPS and e.left.sensor in _PCT and not e.left.args:
             return f"{_PCT[e.left.sensor]} {_OPS[e.op]} {v:g} %"
+        k = fn.hotbar_key(e.left)  # 2026-11-14: "F6's count > 0"
+        if num and e.op in _OPS and k is not None:
+            return f"{k}'s count {_OPS[e.op]} {v:g}"
     if isinstance(e, ir.Logic):
         parts = [cond_words(x) for x in e.terms]
         if all(x is not None for x in parts):
@@ -732,7 +818,7 @@ def takeovers(flow: ir.Flow, block: str, where: Any = None,
     handlers = {e.label: e for e in merge(flow, b).active()}
     rows: list[dict[str, Any]] = []
     for play in PLAYS:
-        if play not in hp.plays:
+        if play not in hp.plays or play in OWN_PLAYS:
             continue
         base = {"play": play, "settings": list(PLAY_SETTINGS.get(play, ())),
                 "replaces": PLAY_WORDS.get(play, play)}  # fmt: skip
@@ -798,6 +884,15 @@ def document(cat: Catalogue | None = None) -> dict[str, Any]:
                 "words": "a role function that is more than one press_key is played by the box "
                 "at the runner's own moment (the Knife swap, the way home); the respawn functions "
                 "click; one press_key alone stays the runner's own key (stage 3)",
+            },
+            # 2026-11-14 (live-blocks.md 10): the box eats from the hotbar
+            "eat": {
+                "role": fn.EAT_ROLE,
+                "sensor": fn.HOTBAR_SENSOR,
+                "words": "dungeon_hunt's eat names the function the box's events call to eat a "
+                "food item (one press_key of its input, the item's key); hotbar_count(key) is the "
+                "count on that slot, read from the hunt core's frame (an empty slot reads 0, an "
+                "unreadable one is unknown); an event that reads it eats from the slots it reads",
             },
             # stage 4a: the box's model and its monsters' recipes (poring_flow.recipes)
             "recipes": {

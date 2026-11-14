@@ -172,8 +172,9 @@ export interface Scenario {
   hp_per_attack?: number;
   attack_s?: number;
   // detects: "<model>/<class>" -> how many boxes the trained model finds from t on (ADR-0020
-  // Amendment B; before any entry: 0)
-  timeline?: { t: number; set?: Record<string, number | boolean>; sees?: Record<string, boolean>; detects?: Record<string, number> }[];
+  // Amendment B; before any entry: 0); hotbar (2026-11-14, live-blocks.md 10): a row-1 key -> the
+  // count drawn on its slot from t on (hotbar_count; before any entry: 0)
+  timeline?: { t: number; set?: Record<string, number | boolean>; sees?: Record<string, boolean>; detects?: Record<string, number>; hotbar?: Record<string, number> }[];
   // the Maps page (2026-11-10): a monster placed for each attack, repeatable by the seed
   encounters?: boolean;
   seed?: number;

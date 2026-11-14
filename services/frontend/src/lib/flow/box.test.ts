@@ -14,9 +14,11 @@ import { stripFoldLine } from "./words.ts";
 const ev = (play: string, settings: string[], replaces: string, by: string, tab: string, when: string, until: string | null = null) => ({ play, settings, replaces, kind: "event" as const, by, path: `xmas_dun02/${tab}/${by}`, when, until });
 const fnRow = (play: string, settings: string[], replaces: string, by: string | null, tab: string, steps?: string) => ({ play, settings, replaces, kind: "function" as const, by, path: by ? `xmas_dun02/${tab}/${by}` : null, ...(steps ? { steps } : {}) });
 const BOX: BoxDoc = {
-  plays: ["boss_fly", "fly_hp", "home_end", "knife", "model", "potion", "recipes", "respawn", "weight_home"],
+  // 2026-11-14 (live-blocks.md 10): the drink under 50 %; the box eats ("eat": a play of its own,
+  // no takeover row: it switches nothing of the runner's off)
+  plays: ["boss_fly", "eat", "fly_hp", "home_end", "knife", "model", "potion", "recipes", "respawn", "weight_home"],
   takeovers: [
-    ev("potion", ["potion_below"], "the runner's potion on HP", "drink", "survival", "HP < 30 %", "HP >= 31 %"),
+    ev("potion", ["potion_below"], "the runner's potion on HP", "drink", "survival", "HP < 50 %", "HP >= 51 %"),
     ev("fly_hp", ["fly_below"], "the runner's Fly Wing on HP", "fly_away", "survival", "a boss is seen or HP < 25 %"),
     ev("boss_fly", [], "the runner's boss fly (a Battle Log boss line)", "fly_away", "survival", "a boss is seen or HP < 25 %"),
     fnRow("knife", [], "the runner's Knife and dagger presses (the swap's moments stay the runner's)", "knife_on", "knife"),
@@ -36,7 +38,7 @@ const ALONE = "this value is the runner's alone (the old Run path, a box without
 test("Before Run's settings rows say which of them this project's box replaces, and by what", () => {
   const b = boxedSettings(BOX);
   assert.deepEqual(Object.keys(b).sort(), ["fly_below", "potion_below", "respawn_at", "respawn_confirm_at", "weight_home"]);
-  assert.equal(b.potion_below, `in this project: replaced by the box's drink event (HP < 30 %, until HP >= 31 %); ${ALONE}`);
+  assert.equal(b.potion_below, `in this project: replaced by the box's drink event (HP < 50 %, until HP >= 51 %); ${ALONE}`);
   assert.equal(b.fly_below, `in this project: replaced by the box's fly_away event (a boss is seen or HP < 25 %); ${ALONE}`);
   assert.equal(b.weight_home, `in this project: replaced by the box's bag_full event (weight >= 50 %); ${ALONE}`);
   assert.equal(b.respawn_at, "in this project: replaced by the box's respawn_button (a click at 645,481); this value is the runner's alone (the old Run path, a box without that function)");

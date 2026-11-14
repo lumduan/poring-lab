@@ -20,10 +20,12 @@ THE ARMS (the same runner settings for both: the Run config, the boxes' five key
 same keys, checked -- and --minutes M), both `flow_play.py play` on the node xmas_dun02:
 - B3: services/frontend/src/lib/flow/fixtures/project_xmas_dun02_stage3.json (the box as stage 3
   left it: no use_model, no monsters tab -- the runner's own model choice and technique);
-- B4: services/frontend/src/lib/flow/fixtures/project_xmas_dun02.json (the ready-made box: also
-  use_model("xmas02") and the monsters tab, every recipe today's technique: plan refuses a B4 that
-  is not -- a recipe without the Knife swap, a priority other than 1 -- since that is the next
-  experiment, B4 vs B4', not this one).
+- B4: services/frontend/src/lib/flow/fixtures/project_xmas_dun02_stage4.json (the box as stage 4a
+  left it: also use_model("xmas02") and the monsters tab, every recipe today's technique: plan
+  refuses a B4 that is not -- a recipe without the Knife swap, a priority other than 1 -- since
+  that is the next experiment, B4 vs B4', not this one). ➡️ 2026-11-14 (live-blocks.md section 10)
+  the ready-made box (project_xmas_dun02.json) drinks under 50 % and eats the candies; this file
+  is the box that played s4ab-1114, kept byte for byte so the series stays the one it measured.
 The order: "alternate" (the default) is B3 B4, B4 B3, ... ; "ab" is B3 B4, B3 B4, ...
 
 THE SETUP before every run: exactly stage2_ab.py's (the read; clear-bag at 40 %; the lab GM's
@@ -61,7 +63,8 @@ import stage3_ab as s3  # noqa: E402
 VERSION = "9.51"  # dungeon_hunt.BOX_RECIPES_VERSION: the stage it measures
 NODE = s2.NODE
 FIX = ROOT / "services/frontend/src/lib/flow/fixtures"
-PROJECTS = {"B3": FIX / "project_xmas_dun02_stage3.json", "B4": FIX / "project_xmas_dun02.json"}
+PROJECTS = {"B3": FIX / "project_xmas_dun02_stage3.json",
+            "B4": FIX / "project_xmas_dun02_stage4.json"}  # fmt: skip
 SCRATCH = Path("/dev/shm/poring-lab-tmp/stage4-ab")
 TODAY = ("knife_on", "strike", "wait_steal", "knife_back", "wait_kill", "loot")
 # THE PRE-REGISTERED BAR (live-blocks.md 3.4, written before any live run): what B4 must hold vs B3

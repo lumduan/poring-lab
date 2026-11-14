@@ -1,7 +1,7 @@
 // WHAT THE BOX PLAYS in a box run, and which run settings that replaces (matpilot round 17 N1).
 //
 // Heal and the Fly Wing each showed two thresholds that differ: the survival tab's drink
-// (hp_percent() < 30) and fly_away (sees_boss() or hp_percent() < 25), and Before Run's settings
+// (hp_percent() < 30; ➡️ < 50 since 2026-11-14, live-blocks.md 10) and fly_away (sees_boss() or hp_percent() < 25), and Before Run's settings
 // "heal at HP under 40 %" and "Fly Wing at HP under 20 %". Neither page said which one a live run
 // uses. The truth (live-blocks.md stage 2, dungeon@9.49; stages 3 and 4a): in a BOX run (Run of a
 // project: the live block player) the box's events and role functions decide what they play, and
@@ -19,7 +19,7 @@ export type BoxTakeover = {
   kind: "event" | "function" | "model";
   by: string | null; // the event, function or model that plays it (null: none, e.g. no confirmation)
   path: string | null; // where it is written ("xmas_dun02/survival/drink")
-  when?: string | null; // an event's condition in words ("HP < 30 %")
+  when?: string | null; // an event's condition in words ("HP < 50 %")
   until?: string | null;
   steps?: string; // a role function's steps in words ("a click at 645,481")
 };
@@ -33,7 +33,7 @@ const what = (t: BoxTakeover): string => {
 };
 
 /** PURE: each run setting the box replaces in this project -> the words its row says (Before
- * Run's settings): "in this project: replaced by the box's drink event (HP < 30 %, until HP >= 31 %);
+ * Run's settings): "in this project: replaced by the box's drink event (HP < 50 %, until HP >= 51 %);
  * this value is the runner's alone (the old Run path, a box without it)". Empty: no box, or it
  * replaces none. */
 export function boxedSettings(box: BoxDoc | null | undefined): Record<string, string> {

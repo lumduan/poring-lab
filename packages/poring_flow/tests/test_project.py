@@ -98,11 +98,19 @@ def test_the_xmas_dun02_fixture_is_one_box_and_says_what_batt_asked() -> None:
     assert {k: v.value for k, v in hunt.params.items()} == {  # type: ignore[union-attr]
         "heal": "heal", "fly": "fly_wing", "knife_on": "knife_on", "knife_back": "knife_back",
         "home": "fly_home", "respawn": "respawn_button",
-        "respawn_confirm": "respawn_ok"}  # fmt: skip
+        "respawn_confirm": "respawn_ok", "eat": "eat"}  # fmt: skip
     assert stop == ir.Stop(reason="home")
-    keys = {d.name: d.body[0].params["key"].value for d in x.tabs[1].defs}  # type: ignore[union-attr]
+    *key_defs, eat, cane, candy = x.tabs[1].defs
+    keys = {d.name: d.body[0].params["key"].value for d in key_defs}  # type: ignore[union-attr]
     assert keys == {"heal": "F1", "fly_wing": "F8", "butterfly_wing": "F9", "wield_knife": "F4",
                     "wield_damascus": "F5"}  # fmt: skip
+    # Batt 2026-11-14 (live-blocks.md 10): the eat role's function presses its input (the item's
+    # key); the two items' functions give it the lab Rogue's slots: F6 the Candy Canes, F7 Candies
+    assert (eat.name, [q.name for q in eat.params]) == ("eat", ["key"])
+    assert eat.body[0].params["key"] == ir.Var(name="key")  # type: ignore[union-attr]
+    assert [(d.name, d.body) for d in (cane, candy)] == [
+        ("candy_cane", [ir.CallProc(proc="eat", args=[ir.Lit(value="F6")])]),
+        ("candy", [ir.CallProc(proc="eat", args=[ir.Lit(value="F7")])])]  # fmt: skip
     # stage 3 (live-blocks.md 3.3): the Knife swap's two functions (each calls its key's function:
     # the strike between, the runner's own today), the way home, the respawn's two clicks
     assert [(d.name, d.body) for d in x.tabs[3].defs] == [
@@ -128,7 +136,7 @@ def test_the_xmas_dun02_fixture_is_one_box_and_says_what_batt_asked() -> None:
     # stage 2 (Batt 2026-11-13: "Heal: press F1 when HP < 30 %. Fly Wing: press F8 when a boss is
     # seen or HP < 25 %"; live-blocks.md 3.2): two events, each calling its key's function; stage 3
     # adds the weight home (Batt: "if the weight is over 50 %, use a Butterfly Wing to go back")
-    drink, fly, bag = x.tabs[2].defs
+    drink, fly, bag, eat_cane, eat_candy = x.tabs[2].defs
     assert (bag.name, bag.body) == ("bag_full", [ir.Stop(reason="home")])
     assert bag.on is not None and (bag.on.mode, bag.on.priority, bag.on.max_per_run) == (
         "preempt", "upkeep", 1)  # fmt: skip
@@ -140,8 +148,22 @@ def test_the_xmas_dun02_fixture_is_one_box_and_says_what_batt_asked() -> None:
     assert drink.on is not None and fly.on is not None
     assert (drink.on.mode, drink.on.priority, drink.on.cooldown_s) == ("insert", "survival", 0.7)
     hp = ir.Sense(sensor="hp_percent")
-    assert drink.on.when == ir.Cmp(op="<", left=hp, right=ir.Lit(value=30))
-    assert drink.on.until == ir.Cmp(op=">=", left=hp, right=ir.Lit(value=31))
+    # Batt 2026-11-14 ("raise the drink"; live-blocks.md 10): under 50 %, the Knife's own HP floor
+    # (knife_hp_min 0.5), so the 30-50 % band where she neither drank nor swapped is closed
+    assert drink.on.when == ir.Cmp(op="<", left=hp, right=ir.Lit(value=50))
+    assert drink.on.until == ir.Cmp(op=">=", left=hp, right=ir.Lit(value=51))
+    # and the candies eaten the moment the slot shows one: a repeating insert per item, until the
+    # slot reads empty, paced 1.5 s (the count shows the press first), at any HP
+    for ev_, key, rank, fn_ in ((eat_cane, "F6", 51, "candy_cane"), (eat_candy, "F7", 52,
+                                                                     "candy")):  # fmt: skip
+        on = ev_.on
+        assert on is not None and ev_.body == [ir.CallProc(proc=fn_)]
+        cnt = ir.Sense(sensor="hotbar_count", args={"key": ir.Lit(value=key)})
+        zero = ir.Lit(value=0)
+        assert (on.when, on.until) == (ir.Cmp(op=">", left=cnt, right=zero),
+                                       ir.Cmp(op="==", left=cnt, right=zero))  # fmt: skip
+        assert (on.mode, on.priority, on.rank, on.cooldown_s, on.max_fires_per_10min,
+                on.then) == ("insert", "upkeep", rank, 1.5, 30, "resume")  # fmt: skip
     assert (fly.on.mode, fly.on.priority, fly.on.cooldown_s, fly.on.until, fly.on.rearm) == (
         "preempt", "critical", 3.0, None, None)  # fmt: skip
     assert fly.on.when == ir.Logic(kind="or", terms=[
@@ -737,7 +759,8 @@ def test_a_map_start_simulates_from_its_entry_with_no_session() -> None:
 
 def test_the_box_s_survival_events_simulate_on_scripted_sensors() -> None:
     """live-blocks.md stage 2: the simulator plays the one box's events like any other: drink on
-    a scripted HP under 30 %, fly_away on a scripted sees_boss (the hunt core's boss read)."""
+    a scripted HP under 50 % (30 % until 2026-11-14, section 10), fly_away on a scripted sees_boss
+    (the hunt core's boss read)."""
     p = P.from_json(XMAS.read_text())
     sc = Scenario(horizon_s=60, timeline=[{"t": 0.3, "set": {"hp_percent": 28}},
                                           {"t": 0.8, "set": {"hp_percent": 60, "sees_boss": True}},

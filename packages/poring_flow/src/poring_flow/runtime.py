@@ -71,6 +71,13 @@ MAX_CALL_DEPTH = 32  # nested calls (recursion is the linter's error: this only 
 RETURN = "\0return"  # a local environment's return value (never a NAME)
 
 
+def hotbar_world_key(key: Any) -> str:
+    """The world's entry of hotbar_count(key) (2026-11-14, live-blocks.md 10): "hotbar:F6". The
+    simulator's scenario sets it (trace.Change.hotbar); the live player sets it from the hunt core's
+    tick frame (scripts/flow_play.py), and nothing sets it anywhere else (unknown there)."""
+    return f"hotbar:{key}"
+
+
 def queue_key(e: Effective) -> tuple[int, int, int]:
     """Where a due event sits in the queue: its class, the safety-critical lead, its rank inside
     the class (#13). Ties keep their arrival order (FIFO only between equal ranks)."""
@@ -279,6 +286,8 @@ class Sim:
         if s.sensor == "item_count":
             item = self._eval(s.args["item"])
             return self.world.get(f"item:{getattr(item, 'id', item)}")
+        if s.sensor == "hotbar_count":  # 2026-11-14 (live-blocks.md 10): a slot's drawn count
+            return self.world.get(hotbar_world_key(self._eval(s.args.get("key"))))
         if s.sensor in ("detector_sees", "detector_count"):  # a trained model (models.yaml)
             model, label = self._eval(s.args["model"]), self._eval(s.args["label"])
             n = self.world.get(f"detect:{model}/{label}")

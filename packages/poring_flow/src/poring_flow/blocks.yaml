@@ -167,6 +167,13 @@ blocks:
       # calls it at its own moment; poring_flow.functions.BODY_ROLES).
       - {name: respawn, type: proc, group: exits, note: "the function the hunt core calls after a death to press the death dialog's button (move to the saved location): click_at and wait only; absent: the runner's own point (the Run settings)"}
       - {name: respawn_confirm, type: proc, group: exits, note: "the function it calls when the confirmation reads after that press (this client: OK): click_at and wait only; absent with respawn: this server asks none"}
+      # ➡️ Batt 2026-11-14 ~14:0x ("the moment we get a Candy Cane or a Candy, eat it to add HP right
+      # away; that also cuts the weight"; live-blocks.md section 10): the OPTIONAL eat role names the
+      # function the box's events call, inside the hunt core, to eat a food item from the hotbar.
+      # Its body is ONE press_key of its input (the item's key, a literal at every call) or of one
+      # literal key; every press inside a call of it is an EAT press (live.hunt_plan: "eat"). The eat
+      # keys are not Run keys: the start's slot check and the stock never read them.
+      - {name: eat, type: proc, group: keys, note: "the function the box's events call to eat a food item from the hotbar (one press_key of its input, the item's key; or of one key); absent: the box eats nothing inside the hunt core"}
     timeout_s: 600
     long: true
     moves: near
@@ -504,7 +511,8 @@ blocks:
 #   cue      a momentary cue (true for an instant): it cannot hold on every tick
 #   danger   low | high: which side of a threshold is the dangerous one ("looser", 13.6.9)
 #   live     the live block player reads it from pixels (stage 1: HP / SP / weight, the death
-#            dialog, the map's name from the minimap; stage 2: sees_boss, inside a hunt core)
+#            dialog, the map's name from the minimap; stage 2: sees_boss, inside a hunt core;
+#            2026-11-14: hotbar_count, inside a hunt core)
 sensors:
   hp_percent: {concept: vitals.read, type: percent, passive: true, live: true, drift: true, range: [0, 100], resolution: 1, danger: low}
   sp_percent: {concept: vitals.read, type: percent, passive: true, live: true, drift: true, range: [0, 100], resolution: 1, danger: low}
@@ -527,6 +535,13 @@ sensors:
   # hook: dungeon_hunt.HuntTick.boss); anywhere else it is unknown (None), so it never fires there.
   # Not "boss_seen": that name is a map event of the IR 2 samples (town_warp_farm, farm_loop).
   sees_boss: {type: bool, passive: true, drift: true, cue: true, live: true, note: "the hunt core's boss read on this tick: a Battle Log line (damage or taken) whose bracketed name fits the map's boss or one of its summons (dungeon_hunt boss_of over boss_names; the runner's --engage-screen boss guard). Read only while the hunt core plays; elsewhere unknown"}
+  # Batt 2026-11-14 ~14:0x (live-blocks.md section 10: "the moment we get a Candy Cane or a Candy,
+  # eat it"): the count drawn on a row-1 hotbar slot, read from pixels with the runner's own reader
+  # (scripts/hotbar_count.py read_count on the hunt core's tick frame). Live ONLY inside a hunt core
+  # (flow_play reads it from dungeon_hunt.HuntTick.frame, at most once every HOTBAR_EVERY_S a key,
+  # only for the keys the box's events name); anywhere else it is unknown (None). An empty slot reads
+  # 0; a count it cannot read is unknown (a condition on it never fires).
+  hotbar_count: {type: int, passive: true, drift: true, live: true, range: [0, 999], params: [{name: key, type: str, required: true, positional: true, options: [F1, F2, F3, F4, F5, F6, F7, F8, F9], note: "the hotbar key (row 1) whose slot's count is read"}], note: "the count drawn on that hotbar slot (row 1), read from pixels inside the hunt core (the runner's hotbar reader); an empty slot reads 0, an unreadable count is unknown; elsewhere unknown"}
   engagement_seen: {type: bool, passive: true, drift: true, cue: true, note: "an engagement we did not order, from pixels (13.9)"}
   engaged_species: {type: mob, passive: true, drift: true, note: "needs a detector that names species (13.9, open question 33)"}
   # The TRAINED MODELS as sensors (Batt 2026-11-09; models.yaml, ADR-0020 Amendment B): `model` is a

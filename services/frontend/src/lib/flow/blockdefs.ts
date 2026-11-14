@@ -104,7 +104,9 @@ export const CREDENTIALS = ["lab_gm", "lab_player"] as const;
  * OPTIONAL: an empty field is no home role (the map's item warp by function gives the key). Stage 3
  * (live-blocks.md 3.3, Batt 2026-11-13: "make respawn a function block"): the OPTIONAL respawn
  * roles name the death exit's two functions of click_at (empty: the runner's own points; an empty
- * confirm with a respawn: this server asks no confirmation). */
+ * confirm with a respawn: this server asks no confirmation). 2026-11-14 (live-blocks.md 10): the
+ * OPTIONAL eat role names the function the box's events call to eat a food item from the hotbar (one
+ * press_key of its input, the item's key; empty: the box eats nothing inside the hunt core). */
 export const RUNNER_ROLES = [
   { param: "heal", field: "HEAL", words: "heal", fn: "heal", optional: false },
   { param: "fly", field: "FLY", words: "Fly Wing", fn: "fly_wing", optional: false },
@@ -113,6 +115,7 @@ export const RUNNER_ROLES = [
   { param: "home", field: "HOME", words: "home (Butterfly Wing)", fn: "butterfly_wing", optional: true },
   { param: "respawn", field: "RESPAWN", words: "respawn", fn: "respawn_button", optional: true },
   { param: "respawn_confirm", field: "RESPAWN_OK", words: "respawn confirm", fn: "respawn_ok", optional: true },
+  { param: "eat", field: "EAT", words: "eat", fn: "eat", optional: true },
 ] as const;
 
 export const BLOCK_DEFS: BlockDef[] = [
@@ -296,7 +299,9 @@ export const BLOCK_DEFS: BlockDef[] = [
     args3: [text("HOME", "butterfly_wing")],
     message4: "after a death: call %1 then confirm: call %2",
     args4: [text("RESPAWN", ""), text("RESPAWN_OK", "")],
-    tooltip: "dungeon_hunt(...): the Rogue's runner hunts this map (only a map that has a runner: xmas_dun02). Each role names the function it calls: a function of one key press is the key the runner presses; a function of presses and waits (the Knife swap, the way home) plays at the runner's own moment. home: the Butterfly Wing it flies home on when the bag is half full or on Stop (empty: the map's item warp by function). after a death: the functions that click the death dialog's button and its confirmation (click_at; empty: the runner's own points from the Run settings). Its other settings: the Run pane",
+    message5: "eat (a food on the hotbar): call %1",
+    args5: [text("EAT", "")],
+    tooltip: "dungeon_hunt(...): the Rogue's runner hunts this map (only a map that has a runner: xmas_dun02). Each role names the function it calls: a function of one key press is the key the runner presses; a function of presses and waits (the Knife swap, the way home) plays at the runner's own moment. home: the Butterfly Wing it flies home on when the bag is half full or on Stop (empty: the map's item warp by function). after a death: the functions that click the death dialog's button and its confirmation (click_at; empty: the runner's own points from the Run settings). eat: the function your events call to eat a food item from the hotbar, e.g. eat(key) pressing its input, called as eat(\"F6\") (empty: nothing is eaten in the hunt); hotbar_count(key=\"F6\") reads that slot's count. Its other settings: the Run pane",
   }),
   stmt({ type: "pl_stop", message0: "stop %1 %2", args0: [text("REASON", "done"), run] }),
   stmt({ type: "pl_break", message0: "break" }),
@@ -689,6 +694,7 @@ export function toolbox(
     { kind: "block", type: "pl_expr", fields: { TEXT: "hp_percent()" } },
     { kind: "block", type: "pl_expr", fields: { TEXT: "weight_percent()" } },
     { kind: "block", type: "pl_expr", fields: { TEXT: "is_dead()" } },
+    { kind: "block", type: "pl_expr", fields: { TEXT: 'hotbar_count(key="F6")' } },
   ];
   const operators: ToolboxItem[] = [
     { kind: "block", type: "pl_expr", fields: { TEXT: "0" } },

@@ -47,7 +47,9 @@ def _load(name: str) -> Any:
 TBF = _load("test_box_functions.py")  # stage 3's fakes (FakeIO, prep, refused, the player)
 TDH = TBF.TDH  # test_dungeon_hunt's simulated client
 FIX = TBF.FIX
-B4 = FIX / "project_xmas_dun02.json"  # the one box (stage 4a): use_model + the monsters tab
+# the box as stage 4a left it (use_model + the monsters tab; stage4_ab.py's B4 arm); since
+# 2026-11-14 the ready-made one also drinks under 50 % and eats (test_box_eat.py)
+B4 = FIX / "project_xmas_dun02_stage4.json"
 B3 = FIX / "project_xmas_dun02_stage3.json"  # the box as stage 3 left it
 B2 = FIX / "project_xmas_dun02_stage2.json"
 TODAY = list(rc.KNIFE_SHAPE)
@@ -572,8 +574,8 @@ def test_the_cli_and_the_old_run_path_are_unchanged_by_4a() -> None:
     assert sig.parameters["box_model"].default is None
     assert sig.parameters["box_recipes"].default is None
     assert "return run(a)" in inspect.getsource(dh.main)  # no hook, no box
-    assert dh.VERSION == "dungeon@8.7" and dh.BOX_RECIPES_VERSION == live.VERSION == "9.51"
-    assert rc.VERSION == dh.BOX_RECIPES_VERSION and fp.VERSION == live.VERSION
+    assert dh.VERSION == "dungeon@8.7" and dh.BOX_RECIPES_VERSION == rc.VERSION == "9.51"
+    assert dh.BOX_EAT_VERSION == live.VERSION == fp.VERSION == "9.52"  # 2026-11-14: the eat play
     import runner_flow_export as rfe
 
     assert "BOX_RECIPES_VERSION" in rfe.NOT_FEATURES

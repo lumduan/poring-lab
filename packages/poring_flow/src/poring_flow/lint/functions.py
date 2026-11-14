@@ -11,7 +11,9 @@ Layer 1:
   (`resolve_key`: the runner presses one key for each role). Stage 3 (live-blocks.md 3.3): knife_on,
   knife_back and home may be a BODY of presses and waits (`functions.BODY_ROLES`, its key the first
   press, within `steps_problem`'s caps), and the optional `respawn` / `respawn_confirm` name
-  functions of click_at and waits;
+  functions of click_at and waits; 2026-11-14 (live-blocks.md 10): the optional `eat` names a
+  function of one press_key of its input or of one key (`functions.eat_shape`), and no key it eats
+  is another role's (`hotbar_keys`);
 - `key_argument` (the project model): a function whose press_key presses its PARAMETER is given
   a literal hotbar key at every call (or the parameter's default is one);
 - `hotbar_keys`: dungeon_hunt's roles press DIFFERENT keys (four, five with `home`), and none of
@@ -182,6 +184,7 @@ def _dungeon_hunt(ctx: Ctx, site: ir.Site, a: ir.ActionStmt, wings: dict[str, li
                 f"dungeon_hunt's {role} ({fn.ROLE_WORDS[role]}) presses {key}, the key "
                 f"{wings[key][0]} uses as the Butterfly Wing home: each role needs its own key",
             )
+    _eat_role(ctx, site, a, keys)
     b = site.block
     maps = ", ".join(sorted(fn.RUNNER_MAPS))
     if b is None or site.scope not in ("block", "map_event", "extension"):
@@ -202,6 +205,42 @@ def _dungeon_hunt(ctx: Ctx, site: ir.Site, a: ir.ActionStmt, wings: dict[str, li
             f"dungeon_hunt runs the map's runner, and {b.map.map} has none (maps with a runner: "
             f"{maps}; scripts/flow_run.py)",
         )
+
+
+def _eat_role(ctx: Ctx, site: ir.Site, a: ir.ActionStmt, keys: dict[str, str]) -> None:
+    """2026-11-14 (live-blocks.md 10): dungeon_hunt's optional eat role names a function whose body
+    is one press_key of its input (the item's key) or of one literal key, and no key it eats -- its
+    literal one, or one a call gives it -- is another role's (``keys``: key -> role)."""
+    if fn.EAT_ROLE not in a.params:
+        return
+    flow = ctx.flow
+    name = fn.role_functions(a, (fn.EAT_ROLE,))[fn.EAT_ROLE]
+    what = f"dungeon_hunt's eat ({fn.EAT_WORDS})"
+    if name is None:
+        given = ctx.src(a.params[fn.EAT_ROLE])
+        ctx.add("hunt_function", "error", 1, site.path,
+                f"{what} takes a function's name, not {given}")  # fmt: skip
+        return
+    why = _function(ctx, name) or fn.eat_shape(flow, name)
+    if why is not None:
+        ctx.add("hunt_function", "error", 1, site.path, f"{what}: {why}")
+        return
+    eaten: set[str] = set()
+    for s in ir.sites(flow):
+        if isinstance(s.stmt, ir.CallProc) and s.stmt.proc == name:
+            k, _ = fn.resolve_key(flow, name, [fn.literal_value(x, {})[1] for x in s.stmt.args],
+                                  {k_: fn.literal_value(x, {})[1]
+                                   for k_, x in s.stmt.kwargs.items()})  # fmt: skip
+            if k is not None:
+                eaten.add(k)
+    k0, _ = fn.resolve_key(flow, name)  # no input: its one literal key
+    if k0 is not None:
+        eaten.add(k0)
+    for k in sorted(eaten):
+        if k in keys:
+            ctx.add("hotbar_keys", "error", 1, site.path,
+                    f"dungeon_hunt's eat ({name}) eats {k}, the key of its {keys[k]} "
+                    f"({fn.ROLE_WORDS[keys[k]]}): each role needs its own key")  # fmt: skip
 
 
 def _unknown_presses(

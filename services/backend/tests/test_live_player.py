@@ -22,7 +22,7 @@ import flow_config as fc  # noqa: E402
 import flow_play as fp  # noqa: E402
 import flow_run as fr  # noqa: E402
 
-from poring_flow import catalogue, editor, live  # noqa: E402
+from poring_flow import catalogue, editor, ir, live  # noqa: E402
 from poring_flow import project as pj  # noqa: E402
 
 
@@ -215,13 +215,15 @@ def test_the_live_set_is_one_place_and_the_catalogue_serves_it() -> None:
     assert live.live_blocks() == ["assert_save_point", "click_at", "dungeon_hunt", "loot",
                                   "press_key", "strike", "use_model", "wait_kill",
                                   "wait_steal"]  # fmt: skip
-    assert live.live_sensors() == ["current_map", "hp_percent", "is_dead", "map_load_seen",
-                                   "sees_boss", "sp_percent", "weight_percent"]  # fmt: skip
+    assert live.live_sensors() == ["current_map", "hotbar_count", "hp_percent", "is_dead",
+                                   "map_load_seen", "sees_boss", "sp_percent",
+                                   "weight_percent"]  # fmt: skip  # 2026-11-14: hotbar_count
     doc = editor.catalogue_doc()
     assert doc["live"]["blocks"] == live.live_blocks() and doc["live"]["stage"] == 4
     assert doc["live"]["hunt_core"]["recipes"]["shapes"] == [list(x) for x in dh.RECIPE_SHAPES]
     assert doc["live"]["hunt_core"]["sensors"] == ["hp_percent", "sp_percent", "sees_boss",
-                                                   "weight_percent"]  # fmt: skip
+                                                   "weight_percent", "hotbar_count"]  # fmt: skip
+    assert doc["live"]["hunt_core"]["eat"]["role"] == "eat"
     assert doc["live"]["hunt_core"]["calls"]["max_wait_s"] == 1.0
     assert doc["blocks"]["press_key"]["spec"]["live"] is True
     assert doc["blocks"]["walk_to"]["spec"]["live"] is False
@@ -231,10 +233,11 @@ def test_the_live_set_is_one_place_and_the_catalogue_serves_it() -> None:
         *live.live_blocks(),
         *live.live_sensors(),
     }
-    # one version, three places (stage 4a: the box's model and recipes; stage 3's functions stay
-    # 9.50, stage 2's survival events 9.49, stage 1's library seam 9.48); the runner's own version
-    # is unchanged
-    assert dh.BOX_RECIPES_VERSION == live.VERSION == fp.VERSION == "9.51"
+    # one version, three places (2026-11-14: the box eats from the hotbar; stage 4a's model and
+    # recipes stay 9.51, stage 3's functions 9.50, stage 2's survival events 9.49, stage 1's
+    # library seam 9.48); the runner's own version is unchanged
+    assert dh.BOX_EAT_VERSION == live.VERSION == fp.VERSION == "9.52"
+    assert dh.BOX_RECIPES_VERSION == "9.51"
     assert dh.BOX_FUNCTIONS_VERSION == "9.50"
     assert dh.SURVIVAL_EVENTS_VERSION == "9.49"
     assert dh.LIVE_BLOCKS_VERSION == "9.48" and dh.VERSION == "dungeon@8.7"
@@ -748,10 +751,18 @@ def test_the_box_takeovers_name_real_settings_and_follow_the_plan() -> None:
     drink = rows[("potion", "drink")]
     assert (drink["settings"], drink["when"], drink["until"], drink["path"]) == (
         ["potion_below"],
-        "HP < 30 %",
-        "HP >= 31 %",
+        "HP < 50 %",  # Batt 2026-11-14: "raise the drink" (live-blocks.md 10; it was 30 %)
+        "HP >= 51 %",
         "xmas_dun02/survival/drink",
     )
+    # 2026-11-14: the candies, eaten at once -- a play of the box's own, no takeover row (it
+    # switches nothing of the runner's off); its words are cond_words'
+    assert "eat" in doc["plays"] and not [r for r in doc["takeovers"] if r["play"] == "eat"]
+    assert live.OWN_PLAYS == ("eat",)
+    assert live.hunt_plan(c.flow, "xmas_dun02").play_by["eat"] == ("eat_cane", "eat_candy")
+    cnt = ir.Sense(sensor="hotbar_count", args={"key": ir.Lit(value="F6")})
+    assert live.cond_words(ir.Cmp(op=">", left=cnt, right=ir.Lit(value=0))) == "F6's count > 0"
+    assert live.cond_words(ir.Cmp(op="==", left=cnt, right=ir.Lit(value=0))) == "F6's count = 0"
     fly = rows[("fly_hp", "fly_away")]
     assert (fly["settings"], fly["when"]) == (["fly_below"], "a boss is seen or HP < 25 %")
     assert rows[("boss_fly", "fly_away")]["settings"] == []  # no setting: the boss line itself

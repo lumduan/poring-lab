@@ -253,6 +253,54 @@ CLICK_ROLES = {
 STEPS_MAX = 4  # presses and clicks in one role body
 STEPS_WAIT_MAX_S = 1.0  # its waits in all: the runner waits while the box plays a body
 
+# --- 2026-11-14 (Batt ~14:0x: "the moment we get a Candy Cane or a Candy, eat it to add HP right
+# away; that also cuts the weight"; docs/planning/live-blocks.md section 10) ----------------------
+# The OPTIONAL eat role: the function the box's events call, inside the hunt core, to eat a food
+# item from the hotbar. Its body is ONE press_key of its INPUT (the item's key, given a literal at
+# every call: `def eat(key): press_key(key)`, called as `eat("F6")`) or of one literal key. Every
+# press inside a call of it is an EAT press (poring_flow.live.hunt_plan's play "eat"); its keys are
+# not Run keys (the start's slot check and the stock never read them), none another role's.
+EAT_ROLE = "eat"
+EAT_WORDS = "the function the box's events call to eat a food item from the hotbar"
+# the sensor that reads a slot's drawn count (blocks.yaml hotbar_count; live inside a hunt core)
+HOTBAR_SENSOR = "hotbar_count"
+
+
+def hotbar_key(e: Any) -> str | None:
+    """A hotbar_count read's LITERAL key ("F6"), else None (another sensor, or no literal)."""
+    if not (isinstance(e, ir.Sense) and e.sensor == HOTBAR_SENSOR):
+        return None
+    k = e.args.get("key")
+    return k.value if isinstance(k, ir.Lit) and isinstance(k.value, str) else None
+
+
+def hotbar_keys_read(flow: ir.Flow) -> list[str]:
+    """PURE: every literal key the flow's hotbar_count reads name, anywhere it holds an expression
+    (statements, event conditions, assumes, stop_when), sorted (the simulator starts them at 0)."""
+    exprs: list[Any] = [e for site in ir.sites(flow) for _, e in ir.stmt_exprs(site.stmt)]
+    for _, h, _, _ in ir.handler_bodies(flow):
+        exprs += [c for c in (h.when, h.until, h.rearm) if c is not None]
+    exprs += list(flow.assumes) + ([flow.stop_when] if flow.stop_when is not None else [])
+    keys = {k for e in exprs for x in ir.sub_exprs(e) if (k := hotbar_key(x)) is not None}
+    return sorted(keys)
+
+
+def eat_shape(flow: ir.Flow, name: str) -> str | None:
+    """PURE: why ``name`` cannot be dungeon_hunt's eat function (None: it can) -- its body is
+    exactly one press_key whose key is a literal or one of its own inputs."""
+    if name not in flow.procedures:
+        return f"there is no function {name}"
+    st = single_press(flow, name)
+    if st is None:
+        return f"{name}'s body is not exactly one press_key (the eaten item's key)"
+    e = st.params.get("key")
+    if isinstance(e, ir.Lit) and isinstance(e.value, str):
+        return None
+    sig = flow.signatures.get(name)
+    if isinstance(e, ir.Var) and sig is not None and e.name in sig.names():
+        return None
+    return f"{name}'s press_key presses neither a literal key nor one of its inputs"
+
 
 @dataclass(frozen=True)
 class Step:

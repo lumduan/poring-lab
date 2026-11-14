@@ -75,6 +75,17 @@ calls the hook's ``recipe(species, why)`` and the player answers with that speci
 code: a recipe without knife_on strikes that monster without the Knife swap. A box without
 use_model and recipes plays exactly as stage 3 (run() gets no box_model, no box_recipes).
 
+THE BOX EATS FROM THE HOTBAR (2026-11-14, Batt ~14:0x: "the moment we get a Candy Cane or a Candy,
+eat it to add HP right away; that also cuts the weight"; live-blocks.md section 10; dungeon@9.52):
+the sensor hotbar_count(key) is the count drawn on a row-1 hotbar slot. Inside a hunt core the
+player reads it from the runner's tick frame (HuntTick.frame) with the runner's own reader
+(hotbar_count.read_count, its digit templates loaded at run time from data/hotbar), only for the
+keys the box's events name (live.hunt_plan -> RunnerPlan.hotbar_keys) and at most once every
+HOTBAR_EVERY_S a key (between reads it keeps the last value); an empty slot reads 0, a count it
+cannot read is unknown -- an event that reads it is then not evaluated (it never fires, and a
+repeating one pauses). Elsewhere it is unknown. An event's presses through dungeon_hunt's eat
+function are EAT presses: the runner presses them through its own press path (run(box_eat=...)).
+
 THE START, before any input: the project validates; the node is a map node; every block plays live;
 the time box fits the Settings maximum (--max-s); each hunt core's keys resolve from the node's
 functions (project.runner_keys) and its runner settings from the config file; then the START CHECK
@@ -132,6 +143,7 @@ from poring_flow.runtime import (  # noqa: E402
     _Frame,
     _Halt,
     _Tick,
+    hotbar_world_key,
 )
 
 VERSION = live.VERSION  # dungeon_hunt.SURVIVAL_EVENTS_VERSION (test_live_player.py pins them)
@@ -142,6 +154,11 @@ EXPECT_S = 20.0  # after a Butterfly Wing's press, a map change within this long
 SETTLE_S = 20.0  # a relocation waits this long for the minimap to name the map
 SETTLE_POLL_S = 0.25
 BLOCK_LOG_S = 1.0  # the same node entered again within this long is not logged again (a loop)
+# 2026-11-14 (live-blocks.md 10): hotbar_count(key) inside the hunt core -- each key is read from
+# the runner's tick frame at most this often (between reads it keeps the last value): a press's
+# count change shows within ~0.5 s, and an eat event's cooldown (the one box: 1.5 s) is longer
+HOTBAR_EVERY_S = 1.0
+HOTBAR_ROWS = 40  # the game frame's top rows that hold row 1's icons and counts (hotbar_count.py)
 ROLE_PRESS = {"heal_key": "potion", "fly_key": "fly", "home_key": "home", "knife_key": "opener",
               "dagger_key": "equip"}  # flow_run.PRESS_BLOCK's words (the live line)  # fmt: skip
 MIRROR = frozenset({*fr.EVENT_BLOCK, "press", "death", "player_home", "player_end",
@@ -152,6 +169,10 @@ CHECK_LABEL = "flowplay-check"
 
 def refuse(words: str) -> str:
     return f"flow_play refused before any input: {words}"
+
+
+def _sense_names(e: Any) -> set[str]:
+    return {x.sensor for x in ir.sub_exprs(e) if isinstance(x, ir.Sense)}
 
 
 # --- the plan (PURE: no screen, no input) ---------------------------------------------------------
@@ -179,6 +200,11 @@ class RunnerPlan:
     model_doc: Mapping[str, Any] | None = None
     recipes: Mapping[str, Any] = field(default_factory=dict)
     default_species: tuple[str, ...] = ()
+    # 2026-11-14 (live-blocks.md 10): the keys the box's events eat (through dungeon_hunt's eat
+    # function, its name) and the keys their hotbar_count reads name (read from the tick frame)
+    eat_keys: tuple[str, ...] = ()
+    eat_name: str | None = None
+    hotbar_keys: tuple[str, ...] = ()
 
     def box_kwargs(self) -> dict[str, Any]:
         """dungeon_hunt run(...)'s box arguments: none at all for a box without events, functions,
@@ -190,6 +216,8 @@ class RunnerPlan:
             box["box_model"] = dict(self.model_doc)
         if self.recipes:  # stage 4a: the monsters' recipes
             box["box_recipes"] = {sp: r.doc() for sp, r in sorted(self.recipes.items())}
+        if self.eat_keys:  # 2026-11-14: the keys the box eats (none: exactly as 9.51)
+            box["box_eat"] = list(self.eat_keys)
         return box
 
     def box_roles(self) -> dict[str, str]:
@@ -243,7 +271,11 @@ class Prepared:
                                 **({"box_model": dict(p.model_doc)} if p.model_doc else {}),
                                 **({"box_recipes": p.box_kwargs()["box_recipes"],
                                     "default_species": list(p.default_species)}
-                                   if p.recipes else {})} for b, p in
+                                   if p.recipes else {}),
+                                **({"box_eat": list(p.eat_keys), "eat": p.eat_name}
+                                   if p.eat_keys else {}),
+                                **({"hotbar_keys": list(p.hotbar_keys)}
+                                   if p.hotbar_keys else {})} for b, p in
                             self.runners.items()}}  # fmt: skip
 
 
@@ -308,8 +340,10 @@ def prepare(text: str, node: str, max_s: int | None, *, config_dir: Path = fr.CO
         runners[block] = RunnerPlan(block, fid, dict(rk.keys), vals, hp.events, hp.plays,
                                     dict(hp.calls), dict(hp.call_names), hp.weight_events,
                                     hp.knife_ends, hp.model_doc, dict(hp.recipes),
-                                    hp.default_species)  # fmt: skip
+                                    hp.default_species, hp.eat_keys, hp.eat_name,
+                                    hp.hotbar_keys)  # fmt: skip
         roles.update({k: ROLE_PRESS[f] for f, k in rk.keys.items() if f in ROLE_PRESS})
+        roles.update({k: "eat" for k in hp.eat_keys})  # 2026-11-14: the live line's words
     return Prepared(p, c, node, h, float(min(p.max_runtime_s, max_s)), runners, roles)
 
 
@@ -363,8 +397,28 @@ class LiveIO:
     def release(self) -> None:  # ReleaseAll
         raise NotImplementedError
 
+    def hotbar_counts(self, frame: Any, keys: Sequence[str]) -> dict[str, int | None]:
+        """2026-11-14: each key's drawn count on the hunt core's tick frame (0: an empty slot;
+        None: unread). This interface reads none (unknown); PixelIO reads the pixels."""
+        return {k: None for k in keys}
+
     def close(self) -> None:
         pass
+
+
+def read_hotbar(frame: Any, keys: Sequence[str], tpl: Mapping[str, Any]) -> dict[str, int | None]:
+    """PURE (2026-11-14, live-blocks.md 10): each row-1 key's count on a game-region frame, by the
+    runner's own reader (hotbar_count.read_count on hotbar_count.gray of the frame's top
+    HOTBAR_ROWS rows; dungeon_hunt.hotbar_slot): 0 for an empty slot, None when it cannot be read
+    (no frame, or a digit the templates do not match)."""
+    import dungeon_hunt as dh
+    import hotbar_count as hb
+    import numpy as np
+
+    if frame is None:
+        return {k: None for k in keys}
+    g = hb.gray(np.asarray(frame)[:HOTBAR_ROWS])
+    return {k: hb.read_count(g, dh.hotbar_slot(k), dict(tpl)) for k in keys}
 
 
 class PixelIO(LiveIO):
@@ -386,6 +440,7 @@ class PixelIO(LiveIO):
         self.agent = None
         self._w: int | None = None
         self._w_t = -1e9
+        self._hb_tpl: dict[str, Any] | None = None  # the hotbar digits, loaded at the first read
 
     def ns(self) -> int:
         return int(self.r.ns())
@@ -424,6 +479,19 @@ class PixelIO(LiveIO):
 
     def tap(self, code: str) -> None:
         self.agent.keys(code)  # down, 50 ms, up, 50 ms: the client takes a paced tap
+
+    def hotbar_counts(self, frame: Any, keys: Sequence[str]) -> dict[str, int | None]:
+        """The runner's own hotbar reader on the tick's frame; its digit templates are the
+        client's pixels, loaded at RUN TIME from data/hotbar (never in git). Missing templates:
+        no digit reads (a count is unknown), an empty slot still reads 0."""
+        if self._hb_tpl is None:
+            import hotbar_count as hb
+
+            try:
+                self._hb_tpl = hb.load()
+            except (OSError, KeyError, ValueError):
+                self._hb_tpl = {}
+        return read_hotbar(frame, keys, self._hb_tpl)
 
     def release(self) -> None:
         if self.agent is not None:
@@ -540,6 +608,8 @@ class HuntCore:
         player.rec.ev({"kind": "hunt_start", "node": player.node_path, "n": self.n,
                        "flow": plan.flow_id, "keys": plan.keys, "argv": argv,
                        "events": list(plan.events), "box_plays": sorted(plan.plays),
+                       **({"box_eat": box["box_eat"]} if "box_eat" in box else {}),
+                       **({"hotbar_keys": list(plan.hotbar_keys)} if plan.hotbar_keys else {}),
                        **({"box_model": box["box_model"]["id"]} if "box_model" in box else {}),
                        **({"box_recipes": box["box_recipes"],
                            "default_species": list(plan.default_species)}
@@ -592,6 +662,9 @@ class LivePlayer(Sim):
         self._hunt_halt: _Halt | None = None  # one of them ended the run (its words: words)
         self._playing: str | None = None  # the event whose body plays now (its key)
         self._readings: dict[str, dict[str, Any]] = {}  # event key -> the reading that fired it
+        # 2026-11-14: hotbar_count inside the hunt core -- the keys it reads, each one's last read
+        self._hunt_hotbar: tuple[str, ...] = ()
+        self._hotbar_t: dict[str, float] = {}
 
     # -- the clock and the sensors --
     def stop_due(self) -> str | None:
@@ -765,11 +838,15 @@ class LivePlayer(Sim):
             return "failed"
         self._hunt_keys = frozenset(plan.events)  # stage 2: they play through its tick hook
         self._hunt_weight = frozenset(plan.weight_events)  # stage 3: on its weight read only
+        self._hunt_hotbar, self._hotbar_t = plan.hotbar_keys, {}  # 2026-11-14: from its frames
         try:
             res = self.hunt.play(self, plan)
         finally:
             self._hunt_keys = self._hunt_weight = frozenset()
             self.world["sees_boss"] = None  # the runner's boss read: unknown outside it
+            for k in self._hunt_hotbar:  # hotbar_count: unknown outside it too
+                self.world[hotbar_world_key(k)] = None
+            self._hunt_hotbar = ()
         self._next = self.io.clock()
         self.t = self.io.clock() - self._t0
         if res.left:  # its own map exit: the map change it made is expected
@@ -873,13 +950,19 @@ class LivePlayer(Sim):
                      **({"in": "hunt"} if self._port is not None else {})})  # fmt: skip
 
     def _reading_of(self, e: Any) -> dict[str, Any]:
-        """The values its conditions read when it fired (the record; the press's why)."""
+        """The values its conditions read when it fired (the record; the press's why); a
+        hotbar_count read as "hotbar_count(F6)" (2026-11-14)."""
         h = e.handler
-        names = sorted({x.sensor for c in (h.when, h.until, h.rearm) if c is not None
-                        for x in ir.sub_exprs(c) if isinstance(x, ir.Sense) and not x.args
+        conds = [c for c in (h.when, h.until, h.rearm) if c is not None]
+        names = sorted({x.sensor for c in conds for x in ir.sub_exprs(c)
+                        if isinstance(x, ir.Sense) and not x.args
                         and x.sensor not in live.HELPER_SENSORS})  # fmt: skip
         world_key = {"current_map": "map", "position": "cell"}
-        return {n: self.world.get(world_key.get(n, n)) for n in names}
+        out = {n: self.world.get(world_key.get(n, n)) for n in names}
+        hot = sorted({k for c in conds for x in ir.sub_exprs(c)
+                      if (k := fn.hotbar_key(x)) is not None})  # fmt: skip
+        out.update({f"{fn.HOTBAR_SENSOR}({k})": self.world.get(hotbar_world_key(k)) for k in hot})
+        return out
 
     def _box_why(self) -> str:
         """A box press's why in the runner's record: "box fly_away (hp_percent 80, sees_boss
@@ -909,17 +992,22 @@ class LivePlayer(Sim):
         if not keys:
             return None
         boss = None if view.quick else view.boss is not None  # quick: no Battle Log read
-        if view.hp_pct is None and not boss:
-            return None  # nothing to decide on: no HP read and no boss line
+        vitals = view.hp_pct is not None or bool(boss)
         self.t = self.io.clock() - self._t0
-        changes: dict[str, Any] = {"hp_percent": view.hp_pct, "sp_percent": view.sp_pct,
-                                   "sees_boss": boss}  # fmt: skip
-        if not view.quick:
-            changes["is_dead"] = bool(view.dead)
+        read = self._hotbar_read(getattr(view, "frame", None))  # 2026-11-14: from its frame
+        if not vitals and not read:
+            return None  # nothing to decide on: no HP read, no boss line, no hotbar count
+        changes: dict[str, Any] = {}
+        if vitals:
+            changes.update({"hp_percent": view.hp_pct, "sp_percent": view.sp_pct,
+                            "sees_boss": boss})  # fmt: skip
+            if not view.quick:
+                changes["is_dead"] = bool(view.dead)
+        changes.update({hotbar_world_key(k): v for k, v in read.items()})
         self._set(changes, "world")
         node_path, self._port = self.node_path, press
         try:
-            for e in self._perceive(lambda x: x.key in keys):
+            for e in self._perceive(lambda x: x.key in keys and self._decides(x, vitals)):
                 self._fire(e)
             self._preempt_now(keys)
             self._run_inserts()
@@ -929,6 +1017,32 @@ class LivePlayer(Sim):
         finally:
             self._port, self.node_path = None, node_path
         return None
+
+    def _hotbar_read(self, frame: Any) -> dict[str, int | None]:
+        """2026-11-14: the hotbar keys due a read on this tick (each at most every HOTBAR_EVERY_S;
+        between reads the world keeps the last value), read from the tick's frame. {}: none due,
+        or no frame."""
+        if not self._hunt_hotbar or frame is None:
+            return {}
+        due = [k for k in self._hunt_hotbar
+               if self.t - self._hotbar_t.get(k, -1e9) >= HOTBAR_EVERY_S]  # fmt: skip
+        if not due:
+            return {}
+        for k in due:
+            self._hotbar_t[k] = self.t
+        return dict(self.io.hotbar_counts(frame, due))
+
+    def _decides(self, e: Any, vitals: bool) -> bool:
+        """May the event be evaluated on this hunt tick: an event that reads HP, SP or the boss
+        needs a tick that carries them (stage 2's rule); one that reads hotbar_count needs every
+        slot it reads known (an unreadable count never fires it, and a repeating one pauses)."""
+        h = e.handler
+        conds = [c for c in (h.when, h.until, h.rearm) if c is not None]
+        reads = set().union(set(), *(_sense_names(c) for c in conds))
+        hot = {k for c in conds for x in ir.sub_exprs(c) if (k := fn.hotbar_key(x)) is not None}
+        if any(self.world.get(hotbar_world_key(k)) is None for k in hot):
+            return False
+        return vitals or (bool(hot) and not reads & set(live.VITAL_SENSORS))
 
     def _weight_tick(self, w: int, press: Callable[[str, str], str | None]) -> str | None:
         """Stage 3: the weight read of the runner's UI watch -- only the WEIGHT events are

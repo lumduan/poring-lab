@@ -51,7 +51,7 @@ from poring_flow import functions as fn
 from poring_flow import ir
 from poring_flow.catalogue import Catalogue, catalogue
 from poring_flow.models import detector_keys
-from poring_flow.runtime import TICK_S, Plan, Sim, _Halt, _Tick, default_plan
+from poring_flow.runtime import TICK_S, Plan, Sim, _Halt, _Tick, default_plan, hotbar_world_key
 from poring_flow.sheet import Cell, MapSheet, World
 
 WALK_MS = 150  # RO's default walk speed: one cell
@@ -82,6 +82,8 @@ ScenarioKey = Literal[
     "engaged_species",
     "sees_boss",  # live-blocks.md stage 2: the hunt core's boss read, scripted like the others
 ]
+# 2026-11-14 (live-blocks.md 10): hotbar_count(key)'s keys, the hotbar's row 1
+HotbarKey = Literal["F1", "F2", "F3", "F4", "F5", "F6", "F7", "F8", "F9"]
 
 
 class Change(BaseModel):
@@ -95,6 +97,11 @@ class Change(BaseModel):
     # boxes of that class it finds from t on (0 = it sees none); before any entry: 0
     detects: dict[DetectKey, Annotated[int, Field(ge=0, le=999)]] = Field(
         default_factory=dict, max_length=10
+    )
+    # 2026-11-14 (live-blocks.md 10): hotbar_count(key) -- the count drawn on a row-1 slot from t
+    # on (0 = an empty slot); before any entry: 0 for every key the flow reads
+    hotbar: dict[HotbarKey, Annotated[int, Field(ge=0, le=999)]] = Field(
+        default_factory=dict, max_length=9
     )
 
 
@@ -217,6 +224,8 @@ class TraceSim(Sim):
                 values[f"wing:{item.id}"] = "butterfly"
         # every model / class pair the flow reads starts at 0 boxes (the scenario sets others)
         values.update({f"detect:{k}": 0 for k in detector_keys(flow)})
+        # every hotbar key the flow reads starts as an empty slot (the scenario sets others)
+        values.update({hotbar_world_key(k): 0 for k in fn.hotbar_keys_read(flow)})
         timeline: list[tuple[float, dict[str, Any]]] = []
         for ch in sc.timeline:
             changes: dict[str, Any] = {}
@@ -224,6 +233,7 @@ class TraceSim(Sim):
                 changes[k] = ir.MobRef(id=int(v)) if k == "engaged_species" else v
             changes.update({f"sees:{m}": seen for m, seen in ch.sees.items()})
             changes.update({f"detect:{k}": n for k, n in ch.detects.items()})
+            changes.update({hotbar_world_key(k): n for k, n in ch.hotbar.items()})
             timeline.append((ch.t, changes))
         super().__init__(
             flow,
