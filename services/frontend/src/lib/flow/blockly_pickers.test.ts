@@ -13,10 +13,11 @@ import { fileURLToPath } from "node:url";
 
 import type * as BlocklyT from "blockly/core";
 
-import { displayOf, PICK_NUM, PICK_TEXT, pickerSession, setPickerSource, specOf } from "../../components/flows/blockly-pickers.ts";
+import { displayOf, PICK_NUM, PICK_TEXT, pickerDrag, pickerSession, setPickerSource, specOf } from "../../components/flows/blockly-pickers.ts";
 import { register, syncExprWrap } from "../../components/flows/blockly-register.ts";
 import { tabFromWorkspace, tabToWorkspace, type Workspace, type WsBlock } from "./blocks.ts";
 import { canonical } from "./ir.ts";
+import { pointIn } from "./pickers.ts";
 import { MAIN_TAB, type Project, sampleProject, xmasProject } from "./project.ts";
 import { SETTING_BY_NAME, SETTINGS, settingType } from "./settings.ts";
 import { sessionProject } from "./testkit.ts";
@@ -296,4 +297,62 @@ test("round 22: a long condition wraps onto rows of the same box, whole; the sav
   syncExprWrap(B, long);
   assert.equal(long.inputList.length, 1);
   ws.dispose();
+});
+
+// --- round 24 (live-blocks.md 12.8): the FIRST drag after a point picker opens reads like the second
+// The reviewer at 1440 (the picker COMPACT, the picture 176 x 99 at about (702, 505)): the first drag
+// read 360 at 50 %, then 719 at 55 % and 90 %; a second drag read 360 / 396 / 648. The picker lives
+// inside Blockly's injection div, so it moves with the canvas; on a wide screen the canvas moved UP
+// after the press (the edit made the lint stale and the strip over the canvas lost its IN A RUN
+// lines), and round 23 read the picture's box again at every move. These tests play the open
+// sequence in order on the real drag code, with a fake picture whose box moves when the page does.
+type Box = { left: number; top: number; width: number; height: number };
+function fakePicture(box: Box, scrollTop = 0) {
+  const root = { scrollTop };
+  class Svg extends EventTarget {
+    setPointerCapture(): void {}
+    closest(sel: string): unknown {
+      return sel === ".pl-picker" ? root : null;
+    }
+  }
+  const svg = new Svg();
+  const back = { getBoundingClientRect: () => ({ ...box }) }; // the drawn picture, wherever it is NOW
+  const read: [number, number][] = [];
+  pickerDrag(svg as unknown as SVGSVGElement, (fn) => fn(), (x, y) => void read.push(pointIn((x * 1280) / 256, (y * 720) / 144)), { el: back as unknown as Element, area: { x: 0.5, y: 0.5, width: 255, height: 143 } });
+  const fire = (type: string, x: number, y: number) => svg.dispatchEvent(Object.assign(new Event(type, { cancelable: true }), { button: 0, pointerId: 1, clientX: x, clientY: y }));
+  return { box, root, read, fire };
+}
+
+test("round 24: the canvas moves up after the press (the strip's IN A RUN lines go): the first drag reads 360 / 396 / 646, like the second", () => {
+  const p = fakePicture({ left: 702, top: 505, width: 175.3, height: 98.3 }); // after Blockly's slide
+  const T0 = { ...p.box }; // where the reviewer measured the picture before the first drag
+  const at = (b: Box, f: number): [number, number] => [b.left + 0.5 * b.width, b.top + f * b.height];
+  p.fire("pointerdown", ...at(T0, 0.5));
+  p.box.top -= 56; // the edit makes the lint stale: the strip's three IN A RUN lines go, the canvas rises
+  p.fire("pointermove", ...at(T0, 0.55));
+  p.fire("pointermove", ...at(T0, 0.9));
+  p.fire("pointerup", ...at(T0, 0.9));
+  assert.deepEqual(p.read.map(([, y]) => y), [360, 396, 646], "the first drag (round 23 read 360 / 719 / 719)");
+  assert.equal(p.read[1][0], 640); // x was always right
+  // the second drag, measured where the picture is now
+  const T1 = { ...p.box };
+  p.read.length = 0;
+  p.fire("pointerdown", ...at(T1, 0.5));
+  p.fire("pointermove", ...at(T1, 0.55));
+  p.fire("pointermove", ...at(T1, 0.9));
+  p.fire("pointerup", ...at(T1, 0.9));
+  assert.deepEqual(p.read.map(([, y]) => y), [360, 396, 646], "the second drag");
+});
+
+test("round 24: Blockly's slide and keepDropDownsInside's nudge landing after the press change nothing a move reads; a drag holds the picker's scroll", () => {
+  const p = fakePicture({ left: 702, top: 489 + 8, width: 175.3, height: 98.3 }, 30); // mid-slide (16 px, 0.25 s)
+  const pressAt: [number, number] = [p.box.left + 0.5 * p.box.width, p.box.top + 0.5 * p.box.height];
+  p.fire("pointerdown", ...pressAt);
+  p.box.top = 505; // the slide ends
+  p.box.top -= 12; // the nudge back inside the blocks area
+  p.root.scrollTop = 80; // and something scrolls the picker's root
+  p.fire("pointermove", pressAt[0], pressAt[1] + 0.05 * p.box.height); // 5 % of the picture lower
+  p.fire("pointerup", pressAt[0], pressAt[1] + 0.05 * p.box.height);
+  assert.deepEqual(p.read.map(([, y]) => y), [360, 396]);
+  assert.equal(p.root.scrollTop, 30); // held where it was at the press
 });

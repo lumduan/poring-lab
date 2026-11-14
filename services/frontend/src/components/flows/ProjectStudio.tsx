@@ -35,7 +35,7 @@ import LiveRun, { LiveRunButtons, RunNotReady, useLiveRun } from "@/components/f
 import { DEFAULT_SIM, FlowSettings, HuntRulesPanel, LintPanel, PathPanel, scenarioOf, type SimForm, SimulatePanel } from "@/components/flows/Panels";
 import { ApiError, type CatalogueDoc, type Finding, FlowsApi, type LintDoc, type PythonFiles, type SimDoc, sitePath, type WorldSource } from "@/lib/flow/api";
 import type { ToolboxScope } from "@/lib/flow/blockdefs";
-import { boxTabNote, boxTabShort } from "@/lib/flow/box";
+import { boxStripPart } from "@/lib/flow/box";
 import { type FileMeta, newFileMeta, readFileMeta, writeFileMeta } from "@/lib/flow/file";
 import { canonical } from "@/lib/flow/ir";
 import { ACTIVE, busyWhy, PROJECT_FLOW } from "@/lib/flow/liverun";
@@ -659,9 +659,10 @@ export default function ProjectStudio({ backendUrl, initialNode = null }: { back
   const strip = nodeStrip(project, node, overrides);
   // matpilot round 17 N1: what this node's box plays in a Run of the project, and what of the
   // runner's (and of its setting blocks) it replaces: the engine's takeovers (POST /flows/lint)
-  const box = lintStale ? null : (lintDoc?.box?.[node.id] ?? null);
-  const boxNote = tab ? boxTabNote(box, node.id, tab.name, runValues) : null;
-  if (boxNote && tab) strip.push({ head: "IN A RUN", text: boxNote, short: boxTabShort(box, node.id, tab.name) });
+  // round 24 (live-blocks.md 12.8): from the LAST lint, also while it checks an edit (marked), so the
+  // strip over the canvas keeps its height and the canvas -- and a picker open in it -- never jumps
+  const runPart = tab ? boxStripPart(lintDoc?.box?.[node.id] ?? null, lintStale, node.id, tab.name, runValues) : null;
+  if (runPart) strip.push(runPart);
   // live-blocks.md 12: a settings tab says what its blocks are (the group's title, the name rule)
   const settingsNote = tab ? settingTabNote(tab, node.kind, globalOf(project) !== undefined) : null;
   if (settingsNote) strip.push({ head: "SETTINGS", text: settingsNote });
@@ -859,7 +860,7 @@ export default function ProjectStudio({ backendUrl, initialNode = null }: { back
               </button>
             )}
             {strip.map((s) => (
-              <span key={s.head} className="map-binding-part">
+              <span key={s.head} className="map-binding-part" data-stale={s.stale ? "true" : undefined} title={s.stale ? "checking the last edit: these are the last check's words" : undefined}>
                 <span className="map-binding-head">{s.head}</span> {s.text}
               </span>
             ))}

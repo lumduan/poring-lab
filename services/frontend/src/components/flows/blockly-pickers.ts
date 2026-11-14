@@ -247,6 +247,10 @@ export function keepDropDownsInside(B: B_, area: () => DOMRect | null): () => vo
   let timer: ReturnType<typeof setTimeout> | null = null;
   const check = () => {
     timer = null;
+    if (dragging > 0) {
+      timer = setTimeout(check, 120); // round 24: never under a finger; after the drag
+      return;
+    }
     if (!B.DropDownDiv.isVisible()) {
       content.style.maxHeight = "";
       mine = null;
@@ -278,40 +282,64 @@ function closePicker(field: BlocklyT.Field): void {
   BL!.DropDownDiv.hideIfOwner(field, true);
 }
 
+/** How many drags are in progress (keepDropDownsInside never moves a picker under a finger). */
+let dragging = 0;
+
 /** Calls `onPoint` while the pointer is pressed on the element, in the element's own SVG units;
  * a press and its drag are part of the picker's session (`run`: no undo step until it is kept).
- * Round 23 (the reviewer: in the COMPACT picker at 1440 the point picture read y 719 from 55 % on,
- * by mouse and by touch): with `ref`, a place is mapped from the DRAWN area's own box on the screen
- * (`ref.el`'s getBoundingClientRect: whatever size the picker gives the picture, the svg box's
- * letterboxing or a transform) onto that area's extent in the svg (`ref.area`; pickers.ts toArea);
- * else through the SVG's screen matrix. The picker cannot scroll under the pointer while it drags. */
+ * Round 23: with `ref`, a place is mapped from the DRAWN area's own box on the screen (`ref.el`'s
+ * getBoundingClientRect: whatever size the picker gives the picture, the svg box's letterboxing or
+ * a transform) onto that area's extent in the svg (`ref.area`; pickers.ts toArea); else through the
+ * SVG's screen matrix.
+ * Round 24 (the reviewer: at 1440 the FIRST drag after the picker opened read y 360 at 50 %, then
+ * 719 at 55 % and 90 %; the second drag was right): the picker lives inside Blockly's injection div
+ * (Blockly's parent container for the DropDownDiv), so it moves with the canvas -- and on a wide
+ * screen the canvas moved UP right after the press: the press changed the value, the edit made
+ * the lint stale, and the strip over the canvas lost its IN A RUN words (several lines). Round 23
+ * read the picture's box again at every move, so the moves were read against the moved picture
+ * and the pointer was below it. Now the box (or the screen matrix) is read ONCE, at the press, and
+ * the whole drag is read against the picture as it was pressed: nothing that moves the picker
+ * after the press (that strip, Blockly's 0.25-s slide, keepDropDownsInside's nudge, a scroll) can
+ * change what a move reads. The next press reads the box again. The picker's root and Blockly's
+ * content box cannot scroll under the pointer while it drags, and no nudge lands during a drag. */
 function onDrag(el: SVGSVGElement, run: (fn: () => void) => void, onPoint: (x: number, y: number) => void, ref?: { el: Element; area: { x: number; y: number; width: number; height: number } }): void {
-  const local = (e: PointerEvent): [number, number] => {
-    if (ref) return toArea(e.clientX, e.clientY, ref.el.getBoundingClientRect(), ref.area);
+  /** The mapping of one drag, fixed at its press. */
+  const pressed = (): ((e: PointerEvent) => [number, number]) => {
+    if (ref) {
+      const drawn = ref.el.getBoundingClientRect();
+      return (e) => toArea(e.clientX, e.clientY, drawn, ref.area);
+    }
     const ctm = el.getScreenCTM?.();
     if (ctm && typeof el.createSVGPoint === "function") {
-      const pt = el.createSVGPoint();
-      pt.x = e.clientX;
-      pt.y = e.clientY;
-      const q = pt.matrixTransform(ctm.inverse());
-      return [q.x, q.y];
+      const inv = ctm.inverse();
+      return (e) => {
+        const pt = el.createSVGPoint();
+        pt.x = e.clientX;
+        pt.y = e.clientY;
+        const q = pt.matrixTransform(inv);
+        return [q.x, q.y];
+      };
     }
+    const box = el.getBoundingClientRect();
     const view = el.viewBox.baseVal;
-    return toViewBox(e.clientX, e.clientY, el.getBoundingClientRect(), view && view.width ? view : { width: el.clientWidth, height: el.clientHeight });
+    const v = view && view.width ? view : { width: el.clientWidth, height: el.clientHeight };
+    return (e) => toViewBox(e.clientX, e.clientY, box, v);
   };
   el.addEventListener("pointerdown", (e) => {
     if (e.button !== 0) return;
     e.preventDefault();
     e.stopPropagation();
     el.setPointerCapture(e.pointerId);
-    const scroller = el.closest(".blocklyDropDownContent, .pl-picker") as HTMLElement | null;
-    const top = scroller?.scrollTop ?? 0;
+    const local = pressed();
+    const held = [el.closest(".pl-picker"), el.closest(".blocklyDropDownContent")].filter((x): x is HTMLElement => !!x).map((x) => [x, x.scrollTop] as const);
     const at = (ev: PointerEvent) => {
-      if (scroller && scroller.scrollTop !== top) scroller.scrollTop = top; // no scroll mid-drag
+      for (const [x, top] of held) if (x.scrollTop !== top) x.scrollTop = top; // no scroll mid-drag
       run(() => onPoint(...local(ev)));
     };
+    dragging++;
     at(e);
     const end = () => {
+      dragging = Math.max(0, dragging - 1);
       el.removeEventListener("pointermove", at);
       el.removeEventListener("pointerup", end);
       el.removeEventListener("pointercancel", end);
@@ -321,6 +349,10 @@ function onDrag(el: SVGSVGElement, run: (fn: () => void) => void, onPoint: (x: n
     el.addEventListener("pointercancel", end);
   });
 }
+
+/** The drag, for the headless tests (blockly_pickers.test.ts: the open sequence, then the first
+ * press and moves, reads like a second drag). */
+export const pickerDrag = onDrag;
 
 /** Makes an element a slider for the keyboard and screen readers (matpilot makeSlider); the
  * returned function refreshes its aria values. */
@@ -349,7 +381,8 @@ function makeSlider(el: Element, label: string, r: () => NumRange, get: () => nu
 const coarse = (): boolean => typeof window !== "undefined" && !!window.matchMedia?.("(pointer: coarse)").matches;
 function focusFirst(root: Element, selector: string, text = false): void {
   if (text && coarse()) return;
-  (root.querySelector(selector) as HTMLElement | SVGElement | null)?.focus();
+  // round 24: focusing at open never scrolls (the root, Blockly's injection div, the page)
+  (root.querySelector(selector) as HTMLElement | SVGElement | null)?.focus({ preventScroll: true });
 }
 
 /** The control's range, widened to hold a loaded value outside it (a cell past 400, a wait of 120 s

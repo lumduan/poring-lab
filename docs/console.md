@@ -594,6 +594,10 @@ Amendment B); a not-adopted model is never offered.
     / 10 / 15 / 25 / 30 s; 10 / 25 / 50 / 75 / 90 %); a broken condition says what is missing
     ("after < a value is missing"), never a character number; Blockly's own menus stay inside the
     blocks area.
+  - **Round 24** ([planning/live-blocks.md](planning/live-blocks.md) 12.8): a drag in the point
+    picture is read against the picture as it was pressed, so the first drag reads like the second
+    on a wide screen too; while the lint checks an edit, the strip's IN A RUN words stay (faded)
+    instead of going, so the canvas under the strip never jumps.
 - **No live run (the block editor):** nothing in the block editor reaches the executor, the mux or an input path (➡️ Run, above, is the one live path: the Run helper's player, never the editor). The backend's
   `/flows/*` routes only compute (public listener, LAN viewer, Origin; POSTs need the CSRF token,
   20 a minute; the Python view 120 a minute on its own budget since 2026-11-09). See [planning/mw2-block-editor.md](planning/mw2-block-editor.md) and

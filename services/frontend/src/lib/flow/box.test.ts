@@ -8,7 +8,7 @@ import assert from "node:assert/strict";
 import { existsSync, readFileSync } from "node:fs";
 import { test } from "node:test";
 
-import { type BoxDoc, boxNameWords, boxReplaced, boxTabNote, boxTabShort } from "./box.ts";
+import { type BoxDoc, boxNameWords, boxReplaced, boxStripPart, boxTabNote, boxTabShort } from "./box.ts";
 import { xmasProject } from "./project.ts";
 import { nodeSettings } from "./settings.ts";
 import { FOLD_MAX_CHARS, stripFoldLine } from "./words.ts";
@@ -120,4 +120,19 @@ test("the strip's folded line: IN A RUN in a few words, else the first part", ()
     const line = stripFoldLine([{ head: "MAP", text: "" }, { head: "EXITS", text: "" }, { head: "RUN", text: "" }, { head: "IMPORTS", text: "" }, { head: "SETTINGS", text: "" }, { head: "IN A RUN", text: "", short: s }]);
     assert.ok(line.length <= FOLD_MAX_CHARS, `${tab}: ${line.length} characters: ${line}`);
   }
+});
+
+test("round 24: the strip keeps the last check's IN A RUN words while the lint checks an edit (the canvas under it never jumps)", () => {
+  const fresh = boxStripPart(BOX, false, "xmas_dun02", "respawn", values);
+  const checking = boxStripPart(BOX, true, "xmas_dun02", "respawn", values);
+  assert.ok(fresh && checking);
+  assert.equal(fresh.stale, undefined);
+  assert.equal(checking.stale, true);
+  // the same words while checking: the strip keeps its height (round 23 dropped the part: at 1440
+  // the canvas and an open picker rose by its lines)
+  assert.deepEqual({ ...checking, stale: undefined }, { ...fresh, stale: undefined });
+  assert.equal(checking.text, boxTabNote(BOX, "xmas_dun02", "respawn", values));
+  assert.equal(checking.short, boxTabShort(BOX, "xmas_dun02", "respawn"));
+  assert.equal(boxStripPart(null, true, "xmas_dun02", "respawn", values), null); // no check yet: no part
+  assert.equal(boxStripPart(BOX, true, "xmas_dun02", "keys", values), null); // a tab without a note
 });
