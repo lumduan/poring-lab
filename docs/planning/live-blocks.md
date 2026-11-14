@@ -1223,7 +1223,7 @@ Report-only, from the packets (sniffer, offline):
   alarm: at last night's rate (1 in 3 per run), 0 in 6 has a chance of (2/3)^6 = 8.8 %.
   Party visits were few (6 in 2 h).
 
-**Batt's decisions on 10.2 (2026-11-14 ~17:4x ICT, Thai, translated):**
+**Batt's decisions on 10.2 (2026-11-14 ~18:1x ICT, Thai, translated):**
 1. The drink: "keep it at 50 % for now". It stays at 50 %; the next long series measures it
    again, with income.
 2. The Goblin class (11.4): "if it can run in parallel, do it now; if not, wait". It can: 5b is
@@ -1314,7 +1314,7 @@ garm_baby box of the deployed model (xmas02gb) in either detection stream, and t
   swaps back through knife_back (the other 2 were the runner's own escape dagger), 0 failed swaps.
 - (b) stays written (knife_ends "armed", section 3.3): a person may try it by editing the knife tab.
 
-### 11.4 Next: a Christmas Goblin class (➡️ STARTED 2026-11-14 ~17:4x, Batt: "if it can run in parallel, do it now"; 10.2)
+### 11.4 Next: a Christmas Goblin class (➡️ STARTED 2026-11-14 ~18:2x, Batt: "if it can run in parallel, do it now"; 10.2)
 
 The Goblin is a summon only on this map and came first in every death above, so a Goblin class
 in the alarm would see the party 2.4-6.4 s ahead. S3's blocker was the cache's WHOLE-frame rule (a
@@ -1401,7 +1401,7 @@ plain process, `scripts/flow_run.py serve`, restarted by its PID: the unit
 `scripts/host/poring-lab-flowrun.service` is not installed there). Until both, a running helper still accepts the old runner-only start; the
 new page never sends one. A series started from main before the merge keeps main's code.
 
-### 12.3 5b (➡️ STARTED 2026-11-14 ~17:4x, Batt: "go on, no need to ask me again"; 10.2)
+### 12.3 5b (➡️ STARTED 2026-11-14 ~18:2x, Batt: "go on, no need to ask me again"; 10.2)
 
 The loop as playable blocks: HuntState (section 2b, 4b) moves the loop's state out of run()'s
 closures so look, choose_target, walk_to_target, strike, wait_kill, loot and explore each play as
