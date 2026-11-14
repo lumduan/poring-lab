@@ -2528,7 +2528,8 @@ section 3.2.
 - **What may play there** is `live.hunt_plan` (the ONE place): the sensors hp_percent, sp_percent
   and the new `sees_boss` (the runner's boss read: its boss guard's Battle Log line); presses of
   dungeon_hunt's heal and fly keys only; calls, if, set, return; `then` resume. Anything else is
-  refused before any input, named.
+  refused before any input, named. ➡️ **2026-11-14 (Amendment I):** also `hotbar_count(key)`, and
+  the presses of the box's eat function.
 - **The runner's own handler for each thing the box plays is switched off** for that run (the
   potion, the Fly Wing on HP, the boss fly); everything else stays the runner's (the HP-rate fly,
   the Garm Baby box, the stock, the dead jump, an unread position, the NPC guard, the knife, the
@@ -2643,3 +2644,30 @@ to Amendments B, C, E, F and G (pointers there); nothing above is rewritten.
   choose_target() and the steps as blocks the player schedules (the HuntState refactor).
 - **Proven by** a live A/B, the stage-3 box against the stage-4a box (`scripts/stage4_ab.py`, an
   equivalence check), its bar pre-registered in live-blocks.md 3.4 before any live run.
+
+## Amendment I (2026-11-14, Batt decided): the box eats from the hotbar; hotbar_count
+
+**Batt (2026-11-14 ~14:0x, translated; [live-blocks.md](../planning/live-blocks.md) section 10):**
+"Raise the drink. And the moment we get a Candy Cane or a Candy, eat it to add HP right away; that
+also cuts the weight." What was built is live-blocks.md section 10. This amendment ADDS to
+Amendments F and H (a pointer in F); nothing above is rewritten.
+
+- **A new live sensor `hotbar_count(key)`** (blocks.yaml; int 0..999; `key` one of press_key's
+  F1-F9): the count drawn on a row-1 hotbar slot, read with the runner's own reader
+  (scripts/hotbar_count.py) from the hunt core's tick frame -- inside a hunt core only, only for
+  the keys the box's events name, at most once a second a key; elsewhere unknown. An empty slot
+  reads 0; an unreadable count is unknown, and an event that reads it is not evaluated. The
+  simulator reads it from the scenario (`Change.hotbar`).
+- **A new optional dungeon_hunt role `eat`**: the function the box's events call to eat a food
+  item (one press_key of its input, the item's key, or of one key). Every press inside a call of
+  it, in a hunt-core event, is an eat press; its keys are not Run keys (the slot check and the
+  stock never read them) and none may be another role's key. An event that reads hotbar_count
+  must eat from the slots it reads (the key in the condition and the key in the item's function
+  are two literals; the model offers no single place for both, so the engine checks them).
+- **PLAYS** (`live.PLAYS` == `dungeon_hunt.BOX_PLAYS`) gains `eat` (dungeon@9.52,
+  `run(..., box_eat=...)`): the runner presses an eat key through its own key path (counted,
+  recorded, no stock read) and still refuses every other key; refused beside the runner's own
+  `--heal-candy`. It replaces nothing of the runner's: no takeover row, no Run setting.
+- **The one box** drinks under 50 % (until 51 %) and eats a Candy Cane (F6) or a Candy (F7) the
+  moment its slot shows one, at any HP; the box as stage 4a left it is kept as
+  `project_xmas_dun02_stage4.json`.

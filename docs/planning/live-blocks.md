@@ -279,7 +279,9 @@ when a boss is seen or HP < 25 %", each a FUNCTION. The one box (`project_xmas_d
   sensor is `sees_boss()`, because `boss_seen` is a map event of the IR 2 samples
   (town_warp_farm, farm_loop) and a sensor of that name would make them invalid.
 - The thresholds are Batt's: 30 % / 25 %. The runner's own (P2) are 40 % (potion) and 20 % (Fly
-  Wing). The A/B measures that difference with the rest.
+  Wing). The A/B measures that difference with the rest. ➡️ **2026-11-14 (Batt, section 10):** the
+  one box drinks under 50 % (until 51 %) and eats the candies; this 30 % box is
+  `project_xmas_dun02_stage2.json` (and the stage-3 / stage-4a copies).
 
 **The sensor `sees_boss()`** (blocks.yaml `live: true`, cue; the simulator's scenario key;
 `dungeon_hunt.HuntTick.boss`): the runner's OWN boss read of that tick -- its boss guard's
@@ -608,7 +610,9 @@ So "today's technique for every monster" is one recipe, the same four times:
 
 **The one box** (`project_xmas_dun02.json` = `xmasProject()`, byte-identical canonical; 0 lint
 errors, the same four warnings as stage 3's, run allowed; the stage-3 box kept byte for byte as
-`project_xmas_dun02_stage3.json`: stage3_ab.py's B3 and stage 3's tests) has six tabs now:
+`project_xmas_dun02_stage3.json`: stage3_ab.py's B3 and stage 3's tests) has six tabs now (➡️
+since 2026-11-14, section 10, it also drinks under 50 % and eats the candies; the box as 4a left
+it is `project_xmas_dun02_stage4.json`, stage4_ab.py's B4):
 
     # tab main: the trained data before the hunt core
     assert_save_point(cell("geffen", 119, 40))
@@ -759,7 +763,8 @@ detect server, run and score; run by the parent; NOT run yet):
   either box cannot play, if B3 names a model or recipes, if B4 names none, if B4's recipes are
   not today's technique, or if the two boxes' stage-3 functions or keys differ.
 - The arms, both `flow_play.py play` with the same runner config (the same five keys, checked):
-  B3 = the stage-3 box, B4 = the one box. Order B3 B4, B4 B3, ... The setup before every run is
+  B3 = the stage-3 box, B4 = the one box (➡️ since 2026-11-14: `project_xmas_dun02_stage4.json`,
+  the box as 4a left it; section 10). Order B3 B4, B4 B3, ... The setup before every run is
   stage2_ab's (3.2).
 - The score per run (the runner's own session, the same reader for both): stage 3's lines and the
   recipes asked (per species), the locks without the Knife, the mismatches, the loot steps per
@@ -989,4 +994,148 @@ unchanged).
   under 40 %. In stage 2's valid runs the runner alone spent 0 % of its time under 50 % HP (3 runs)
   and the box 0, 0, 21, 32 and 47 % (5 runs): a small sample (where she fought), but the band is
   real. The runner's tick rate is the same in both arms (2.2-2.5 reads/s, median gap 201 ms), so
-  the box's hook does not slow it.
+  the box's hook does not slow it. ➡️ **Batt answered 2026-11-14 ~14:0x ("raise the drink"):** the
+  one box drinks under 50 % now, the band is closed (section 10).
+
+## 10. Batt's 2026-11-14 answers (built): the drink at 50 %, the candies eaten at once
+
+Batt, 2026-11-14 ~14:0x ICT (Thai, translated): "Raise the drink. And the moment we get a Candy
+Cane or a Candy, eat it to add HP right away; that also cuts the weight." BUILT 2026-11-14 14:5x
+(feat/candy-box; offline tests only, NOT run live). dungeon@9.52 (`BOX_EAT_VERSION` = `live.VERSION`
+= `flow_play.VERSION`; stage 4a's 9.51 and the earlier stages' versions stay; `dungeon_hunt.VERSION`
+stays dungeon@8.7; in the runner export's `NOT_FEATURES`).
+
+**The one box now** (`project_xmas_dun02.json` = `xmasProject()`, byte-identical canonical; 0 lint
+errors, the same four warnings; the box as stage 4a left it is kept byte for byte as
+`project_xmas_dun02_stage4.json`: stage4_ab.py's B4 and stage 4a's tests, so s4ab-1114 stays the
+series it measured):
+
+    # tab main: the eat role names the box's eat function
+    dungeon_hunt(heal=heal, fly=fly_wing, knife_on=knife_on, knife_back=knife_back, home=fly_home,
+                 respawn=respawn_button, respawn_confirm=respawn_ok, eat=eat)
+    # tab keys: the five keys as before, and the food on the hotbar
+    def eat(key):      press_key(key)   # dungeon_hunt's eat role: whatever food is on that slot
+    def candy_cane():  eat("F6")        # the Candy Cane (item 530): the lab Rogue's F6
+    def candy():       eat("F7")        # the Candy (item 529): her F7
+    # tab survival: the drink raised; one event per item
+    @on(hp_percent() < 50, until=hp_percent() >= 51, priority=SURVIVAL, mode=INSERT, cooldown_s=0.7)
+    def drink():
+        heal()
+    @on(hotbar_count("F6") > 0, until=hotbar_count("F6") == 0, priority=UPKEEP, rank=51,
+        mode=INSERT, cooldown_s=1.5, max_fires_per_10min=30)
+    def eat_cane():
+        candy_cane()
+    @on(hotbar_count("F7") > 0, until=hotbar_count("F7") == 0, priority=UPKEEP, rank=52,
+        mode=INSERT, cooldown_s=1.5, max_fires_per_10min=30)
+    def eat_candy():
+        candy()
+
+- **The drink** goes from HP < 30 % (until 31 %) to HP < 50 % (until 51 %): the Knife swap needs
+  50 % (`knife_hp_min` 0.5), so the 30-50 % band of section 9 (she neither drank nor swapped) is
+  closed: the drink repeats until 51 %, over the Knife's floor. The runner's own P2
+  line (`potion_below` 0.4) is unchanged: it is the old Run path's, and it is off in a box run.
+- **The eat**: each item's event fires the moment its slot reads a count over 0, at ANY HP (no HP
+  gate), and repeats every 1.5 s (`cooldown_s`, a literal in the box: long enough for the slot's
+  count to change after a press) until the slot reads empty. An INSERT, class upkeep, then
+  resume; ranks 51 / 52 order the two after bag_full (rank 50) and each other (the lint's ties
+  rule: an info, no warning). `max_fires_per_10min` 30: a stack of 7 is 7-8 fires; the count of
+  fires clears each time the slot reads empty. The F6 / F7 keys and every number are defaults: a
+  person changes them in the keys and survival tabs.
+- **Two literals a person keeps in step**: the key the condition reads (`hotbar_count("F6")`) and
+  the key the item's function eats (`candy_cane(): eat("F6")`). The model allows no better: an
+  event's condition cannot read a function's input, and press_key / hotbar_count take literal keys
+  (a tab variable is refused as a press key, lint `param_option` / `key_argument`). So the engine
+  checks them against each other instead: an event that reads hotbar_count and eats a key its
+  condition does not read is REFUSED before any input, in words ("eat_cane eats F3 but its
+  condition reads hotbar_count of F6: the count it reads is not the slot it eats from").
+
+**The sensor `hotbar_count(key)`** (blocks.yaml, `live: true`, int 0..999, a positional `key` with
+press_key's options F1-F9): the count drawn on a row-1 hotbar slot, read with the runner's OWN
+reader (`hotbar_count.read_count` on `hotbar_count.gray` of the frame's top 40 rows;
+`dungeon_hunt.hotbar_slot(key)`; its digit templates loaded at RUN TIME from data/hotbar, never in
+git). Live ONLY inside a hunt core: `flow_play.LivePlayer.hunt_tick` reads it from
+`HuntTick.frame` (the tick's game-region frame, already passed), only for the keys the box's
+events name (`live.hunt_plan` -> `HuntPlan.hotbar_keys`), each at most once every
+`flow_play.HOTBAR_EVERY_S` (1.0 s; between reads the last value stands). An empty slot reads 0; a
+count it cannot read (a digit no template matches, a frame-less tick) is unknown: an event that
+reads it is then not evaluated (it never fires, and a repeating one pauses until a read). An event
+that reads only hotbar_count is evaluated on a tick without an HP read too (stage 2's rule -- no
+HP read, no boss line: nothing decided -- still holds for every event that reads HP, SP or the
+boss). Outside a hunt core it is unknown. The simulator reads it from the scenario
+(`trace.Change.hotbar`: "F6" -> a count from t on; every slot the flow reads starts at 0); the
+editor offers `hotbar_count(key="F6")` under Sensors.
+
+**The role and the play.** `dungeon_hunt`'s new OPTIONAL role `eat` names the function the box's
+events call to eat (`functions.eat_shape`: ONE press_key of its input, the item's key, or of one
+literal key). Every press inside a call of it, in a hunt-core event, is an EAT press; `live.PLAYS`
+== `dungeon_hunt.BOX_PLAYS` gains `"eat"` (by the events that eat: `play_by`). It replaces nothing
+of the runner's, so `live.takeovers` lists no row for it (`OWN_PLAYS`; the pages' "IN A RUN" words
+name only what is switched off) and it has no Run setting.
+
+    the player (prepare, before any input)               the runner (dungeon_hunt.run)
+      live.hunt_plan: eat_keys (F6, F7), hotbar_keys
+      run(box_plays=[..., "eat"], box_eat=["F6","F7"]) -->  box_plays_refused -> eat_refused:
+                                                          "eat" <=> box_eat, row-1 keys, each
+                                                          once, never beside --heal-candy, none
+                                                          another key of the run (keys_clash over
+                                                          its whole key map and --steal-opener)
+                                                          run_start: box_eat, box_version 9.52
+                                                          box_keys: F6 / F7 -> "eat"
+      each tick: hotbar_count from HuntTick.frame
+      eat_cane due: candy_cane() -> eat("F6") ->     -->  box_press("F6", "box eat_cane
+                                                          (hotbar_count(F6) 2)"): agent_raw.keys,
+                                                          counts eat / box_eat, a press record
+                                                          {what: eat, key, why}; no stock read
+                                                          any other key: box_refused, not pressed
+
+**Refused before any input** (`live.problems` / `hunt_plan`, the backend's not_live; the lint's
+`hunt_function` / `hotbar_keys` name the same in the editor): an eat key that is dungeon_hunt's
+heal, Fly Wing, Knife, dagger or Butterfly Wing key ("eats F1 through eat() inside the hunt core: F1
+is dungeon_hunt's heal key (the heal item's key); an eat key must be its own ..."); an eat event
+whose condition reads another slot than it eats; a direct press_key of a food's key in an event
+(not through the eat function); a hotbar_count whose key is not a literal row-1 key; an eat
+function that is not one press_key; an eat role naming no function.
+
+**What stays the runner's**: the start's slot check (dungeon@9.47) and the stock read and end
+(dungeon@8.4 / 8.3) never see the eat keys -- 0 candies is normal, and an empty food slot never
+ends a run; the runner's own `--heal-candy` (dungeon@9.31: a due potion presses the cane, then the
+candy, then the White Potion, its keys HEAL_CANDY_KEYS F6 / F7 fixed in code) is untouched and stays
+the runner's own flag, refused beside the box's eat (one candy eater); the HP-rate fly, the Garm
+Baby, the dead jump, an unread position, the NPC guard. A box without the eat role or eat events
+passes run() exactly stage 4a's arguments (no box_eat).
+
+**The record**: the player's events.jsonl has each eat event fired (`event`, its `reading`
+`{"hotbar_count(F6)": 2}`, `in: "hunt"`), the runner's press records mirrored (`press` what "eat",
+the key, why "box eat_cane (hotbar_count(F6) 2)"), `hunt_start` with `box_eat` and `hotbar_keys`;
+the runner's session: run_start `box_eat` / `box_version` 9.52, `press {what: "eat"}`, the counters
+`eat` and `box_eat`.
+
+**The expected cost and gain** (from the local KB and the records named; NOT measured with the new
+box yet):
+- **More potions.** A White Potion buys at 1,200 z (KB item 504). Drinking under 50 % instead of
+  30 % will use more of them: stage 4a's r02B4 spent 70 % of its run under 50 % (section 9), all of
+  it now inside the drink's band. Each extra potion an hour costs 1,200 z/h, about 0.9 % of Batt's
+  bar of 135,737 common z/h (computed). The next live run should count potions per hour against
+  stage 4a's, with the Knife openers per hour (the band closing should raise them).
+- **The candies are small.** They sell for 5 z (Candy, 529) and 10 z (Candy Cane, 530), weigh 3 and
+  4, and heal ~45-65 and ~105-145 HP (rogue-xmas02.md 4CF). On xmas_dun02 they drop from the Myst
+  Case (Candy 3.4 %, Candy Cane 0.9 %) and the Cookie (3.2 % / 1.5 %) only (the local KB's
+  drops.json: rates 340 / 90 and 320 / 150; the Christmas Cookie and the Cruiser drop neither).
+  With kills in the spawn mix (Myst Case 50, Cruiser 35, Cookie 20, Christmas Cookie 20) that is
+  about 1.9 Candies and 0.6 Candy Canes per 100 kills (computed, steals not counted): at ~140
+  kills/h, ~2.6 + 0.8 an hour, ~250 HP an hour (less than one White Potion), ~11 weight an hour off
+  the bag and ~21 z/h of NPC sales given up.
+- **The start eats the slots**: the lab Rogue's F6 holds 2 Candy Canes and F7 7 Candies (read
+  2026-11-14 14:0x); the first ~10-15 s of a run eat all 9 (each slot paced 1.5 s), at full HP.
+
+**Tests** (offline): services/backend/tests/test_box_eat.py (the sensor on fake frames: eaten one by
+one until empty, the 1-s rate, unknown pauses, no HP needed; the reader stubbed and on synthetic
+pixels; the templates loaded at run time; the simulator's scenario; the refusals; run()'s own
+box_press executed from its source; eat_refused; the AST: the eat keys never reach the run's key
+map, slot check or stock); the one box's pins in test_project.py, test_live_player.py and the
+frontend's project.test.ts / box.test.ts.
+
+**Still fixed in code** (a person cannot set them yet): `HOTBAR_EVERY_S` (1.0 s) and the 40-row
+crop; the hotbar reader's geometry and font (hotbar_count.py, row 1 at the 1280 x 720 client) and
+its two-digit limit (a count over 99 reads unknown, though the sensor's range is 0..999); one press
+per call of the eat function; the runner's `HEAL_CANDY_KEYS`.

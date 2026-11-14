@@ -291,6 +291,12 @@ priority=1)`, `attack_cruiser`, `attack_cookie`, `attack_cookie_xmas`, each TODA
 the recipe of a target's species when it locks it. A function named `attack_<class>` is a monster's
 RECIPE (poring_flow.recipes). Still 0 lint errors. The stage-3 box is kept as
 `project_xmas_dun02_stage3.json` (its tests, stage 3's A/B).
+➡️ **2026-11-14 (live-blocks.md section 10, Batt: "raise the drink; eat a Candy Cane or a Candy the
+moment we get it"):** `keys` adds `eat(key)` (presses its input: dungeon_hunt's new eat role),
+`candy_cane` (`eat("F6")`) and `candy` (`eat("F7")`); `survival`'s drink is `hp_percent() < 50`
+(until 51 %) and two events eat each item while `hotbar_count(<its key>) > 0` (until 0, paced
+1.5 s, at any HP); main's `dungeon_hunt(..., eat=eat)`. Still 0 lint errors. The stage-4a box is
+kept as `project_xmas_dun02_stage4.json` (its tests, stage 4a's A/B).
 
 ## 8. Not converted (Batt's answer 6)
 
