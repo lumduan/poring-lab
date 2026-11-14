@@ -1329,8 +1329,9 @@ rogue, the map, --strategy P2, the seed) and the flags flow_config.NOT_SETTINGS 
 reasons (--player-mode, the GM trial lines, --heal-candy ...); the loop itself (5b).
 
 **Deploy (after the merge):** a guarded backend restart (routes_flowrun: the check route, the config
-routes gone) and a restart of the Run helper (`poring-lab-flowrun.service`: parse_request takes
-project checks only). Until both, a running helper still accepts the old runner-only start; the
+routes gone) and a restart of the Run helper (parse_request takes project checks only; on bot-server it is a
+plain process, `scripts/flow_run.py serve`, restarted by its PID: the unit
+`scripts/host/poring-lab-flowrun.service` is not installed there). Until both, a running helper still accepts the old runner-only start; the
 new page never sends one. A series started from main before the merge keeps main's code.
 
 ### 12.3 Not yet (5b, planned, not built)
