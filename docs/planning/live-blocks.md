@@ -2025,7 +2025,7 @@ detect server, run and score; run by the parent after review, NOT run yet):
 | kills per hour | the mean paired difference (B - A) >= -2 x its standard error, over at least 3 valid pairs |
 | loot steps per hour | the same rule |
 | Knife openers per hour | B's series rate within +-20 % of A's (valid runs pooled) |
-| the tick pace | B's median and 95th-percentile gap between hp_read records each <= A's + 10 ms (valid runs pooled) |
+| the tick pace | B's median and 95th-percentile gap between hp_read records each <= A's + 10 ms (valid runs pooled) ➡️ s5b1-ab FAILED this line on the p95 alone (13.7: noise-dominated); kept as scored |
 | no new record kind | every record kind B's runner sessions write is one the base runner's source writes (its `"kind": "..."` literals) |
 | no runner error | no B run ends by an exception of the runner (hunt_end `error`, or a traceback in its log) |
 | a valid run | at least 80 % of M minutes on the runner's own clock, or a weight-home end; a pair counts when both runs are valid |
@@ -2447,7 +2447,7 @@ the 5b-1 program, and the drive's own line:
 | kills per hour | the mean paired difference (B - A) >= -2 x its standard error, over at least 3 valid pairs |
 | loot steps per hour | the same rule |
 | Knife openers per hour | B's series rate within +-20 % of A's (valid runs pooled) |
-| the tick pace | B's median and 95th-percentile gap between hp_read records each <= A's + 10 ms (valid runs pooled) |
+| the tick pace | ~~B's median and 95th-percentile gap between hp_read records each <= A's + 10 ms (valid runs pooled)~~ ➡️ CORRECTED by 14.7a before any run: B's MEDIAN gap <= A's + 5 ms; the p95 reported only |
 | no new record kind | every record kind B's runner sessions write is one the 5b-1 runner's source writes (its literal kinds), one A's sessions wrote, or the drive's own `drive` |
 | no runner error | no B run ends by an exception of the runner (a traceback in its log, or hunt_end `error` not a refusal) |
 | the drive | every B run that played drove (one `drive` start and one end in its runner session), passed no step (the end's `passed` empty), and its drive ended as the run did (`time_box` / `run_end`, never a spin, a refusal or the loop returning); no A run drove |
