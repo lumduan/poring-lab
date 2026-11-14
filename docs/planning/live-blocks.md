@@ -948,8 +948,10 @@ warp (the short-run rule, since fixed: 813893cc); s3ab-1114b (06:05-08:02, 3 pai
 - **Report-only:** with s3ab-1114's one valid pair (B2 132.5 / B3 169.2 kills/h; steals 60.2 /
   51.4) the three valid pairs' kills/h differences are +36.7, -6.0, +12.1 (mean +14.3) and
   steals/h -8.8, +27.2, +15.1 (mean +11.2). Not the bar (each series is scored on its own).
-- **What stage 3 PROVED live:** every Knife opener and swap back of the B3 runs came from the box's
-  knife_on / knife_back (box calls recorded; 161 openers, 161 swaps back, 0 failed); the way home
+- **What stage 3 PROVED live:** the B3 runs' 161 Knife openers all came from the box's knife_on
+  (161 box calls), and 159 of their 161 swaps back from the box's knife_back (the other 2: the
+  runner's own dagger press before an escape Fly Wing, which stays the runner's by design, 3.3);
+  0 failed swaps; the way home
   at the end pressed the box's fly_home() in every valid B3 run and arrived; the death exit played
   the box's respawn_button() = click_at(645, 481) then respawn_ok() = click_at(714, 405) and she was
   back in 4.33 s (s3ab-1114b-r03B3, outside the bar: that run is invalid). NOT proven: the weight
