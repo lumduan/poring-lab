@@ -1,13 +1,13 @@
 ---
 doc_type: design
 hypothesis: null
-status: "DECIDED 2026-11-13 ~21:4x (Batt): build the live block player first; one box (START > xmas_dun02); break the runner into blocks. Stage 1 BUILT and PASSED live (section 6). Stages 2, 3 and 4a BUILT 2026-11-14 and their live A/Bs RUN 2026-11-14 00:4x-09:52 ICT: all three INCONCLUSIVE by their pre-registered bars (too few valid pairs: the Stormy Knight killed her in 10 of 30 played runs), the box's survival, Knife, home, respawn and recipes proven live (sections 7-9). Batt's 2026-11-14 ~14:0x answers: the Knight -> a Fly Wing away (section 11: dungeon@9.53 --alarm-fast BUILT; the Goblin class proposed); the HP band -> the drink raised to 50 % and the candies eaten at once (section 10); the Knife question delegated to the agent -> answer (a) KEPT (section 11.3). Batt's 2026-11-14 ~15:2x ask ("no runner [page]; make them ALL blocks"): stage 5a BUILT offline on feat/settings-blocks (section 12: every runner setting a block in the project's tabs, the Run and the check read them, the runner page and the settings file gone); 5b (the loop as playable blocks) planned, not built."
+status: "DECIDED 2026-11-13 ~21:4x (Batt): build the live block player first; one box (START > xmas_dun02); break the runner into blocks. Stage 1 BUILT and PASSED live (section 6). Stages 2, 3 and 4a BUILT 2026-11-14 and their live A/Bs RUN 2026-11-14 00:4x-09:52 ICT: all three INCONCLUSIVE by their pre-registered bars (too few valid pairs: the Stormy Knight killed her in 10 of 30 played runs), the box's survival, Knife, home, respawn and recipes proven live (sections 7-9). Batt's 2026-11-14 ~14:0x answers: the Knight -> a Fly Wing away (section 11: dungeon@9.53 --alarm-fast BUILT; the Goblin class proposed); the HP band -> the drink raised to 50 % and the candies eaten at once (section 10); the Knife question delegated to the agent -> answer (a) KEPT (section 11.3). Batt's 2026-11-14 ~15:2x ask ("no runner [page]; make them ALL blocks"): stage 5a BUILT and MERGED 2026-11-14 17:2x (section 12: every runner setting a block in the project's tabs, the Run and the check read them, the runner page and the settings file gone); 5b (the loop as playable blocks) planned, not built. The live A/B s5ab-1114 (B4 the stage-4a box vs B5 the one box, both with the fast alarm; 15:10-17:19 ICT): FAIL by its pre-registered bar on line 2 only (time under 50 % HP: B4 0.000, B5 0.003; B4 never went under 50 %), deaths 0 in 6 (last night 10 in 30), eats B5 10, the alarm 8 fires (5 true, 3 false, each a Fly Wing in <= 0.42 s) (section 10.2)."
 role: null
 verdict_date: null
 verdict_ticket: null
 supersedes: null
 related: [project-model.md, player-mode.md, ADR-0020, ../../scripts/dungeon_hunt.py, ../../scripts/runner_flow_export.py, ../../packages/poring_flow/src/poring_flow/runtime.py]
-next_action: "Merge feat/candy-box (section 10) and feat/fast-alarm (section 11), deploy (backend, Run helper), then a live check of both on the lab server (the drink at 50 %, the candies eaten, the alarm read inside actions; deaths and false flies counted from packets). The Christmas Goblin class (11.4) is the next detector round if the check confirms the alarm still comes too late. Section 12 (5a): review and merge feat/settings-blocks, then a guarded backend restart and a Run helper restart (the check route, the project-only requests); a browser re-measure of the setting blocks; 5b after that."
+next_action: "Batt decides the drink threshold: 50 % cost 10 White Potions in B5's hour (about 12,100 z / h) with no dip below 41 % and none in B4 (10.2); it is one number on the drink block now. The Christmas Goblin class (11.4) waits on Batt. Section 12 (5a): a browser re-measure of the setting blocks (block widths, the phone layout, /maps' tab rows). Then 5b: the loop as playable blocks (dungeon_hunt split into steps), checked by a live A/B against today's runner."
 title: "Live blocks: the player that plays a project's blocks in the game, and the runner broken into blocks"
 date: 2026-11-13
 owner: Batt
@@ -1165,6 +1165,63 @@ B5; stage2_ab's setup before every run; a STOP file in /dev/shm/poring-lab-tmp/s
 - **Known before the run**: her F6 / F7 hold 2 Candy Canes and 7 Candies from 2026-11-11's GM
   `@item` setup (4CF), not loot; the first B5 run eats them. They are counted apart from looted
   candies in the report (the setup never tops candies up).
+
+### 10.2 Result of s5ab-1114 (run 15:10-17:19 ICT, scored 17:2x): FAIL by the bar -- on line 2 only
+
+`stage5_ab.py score --label s5ab-1114`: 3 pairs, all 6 runs valid (19.8-19.9 min, each ended by
+its time box), 0 invalid.
+
+    run        arm  min  deaths kills/h open/h potions eats  <50 %  lowest HP  alarm in/between
+    r01B4      B4   19.9   0    160.2   136.0    0      0    0.00     67 %        0/0
+    r02B5      B5   19.9   0    129.9   120.8    3      6    0.00     45 %        0/2
+    r03B5      B5   19.9   0    141.9   114.7    0      3    0.00     68 %        0/3
+    r04B4      B4   19.9   0    120.9   123.9    0      0    0.00     75 %        0/3
+    r05B4      B4   19.9   0    148.1   126.9    0      0    0.00     54 %        0/0
+    r06B5      B5   19.8   0    139.0   120.9    7      1    0.01     40 %        0/0
+
+The bar, line by line:
+1. deaths: B4 0, B5 0 -> PASS.
+2. under50: B4 0.000, B5 0.003 of the HP-read time -> **FAIL** (B5 < B4 is impossible against 0).
+3. openers_h: B4 128.9, B5 118.8 (0.92 x) -> PASS.
+4. kills_h: paired B5 - B4 = -30.2, +21.1, -9.1; mean -6.1 / h, SE 14.9 -> PASS (>= -2 SE).
+5. eat: B4 0, B5 10 -> PASS.
+
+The verdict stays **FAIL**, as pre-registered; it is not re-scored. What line 2 measured: B4
+(drink under 30 %) never went under 50 % in its hour, the lowest 54 %. So the line could pass
+only if B5 never did either, and a drink AT 50 % comes after a read under 50 %. Lesson for the
+next bar: a strict "<" against an arm at 0 cannot pass. Compare the time in the 30-50 % band with
+"<=", or require that the band was entered at all.
+
+Report-only, from the packets (sniffer, offline):
+- **B5's dips under 50 %:** 10, each 0.2-6.1 s, lowest 41 % (r06B5). The HP is stat 5, against
+  the run's highest HP, 5,070, because max HP is sent only at login. The damage in the 15 s
+  before each low point came from the map's ordinary monsters (jobs 1249, 1248, 1246), never the
+  boss party. B4 had no dip under 50 %.
+- **Potions:** B5 drank 10 White Potions (item 504) in 59.6 min, 10.1 / h = about 12,100 z / h at
+  1,200 z each. B4 drank 0. Fly Wings (601): B5 12, B4 4. Butterfly Wings (602): one per run, the
+  home at the end; the setup tops F9 up before each run.
+- **Eats:** B5 10 (Candy 529 x 6, Candy Cane 530 x 4), 10.1 / h; B4 0. **Correction to "Known
+  before the run":** the 11-11 candies were gone before any B5 run. The setup's clear-bag
+  ("etc, use", run when the bag reads over 0.40) emptied the use tab before r01B4. It did the
+  same before r04B4 and r06B5, then restocked 10 White Potions and 10 Fly Wings each time. So
+  r02B5's first eat read hotbar_count(F7) = 2, which is r01B4's 2 looted Candies, and its first
+  F6 eat came 90 s in, after a looted cane. r05B4's 6 looted candies were cleared before r06B5.
+  All 10 eaten were looted, in that B5 run or in the B4 run just before it with no clear-bag in
+  between. B4 looted 8 candies (529 x 5, 530 x 3) and, by design, ate none.
+- **The shortcut survives a count of 0:** F7 read 2, then 1, then 0, and later 1 again for each
+  looted Candy, eaten each time (r02B5: 4 F7 presses, 2 F6 presses).
+- **The fast alarm (dungeon@9.53, both arms; 6 runs, 2.0 h):**
+  - **Fires:** 8 in all. 5 were true (a boss-party member in view by packets, within 2 s) and 3
+    false, which is 1.5 false fires / h; the offline estimate in 11.2 was 1.7 / h.
+  - **By kind:** all 3 single-box fires (score 0.88, 0.98, 0.99) were true. The 3 false ones
+    were two-in-a-row fires at scores 0.31, 0.38 and 0.70.
+  - **Fly Wing:** every fire pressed it 0.21-0.42 s later (fly "boss").
+  - **Inside long actions:** 0 fires. guard_tick's inside path was not exercised live.
+  - **Party visits:** 6 by packets, and the alarm fired in 5. The sixth was one Christmas Goblin
+    (1607) at 11 cells or more, for 1.6 s, with no damage to her (the alarm watches Garm Babies).
+- **Deaths: 0 in 6 played runs**, against last night's 10 in 30. Too few runs to credit the
+  alarm: at last night's rate (1 in 3 per run), 0 in 6 has a chance of (2/3)^6 = 8.8 %.
+  Party visits were few (6 in 2 h).
 
 ## 11. Batt's 2026-11-14 answers (~14:0x ICT): the Knight, the Knife, the Butterfly Wings
 
