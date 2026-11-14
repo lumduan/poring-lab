@@ -584,6 +584,16 @@ Amendment B); a not-adopted model is never offered.
     the client's fixed windows (basic info, hotbar, minimap, chat: where they usually are); a
     role's list holds only the functions it can call (no inputs needed, no event, no monster's
     recipe); a greyed block's picker is drawn in a darker shade so its words read.
+  - **Round 23** (the reviewer's browser measure of round 22; [planning/live-blocks.md](planning/live-blocks.md)
+    12.7): a tab's blocks never overlap -- once drawn they are stacked from their measured
+    heights, 24 units apart, in their order, and a block that grows (a wrapped condition, a note)
+    pushes the ones under it down (a move, not an edit: no undo step, nothing saved); Escape or
+    Cancel leaves Undo exactly as it was (Ctrl+Z after a cancel does nothing), a kept change is one
+    Ctrl+Z; the point picture reads the right place in the compact picker too; a tap on any row of
+    a wrapped condition opens its picker; the presets and the lever's ticks are round (END_HOT_S 2
+    / 10 / 15 / 25 / 30 s; 10 / 25 / 50 / 75 / 90 %); a broken condition says what is missing
+    ("after < a value is missing"), never a character number; Blockly's own menus stay inside the
+    blocks area.
 - **No live run (the block editor):** nothing in the block editor reaches the executor, the mux or an input path (➡️ Run, above, is the one live path: the Run helper's player, never the editor). The backend's
   `/flows/*` routes only compute (public listener, LAN viewer, Origin; POSTs need the CSRF token,
   20 a minute; the Python view 120 a minute on its own budget since 2026-11-09). See [planning/mw2-block-editor.md](planning/mw2-block-editor.md) and

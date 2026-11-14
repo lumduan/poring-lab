@@ -25,6 +25,7 @@ import {
   condText,
   defOn,
   exprProblem,
+  fitDropDown,
   functionsOn,
   GAME_AREAS,
   matchScore,
@@ -47,10 +48,12 @@ import {
   snap,
   stepBy,
   stopReasons,
+  toArea,
   toViewBox,
   typedProblem,
 } from "./pickers.ts";
 import * as PLACE from "./pickers.ts";
+import { SETTINGS } from "./settings.ts";
 import { BLOCK_STYLES, contrast } from "./theme.ts";
 import { MAIN_TAB, nodeById, type Project, sampleProject, xmasProject } from "./project.ts";
 
@@ -451,4 +454,64 @@ test("round 22: the outlined windows are the UI anchors' home places (no picture
   }
   assert.match(py, /"basic_info": WindowSpec\("basic_info", size=\(220, 140\)/);
   assert.match(py, /"minimap", size=\(128, 142\)/);
+});
+
+// --- round 23 (live-blocks.md 12.7) -----------------------------------------------------------------
+test("round 23: presets and the lever's ticks are ROUND (END_HOT_S 2 / 10 / 15 / 25 / 30 s, not 1.5 / 10 / 15.25 / 21.5 / 30)", () => {
+  assert.deepEqual(presetsOf({ lo: 0.5, hi: 30, step: 0.01 }), [2, 10, 15, 25, 30]); // END_HOT_S
+  assert.deepEqual(presetsOf({ lo: 5, hi: 95, step: 1 }), [10, 25, 50, 75, 90]); // END_FLY_BELOW: not 5 / 28 / 50 / 73 / 95
+  assert.deepEqual(presetsOf({ lo: 10, hi: 99, step: 1 }), [20, 40, 50, 75, 90]); // REGEN_STOP: not 10 / 32 / 55 / 77 / 99
+  // every number setting: at most two significant digits, in the range, on the grid, apart
+  for (const f of SETTINGS.fields) {
+    if (f.kind !== "number" && f.kind !== "int" && f.kind !== "share") continue;
+    const pct = (v: number) => Math.round(v * 100 * 1e6) / 1e6;
+    const r = f.kind === "share" ? { lo: pct(f.lo), hi: pct(f.hi), step: pct(f.step) } : { lo: f.lo, hi: f.hi, step: f.kind === "int" ? Math.max(1, f.step) : f.step };
+    const ps = presetsOf(r);
+    assert.ok(ps.length >= 3, `${f.name}: ${ps}`);
+    for (const v of ps) {
+      assert.ok(v === 0 || Number(v.toPrecision(2)) === v, `${f.name}: ${v} is not round (${ps})`);
+      assert.ok(v >= r.lo && v <= r.hi && snap(v, r) === v, `${f.name}: ${v}`);
+    }
+    for (let i = 1; i < ps.length; i++) assert.ok(ps[i] - ps[i - 1] >= (r.hi - r.lo) * 0.1 - 1e-9, `${f.name}: ${ps} (two labels collide)`);
+  }
+});
+
+test("round 23: a broken condition says what to do in a learner's words -- never a column, a token or 'unexpected'", () => {
+  assert.equal(exprProblem("hp_percent() < and sees_boss()"), "after < a value is missing"); // was "and cannot stand here (character 17)"
+  assert.equal(exprProblem("hp_percent() <  and"), "after < a value is missing");
+  assert.equal(exprProblem("hp_percent( < 50"), "after ( a value is missing before <");
+  assert.equal(exprProblem("x = 3"), "= cannot stand here: to compare two values, use ==");
+  assert.equal(exprProblem("[1, 2"), "a [ is not closed: add ] after its items");
+  assert.equal(exprProblem("hp_percent() <= 50)"), ") cannot stand here: no ( is open before it");
+  assert.equal(exprProblem("hp_percent() < 'abc"), 'a text goes in double quotes: "like this"');
+  const broken = ["hp_percent() < ", "hp_percent() <", "(hp_percent() < 50", 'hotbar_count(key="F6"', 'hotbar_count(key="F6) > 0', "1 < 2 < 3", 'hotbar_count(key="F6", "F7")', "f(a=1, a=2)", "1e999 > 0", "hp_percent() << 5", "hp_percent() < 50 50", ")", "hp_percent() > >", "not", "5 +", "x = 3", "[1, 2", "@", "a.b", "f(,)", "hp_percent() < 'abc", "and", "hp_percent() < 50 or or 1"];
+  for (const t of broken) {
+    const m = exprProblem(t);
+    assert.ok(m !== "", t);
+    assert.doesNotMatch(m, /\bcol\b|character [0-9]|unexpected|expected "|\btoken\b|"end"|EOF/, `${t}: ${m}`);
+  }
+});
+
+test("round 23: the point picture reads the same place full (256 x 144) and COMPACT (176 x 99): 55 % is y 396, never 719", () => {
+  const area = { x: 0.5, y: 0.5, width: 255, height: 143 }; // the drawn picture's rect in the svg's units
+  const game = ([x, y]: [number, number]) => pointIn((x * 1280) / 256, (y * 720) / 144);
+  for (const drawn of [{ left: 100, top: 300, width: 255, height: 143 }, { left: 702, top: 505, width: 175.3, height: 98.3 }]) {
+    const at = (fx: number, fy: number) => game(toArea(drawn.left + fx * drawn.width, drawn.top + fy * drawn.height, drawn, area));
+    assert.deepEqual(at(0.5, 0.5), [640, 360]);
+    assert.deepEqual(at(0.55, 0.55), [704, 396]);
+    assert.deepEqual(at(0.9, 0.9), [1150, 646]);
+    assert.deepEqual(at(1.2, 1.2), [1279, 719]); // past the picture: its edge
+  }
+  // the lever's bar, drawn 200 px wide in the compact picker (its 260-unit svg): the middle is the middle
+  const bar = { x: 10, y: 10, width: 240, height: 24 };
+  const [x] = toArea(300 + 0.5 * (200 * (240 / 260)), 0, { left: 300, top: 0, width: 200 * (240 / 260), height: 18 }, bar);
+  assert.ok(Math.abs(x - 130) < 1e-9, String(x));
+});
+
+test("round 23: a Blockly menu past the blocks area moves back inside (at most 12 px), the rest scrolls", () => {
+  const area = { top: 100, bottom: 700 };
+  assert.deepEqual(fitDropDown({ top: 400, bottom: 690 }, area), { shift: 0, shrink: 0 }); // inside, 4 px margin
+  assert.deepEqual(fitDropDown({ top: 400, bottom: 700 }, area), { shift: -4, shrink: 0 }); // 4 px past the margin
+  assert.deepEqual(fitDropDown({ top: 400, bottom: 711 }, area), { shift: -12, shrink: 3 }); // 15 px past the area
+  assert.deepEqual(fitDropDown({ top: 98, bottom: 300 }, area), { shift: 6, shrink: 0 }); // above the area's top
 });

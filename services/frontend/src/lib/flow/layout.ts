@@ -159,3 +159,106 @@ export function blockWidth(b: WsBlock, labels: Record<string, string> = {}): num
   if (!def) return textUnits(b.type) + G.side;
   return Math.max(0, ...blockRows({ ...b, next: undefined }, labels));
 }
+
+// --- round 23: the blocks' HEIGHTS and the tab's stack ---------------------------------------------
+// The reviewer (round 22's re-measure): the survival tab's events OVERLAPPED -- drink / fly_away 78 px
+// at 390 (97 at 1440), fly_away / bag_full 131 (164), bag_full / eat_cane 78 (96) -- 8 fields hidden
+// under the next block, because the blocks grew taller (a role a row, wrapped conditions, and / or as
+// a block) while the tab placed them by an old guess. The editor now stacks a tab's top blocks from
+// their MEASURED heights once drawn (BlockEditor settle, stackTops below); this model only places
+// them before that (blocks.ts tabToWorkspace) and lets the tests check the stack (layout.test.ts),
+// its row heights FITTED to the reviewer's measure (drink 840 units tall, fly_away 928, bag_full 793:
+// the model gives +2.1 %, +3.7 %, +2.1 %, so it errs tall).
+
+/** A row of fields (zelos: a 32-unit field and its padding). */
+export const ROW_H = 42;
+/** A block's own top and bottom. */
+export const BLOCK_PAD = 12;
+/** A statement input's top and bottom around the blocks in it; an empty one's room. */
+export const STMT_PAD = 24;
+export const EMPTY_STMT_H = 24;
+/** A reporter of one text field, and each further line of a wrapped one (pickers.ts wrapExpr). */
+export const REPORTER_H = 40;
+export const LINE_H = 26;
+/** The hunt block's rows (its type is defined at run time from the catalogue: hunt.ts). */
+const HUNT_ROWS = 5;
+/** The gap between two top blocks of a tab (workspace units): blocks.ts places them so, the editor
+ * keeps them so with the heights Blockly measured (BlockEditor settle). */
+export const STACK_GAP = 24;
+
+/** A value block's height (a wrapped expression: its lines). */
+function reporterHeight(b: WsBlock, labels: Record<string, string>, hidden: (name: string) => boolean): number {
+  if (b.type === "pl_expr") return REPORTER_H + LINE_H * (wrapExpr(String(b.fields?.TEXT ?? "")).length - 1);
+  if (b.type === "pl_raw_expr") return REPORTER_H;
+  return blockHeight(b, labels, hidden);
+}
+
+/** A block's own height in workspace units (its rows, its statement inputs with what they hold),
+ * without the blocks after it. */
+export function blockHeight(b: WsBlock, labels: Record<string, string> = {}, hidden: (name: string) => boolean = () => false): number {
+  const def = DEF_BY_TYPE[b.type];
+  if (b.type === "pl_hunt") return HUNT_ROWS * ROW_H + BLOCK_PAD; // the run-time hunt type (hunt.ts): its rule rows
+  if (!def) return ROW_H + BLOCK_PAD;
+  const all = inputsOf(def, b, labels, hidden);
+  if (b.type === "pl_logic") for (const k of Object.keys(b.inputs ?? {}).filter((x) => /^T[0-9]+$/.test(x)).sort((x, y) => Number(x.slice(1)) - Number(y.slice(1)))) all.push({ type: "value", name: k, fields: [], words: [], visible: true });
+  const inline = inputsInline(def, all);
+  const ins = all.filter((x) => x.visible);
+  let total = 0;
+  let row = 0; // the height of the row being filled (0: empty)
+  const close = () => {
+    total += row;
+    row = 0;
+  };
+  ins.forEach((inp, i) => {
+    const prev = ins[i - 1];
+    if (prev !== undefined && (prev.type === "end" || inp.type === "statement" || prev.type === "statement" || !inline)) close();
+    if (inp.type === "statement") {
+      const child = b.inputs?.[inp.name]?.block;
+      row = Math.max(ROW_H, (child ? stackHeight(child, labels, hidden) : EMPTY_STMT_H) + STMT_PAD);
+      close();
+      return;
+    }
+    if (inp.fields.length) row = Math.max(row, ROW_H);
+    if (inp.type === "value") {
+      const child = b.inputs?.[inp.name]?.block;
+      row = Math.max(row, ROW_H, child ? reporterHeight(child, labels, hidden) + 8 : 0);
+    }
+  });
+  close();
+  return total + BLOCK_PAD;
+}
+
+/** A stack's height: a block and the blocks after it. */
+export function stackHeight(b: WsBlock, labels: Record<string, string> = {}, hidden: (name: string) => boolean = () => false): number {
+  let h = 0;
+  for (let cur: WsBlock | undefined = b; cur; cur = cur.next?.block) h += blockHeight({ ...cur, next: undefined }, labels, hidden);
+  return h;
+}
+
+/** A top block's box on the workspace (workspace units). */
+export type TopBox = { id: string; x: number; y: number; w: number; h: number };
+
+/** PURE (round 23): the tab's top blocks stacked so no two overlap, IN THEIR ORDER (top to bottom:
+ * the order the converter reads, so the project never changes) and at their x. `pack` (a tab just
+ * opened): each block right under the ones above it in its column, `gap` apart, from `top`;
+ * `push` (a block's height changed since): a block only ever moves DOWN, as far as the ones above
+ * it need. Returns each moved block's new y. */
+export function stackTops(boxes: readonly TopBox[], mode: "pack" | "push", gap: number, top: number): Map<string, number> {
+  const order = boxes.map((b, i) => ({ ...b, i })).sort((a, c) => a.y - c.y || a.x - c.x || a.i - c.i);
+  const placed: TopBox[] = [];
+  const out = new Map<string, number>();
+  let prev = -Infinity;
+  for (const b of order) {
+    let y = mode === "pack" ? top : b.y;
+    for (const p of placed) if (p.x < b.x + b.w && b.x < p.x + p.w) y = Math.max(y, p.y + p.h + gap);
+    y = Math.max(y, prev); // never above the block before it: the order stays
+    if (mode === "push") y = Math.max(y, b.y);
+    if (Math.abs(y - b.y) > 0.5) out.set(b.id, y);
+    placed.push({ ...b, y });
+    prev = y;
+  }
+  return out;
+}
+
+/** PURE: do two boxes intersect (the no-overlap test)? */
+export const overlaps = (a: TopBox, b: TopBox): boolean => a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h && b.y < a.y + a.h;

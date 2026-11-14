@@ -18,7 +18,7 @@ import { register, syncExprWrap } from "../../components/flows/blockly-register.
 import { tabFromWorkspace, tabToWorkspace, type Workspace, type WsBlock } from "./blocks.ts";
 import { canonical } from "./ir.ts";
 import { MAIN_TAB, type Project, sampleProject, xmasProject } from "./project.ts";
-import { SETTING_BY_NAME, settingType } from "./settings.ts";
+import { SETTING_BY_NAME, SETTINGS, settingType } from "./settings.ts";
 import { sessionProject } from "./testkit.ts";
 
 const require = createRequire(import.meta.url);
@@ -165,28 +165,118 @@ test("the real Blockly builds the rows layout.ts measures: each runner role with
   ws.dispose();
 });
 
-test("round 22: Escape / Cancel puts every value of the session back and leaves no undo step", async () => {
+// Round 23 (the reviewer: after Escape, Undo was enabled and Ctrl+Z RE-APPLIED the cancelled
+// value -- stepper 3.5 -> 4, percent 50 -> 51, cell 119 -> 120, a condition "< 50" -> "<= 50"):
+// Blockly fires its events on the next animation frame, which node does not have (it falls back
+// to a timeout, which is why round 22's test passed). These tests give node a browser's frames.
+const frame = (ms = 40) => new Promise((r) => setTimeout(r, ms));
+async function withFrames(fn: () => Promise<void>): Promise<void> {
+  const g = globalThis as { requestAnimationFrame?: (cb: () => void) => unknown };
+  const had = g.requestAnimationFrame;
+  g.requestAnimationFrame = (cb) => setTimeout(cb, 16);
+  try {
+    await fn();
+  } finally {
+    if (had) g.requestAnimationFrame = had;
+    else delete g.requestAnimationFrame;
+  }
+}
+const POINT = SETTINGS.fields.find((f) => f.kind === "point")!;
+/** Each kind of picker: the block, the session's fields, the value it opens on, a preview and the
+ * value kept (the reviewer's own examples first). */
+const KINDS: { kind: string; block: BlocklyT.serialization.blocks.State; fields: string[]; preview: unknown[][]; kept: unknown[] }[] = [
+  { kind: "stepper", block: { type: "pl_wait", fields: { SECONDS: 3.5 } }, fields: ["SECONDS"], preview: [[3.6], [3.8]], kept: [4] },
+  { kind: "percent", block: { type: settingType(SETTING_BY_NAME.get("END_FLY_BELOW")!), fields: { VALUE: 50 } }, fields: ["VALUE"], preview: [[50.5], [50.8]], kept: [51] },
+  { kind: "cell", block: { type: "pl_save_point", fields: { MAP: "geffen", X: 119, Y: 40 } }, fields: ["X", "Y"], preview: [[119.5, 40], [119.8, 41]], kept: [120, 42] },
+  { kind: "point", block: { type: settingType(POINT), fields: { X: 645, Y: 481 } }, fields: ["X", "Y"], preview: [[640, 470], [600, 400]], kept: [128, 360] },
+  { kind: "expr", block: { type: "pl_expr", fields: { TEXT: "hp_percent() < 50" } }, fields: ["TEXT"], preview: [["hp_percent() <"], ["hp_percent() <="]], kept: ["hp_percent() <= 50"] },
+  { kind: "optnum", block: { type: "pl_event", fields: { NAME: "drink", RANK: "" } }, fields: ["RANK"], preview: [["2"], ["5"]], kept: ["3"] },
+  { kind: "ref", block: { type: "pl_call", fields: { PROC: "heal", ARGS: "" } }, fields: ["PROC"], preview: [["fly"], ["fly_w"]], kept: ["fly_wing"] },
+];
+
+test("round 23: Escape / Cancel leaves the undo stack EXACTLY as before the picker opened -- every kind, Ctrl+Z included", async () => {
+  await withFrames(async () => {
+    for (const k of KINDS) {
+      const ws = new B.Workspace();
+      const b = B.serialization.blocks.append(k.block, ws);
+      const fs = k.fields.map((n) => b.getField(n)!);
+      const start = fs.map((f) => f.getValue());
+      await frame();
+      ws.clearUndo();
+      const s = pickerSession(fs);
+      for (const vs of k.preview) {
+        s.run(() => vs.forEach((v, i) => fs[i].setValue(v))); // a drag, a tap, a key: the live preview
+        await frame(); // the events fire, a frame later
+      }
+      assert.equal(ws.getUndoStack().length, 0, `${k.kind}: the preview is no undo step`);
+      s.cancel();
+      assert.deepEqual(fs.map((f) => f.getValue()), start, k.kind);
+      await frame();
+      assert.equal(ws.getUndoStack().length, 0, `${k.kind}: Undo stays greyed`);
+      ws.undo(false); // Ctrl+Z
+      await frame();
+      assert.deepEqual(fs.map((f) => f.getValue()), start, `${k.kind}: Ctrl+Z after a cancel re-applies nothing`);
+      assert.equal(ws.getRedoStack().length, 0, k.kind);
+      ws.dispose();
+    }
+  });
+});
+
+test("round 23: a KEPT session is ONE undo step: Ctrl+Z puts back the value from before it opened, redo the kept one -- every kind", async () => {
+  await withFrames(async () => {
+    for (const k of KINDS) {
+      for (const sameTick of [false, true]) {
+        const ws = new B.Workspace();
+        const b = B.serialization.blocks.append(k.block, ws);
+        const fs = k.fields.map((n) => b.getField(n)!);
+        const start = fs.map((f) => f.getValue());
+        await frame();
+        ws.clearUndo();
+        const s = pickerSession(fs);
+        for (const vs of [...k.preview, k.kept]) {
+          s.run(() => vs.forEach((v, i) => fs[i].setValue(v)));
+          if (!sameTick) await frame();
+        }
+        const kept = fs.map((f) => f.getValue());
+        s.commit(); // Done, Enter, a tap outside, a pick from a list
+        s.commit(); // once only
+        s.cancel(); // too late: kept is kept
+        await frame();
+        const what = `${k.kind}${sameTick ? " (in one frame)" : ""}`;
+        assert.deepEqual(fs.map((f) => f.getValue()), kept, what);
+        const stack = ws.getUndoStack();
+        assert.ok(stack.length >= 1, `${what}: one undo step`);
+        assert.equal(new Set(stack.map((e) => e.group)).size, 1, `${what}: one undo step`);
+        ws.undo(false); // Ctrl+Z
+        await frame();
+        assert.deepEqual(fs.map((f) => f.getValue()), start, `${what}: Ctrl+Z puts back what was there before`);
+        assert.equal(ws.getUndoStack().length, 0, what);
+        ws.undo(true); // redo
+        await frame();
+        assert.deepEqual(fs.map((f) => f.getValue()), kept, `${what}: redo`);
+        ws.dispose();
+      }
+    }
+  });
+});
+
+test("round 23: a wrapped condition's further rows open its picker (they are tappable labels, never saved)", () => {
   const ws = new B.Workspace();
-  const wait = B.serialization.blocks.append({ type: "pl_wait", fields: { SECONDS: 1 } }, ws);
-  const f = wait.getField("SECONDS")!;
-  await new Promise((r) => setTimeout(r, 0));
-  ws.clearUndo();
-  const s = pickerSession([f]);
-  s.run(() => f.setValue(5));
-  s.run(() => f.setValue(7.5));
-  await new Promise((r) => setTimeout(r, 0));
-  assert.ok(ws.getUndoStack().length > 0); // the session's steps, one group
-  s.cancel();
-  assert.equal(f.getValue(), 1);
-  assert.equal(s.cancelled(), true);
-  await new Promise((r) => setTimeout(r, 5));
-  assert.equal(ws.getUndoStack().length, 0); // nothing to undo: the picker never happened
-  // a kept session stays one undo step
-  const k = pickerSession([f]);
-  k.run(() => f.setValue(3));
-  k.run(() => f.setValue(4));
-  await new Promise((r) => setTimeout(r, 0));
-  assert.equal(new Set(ws.getUndoStack().map((e) => e.group)).size, 1);
+  const long = B.serialization.blocks.append({ type: "pl_expr", fields: { TEXT: 'hotbar_count(key="F6") == 0 and hp_percent() < 50' } }, ws);
+  syncExprWrap(B, long);
+  const text = long.getField("TEXT")!;
+  let opened = 0;
+  text.showEditor = () => void opened++; // the picker itself needs a browser: count the opening
+  const rows = long.inputList.filter((i) => /^WRAP[0-9]+$/.test(i.name));
+  assert.ok(rows.length >= 1);
+  for (const r of rows) {
+    const label = r.fieldRow[0];
+    assert.ok(label instanceof B.FieldLabel && label.isClickable(), r.name);
+    label.showEditor();
+  }
+  assert.equal(opened, rows.length);
+  const saved = B.serialization.blocks.save(long) as { fields?: Record<string, unknown> };
+  assert.deepEqual(Object.keys(saved.fields ?? {}), ["TEXT"]);
   ws.dispose();
 });
 

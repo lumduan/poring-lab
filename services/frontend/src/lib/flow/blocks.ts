@@ -14,7 +14,7 @@
 import { CREDENTIALS, DEF_BY_TYPE, DEFAULT_FAILS, DEFAULT_MAX_10, HOTKEYS, RUNNER_ROLES, SENTENCE, SENTENCE_BY_TYPE } from "./blockdefs.ts";
 import { argsText, callArgsText, ExprError, exprText, hasDo, parseArgs, parseCallArgs, parseExpr, parseParams } from "./expr.ts";
 import { fieldOf, HUNT_TYPE, type HuntRules, omitted, paramOf, params as huntParams } from "./hunt.ts";
-import { rowsOf } from "./layout.ts";
+import { blockHeight, rowsOf, STACK_GAP } from "./layout.ts";
 import { CLASS_KEY, DETECT_SENSOR, MODEL_KEY, SENSOR_BLOCK } from "./models.ts";
 import { SETTING_BY_VAR, settingFields, settingFromFields, settingLit, settingOfType, settingProblem, settingRows, settingType } from "./settings.ts";
 import { blockWords, type Issue, type Loose, stackSize } from "./words.ts";
@@ -1168,13 +1168,16 @@ export const TAB_TOP_Y = 90;
 /** An event block's first three rows (when; event / class / rank; mode / then: the fields a person
  * reads first), workspace units, generously: the zelos rows are ~48 units, the first one taller. */
 export const FIRST_ROWS_Y = 3 * 56;
-/** An event block's extra height in workspace units: its trigger's rows (round 17 N4; round 21:
- * one or two fields a row, thirteen rows). */
-const EVENT_ROWS_Y = 11 * 48;
+/** ➡️ Round 23: an event's height is no longer a fixed EVENT_ROWS_Y (11 x 48 units: the survival
+ * tab's events, 793-928 units tall measured, overlapped by 78-164 px): every block is placed by
+ * layout.ts blockHeight. What a placed block is drawn with: its badge row (decorate fills it), and
+ * not the rows that show only while they say something (the run line, a warning, the lint's note). */
+const PLACED_LABELS: Record<string, string> = { BADGE: "●" };
+const placedHidden = (n: string): boolean => n === "ROW_RUN" || n.startsWith("ROW_WARN") || n.startsWith("ROW_NOTE");
 /** A setting block's row, and the gap under the block (live-blocks.md 12: a tab of settings is a
  * list; matpilot round 20 #2: a block is several rows, settings.ts settingRows), workspace units,
  * generously (a zelos label row is ~32-40). The editor pushes a block down when the lint's "not
- * used" rows make the one above it taller (BlockEditor restack). */
+ * used" rows make the one above it taller (BlockEditor settle; round 20's restack until round 23). */
 export const SETTING_ROW_Y = 40;
 export const SETTING_GAP_Y = 24;
 /** A setting block's height as placed: its words, value (and var) rows, and its warning while off. */
@@ -1199,8 +1202,11 @@ export function tabToWorkspace(p: Project, scope: TabScope, opts: ConvertOptions
     b.x = 20;
     b.y = y;
     const setting = settingOfType(b.type); // its rows (a safety switch's warning while off)
-    // (round 21: a function's three header rows; the event's rows are EVENT_ROWS_Y)
-    y += setting ? settingHeight(b.type, b.fields) : 90 + 46 * height(b.inputs?.DO?.block) + (b.type === "pl_event" ? EVENT_ROWS_Y : 46 * (ownRows(b) - 1));
+    // round 23 (the reviewer: the survival tab's events overlapped, 78-164 px at 390 and 1440, 8
+    // fields hidden): a block is as tall as its rows (layout.ts blockHeight: the reviewer's measured
+    // heights or a little more), the next one STACK_GAP under it; the editor then stacks them again
+    // with the heights Blockly measured (BlockEditor settle)
+    y += setting ? settingHeight(b.type, b.fields) : blockHeight(b, PLACED_LABELS, placedHidden) + STACK_GAP;
     top.push(b);
   };
   if (t.main) place({ type: "pl_main", id: ids.take("h:main"), inputs: chainInput("DO", t.main, "main", ids), extraState: {} });

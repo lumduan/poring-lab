@@ -221,12 +221,6 @@ export function niceStep(r: NumRange): number {
   return tidy(Math.max(1, Math.round(nice / r.step)) * r.step);
 }
 
-/** A round value: a multiple of 1, 2, 2.5 or 5 x 10^n (10, 25, 50, 75, 90 for a percent). */
-function roundness(v: number): number {
-  for (const [i, m] of [100, 50, 25, 10, 5, 2, 1, 0.5, 0.25, 0.1, 0.05, 0.01].entries()) if (Math.abs(v / m - Math.round(v / m)) < 1e-9) return i;
-  return 99;
-}
-
 /** A few ROUND values inside the range for the preset buttons (the given ones that fit, else, near
  * each of the range's quarters, the roundest value on the field's grid: 10 / 25 / 50 / 75 / 90 for
  * 5..95 %, not 5 / 28 / 50 / 73 / 95; round 22), at most five, distinct, in order. */
@@ -235,19 +229,33 @@ export function presetsOf(r: NumRange, given?: readonly number[]): number[] {
   if (pick.length) return [...new Set(pick.map((v) => tidy(v)))].slice(0, 5);
   const span = r.hi - r.lo;
   if (!(span > 0)) return [tidy(r.lo)];
+  // round 23 (the reviewer: END_HOT_S's presets were 1.5 / 10 / 15.25 / 21.5 / 30 s): the round
+  // values are ENUMERATED -- for each round unit, largest first, the multiple nearest the point --
+  // never sampled (a sample on a 0.01 grid never hit 15 exactly). Units are 5, 2 and 1 of each
+  // power of ten, and 25 / 250 / ... (never 2.5 or 0.25: a child reads 2 sooner than 2.5); a
+  // preset may move a tenth of the range from its point, and never lands within a tenth of the
+  // range of the one before it (two labels that close collide on the lever): the next finer unit
+  // is tried, else the point is left out.
+  const near = span * 0.1;
+  const units: number[] = [];
+  for (let e = Math.ceil(Math.log10(span)) + 1; e >= Math.floor(Math.log10(Math.max(r.step || span / 1000, 1e-9))) - 1; e--) {
+    for (const m of e >= 1 ? [5, 2.5, 2, 1] : [5, 2, 1]) units.push(tidy(m * 10 ** e));
+  }
   const out: number[] = [];
+  const apart = (v: number) => !out.length || v - out[out.length - 1] >= near - 1e-9;
   for (const f of [0.05, 0.25, 0.5, 0.75, 0.95]) {
     const want = r.lo + f * span;
-    const near = span * 0.08; // how far a preset may move from its quarter to be round
-    let best = snap(want, r);
-    for (let k = -40; k <= 40; k++) {
-      const v = snap(want + (k * near) / 40, r);
-      if (v < r.lo || v > r.hi) continue;
-      if (roundness(v) < roundness(best) || (roundness(v) === roundness(best) && Math.abs(v - want) < Math.abs(best - want))) best = v;
+    let pick: number | null = null;
+    for (const u of units) {
+      const v = tidy(Math.round(want / u) * u);
+      if (v < r.lo - 1e-9 || v > r.hi + 1e-9 || Math.abs(v - want) > near || snap(v, r) !== v || !apart(v)) continue;
+      pick = v;
+      break;
     }
-    out.push(best);
+    if (pick === null && apart(snap(want, r))) pick = snap(want, r);
+    if (pick !== null) out.push(pick);
   }
-  return [...new Set(out)].sort((a, b) => a - b).slice(0, 5);
+  return out;
 }
 
 /** An optional whole number in a TEXT field ("" = none / the default): the number, null for
@@ -957,19 +965,55 @@ export function exprProblem(text: string): string {
     return "";
   } catch (e) {
     const msg = e instanceof ExprError ? e.message : "";
-    const at = Number(/^col ([0-9]+)/.exec(msg)?.[1] ?? 0);
-    const last = /(==|!=|<=|>=|<|>|=|\+|-|\*|\/|,|\(|\band\b|\bor\b|\bnot\b|\bin\b)\s*$/.exec(text)?.[1];
-    if (/unexpected "end"|unexpected end/.test(msg) || /unexpected "\)"/.test(msg) && last === "(") return last ? `the condition is not finished: a value is missing after ${last}` : "the condition is not finished: something is missing at its end";
-    const want = /expected "(.)"/.exec(msg)?.[1];
-    if ((want === ")" || want === ",") && at > text.trimEnd().length) return "a ( is not closed: add ) after its inputs";
-    if (want) return `"${want}" is missing here (character ${at})`;
-    if (/unterminated text/.test(msg)) return 'a text in quotes is not closed: add " at its end';
-    if (/chained comparisons/.test(msg)) return "one comparison at a time: join two with and / or";
-    const bad = /unexpected (".*"|\S+)$/.exec(msg)?.[1];
-    if (bad) return `${bad.replace(/^"|"$/g, "")} cannot stand here${at ? ` (character ${at})` : ""}`;
-    if (/is not a valid name/.test(msg)) return msg.replace(/^col [0-9]+: /, "") + " (a name: letters, digits and _, a letter first)";
-    return msg.replace(/^col ([0-9]+): /, "at character $1: ") || "it cannot be read";
+    return learnerWords(text, msg);
   }
+}
+
+const OPERATOR = /(==|!=|<=|>=|<|>|=|\+|-|\*|\/|,|\(|\band\b|\bor\b|\bnot\b|\bin\b)\s*$/;
+
+/** The last ( or [ of a text still open at its end (outside quotes); "" when none is. */
+function openerOf(text: string): string {
+  const open: string[] = [];
+  let quoted = false;
+  for (const ch of text) {
+    if (ch === '"') quoted = !quoted;
+    else if (quoted) continue;
+    else if (ch === "(" || ch === "[") open.push(ch);
+    else if (ch === ")" || ch === "]") open.pop();
+  }
+  return open[open.length - 1] ?? "";
+}
+
+/** PURE (round 23: after "< " the message was "and cannot stand here (character 17)"): the
+ * parser's message in a learner's words, never a column or a token name. A thing out of place
+ * right after an operator is a MISSING value after that operator. */
+export function learnerWords(text: string, msg: string): string {
+  const at = Number(/^col ([0-9]+)/.exec(msg)?.[1] ?? 0);
+  const before = at > 0 ? text.slice(0, at - 1) : text;
+  const opBefore = OPERATOR.exec(before)?.[1];
+  const last = OPERATOR.exec(text)?.[1];
+  if (/unexpected "end"|unexpected end/.test(msg)) return last ? `the condition is not finished: a value is missing after ${last}` : "the condition is not finished: something is missing at its end";
+  const bad = /unexpected (".*"|\S+)$/.exec(msg)?.[1]?.replace(/^"|"$/g, "");
+  if (bad === "'") return 'a text goes in double quotes: "like this"';
+  if (bad !== undefined && opBefore) return opBefore === "(" ? `after ( a value is missing before ${bad}` : `after ${opBefore} a value is missing`;
+  if (bad === "=") return "= cannot stand here: to compare two values, use ==";
+  if (bad === ")" || bad === "]") return `${bad} cannot stand here: no ${bad === ")" ? "(" : "["} is open before it`;
+  const want = /(?:^|: )expected "(.)"/.exec(msg)?.[1]; // never the "expected" inside "unexpected"
+  if ((want === ")" || want === ",") && at > text.trimEnd().length) return openerOf(text) === "[" ? "a [ is not closed: add ] after its items" : "a ( is not closed: add ) after its inputs";
+  if (want === ")" || want === ",") return `${bad ?? "something"} cannot stand here: a ( needs its ) (or a , between two inputs)`;
+  if (want) return `a ${want} is missing here`;
+  if (/unterminated text/.test(msg)) return 'a text in quotes is not closed: add " at its end';
+  if (/chained comparisons/.test(msg)) return "one comparison at a time: join two with and / or";
+  if (/positional after keyword/.test(msg)) return "an input by position comes before the inputs by name (name=value)";
+  if (/given twice/.test(msg)) return `${/: (\S+) given twice/.exec(msg)?.[1] ?? "an input"} is given twice`;
+  if (/not a finite number/.test(msg)) return "that number is too large";
+  if (/bad text literal/.test(msg)) return "that text in quotes cannot be read";
+  if (/a list holds references/.test(msg)) return "a list holds things like item(501) or mob(1002), or variables";
+  if (/is not a valid name/.test(msg)) return `${msg.replace(/^col [0-9]+: /, "").replace(/ is not a valid name$/, "")} is not a name (a name: letters, digits and _, a letter first)`;
+  if (bad !== undefined) return bad === "end" ? "the condition is not finished" : `${bad} cannot stand here`;
+  if (/longer than/.test(msg)) return "it is too long";
+  if (/nested deeper/.test(msg)) return "too many ( inside each other";
+  return msg.replace(/^col [0-9]+: /, "") || "it cannot be read";
 }
 
 /** PURE (round 22: a greyed block's picker was white on slate, about 1.5:1): the DropDownDiv's
@@ -991,4 +1035,32 @@ export function pickerColours(primary: string, tertiary: string): { primary: str
     out = mix(primary, f);
   }
   return { primary: out, tertiary: mix(primary, Math.max(0, f - 0.15)) };
+}
+
+/** PURE (round 23: the point picture's drag read y 719 in the COMPACT picker at 1440): a pointer's
+ * place in an SVG area's own units from the DRAWN area's box on the screen (its getBoundingClient-
+ * Rect: whatever the picker's size, the svg box's letterboxing or a transform) and that area's
+ * extent in the svg's units. */
+export function toArea(clientX: number, clientY: number, drawn: { left: number; top: number; width: number; height: number }, area: { x: number; y: number; width: number; height: number }): [number, number] {
+  const fx = drawn.width > 0 ? (clientX - drawn.left) / drawn.width : 0;
+  const fy = drawn.height > 0 ? (clientY - drawn.top) / drawn.height : 0;
+  return [area.x + fx * area.width, area.y + fy * area.height];
+}
+
+/** PURE (round 23: Blockly's own menus ran 4-15 px past the blocks area: its fit check leaves out
+ * the 16 px between the field and the menu): how far a shown DropDownDiv moves back inside the
+ * area (`shift`, px, + down / - up: at most `maxShift`, so it never reaches its field) and how much
+ * shorter it must be for the rest (`shrink`, px: its content then scrolls). */
+export function fitDropDown(div: { top: number; bottom: number }, area: { top: number; bottom: number }, maxShift = 12): { shift: number; shrink: number } {
+  const over = div.bottom - (area.bottom - PICKER_MARGIN / 2);
+  const under = area.top + PICKER_MARGIN / 2 - div.top;
+  if (over > 0.5) {
+    const shift = -Math.min(over, maxShift);
+    return { shift, shrink: Math.max(0, Math.ceil(over + shift)) };
+  }
+  if (under > 0.5) {
+    const shift = Math.min(under, maxShift);
+    return { shift, shrink: Math.max(0, Math.ceil(under - shift)) };
+  }
+  return { shift: 0, shrink: 0 };
 }

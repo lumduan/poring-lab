@@ -86,6 +86,10 @@ import {
   niceStep,
   exprProblem,
   GAME_AREAS,
+  fitDropDown,
+  PICKER_GAP,
+  PICKER_MARGIN,
+  toArea,
   toViewBox,
   typedProblem,
   valueRange,
@@ -216,25 +220,74 @@ function openPicker(field: BlocklyT.Field, content: HTMLElement, s: Session, onH
       m = measure() ?? m;
       plan = placePicker(m, false, true);
     }
-    if (plan.maxHeight !== null) {
-      const chrome = div.getBoundingClientRect().height - content.getBoundingClientRect().height;
-      content.style.maxHeight = `${Math.max(100, plan.maxHeight - chrome)}px`;
-    }
+    // round 23: ALWAYS capped to the room on its side (a picker that grows once open -- the
+    // suggestions under a typed text -- scrolls inside, never past the blocks area)
+    const room = plan.maxHeight ?? Math.floor(plan.side === "below" ? m.areaBottom - m.fieldBottom - PICKER_GAP - PICKER_MARGIN : m.fieldTop - m.areaTop - PICKER_GAP - PICKER_MARGIN);
+    const chrome = div.getBoundingClientRect().height - content.getBoundingClientRect().height;
+    content.style.maxHeight = `${Math.max(100, room - chrome)}px`;
   }
-  B.DropDownDiv.showPositionedByField(field, onHide);
+  // round 23: a session that is not cancelled is KEPT as ONE undo step when the picker closes
+  // (Done, Enter, a tap outside, a pick from a list)
+  B.DropDownDiv.showPositionedByField(field, () => {
+    onHide?.();
+    if (!s.cancelled()) s.commit();
+  });
 }
+/** Round 23 (the reviewer: two of Blockly's own menus -- npc_guard's, quick_drop_scaled's -- ran
+ * 4-15 px past the canvas's bottom at 390, four more and the keys' call-argument picker over the
+ * footer at 1440; Blockly's fit check leaves out the 16 px between a field and its menu): once a
+ * shown DropDownDiv has slid to its place, it moves back inside the blocks area (at most 12 px, so
+ * it never reaches its field: pickers.ts fitDropDown) and, for the rest, its content gets shorter
+ * and scrolls. Watches the DropDownDiv's style (Blockly positions it there); returns the disposer. */
+export function keepDropDownsInside(B: B_, area: () => DOMRect | null): () => void {
+  const content = B.DropDownDiv.getContentDiv();
+  const div = content.parentElement as HTMLElement | null;
+  if (!div || typeof MutationObserver === "undefined") return () => undefined;
+  let mine: string | null = null; // the top this nudge set (Blockly sets its own at every show)
+  let timer: ReturnType<typeof setTimeout> | null = null;
+  const check = () => {
+    timer = null;
+    if (!B.DropDownDiv.isVisible()) {
+      content.style.maxHeight = "";
+      mine = null;
+      return;
+    }
+    if (div.style.top === mine) return; // nudged once for this place
+    content.style.maxHeight = ""; // a new place: the last menu's shortening goes
+    const a = area();
+    if (!a) return;
+    const box = div.getBoundingClientRect();
+    const { shift, shrink } = fitDropDown(box, a);
+    if (shift === 0 && shrink === 0) return;
+    if (shrink > 0) content.style.maxHeight = `${Math.max(80, content.getBoundingClientRect().height - shrink)}px`;
+    mine = `${parseFloat(div.style.top || "0") + shift}px`;
+    div.style.top = mine;
+  };
+  const watch = new MutationObserver(() => {
+    if (timer) clearTimeout(timer);
+    timer = setTimeout(check, B.DropDownDiv.ANIMATION_TIME * 1000 + 30); // after its slide
+  });
+  watch.observe(div, { attributes: true, attributeFilter: ["style"] });
+  return () => {
+    watch.disconnect();
+    if (timer) clearTimeout(timer);
+  };
+}
+
 function closePicker(field: BlocklyT.Field): void {
   BL!.DropDownDiv.hideIfOwner(field, true);
 }
 
 /** Calls `onPoint` while the pointer is pressed on the element, in the element's own SVG units;
- * a press and its drag are ONE undo step (matpilot onDrag). Round 22 (the reviewer: a MOUSE drag in
- * the point picture read y from the picker's top): each place is mapped through the SVG's own
- * screen matrix (getScreenCTM: its box, its viewBox, any transform), else its box at that moment
- * (pickers.ts toViewBox), and the picker cannot scroll under the pointer while it drags. */
-function onDrag(el: SVGSVGElement, group: () => string, onPoint: (x: number, y: number) => void): void {
-  const B = BL!;
+ * a press and its drag are part of the picker's session (`run`: no undo step until it is kept).
+ * Round 23 (the reviewer: in the COMPACT picker at 1440 the point picture read y 719 from 55 % on,
+ * by mouse and by touch): with `ref`, a place is mapped from the DRAWN area's own box on the screen
+ * (`ref.el`'s getBoundingClientRect: whatever size the picker gives the picture, the svg box's
+ * letterboxing or a transform) onto that area's extent in the svg (`ref.area`; pickers.ts toArea);
+ * else through the SVG's screen matrix. The picker cannot scroll under the pointer while it drags. */
+function onDrag(el: SVGSVGElement, run: (fn: () => void) => void, onPoint: (x: number, y: number) => void, ref?: { el: Element; area: { x: number; y: number; width: number; height: number } }): void {
   const local = (e: PointerEvent): [number, number] => {
+    if (ref) return toArea(e.clientX, e.clientY, ref.el.getBoundingClientRect(), ref.area);
     const ctm = el.getScreenCTM?.();
     if (ctm && typeof el.createSVGPoint === "function") {
       const pt = el.createSVGPoint();
@@ -251,18 +304,11 @@ function onDrag(el: SVGSVGElement, group: () => string, onPoint: (x: number, y: 
     e.preventDefault();
     e.stopPropagation();
     el.setPointerCapture(e.pointerId);
-    const g = group();
-    const scroller = el.closest(".blocklyDropDownContent") as HTMLElement | null;
+    const scroller = el.closest(".blocklyDropDownContent, .pl-picker") as HTMLElement | null;
     const top = scroller?.scrollTop ?? 0;
     const at = (ev: PointerEvent) => {
       if (scroller && scroller.scrollTop !== top) scroller.scrollTop = top; // no scroll mid-drag
-      const old = B.Events.getGroup();
-      B.Events.setGroup(g);
-      try {
-        onPoint(...local(ev));
-      } finally {
-        B.Events.setGroup(old);
-      }
+      run(() => onPoint(...local(ev)));
     };
     at(e);
     const end = () => {
@@ -310,47 +356,58 @@ function focusFirst(root: Element, selector: string, text = false): void {
  * on a 60 s slider): stepping never jumps a value to the slider's end. */
 const widen = (r: NumRange, v: number): NumRange => (Number.isFinite(v) ? { ...r, lo: Math.min(r.lo, v), hi: Math.max(r.hi, v) } : r);
 
-/** One edit session of a picker: every change it makes is one undo step; `cancel` (Escape, the
- * Cancel button; round 22) puts every field it may change back as it was when it opened, and the
- * session leaves no undo step behind. */
-type Session = { group: () => string; run: (fn: () => void) => void; cancel: () => void; cancelled: () => boolean };
+/** One edit session of a picker (round 23, the reviewer: after Escape, Undo was enabled and
+ * Ctrl+Z RE-APPLIED the cancelled value -- the live preview's changes were in the undo stack and the
+ * restore landed on top, because Blockly fires its events on the next animation frame, after the
+ * clean-up). Now the preview records NO undo step (`run`: Blockly's recordUndo off); `cancel`
+ * (Escape, Cancel) puts every field back the same way, so the undo stack is exactly as before the
+ * picker opened; `commit` (the picker closes any other way) makes the change ONE undo step: every
+ * field back to its value from before, unrecorded, then forward to its kept value, recorded, in a
+ * group of its own. (Its own group: Blockly merges a queued change into the one before it of the
+ * same group, block and field, keeping the FIRST one's undo flag -- "back" and "forward" in one
+ * group became one unrecorded no-op and the kept change left no undo step.) */
+type Session = { group: () => string; run: (fn: () => void) => void; cancel: () => void; cancelled: () => boolean; commit: () => void };
 function session(fields: readonly (BlocklyT.Field | null | undefined)[]): Session {
   const B = BL!;
   const g = B.utils.idGenerator.genUid();
   const before = fields.filter((f): f is BlocklyT.Field => !!f).map((f) => [f, f.getValue()] as const);
   let cancelled = false;
-  const run = (fn: () => void) => {
+  let committed = false;
+  const inGroup = (group: string, record: boolean, fn: () => void) => {
     const old = B.Events.getGroup();
-    B.Events.setGroup(g);
+    const rec = B.Events.getRecordUndo();
+    B.Events.setGroup(group);
+    B.Events.setRecordUndo(record);
     try {
       fn();
     } finally {
+      B.Events.setRecordUndo(rec);
       B.Events.setGroup(old);
     }
   };
+  const run = (fn: () => void) => inGroup(g, false, fn);
   return {
     group: () => g,
     run,
     cancelled: () => cancelled,
     cancel: () => {
-      if (cancelled) return;
+      if (cancelled || committed) return;
       cancelled = true;
-      let changed = false;
       run(() => {
-        for (const [f, v] of before) {
-          if (f.getValue() !== v) {
-            f.setValue(v);
-            changed = true;
-          }
-        }
+        for (const [f, v] of before) if (f.getValue() !== v) f.setValue(v);
       });
-      if (!changed) return;
-      // the session's events fire on a timeout: then they leave the undo stack (one group)
-      const ws = before[0]?.[0].getSourceBlock()?.workspace;
-      setTimeout(() => {
-        const stack = ws?.getUndoStack();
-        while (stack?.length && stack[stack.length - 1].group === g) stack.pop();
-      }, 0);
+    },
+    commit: () => {
+      if (cancelled || committed) return;
+      committed = true;
+      const changed = before.map(([f, v]) => [f, v, f.getValue()] as const).filter(([, v, k]) => k !== v);
+      if (!changed.length) return;
+      run(() => {
+        for (const [f, v] of changed) f.setValue(v);
+      });
+      inGroup(B.utils.idGenerator.genUid(), true, () => {
+        for (const [f, , k] of changed) f.setValue(k);
+      });
     },
   };
 }
@@ -395,10 +452,22 @@ function stepper(parent: Element, o: { label: string; unit?: string; range: NumR
     const v = Number(num.value);
     if (num.value.trim() !== "" && Number.isFinite(v)) o.set(v); // typed: exactly as typed (no clamp)
   };
-  num.addEventListener("change", apply);
+  // round 23 (the reviewer: the focused x box showed 645 while the block said 128 after a drag):
+  // the box follows the value unless the person is TYPING in it (from their first key to Enter,
+  // a change or leaving it); focus alone no longer freezes it
+  let typing = false;
+  num.addEventListener("input", () => (typing = true));
+  num.addEventListener("blur", () => (typing = false));
+  num.addEventListener("change", () => {
+    typing = false; // the box then shows the value the field kept
+    apply();
+  });
   // Enter applies the typed number, and the picker keeps it (openPicker: Enter keeps)
   num.addEventListener("keydown", (e) => {
-    if (e.key === "Enter") apply();
+    if (e.key === "Enter") {
+      typing = false;
+      apply();
+    }
   });
   if (o.presets?.length) {
     const pr = htmlEl("div", { class: "pl-picker-row pl-picker-presets" }, wrap);
@@ -406,7 +475,7 @@ function stepper(parent: Element, o: { label: string; unit?: string; range: NumR
   }
   const refresh = () => {
     const v = o.get();
-    if (document.activeElement !== num) num.value = Number.isFinite(v) ? String(v) : "";
+    if (!typing) num.value = Number.isFinite(v) ? String(v) : "";
     if (slider) slider.value = String(Number.isFinite(v) ? snap(v, o.range) : o.range.lo);
     minus.disabled = Number.isFinite(v) && !(v > o.range.lo);
     plus.disabled = Number.isFinite(v) && !(v < o.range.hi);
@@ -417,20 +486,22 @@ function stepper(parent: Element, o: { label: string; unit?: string; range: NumR
 
 /** The lever bar: a bar that fills to the value like an HP bar (red low, green high; the bag the
  * other way round), dragged or tapped, the arrows step it (matpilot's throttle, lying down). */
-function lever(parent: Element, o: { label: string; range: NumRange; bar: "hp" | "weight" | "level"; group: () => string; get: () => number; set: (v: number) => void }): () => void {
+function lever(parent: Element, o: { label: string; range: NumRange; bar: "hp" | "weight" | "level"; run: (fn: () => void) => void; get: () => number; set: (v: number) => void }): () => void {
   const W = 260;
   const H = 56;
   const x0 = 14;
   const x1 = W - 14;
   const svg = svgEl("svg", { viewBox: `0 0 ${W} ${H}`, width: W, height: H, class: "pl-picker-lever" });
   parent.appendChild(svg);
-  svgEl("rect", { class: "pl-focus-ring", x: x0 - 4, y: 10, width: x1 - x0 + 8, height: 24, rx: 12, fill: "rgba(0,0,0,0.35)", stroke: "rgba(255,255,255,0.5)" }, svg);
+  const ring = svgEl("rect", { class: "pl-focus-ring", x: x0 - 4, y: 10, width: x1 - x0 + 8, height: 24, rx: 12, fill: "rgba(0,0,0,0.35)", stroke: "rgba(255,255,255,0.5)" }, svg);
   const fill = svgEl("rect", { x: x0, y: 14, height: 16, rx: 8 }, svg);
-  for (let i = 0; i <= 4; i++) {
-    const x = x0 + ((x1 - x0) * i) / 4;
+  // round 23 (the reviewer: END_FLY_BELOW's ticks read 5 / 28 / 50 / 73 / 95): the ticks are the
+  // ROUND values the presets use (pickers.ts presetsOf), each where it sits on the bar
+  for (const v of presetsOf(o.range)) {
+    const x = x0 + fraction(v, o.range) * (x1 - x0);
     svgEl("line", { x1: x, y1: 36, x2: x, y2: 41, stroke: "#fff", "stroke-width": 1.5, opacity: 0.8 }, svg);
     const t = svgEl("text", { x, y: 53, "text-anchor": "middle", "font-size": 11, fill: "#fff" }, svg);
-    t.textContent = String(atFraction(i / 4, o.range));
+    t.textContent = String(v);
   }
   const knob = svgEl("circle", { cy: 22, r: 11, fill: "#fff", stroke: "rgba(0,0,0,0.45)", "stroke-width": 1.5 }, svg);
   const colour = (f: number) => {
@@ -438,7 +509,7 @@ function lever(parent: Element, o: { label: string; range: NumRange; bar: "hp" |
     return o.bar === "level" ? "#ffffff" : good < 0.3 ? "#ef4444" : good < 0.6 ? "#f59e0b" : "#22c55e";
   };
   const refreshAria = makeSlider(svg, o.label, () => o.range, o.get, o.set, (v) => `${v} percent`);
-  onDrag(svg, o.group, (x) => o.set(atFraction((x - x0) / (x1 - x0), o.range)));
+  onDrag(svg, o.run, (x) => o.set(atFraction((x - x0) / (x1 - x0), o.range)), { el: ring, area: { x: x0 - 4, y: 10, width: x1 - x0 + 8, height: 24 } });
   const refresh = () => {
     const f = fraction(o.get(), o.range);
     const x = x0 + f * (x1 - x0);
@@ -535,7 +606,7 @@ function numberPicker(field: BlocklyT.FieldNumber, spec: Extract<PickSpec, { kin
     const unit = spec.kind === "percent" ? "%" : (spec.unit ?? "");
     const one = spec.kind === "stepper" ? spec.one : undefined;
     refreshers.push(() => (readout.textContent = numText(get(), unit, one)));
-    if (spec.kind === "percent") refreshers.push(lever(root, { label: spec.title, range: r, bar: spec.bar ?? "level", group: s.group, get, set }));
+    if (spec.kind === "percent") refreshers.push(lever(root, { label: spec.title, range: r, bar: spec.bar ?? "level", run: s.run, get, set }));
     refreshers.push(stepper(root, { label: spec.title, unit, range: r, presets: presetsOf(r, spec.presets), get, set, slider: spec.kind !== "percent" }));
   } else {
     // a point or a cell: this field and its pair (X and Y) side by side, one picker for both
@@ -553,7 +624,7 @@ function numberPicker(field: BlocklyT.FieldNumber, spec: Extract<PickSpec, { kin
       const H = Math.round((W * GAME_PX[1]) / GAME_PX[0]);
       const svg = svgEl("svg", { viewBox: `0 0 ${W} ${H}`, width: W, height: H, class: "pl-picker-screen", role: "img", "aria-label": "the game picture: tap to place the point" });
       root.appendChild(svg);
-      svgEl("rect", { x: 0.5, y: 0.5, width: W - 1, height: H - 1, rx: 4, fill: "rgba(0,0,0,0.35)", stroke: "rgba(255,255,255,0.6)" }, svg);
+      const back = svgEl("rect", { x: 0.5, y: 0.5, width: W - 1, height: H - 1, rx: 4, fill: "rgba(0,0,0,0.35)", stroke: "rgba(255,255,255,0.6)" }, svg);
       // round 22: the client's fixed windows where they usually are (pickers.ts GAME_AREAS: the UI
       // anchors' home places), outlined and named -- no game picture is shown or kept
       const k = W / GAME_PX[0];
@@ -564,12 +635,19 @@ function numberPicker(field: BlocklyT.FieldNumber, spec: Extract<PickSpec, { kin
         t.textContent = a.name;
       }
       const dot = svgEl("circle", { r: 5, fill: "#fff", stroke: "#111", "stroke-width": 1.5 }, svg);
-      onDrag(svg, s.group, (x, y) => {
-        const [px, py] = pointIn((x * GAME_PX[0]) / W, (y * GAME_PX[1]) / H);
-        xf?.setValue(px);
-        yf?.setValue(py);
-        refresh();
-      });
+      // round 23: mapped from the DRAWN picture (`back`), so the compact picker's 176 x 99 reads
+      // the same places as the full 256 x 144 one
+      onDrag(
+        svg,
+        s.run,
+        (x, y) => {
+          const [px, py] = pointIn((x * GAME_PX[0]) / W, (y * GAME_PX[1]) / H);
+          xf?.setValue(px);
+          yf?.setValue(py);
+          refresh();
+        },
+        { el: back, area: { x: 0.5, y: 0.5, width: W - 1, height: H - 1 } },
+      );
       refreshers.push(() => {
         dot.setAttribute("cx", String((val(xf) * W) / GAME_PX[0]));
         dot.setAttribute("cy", String((val(yf) * H) / GAME_PX[1]));
@@ -645,7 +723,7 @@ function refPicker(field: BlocklyT.FieldTextInput, spec: RefSpec | null, choices
 /** The condition row: sensor ▾ comparison ▾ value (the value's control follows the sensor: the
  * lever for a percent). `emit(text, rebuild)`: a new sensor, comparison or input rebuilds the row;
  * a new value only redraws the controls (a drag on the lever never loses its bar). */
-function condRow(parent: Element, c0: Cond, sensors: SensorInfo[], d: PickerData, emit: (text: string, rebuild: boolean) => void, group: () => string): void {
+function condRow(parent: Element, c0: Cond, sensors: SensorInfo[], d: PickerData, emit: (text: string, rebuild: boolean) => void, run: (fn: () => void) => void): void {
   let c = c0;
   const sensor = sensors.find((x) => x.name === c.name);
   const row = htmlEl("div", { class: "pl-picker-cond" }, parent);
@@ -718,7 +796,7 @@ function condRow(parent: Element, c0: Cond, sensors: SensorInfo[], d: PickerData
     refreshers.forEach((f) => f());
   };
   const box = htmlEl("div", { class: "pl-picker-value" }, parent);
-  if (sensor?.type === "percent") refreshers.push(lever(box, { label: `${c.name} (percent)`, range: r, bar: c.name.startsWith("weight") ? "weight" : c.name.startsWith("hp") ? "hp" : "level", group, get, set }));
+  if (sensor?.type === "percent") refreshers.push(lever(box, { label: `${c.name} (percent)`, range: r, bar: c.name.startsWith("weight") ? "weight" : c.name.startsWith("hp") ? "hp" : "level", run, get, set }));
   // round 22: the lever is THE slider of a percent (no second one under it)
   refreshers.push(stepper(box, { label: "the value", unit: sensor?.type === "percent" ? "%" : "", range: r, get, set, slider: sensor?.type !== "percent" }));
 }
@@ -821,7 +899,7 @@ function exprPicker(field: BlocklyT.FieldTextInput, spec: Extract<PickSpec, { ki
       const parsed = isCond || loose ? condOf(t) : null;
       const c = parsed ?? (isCond && !t.trim() && sensors.length ? condFor(sensors[0], null) : null);
       const n = numberOf(t);
-      if (c && sensors.length) condRow(builder, c, sensors, d, emit, s.group);
+      if (c && sensors.length) condRow(builder, c, sensors, d, emit, s.run);
       else if (!isCond && n !== null) {
         const r: NumRange = { lo: 0, hi: Math.max(100, n), step: 1 };
         const refresh = stepper(builder, { label: title, range: { ...r, step: 1 }, presets: pi === "TIMES" ? [1, 2, 3, 5, 10] : undefined, get: () => numberOf(input.value) ?? 0, set: (v) => (emit(String(v), false), refresh()) });
@@ -971,6 +1049,23 @@ export function registerPickers(B: B_): void {
 
   B.fieldRegistry.register(PICK_NUM, PickNumber as unknown as BlocklyT.fieldRegistry.RegistrableField);
   B.fieldRegistry.register(PICK_TEXT, PickText as unknown as BlocklyT.fieldRegistry.RegistrableField);
+}
+
+let wrapLine: ((text: string, cls: string) => BlocklyT.FieldLabel) | null = null;
+/** A further line of a wrapped condition (blockly-register.ts syncExprWrap). Round 23 (the
+ * reviewer: a wrapped condition's SECOND row was plain text -- tapping it opened nothing, because
+ * the row's label took the press before the block did): it opens the same picker as the first
+ * line (the block's TEXT field). Not saved (a label), never edited itself. */
+export function wrapLineField(B: B_, text: string, cls: string): BlocklyT.FieldLabel {
+  if (!wrapLine) {
+    class WrapLine extends B.FieldLabel {
+      protected override showEditor_(e?: Event): void {
+        this.getSourceBlock()?.getField("TEXT")?.showEditor(e);
+      }
+    }
+    wrapLine = (t, c) => new WrapLine(t, c);
+  }
+  return wrapLine(text, cls);
 }
 
 /** What a picker text field shows (lib/flow/pickers.ts closedText): a reference with ▾ (⚠ when it
