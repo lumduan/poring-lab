@@ -4409,7 +4409,7 @@ under the sk list, and the xw3 Goblin labels (from the 11-06 T2, which failed) s
    `onnx-export/build.sh`, a temporary RAM env removed after): `xmas02sk-last-736x1280.onnx` + its
    names (they must read the cache's 10 names in order) to `archive/models` (sha256 read back); the
    run to `archive/train/xmas02-sk-20261114` (guarded `archive:`).
-3. **Registered, NOT deployed:** `unit_detector.GPU_WEIGHTS["xmas02sk"]` (+ fi_gpu_latency's ONNX
+3. **Registered, NOT deployed (➡️ reverted on main at the merge: S4.10):** `unit_detector.GPU_WEIGHTS["xmas02sk"]` (+ fi_gpu_latency's ONNX
    map), NOT in MAP_MODELS; models.yaml unchanged (its only statuses are live / not_adopted); a 60-s
    serve test of every registered model listens before anything uses it. MAP_MODELS["xmas_dun02"],
    the runner's map default and the alarm stay xmas02gb.
@@ -4485,7 +4485,7 @@ dataloader workers`, `Starting training for 10 epochs`. A watcher (S4.5) yields 
   SHA256SUMS lists only deployed models and is unchanged).
 - **The run archived** (guarded `archive:`, 00:13:37-00:13:43: copy, check, local delete):
   `archive/train/xmas02-sk-20261114`, its last.pt re-hashed on the NAS: `0b43ebbf...` (S4.8).
-- **Registered, NOT deployed** (`376a0137`): `unit_detector.GPU_WEIGHTS["xmas02sk"]` (+
+- **Registered, NOT deployed (➡️ reverted on main at the merge: S4.10)** (`376a0137`): `unit_detector.GPU_WEIGHTS["xmas02sk"]` (+
   fi_gpu_latency's map, a test); MAP_MODELS["xmas_dun02"] stays `xmas02gb`. **The serve test**
   (00:16:29-00:17:32, the worktree's serve-cmd, OpenVINO, 60 s): `"listening"` with all 9 models,
   `xmas02sk: 76316fb4e581`; it ended by its time box (rc 124), the worker idle after.
@@ -4514,6 +4514,14 @@ dataloader workers`, `Starting training for 10 epochs`. A watcher (S4.5) yields 
   `Q1.per_species.g_gobline_xmas` on this pack.
 
 #### S4.10 (2026-11-15 00:32 ICT from `date`): THE RESULT (scored once) -- THE GOBLIN CLASS FAILS ITS PRECISION BAR
+
+➡️ **The parent, on merging (2026-11-15 00:3x ICT): the registration is REVERTED.** The
+`GPU_WEIGHTS["xmas02sk"]` entry (`376a0137`, and fi_gpu_latency's ONNX) is taken out on main, so
+the live detect servers keep loading the same 9 models they loaded before this round. A failed
+model is not loaded live, and the 5b-1 / 5b-2 live A/Bs that start now run on an unchanged
+detector. The model stays archived (archive/models/xmas02sk-*, archive/train/xmas02-sk-20261114),
+and the ONNX stays in /dev/shm/poring-lab-detector/model. A deployment step re-adds the entry
+with its own amendment (S4.10's 'what a deployment would need').
 
 S4.6's steps 5-6, each once. The labellers' answers were scored as given.
 

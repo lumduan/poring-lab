@@ -324,13 +324,6 @@ GPU_WEIGHTS: dict[str, GpuWeights] = {
                             "331b1927cfbe86c2df03a74207c81e9393c7d528eb3ffda2bc9d5bd369491875",
                             "xmas02fi5-last-736x1280.onnx",
                             "9c43f6cdae28bf874d24299e70d915bf6cc0b1a09e676b537d343a56c29bb25c"),
-    # xmas02-detector.md Amendment S4 (2026-11-14): + the Christmas Goblin and the Stormy Knight
-    # (the masked cache), init xmas02gb; served for its D1 and the held-out evaluation only until
-    # S4's bars and a deployment step of its own decide; NOT in MAP_MODELS (xmas_dun02 stays gb)
-    "xmas02sk": GpuWeights("/datasets/archive/train/xmas02-sk-20261114/weights/last.pt",
-                           "0b43ebbfe8e2bb5c4333d2297520f4f05d9ce79b6fa1cdcde12663879d167a10",
-                           "xmas02sk-last-736x1280.onnx",
-                           "76316fb4e58102aaf015de597eec2b188f9f103e29fb4ca74f87d2f636d19473"),
 }  # fmt: skip
 
 
