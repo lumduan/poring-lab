@@ -43,6 +43,7 @@ import { type Models, monstersOf } from "./models.ts";
 import { type Def, globalOf, mapNodes, nodeById, type PNode, type Project, roleKeyOf } from "./project.ts";
 import { normalise } from "./search.ts";
 import { SETTINGS, textUnits, tidy } from "./settings.ts";
+import { contrast } from "./theme.ts";
 
 // --- what a picker field is (blockdefs.ts puts one on each field it converts) ---------------------
 /** What a reference picker lists. */
@@ -159,6 +160,11 @@ export function stepBy(v: number, dir: 1 | -1, r: NumRange, big = false): number
   return snap(base + dir * n * r.step, r);
 }
 
+/** One press of a +/- button: a NICE step (niceStep) from the value, on the field's grid. */
+export function buttonStep(v: number, dir: 1 | -1, r: NumRange): number {
+  return stepBy(v, dir, { ...r, step: niceStep(r) });
+}
+
 /** The new value of a slider after a key, or null for a key it does not take (matpilot's
  * sliderKey, common.ts: arrows step, Page Up / Down take ten steps, Home / End go to the ends). */
 export function sliderKey(key: string, v: number, r: NumRange): number | null {
@@ -201,12 +207,47 @@ export function atFraction(f: number, r: NumRange): number {
   return snap(r.lo + Math.min(1, Math.max(0, f)) * (r.hi - r.lo), r);
 }
 
-/** A few round values inside the range for the preset buttons (the given ones that fit, else the
- * range's quarters on the grid), at most five, distinct. */
+/** Round 22 (the reviewer: END_HOT_S's +/- stepped 0.01 s, 2,950 taps from 0.5 to 30 s): the +/-
+ * buttons' step -- about 1 % of the range rounded to 1, 2 or 5 x 10^n, never finer than the field's
+ * own step (and a whole multiple of it). The slider, the exact box and the presets keep the field's
+ * step. */
+export function niceStep(r: NumRange): number {
+  const span = r.hi - r.lo;
+  if (!(span > 0)) return r.step > 0 ? r.step : 1;
+  const raw = span / 100;
+  const p = 10 ** Math.floor(Math.log10(raw));
+  const nice = [1, 2, 5, 10].map((m) => m * p).find((x) => x >= raw - 1e-12) ?? 10 * p;
+  if (!(r.step > 0)) return tidy(nice);
+  return tidy(Math.max(1, Math.round(nice / r.step)) * r.step);
+}
+
+/** A round value: a multiple of 1, 2, 2.5 or 5 x 10^n (10, 25, 50, 75, 90 for a percent). */
+function roundness(v: number): number {
+  for (const [i, m] of [100, 50, 25, 10, 5, 2, 1, 0.5, 0.25, 0.1, 0.05, 0.01].entries()) if (Math.abs(v / m - Math.round(v / m)) < 1e-9) return i;
+  return 99;
+}
+
+/** A few ROUND values inside the range for the preset buttons (the given ones that fit, else, near
+ * each of the range's quarters, the roundest value on the field's grid: 10 / 25 / 50 / 75 / 90 for
+ * 5..95 %, not 5 / 28 / 50 / 73 / 95; round 22), at most five, distinct, in order. */
 export function presetsOf(r: NumRange, given?: readonly number[]): number[] {
   const pick = given?.filter((v) => v >= r.lo && v <= r.hi) ?? [];
-  const out = pick.length ? pick : [0, 0.25, 0.5, 0.75, 1].map((f) => atFraction(f, r));
-  return [...new Set(out.map((v) => tidy(v)))].slice(0, 5);
+  if (pick.length) return [...new Set(pick.map((v) => tidy(v)))].slice(0, 5);
+  const span = r.hi - r.lo;
+  if (!(span > 0)) return [tidy(r.lo)];
+  const out: number[] = [];
+  for (const f of [0.05, 0.25, 0.5, 0.75, 0.95]) {
+    const want = r.lo + f * span;
+    const near = span * 0.08; // how far a preset may move from its quarter to be round
+    let best = snap(want, r);
+    for (let k = -40; k <= 40; k++) {
+      const v = snap(want + (k * near) / 40, r);
+      if (v < r.lo || v > r.hi) continue;
+      if (roundness(v) < roundness(best) || (roundness(v) === roundness(best) && Math.abs(v - want) < Math.abs(best - want))) best = v;
+    }
+    out.push(best);
+  }
+  return [...new Set(out)].sort((a, b) => a - b).slice(0, 5);
 }
 
 /** An optional whole number in a TEXT field ("" = none / the default): the number, null for
@@ -217,34 +258,20 @@ export function optNumOf(text: string): number | null {
   return /^[0-9]{1,6}$/.test(t) ? Number(t) : NaN;
 }
 
-/** Round 21 (the re-measure of round 20): on a PHONE an expression wider than this (workspace
- * units: the 300-unit row budget less an event's sides, the field's box and a reporter's rounded
- * ends, layout.ts) shows shortened in the middle, its head and tail kept ("hotbar_count(…) > 0");
- * its whole text is the field's tooltip, the picker's and the Python view's. On a wider screen it
- * shows whole. */
+/** Round 21 (the re-measure of round 20): an expression wider than this (workspace units: the
+ * 300-unit row budget less an event's sides, the field's box and a reporter's rounded ends,
+ * layout.ts) does not fit its row at 390. ➡️ Round 22: it WRAPS onto more lines (wrapExpr), whole;
+ * round 21 shortened it in the middle ("hotbar_count(…) == 0"), which read the same twice. */
 export const EXPR_SHOW_UNITS = 232;
-
-/** An expression's text as a phone shows it closed: whole when it fits `max` units, else its head
- * up to the first "(" and as much of its tail as fits, joined by "…". */
-export function shortExpr(text: string, max = EXPR_SHOW_UNITS): string {
-  if (textUnits(text) <= max) return text;
-  const open = text.indexOf("(");
-  for (let head = open > 0 && open < 24 ? open + 1 : Math.min(12, text.length); head > 0; head--) {
-    for (let tail = text.length - head - 1; tail >= 1; tail--) {
-      const cand = `${text.slice(0, head)}…${text.slice(text.length - tail)}`;
-      if (textUnits(cand) <= max) return cand;
-    }
-  }
-  return "…";
-}
 
 /** What a picker field SHOWS on its block, closed (blockly-pickers.ts; settings.test.ts measures the
  * runner's block with it): a reference its value and ▾ (⚠ before it when it is not one of what
  * exists: `known` false), an empty optional one its word ("none"); an optional number its empty
  * word, or ⚠ after a text that is no whole number; any other picker its value as the plain field
  * showed it. `text`: the value as Blockly displays it (truncated, spaces kept). */
-export function closedText(spec: PickSpec | undefined, text: string, value: string, known: boolean | null = null, compact = false): string {
-  if (spec?.kind === "expr") return compact ? shortExpr(text) : text;
+export function closedText(spec: PickSpec | undefined, text: string, value: string, known: boolean | null = null): string {
+  // round 22: a long condition wraps: the field shows its first line, the block its other lines
+  if (spec?.kind === "expr") return spec.mode === "expr" && wrapExpr(value).length > 1 ? wrapExpr(value)[0] : text;
   if (spec?.kind === "optnum") return value === "" ? spec.empty : Number.isNaN(optNumOf(value)) ? `${text} ⚠` : text;
   if (spec?.kind !== "ref") return text;
   return `${value === "" ? (spec.optional ?? "…") : text}${known === false ? " ⚠" : ""} ▾`;
@@ -282,7 +309,7 @@ export type FieldAt = {
   params?: readonly string[];
 };
 
-type FnInfo = { name: string; tab: string; global: boolean; event: boolean; params: string; keys: string[]; calls: string[]; clicks: boolean };
+type FnInfo = { name: string; tab: string; global: boolean; event: boolean; params: string; required: number; keys: string[]; calls: string[]; clicks: boolean };
 
 /** The functions a body calls and whether it clicks (click_at), at its top level. */
 function bodyWords(body: readonly Stmt[]): { calls: string[]; clicks: boolean } {
@@ -327,7 +354,7 @@ export function functionsOn(data: PickerData): FnInfo[] {
       for (const d of t.defs) {
         if (seen.has(d.name)) continue;
         seen.add(d.name);
-        out.push({ name: d.name, tab: t.name, global, event: d.on !== null, params: paramNames(d), keys: pressedKeys(d.body), ...bodyWords(d.body) });
+        out.push({ name: d.name, tab: t.name, global, event: d.on !== null, params: paramNames(d), required: d.params.filter((x) => x.default === null).length, keys: pressedKeys(d.body), ...bodyWords(d.body) });
       }
     }
   };
@@ -337,7 +364,7 @@ export function functionsOn(data: PickerData): FnInfo[] {
   for (const n of data.extraDefs ?? []) {
     if (!seen.has(n) && NAME.test(n)) {
       seen.add(n);
-      out.push({ name: n, tab: data.tab ?? "", global: false, event: false, params: "", keys: [], calls: [], clicks: false });
+      out.push({ name: n, tab: data.tab ?? "", global: false, event: false, params: "", required: 0, keys: [], calls: [], clicks: false });
     }
   }
   return out;
@@ -352,6 +379,10 @@ export function defOn(data: PickerData, name: string): Def | null {
   }
   return null;
 }
+
+/** A function a role or an escalation calls with no inputs: not an event, not a monster's recipe,
+ * no input without a default. */
+const callableBare = (f: FnInfo): boolean => !f.event && f.required === 0 && f.tab !== RECIPE_TAB;
 
 function fnNote(f: FnInfo): string {
   const what = f.event
@@ -441,15 +472,19 @@ export function refChoices(spec: Extract<PickSpec, { kind: "ref" }>, data: Picke
     case "function":
       return [...fns.filter((f) => !f.event), ...fns.filter((f) => f.event)].map(fnChoice);
     case "role": {
+      // round 22: a role CALLS its function with no inputs, so only the functions it can call are
+      // offered -- no required input, no event, no monster's recipe (a loaded one that does not fit
+      // stays, marked ⚠)
+      // (the eat role's function takes the item's key: the box's events call eat("F6"))
       const role = RUNNER_ROLES.find((r) => r.param === spec.role);
-      const plain = fns.filter((f) => !f.event);
+      const plain = fns.filter(spec.role === "eat" ? (f) => !f.event && f.tab !== RECIPE_TAB && f.required <= 1 : callableBare);
       const usual = plain.filter((f) => f.name === role?.fn);
       const keyed = plain.filter((f) => f.name !== role?.fn && f.keys.length);
       const rest = plain.filter((f) => f.name !== role?.fn && !f.keys.length);
       return [...usual, ...keyed, ...rest].map((f) => ({ ...fnChoice(f), note: `${f.name === role?.fn ? "the usual one · " : ""}${fnNote(f)}` }));
     }
     case "escalate":
-      return fns.filter((f) => !f.event).map(fnChoice);
+      return fns.filter(callableBare).map(fnChoice); // called with no inputs, as a role
     case "model":
       return modelChoices(data.catalogue?.models);
     case "map":
@@ -828,3 +863,150 @@ export function paramsOf(text: string): string[] {
 
 /** A literal's text for a picker row (a string in quotes, a number as is). */
 export const litOf = (v: string | number | boolean): string => exprText({ kind: "lit", value: v } as Lit);
+
+// --- round 22: where a picker opens, the point picture's coordinates, wrapped conditions --------
+/** Round 22 (the point picker's picture was a blank grid): the client's fixed windows where they
+ * usually are in the 1280 x 720 game picture -- the UI anchors' home places and sizes
+ * (packages/poring_env ui_anchors.py CAPTURE_ORIGINS and WINDOWS; the chat window docked at the
+ * bottom-left, the lab's standard). Outlines only: a window a person dragged is elsewhere. */
+export const GAME_AREAS: readonly { name: string; box: [number, number, number, number] }[] = [
+  { name: "basic info", box: [0, 0, 220, 140] },
+  { name: "hotbar", box: [230, 0, 290, 131] },
+  { name: "minimap", box: [1136, 18, 128, 142] },
+  { name: "chat", box: [0, 531, 597, 189] },
+];
+
+/** The DropDownDiv's room around a field (Blockly dropdowndiv.ts: PADDING_Y 16 between the field
+ * and the picker, its arrow inside it), and a margin kept from the blocks area's edges. */
+export const PICKER_GAP = 16;
+export const PICKER_MARGIN = 8;
+/** What a placement reads: the field's top and bottom, the blocks area's, the picker's height. All
+ * in the same screen pixels (getBoundingClientRect). */
+export type Placing = { fieldTop: number; fieldBottom: number; areaTop: number; areaBottom: number; height: number };
+/** What a placement does: scroll the workspace (`scrollBy` px: positive moves the blocks UP, so the
+ * field rises), open compact (fewer rows), cap the picker's height (`maxHeight`: it scrolls inside),
+ * and on which side of the field it opens. It never covers the field and its arrow always points
+ * at it (round 22: a tall picker that fitted on neither side was pushed to the top of the area,
+ * over its own field, its arrow at another block). */
+export type Placement = { side: "below" | "above"; scrollBy: number; compact: boolean; maxHeight: number | null };
+
+/** PURE: the placement of a picker of `m.height` px. `scroll`: the workspace may still be scrolled
+ * (the caller scrolls, measures again, and asks with `scroll` false); `compacted`: the picker is
+ * already compact. In order: below if it fits, above if it fits; else scroll the field to the
+ * area's top (or bottom) when the area can hold the field and the picker; else compact; else the
+ * larger side with the picker's height capped to it. */
+export function placePicker(m: Placing, scroll: boolean, compacted: boolean): Placement {
+  const below = m.areaBottom - m.fieldBottom - PICKER_GAP - PICKER_MARGIN;
+  const above = m.fieldTop - m.areaTop - PICKER_GAP - PICKER_MARGIN;
+  const plain = { scrollBy: 0, compact: false, maxHeight: null };
+  if (m.height <= below) return { side: "below", ...plain };
+  if (m.height <= above) return { side: "above", ...plain };
+  const field = m.fieldBottom - m.fieldTop;
+  const room = m.areaBottom - m.areaTop - field - PICKER_GAP - 2 * PICKER_MARGIN;
+  if (scroll && m.height <= room) {
+    // the side that needs the shorter scroll: the field to the area's top (open below) or bottom
+    const up = m.fieldTop - (m.areaTop + PICKER_MARGIN);
+    const down = m.areaBottom - PICKER_MARGIN - m.fieldBottom;
+    return Math.abs(up) <= Math.abs(down) ? { side: "below", scrollBy: up, compact: false, maxHeight: null } : { side: "above", scrollBy: -down, compact: false, maxHeight: null };
+  }
+  if (!compacted) return { side: below >= above ? "below" : "above", scrollBy: 0, compact: true, maxHeight: null };
+  const side = below >= above ? "below" : "above";
+  return { side, scrollBy: 0, compact: true, maxHeight: Math.max(120, Math.floor(side === "below" ? below : above)) };
+}
+
+/** PURE: a pointer's place in an SVG's own units, from its screen place and the SVG's box and
+ * viewBox (round 22: the point picture read a mouse drag's y from the picker's top). */
+export function toViewBox(clientX: number, clientY: number, box: { left: number; top: number; width: number; height: number }, view: { width: number; height: number }): [number, number] {
+  const sx = box.width > 0 ? view.width / box.width : 1;
+  const sy = box.height > 0 ? view.height / box.height : 1;
+  return [(clientX - box.left) * sx, (clientY - box.top) * sy];
+}
+
+/** The expression's tokens with what follows each (its spaces), so lines break only BETWEEN tokens:
+ * after a name, a number, a text in quotes, "(", ")", ",", "=" or an operator. */
+function tokensOf(text: string): string[] {
+  const out: string[] = [];
+  const re = /"(?:[^"\\]|\\.)*"\s*|'(?:[^'\\]|\\.)*'\s*|[A-Za-z_][A-Za-z0-9_]*\s*|[0-9.]+\s*|==\s*|!=\s*|<=\s*|>=\s*|\S\s*/g;
+  for (let m = re.exec(text); m; m = re.exec(text)) out.push(m[0]);
+  return out;
+}
+
+/** A wrapped expression's lines (round 22): each line at most this wide (workspace units), the
+ * single-line limit: the lines are rows of the same white reporter box (its other lines are labels
+ * in rows of their own, one field each, so Blockly still draws the whole block as the box), so a
+ * line has the room the one line had (layout.ts models it). */
+export const WRAP_UNITS = EXPR_SHOW_UNITS;
+
+/** PURE (round 22: a shortened condition read the same twice, "hotbar_count(…) == 0", and lost
+ * its arguments): a long expression WRAPPED onto lines at token boundaries, nothing cut. Whole
+ * when it fits `one` units on one line; else lines of at most `max` units, each break chosen, in
+ * the line being filled, before a comparison or and / or, else after "(" or ",", else before the
+ * token that does not fit ("hotbar_count(key=\"F6\")" / "== 0"). A token wider than a line stays
+ * whole. Joined with spaces, the lines read as the text. */
+export function wrapExpr(text: string, max = WRAP_UNITS, one = EXPR_SHOW_UNITS): string[] {
+  if (textUnits(text) <= one) return [text];
+  const toks = tokensOf(text);
+  const lines: string[] = [];
+  let start = 0;
+  const width = (from: number, to: number) => textUnits(toks.slice(from, to).join("").trimEnd());
+  const op = (t: string) => /^(==|!=|<=|>=|<|>|and\b|or\b|in\b)/.test(t);
+  while (start < toks.length) {
+    let end = start + 1;
+    while (end < toks.length && width(start, end + 1) <= max) end++;
+    if (end < toks.length) {
+      // a friendlier break inside [start + 1, end]: before an operator, else after "(" or ","
+      let best = -1;
+      for (let j = end; j > start; j--) if (op(toks[j])) { best = j; break; }
+      if (best < 0) for (let j = end; j > start; j--) if (/[(,]\s*$/.test(toks[j - 1])) { best = j; break; }
+      if (best > start) end = best;
+    }
+    lines.push(toks.slice(start, end).join("").trim());
+    start = end;
+  }
+  return lines.length ? lines : [text];
+}
+
+/** PURE (round 22): a condition's problem in a learner's words ("the condition is not finished: a
+ * value is missing after >="), or "" when it reads. */
+export function exprProblem(text: string): string {
+  if (!text.trim()) return "empty: write a condition or a value";
+  try {
+    parseExpr(text);
+    return "";
+  } catch (e) {
+    const msg = e instanceof ExprError ? e.message : "";
+    const at = Number(/^col ([0-9]+)/.exec(msg)?.[1] ?? 0);
+    const last = /(==|!=|<=|>=|<|>|=|\+|-|\*|\/|,|\(|\band\b|\bor\b|\bnot\b|\bin\b)\s*$/.exec(text)?.[1];
+    if (/unexpected "end"|unexpected end/.test(msg) || /unexpected "\)"/.test(msg) && last === "(") return last ? `the condition is not finished: a value is missing after ${last}` : "the condition is not finished: something is missing at its end";
+    const want = /expected "(.)"/.exec(msg)?.[1];
+    if ((want === ")" || want === ",") && at > text.trimEnd().length) return "a ( is not closed: add ) after its inputs";
+    if (want) return `"${want}" is missing here (character ${at})`;
+    if (/unterminated text/.test(msg)) return 'a text in quotes is not closed: add " at its end';
+    if (/chained comparisons/.test(msg)) return "one comparison at a time: join two with and / or";
+    const bad = /unexpected (".*"|\S+)$/.exec(msg)?.[1];
+    if (bad) return `${bad.replace(/^"|"$/g, "")} cannot stand here${at ? ` (character ${at})` : ""}`;
+    if (/is not a valid name/.test(msg)) return msg.replace(/^col [0-9]+: /, "") + " (a name: letters, digits and _, a letter first)";
+    return msg.replace(/^col ([0-9]+): /, "at character $1: ") || "it cannot be read";
+  }
+}
+
+/** PURE (round 22: a greyed block's picker was white on slate, about 1.5:1): the DropDownDiv's
+ * colours for a block's colours -- the block's own when white words on it read at 4.5:1 or more,
+ * else the same hue darkened until they do. The pickers' words are white in light and dark mode
+ * (the block colours are the same in both themes). */
+export function pickerColours(primary: string, tertiary: string): { primary: string; tertiary: string } {
+  const hex = /^#[0-9a-f]{6}$/i;
+  if (!hex.test(primary)) return { primary, tertiary };
+  if (contrast(primary, "#ffffff") >= 4.5) return { primary, tertiary };
+  const mix = (c: string, f: number) => {
+    const ch = [1, 3, 5].map((i) => Math.round(parseInt(c.slice(i, i + 2), 16) * f));
+    return `#${ch.map((x) => x.toString(16).padStart(2, "0")).join("")}`;
+  };
+  let f = 1;
+  let out = primary;
+  while (contrast(out, "#ffffff") < 4.5 && f > 0.05) {
+    f -= 0.05;
+    out = mix(primary, f);
+  }
+  return { primary: out, tertiary: mix(primary, Math.max(0, f - 0.15)) };
+}

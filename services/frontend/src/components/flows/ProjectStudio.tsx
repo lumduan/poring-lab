@@ -992,12 +992,13 @@ export default function ProjectStudio({ backendUrl, initialNode = null }: { back
                   <div className="run-pane" data-testid="run-pane">
                     <p className="muted">
                       Run (the amber button at the top) plays this project in the game from {node.id}, box by box, where she stands (the live block player; player mode, no GM line); its block &ldquo;hunt with the runner&rdquo; is the runner&apos;s hunt on {runnerMap}, in the same process. Its keys are this node&apos;s functions
-                      (its own first, then Global&apos;s): {keysLine}.
+                      {/* round 22: Global named only where the project has one */}
+                      {globalOf(project) ? " (its own first, then Global's)" : ""}: {keysLine}.
                     </p>
-                    <LiveRun live={live} checklist={startChecklist(runValues, runnerMap, runKeys ?? undefined)} minutes={Number(runValues.minutes)} keys={runKeys} blocked={editorHeld ?? runWhy ?? lintBlock ?? (runnable ? null : notRunWhy)} held={editorHeld} />
+                    <LiveRun live={live} checklist={startChecklist(runValues, runnerMap, runKeys ?? undefined)} minutes={Number(runValues.minutes)} keys={runKeys} blocked={editorHeld ?? runWhy ?? lintBlock ?? (runnable ? null : notRunWhy)} held={editorHeld} global={globalOf(project) !== undefined} />
                     {/* live-blocks.md 12 (Batt 2026-11-14: "make them ALL blocks"): the settings are blocks */}
                     <p className="muted" data-testid="run-pane-settings">
-                      Its settings are BLOCKS: one per setting in the tabs {SETTING_TABS.filter((g) => tabs.some((t) => t.name === g)).join(", ") || "of its groups"} ({SETTING_TABS.map((g) => groupOf(g)?.title ?? g).join("; ")}). This node&apos;s block replaces Global&apos;s; a deleted one falls back to Global&apos;s, else the default. A Run and the check send the project: the blocks you see are what the runner gets (the Lint pane names any it cannot take, or does not use).
+                      Its settings are BLOCKS: one per setting in the tabs {SETTING_TABS.filter((g) => tabs.some((t) => t.name === g)).join(", ") || "of its groups"} ({SETTING_TABS.map((g) => groupOf(g)?.title ?? g).join("; ")}). {globalOf(project) ? "This node's block replaces Global's; a deleted one falls back to Global's, else the default." : "A deleted block falls back to the default."} A Run and the check send the project: the blocks you see are what the runner gets (the Lint pane names any it cannot take, or does not use).
                     </p>
                   </div>
                 )}

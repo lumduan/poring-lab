@@ -8,7 +8,7 @@ import { test } from "node:test";
 import { DEF_BY_TYPE, titleLines } from "./blockdefs.ts";
 import { tabToWorkspace } from "./blocks.ts";
 import { BOX, blockRows, INDENT, ROUND, rowsOf } from "./layout.ts";
-import { EXPR_SHOW_UNITS, shortExpr } from "./pickers.ts";
+import { EXPR_SHOW_UNITS, WRAP_UNITS, wrapExpr } from "./pickers.ts";
 import { type Project, sampleProject, xmasHuntProject, xmasProject } from "./project.ts";
 import { rowUnits, SETTING_GEOMETRY as G, SETTING_ROW_BUDGET, textUnits } from "./settings.ts";
 import { sessionProject } from "./testkit.ts";
@@ -91,14 +91,21 @@ test("the event and the function blocks: one or two fields a row; and / or a blo
   assert.deepEqual(rowsOf(recipe, LABELS, 0, HIDDEN).slice(0, 3).map((r) => r.what), ["pl_def: function", "pl_def: [NAME]", "pl_def: ( [PARAMS] )"]);
 });
 
-test("a long expression shows shortened on a phone only where it would pass the budget; its head and tail kept", () => {
+test("round 22: a long expression WRAPS at token boundaries inside the budget; nothing is cut, every line fits", () => {
   // the budget for a top-level event's condition row: the 300 units less its sides, the box, the ends
   assert.equal(EXPR_SHOW_UNITS, SETTING_ROW_BUDGET - G.side - BOX - 2 * ROUND);
-  assert.equal(shortExpr("hp_percent() < 50"), "hp_percent() < 50");
-  const s = shortExpr('hotbar_count(key="F6") == 0');
-  assert.ok(s.startsWith("hotbar_count(") && s.includes("…") && s.endsWith(" == 0"), s);
-  assert.ok(textUnits(s) <= EXPR_SHOW_UNITS);
-  assert.ok(DEF_BY_TYPE.pl_expr); // (the pl_expr field is an expression picker: blockly_pickers.test.ts)
+  assert.equal(WRAP_UNITS, EXPR_SHOW_UNITS); // the lines stay rows of ONE white box (one field a row)
+  assert.deepEqual(wrapExpr("hp_percent() < 50"), ["hp_percent() < 50"]);
+  for (const t of ['hotbar_count(key="F6") == 0', 'hotbar_count(key="F7") > 0', "sees_boss() or hp_percent() < 25 or weight_percent() >= 90 and not is_dead()"]) {
+    const lines = wrapExpr(t);
+    assert.ok(lines.length > 1, t);
+    assert.equal(lines.join(" ").replace(/\( /g, "(").replace(/ \)/g, ")"), t, "whole, nothing cut");
+    for (const l of lines) assert.ok(textUnits(l) <= WRAP_UNITS, `${l}: ${Math.round(textUnits(l))}`);
+    assert.ok(!lines.some((l) => l.includes("…")));
+  }
+  // the two eat events' conditions no longer read the same (round 21's "hotbar_count(…) == 0" twice)
+  assert.notDeepEqual(wrapExpr('hotbar_count(key="F6") == 0'), wrapExpr('hotbar_count(key="F7") == 0'));
+  assert.ok(DEF_BY_TYPE.pl_expr.extensions?.includes("pl_expr_wrap"));
 });
 
 test("every block definition's messages name each of their args exactly once (a row's end is never lost)", () => {

@@ -15,8 +15,8 @@ import type * as BlocklyT from "blockly/core";
 import { useEffect, useRef, useState } from "react";
 
 import { followModel, registerDetectorMenus } from "@/components/flows/blockly-fields";
-import { refreshPickers, setCompact, setPickerSource } from "@/components/flows/blockly-pickers";
-import { huntKey, register, registerHunt, setFlyoutNotes, syncLabelRows, syncSetting, themesOf } from "@/components/flows/blockly-register";
+import { refreshPickers, setPickerSource } from "@/components/flows/blockly-pickers";
+import { huntKey, register, registerHunt, setFlyoutNotes, syncExprWrap, syncLabelRows, syncSetting, themesOf } from "@/components/flows/blockly-register";
 import { registerSearch } from "@/components/flows/blockly-search";
 import type { CatalogueDoc, Finding, LintDoc, Trace } from "@/lib/flow/api";
 import { BADGE_TEXT, sitePath } from "@/lib/flow/api";
@@ -183,7 +183,6 @@ export default function BlockEditor(p: BlockEditorProps) {
         tbRef.current = toolboxOf(cat, latest.current.toolboxScope);
         // matpilot round 18 #4: a phone starts smaller (more of each row shows beside the toolbox)
         const phone = typeof window !== "undefined" && !!window.matchMedia && window.matchMedia("(max-width: 48rem)").matches;
-        setCompact(phone); // round 21: a long expression shows shortened on a phone (its tooltip whole)
         // round 21: the Settings flyout and the search grey a setting this node's box replaces
         setFlyoutNotes((name) => boxReplaced(latest.current.lint?.box?.[latest.current.scope.node]).get(name) ?? null);
         const w = B.inject(host.current, {
@@ -376,6 +375,8 @@ function paint(B: typeof BlocklyT, w: BlocklyT.WorkspaceSvg, catalogue: Catalogu
   const grew: BlocklyT.BlockSvg[] = [];
   const hasGlobal = Boolean(project?.nodes.some((n) => n.kind === "global"));
   for (const b of w.getAllBlocks(false)) {
+    // round 22: a long condition wraps onto rows of its own (loaded ones too); its stack moves down
+    if (b.type === "pl_expr" && !b.isInFlyout && syncExprWrap(B, b)) grew.push(b);
     // a SETTING block (live-blocks.md 12): a safety switch shows its warning rows while it is off;
     // matpilot round 20 #4a: the lint's "not used" words on rows of its own, the block greyed; the
     // tooltip says what deleting the block falls back to (Global's block, else the default)

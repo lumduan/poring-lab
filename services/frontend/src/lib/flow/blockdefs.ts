@@ -393,7 +393,8 @@ export const BLOCK_DEFS: BlockDef[] = [
     args0: [label("TEXT")],
     tooltip: "Not editable as blocks in MW2 (kept exactly): edit it in the JSON view",
   }),
-  value({ type: "pl_expr", message0: "%1", args0: [expr("TEXT", "expr", "hp_percent() < 50", "the value")],
+  // round 22: a long one wraps onto rows of its own (blockly-register.ts pl_expr_wrap), whole
+  value({ type: "pl_expr", message0: "%1", args0: [expr("TEXT", "expr", "hp_percent() < 50", "the value")], extensions: ["pl_expr_wrap"],
     tooltip: "An expression in the Python view's form, e.g. hp_percent() < 50, sees(mob=mob(9109), within=15)" }),
   value({
     type: "pl_compare",
@@ -489,7 +490,8 @@ export const BLOCK_DEFS: BlockDef[] = [
     args0: [label("SCOPE"), endRow("ROW_WHEN"), { type: "input_value", name: "WHEN" }],
     message1: "event %1 %2 class %3 %4 rank %5",
     args1: [text("NAME", "my_event"), endRow("ROW_EVENT"), { type: "field_dropdown", name: "PRIORITY", options: opts(PRIORITY_OPTIONS) }, endRow("ROW_CLASS"),
-      optnum("RANK", 1, MAX_RANK, "auto", "the table order (13.6.3)", "its rank inside its class (1 runs first)")], // IR 2 (ADR-0020 #13): 1..99 inside the class; empty = 13.6.3's table order
+      // round 22: learner words, no spec section number
+      optnum("RANK", 1, MAX_RANK, "auto", "the usual order", "which of its class runs first (1 = first)")], // IR 2 (ADR-0020 #13): 1..99 inside the class; empty = 13.6.3's table order
     message2: "mode %1 %2 then %3",
     args2: [{ type: "field_dropdown", name: "MODE", options: opts(MODE_OPTIONS) }, endRow("ROW_MODE"), { type: "field_dropdown", name: "THEN", options: opts(THEN_OPTIONS) }],
     message3: "until %1 %2",

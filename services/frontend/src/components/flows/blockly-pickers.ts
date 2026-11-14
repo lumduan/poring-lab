@@ -67,9 +67,12 @@ import {
   OP_WORDS,
   optNumOf,
   paramsOf,
+  pickerColours,
   type PickerData,
   pickerList,
   type PickSpec,
+  placePicker,
+  type Placing,
   pointIn,
   presetsOf,
   recipeNames,
@@ -80,7 +83,11 @@ import {
   skillKeysOn,
   sliderKey,
   snap,
-  stepBy,
+  buttonStep,
+  niceStep,
+  exprProblem,
+  GAME_AREAS,
+  toViewBox,
   typedProblem,
   valueRange,
 } from "../../lib/flow/pickers.ts";
@@ -93,13 +100,6 @@ type RefSpec = Extract<PickSpec, { kind: "ref" }>;
 const EMPTY: PickerData = { project: null, node: null, tab: null, catalogue: null, maps: null };
 let source: () => PickerData = () => EMPTY;
 let BL: B_ | null = null;
-
-let compact = false;
-/** A phone (BlockEditor, under 48rem): a long expression shows shortened closed (pickers.ts
- * shortExpr), its whole text in its tooltip. */
-export function setCompact(on: boolean): void {
-  compact = on;
-}
 
 /** What the pickers read when they open (BlockEditor sets it for the tab it shows). */
 export function setPickerSource(fn: (() => PickerData) | null): void {
@@ -147,30 +147,47 @@ function blockColours(field: BlocklyT.Field): { primary: string; tertiary: strin
   let block = field.getSourceBlock();
   if (block?.isShadow()) block = block.getParent() ?? block;
   const style = (block as BlocklyT.BlockSvg | null)?.style;
-  return style ? { primary: style.colourPrimary, tertiary: style.colourTertiary } : { primary: "#1d4ed8", tertiary: "#1e3a8a" };
+  // round 22: a greyed (not used) block's light slate gave white words 1.5:1: a readable pair
+  return style ? pickerColours(style.colourPrimary, style.colourTertiary) : { primary: "#1d4ed8", tertiary: "#1e3a8a" };
 }
 function blockArea(field: BlocklyT.Field): DOMRect | null {
   const ws = field.getSourceBlock()?.workspace as Partial<BlocklyT.WorkspaceSvg> | undefined;
   return ws?.getInjectionDiv?.()?.getBoundingClientRect() ?? null;
 }
-/** When a picker fits neither below nor above its block, Blockly puts it at the top of the page,
- * where the page's header would cut it: move it into the blocks area (matpilot keepInside). */
-function keepInside(area: DOMRect): void {
-  const div = BL!.DropDownDiv.getContentDiv().parentElement;
-  if (!div) return;
-  const rect = div.getBoundingClientRect();
-  const shift = rect.top < area.top ? area.top - rect.top + 8 : Math.min(0, area.bottom - rect.bottom - 8);
-  if (shift !== 0) div.style.top = `${parseFloat(div.style.top || "0") + shift}px`;
+/** The field's own box on the screen (its SVG group). */
+function fieldBox(field: BlocklyT.Field): DOMRect | null {
+  return (field.getSvgRoot() as Element | null)?.getBoundingClientRect() ?? null;
 }
 
-/** Opens a picker under the field (above when it does not fit), in the block's colour; Escape
- * closes it; every key typed in it stays in it (Blockly's shortcuts never see a Backspace there). */
-function openPicker(field: BlocklyT.Field, content: HTMLElement, onHide?: () => void): void {
+/** Opens a picker under the field or above it -- never over it, its arrow always at it (round 22):
+ * when it fits on neither side the workspace scrolls the field to where it fits; when it still
+ * does not, the picker opens COMPACT (no title, no presets, a smaller picture), and at last its
+ * height is capped to the larger side and it scrolls inside (lib/flow/pickers.ts placePicker).
+ * Its footer: Cancel, Done and the keys -- Escape CANCELS the whole session (every value back as
+ * it was when it opened, and no undo step left), Done, Enter or a tap outside KEEP. Every key typed
+ * in it stays in it (Blockly's shortcuts never see a Backspace there). */
+function openPicker(field: BlocklyT.Field, content: HTMLElement, s: Session, onHide?: () => void, beforeDone?: () => void): void {
   const B = BL!;
+  const foot = htmlEl("div", { class: "pl-picker-row pl-picker-foot" }, content);
+  const cancel = () => {
+    s.cancel();
+    closePicker(field);
+  };
+  const keep = () => {
+    beforeDone?.();
+    closePicker(field);
+  };
+  button(foot, "Cancel", cancel, { class: "pl-picker-button pl-picker-cancel" });
+  button(foot, "Done", keep, { class: "pl-picker-button pl-picker-done" });
+  htmlEl("p", { class: "pl-picker-hint" }, content, "Esc: cancel · Enter or Done: keep");
   content.addEventListener("keydown", (e) => {
+    const t = e.target as HTMLElement;
     if (e.key === "Escape") {
       e.preventDefault();
-      closePicker(field);
+      cancel();
+    } else if (e.key === "Enter" && !e.defaultPrevented && !(t instanceof HTMLButtonElement) && !(t instanceof HTMLSelectElement)) {
+      e.preventDefault();
+      keep();
     }
     e.stopPropagation();
   });
@@ -178,29 +195,57 @@ function openPicker(field: BlocklyT.Field, content: HTMLElement, onHide?: () => 
   B.DropDownDiv.getContentDiv().appendChild(content);
   const { primary, tertiary } = blockColours(field);
   B.DropDownDiv.setColour(primary, tertiary);
-  const area = blockArea(field);
-  if (area) {
-    // never taller than the blocks area (on a phone: under the keyboard too): it scrolls inside
-    content.style.maxHeight = `${Math.max(160, Math.floor(Math.min(area.height, window.innerHeight) - 16))}px`;
-    content.style.overflowY = "auto";
+  const div = B.DropDownDiv.getContentDiv().parentElement as HTMLElement | null;
+  const ws = field.getSourceBlock()?.workspace as BlocklyT.WorkspaceSvg | undefined;
+  content.style.overflowY = "auto";
+  const measure = (): Placing | null => {
+    const area = blockArea(field);
+    const box = fieldBox(field);
+    if (!area || !box || !div) return null;
+    return { fieldTop: box.top, fieldBottom: box.bottom, areaTop: area.top, areaBottom: area.bottom, height: div.getBoundingClientRect().height };
+  };
+  let m = measure(); // the DropDownDiv is in the page, hidden (visibility): it measures
+  if (m && div) {
+    let plan = placePicker(m, true, false);
+    if (plan.scrollBy !== 0 && ws && typeof ws.scroll === "function") {
+      ws.scroll(ws.scrollX, ws.scrollY - plan.scrollBy, false);
+      m = measure() ?? m;
+      plan = placePicker(m, false, false);
+    }
+    if (plan.compact) {
+      content.classList.add("pl-picker-compact");
+      m = measure() ?? m;
+      plan = placePicker(m, false, true);
+    }
+    if (plan.maxHeight !== null) {
+      const chrome = div.getBoundingClientRect().height - content.getBoundingClientRect().height;
+      content.style.maxHeight = `${Math.max(100, plan.maxHeight - chrome)}px`;
+    }
   }
   B.DropDownDiv.showPositionedByField(field, onHide);
-  if (area) keepInside(area);
 }
 function closePicker(field: BlocklyT.Field): void {
   BL!.DropDownDiv.hideIfOwner(field, true);
 }
 
 /** Calls `onPoint` while the pointer is pressed on the element, in the element's own SVG units;
- * a press and its drag are ONE undo step (matpilot onDrag). */
+ * a press and its drag are ONE undo step (matpilot onDrag). Round 22 (the reviewer: a MOUSE drag in
+ * the point picture read y from the picker's top): each place is mapped through the SVG's own
+ * screen matrix (getScreenCTM: its box, its viewBox, any transform), else its box at that moment
+ * (pickers.ts toViewBox), and the picker cannot scroll under the pointer while it drags. */
 function onDrag(el: SVGSVGElement, group: () => string, onPoint: (x: number, y: number) => void): void {
   const B = BL!;
-  const local = (e: PointerEvent) => {
-    const box = el.getBoundingClientRect();
+  const local = (e: PointerEvent): [number, number] => {
+    const ctm = el.getScreenCTM?.();
+    if (ctm && typeof el.createSVGPoint === "function") {
+      const pt = el.createSVGPoint();
+      pt.x = e.clientX;
+      pt.y = e.clientY;
+      const q = pt.matrixTransform(ctm.inverse());
+      return [q.x, q.y];
+    }
     const view = el.viewBox.baseVal;
-    const sx = view && view.width ? view.width / box.width : 1;
-    const sy = view && view.height ? view.height / box.height : 1;
-    return [(e.clientX - box.left) * sx, (e.clientY - box.top) * sy] as const;
+    return toViewBox(e.clientX, e.clientY, el.getBoundingClientRect(), view && view.width ? view : { width: el.clientWidth, height: el.clientHeight });
   };
   el.addEventListener("pointerdown", (e) => {
     if (e.button !== 0) return;
@@ -208,7 +253,10 @@ function onDrag(el: SVGSVGElement, group: () => string, onPoint: (x: number, y: 
     e.stopPropagation();
     el.setPointerCapture(e.pointerId);
     const g = group();
+    const scroller = el.closest(".blocklyDropDownContent") as HTMLElement | null;
+    const top = scroller?.scrollTop ?? 0;
     const at = (ev: PointerEvent) => {
+      if (scroller && scroller.scrollTop !== top) scroller.scrollTop = top; // no scroll mid-drag
       const old = B.Events.getGroup();
       B.Events.setGroup(g);
       try {
@@ -263,23 +311,54 @@ function focusFirst(root: Element, selector: string, text = false): void {
  * on a 60 s slider): stepping never jumps a value to the slider's end. */
 const widen = (r: NumRange, v: number): NumRange => (Number.isFinite(v) ? { ...r, lo: Math.min(r.lo, v), hi: Math.max(r.hi, v) } : r);
 
-/** One edit session of a picker: every change it makes is one undo step. */
-function session(): { group: () => string; run: (fn: () => void) => void } {
+/** One edit session of a picker: every change it makes is one undo step; `cancel` (Escape, the
+ * Cancel button; round 22) puts every field it may change back as it was when it opened, and the
+ * session leaves no undo step behind. */
+type Session = { group: () => string; run: (fn: () => void) => void; cancel: () => void; cancelled: () => boolean };
+function session(fields: readonly (BlocklyT.Field | null | undefined)[]): Session {
   const B = BL!;
   const g = B.utils.idGenerator.genUid();
+  const before = fields.filter((f): f is BlocklyT.Field => !!f).map((f) => [f, f.getValue()] as const);
+  let cancelled = false;
+  const run = (fn: () => void) => {
+    const old = B.Events.getGroup();
+    B.Events.setGroup(g);
+    try {
+      fn();
+    } finally {
+      B.Events.setGroup(old);
+    }
+  };
   return {
     group: () => g,
-    run: (fn) => {
-      const old = B.Events.getGroup();
-      B.Events.setGroup(g);
-      try {
-        fn();
-      } finally {
-        B.Events.setGroup(old);
-      }
+    run,
+    cancelled: () => cancelled,
+    cancel: () => {
+      if (cancelled) return;
+      cancelled = true;
+      let changed = false;
+      run(() => {
+        for (const [f, v] of before) {
+          if (f.getValue() !== v) {
+            f.setValue(v);
+            changed = true;
+          }
+        }
+      });
+      if (!changed) return;
+      // the session's events fire on a timeout: then they leave the undo stack (one group)
+      const ws = before[0]?.[0].getSourceBlock()?.workspace;
+      setTimeout(() => {
+        const stack = ws?.getUndoStack();
+        while (stack?.length && stack[stack.length - 1].group === g) stack.pop();
+      }, 0);
     },
   };
 }
+
+/** The session, for the headless tests (blockly_pickers.test.ts: a cancel restores and leaves no
+ * undo step). */
+export const pickerSession = session;
 
 /** Where the field is (lib/flow/pickers.ts FieldAt): its block, its siblings, the input its block
  * is plugged into, the inputs of the function around it. */
@@ -299,26 +378,28 @@ function fieldAt(f: BlocklyT.Field): FieldAt {
 // --- the controls ----------------------------------------------------------------------------------
 /** A stepper: − value +, a slider under it over the range, presets, and a box to type an exact
  * number. `set` applies (the field's own validation decides); `get` reads the field back. */
-function stepper(parent: Element, o: { label: string; unit?: string; range: NumRange; presets?: readonly number[]; get: () => number; set: (v: number) => void; typed?: boolean }): () => void {
+function stepper(parent: Element, o: { label: string; unit?: string; range: NumRange; presets?: readonly number[]; get: () => number; set: (v: number) => void; slider?: boolean }): () => void {
   const wrap = htmlEl("div", { class: "pl-picker-stepper" }, parent);
   const row = htmlEl("div", { class: "pl-picker-row" }, wrap);
-  const minus = button(row, "−", () => o.set(stepBy(o.get(), -1, o.range)), { "aria-label": `${o.label}: one step less` });
+  // round 22: +/- take a NICE step (about 1 % of the range: END_HOT_S's was 0.01 s), never finer
+  // than the field's own; the exact box, the slider and the presets keep the field's step
+  const by = niceStep(o.range);
+  const minus = button(row, "−", () => o.set(buttonStep(o.get(), -1, o.range)), { "aria-label": `${o.label}: ${by} less` });
   const num = htmlEl("input", { type: "number", inputmode: "decimal", class: "pl-picker-number", step: String(o.range.step || "any"), "aria-label": o.label }, row);
-  const plus = button(row, "+", () => o.set(stepBy(o.get(), 1, o.range)), { "aria-label": `${o.label}: one step more` });
+  const plus = button(row, "+", () => o.set(buttonStep(o.get(), 1, o.range)), { "aria-label": `${o.label}: ${by} more` });
   const unit = o.unit ? htmlEl("span", { class: "pl-picker-unit" }, row, o.unit) : null;
   void unit;
-  const slider = htmlEl("input", { type: "range", class: "pl-picker-slider", min: String(o.range.lo), max: String(o.range.hi), step: String(o.range.step || "any"), "aria-label": `${o.label} (slider)` }, wrap);
-  slider.addEventListener("input", () => o.set(Number(slider.value)));
+  // round 22: a picker with the lever shows no second slider for the same value
+  const slider = o.slider === false ? null : htmlEl("input", { type: "range", class: "pl-picker-slider", min: String(o.range.lo), max: String(o.range.hi), step: String(o.range.step || "any"), "aria-label": `${o.label} (slider)` }, wrap);
+  slider?.addEventListener("input", () => o.set(Number(slider.value)));
   const apply = () => {
     const v = Number(num.value);
     if (num.value.trim() !== "" && Number.isFinite(v)) o.set(v); // typed: exactly as typed (no clamp)
   };
   num.addEventListener("change", apply);
+  // Enter applies the typed number, and the picker keeps it (openPicker: Enter keeps)
   num.addEventListener("keydown", (e) => {
-    if (e.key === "Enter") {
-      e.preventDefault();
-      apply();
-    }
+    if (e.key === "Enter") apply();
   });
   if (o.presets?.length) {
     const pr = htmlEl("div", { class: "pl-picker-row pl-picker-presets" }, wrap);
@@ -327,7 +408,7 @@ function stepper(parent: Element, o: { label: string; unit?: string; range: NumR
   const refresh = () => {
     const v = o.get();
     if (document.activeElement !== num) num.value = Number.isFinite(v) ? String(v) : "";
-    slider.value = String(Number.isFinite(v) ? snap(v, o.range) : o.range.lo);
+    if (slider) slider.value = String(Number.isFinite(v) ? snap(v, o.range) : o.range.lo);
     minus.disabled = Number.isFinite(v) && !(v > o.range.lo);
     plus.disabled = Number.isFinite(v) && !(v < o.range.hi);
   };
@@ -436,16 +517,10 @@ function rootOf(title: string, kind: string): HTMLDivElement {
   htmlEl("p", { class: "pl-picker-title" }, root, title);
   return root;
 }
-function done(row: Element, field: BlocklyT.Field, before?: () => void): void {
-  button(row, "Done", () => {
-    before?.();
-    closePicker(field);
-  }, { class: "pl-picker-button pl-picker-done" });
-}
 
 function numberPicker(field: BlocklyT.FieldNumber, spec: Extract<PickSpec, { kind: "stepper" | "percent" | "point" | "cell" }>): void {
-  const s = session();
   const block = field.getSourceBlock();
+  const s = session([field, spec.kind === "point" || spec.kind === "cell" ? block?.getField(spec.pair) : null]);
   const root = rootOf(spec.title, spec.kind);
   const readout = htmlEl("p", { class: "pl-picker-readout", "aria-live": "polite" }, root);
   const refreshers: (() => void)[] = [];
@@ -462,7 +537,7 @@ function numberPicker(field: BlocklyT.FieldNumber, spec: Extract<PickSpec, { kin
     const one = spec.kind === "stepper" ? spec.one : undefined;
     refreshers.push(() => (readout.textContent = numText(get(), unit, one)));
     if (spec.kind === "percent") refreshers.push(lever(root, { label: spec.title, range: r, bar: spec.bar ?? "level", group: s.group, get, set }));
-    refreshers.push(stepper(root, { label: spec.title, unit, range: r, presets: presetsOf(r, spec.presets), get, set }));
+    refreshers.push(stepper(root, { label: spec.title, unit, range: r, presets: presetsOf(r, spec.presets), get, set, slider: spec.kind !== "percent" }));
   } else {
     // a point or a cell: this field and its pair (X and Y) side by side, one picker for both
     const mine = spec.axis;
@@ -480,9 +555,14 @@ function numberPicker(field: BlocklyT.FieldNumber, spec: Extract<PickSpec, { kin
       const svg = svgEl("svg", { viewBox: `0 0 ${W} ${H}`, width: W, height: H, class: "pl-picker-screen", role: "img", "aria-label": "the game picture: tap to place the point" });
       root.appendChild(svg);
       svgEl("rect", { x: 0.5, y: 0.5, width: W - 1, height: H - 1, rx: 4, fill: "rgba(0,0,0,0.35)", stroke: "rgba(255,255,255,0.6)" }, svg);
-      for (const f of [0.25, 0.5, 0.75]) {
-        svgEl("line", { x1: W * f, y1: 0, x2: W * f, y2: H, stroke: "rgba(255,255,255,0.18)" }, svg);
-        svgEl("line", { x1: 0, y1: H * f, x2: W, y2: H * f, stroke: "rgba(255,255,255,0.18)" }, svg);
+      // round 22: the client's fixed windows where they usually are (pickers.ts GAME_AREAS: the UI
+      // anchors' home places), outlined and named -- no game picture is shown or kept
+      const k = W / GAME_PX[0];
+      for (const a of GAME_AREAS) {
+        const [ax, ay, aw, ah] = a.box;
+        svgEl("rect", { x: ax * k + 0.5, y: ay * k + 0.5, width: aw * k - 1, height: ah * k - 1, rx: 2, fill: "rgba(255,255,255,0.08)", stroke: "rgba(255,255,255,0.55)", "stroke-dasharray": "3 2" }, svg);
+        const t = svgEl("text", { x: ax * k + 3, y: ay * k + 9, "font-size": 8, fill: "#fff", opacity: 0.85 }, svg);
+        t.textContent = a.name;
       }
       const dot = svgEl("circle", { r: 5, fill: "#fff", stroke: "#111", "stroke-width": 1.5 }, svg);
       onDrag(svg, s.group, (x, y) => {
@@ -502,15 +582,13 @@ function numberPicker(field: BlocklyT.FieldNumber, spec: Extract<PickSpec, { kin
       refreshers.push(stepper(row, { label: `${spec.title}: ${axis}`, range: r, get: () => val(f), set: (v) => (setOn(f, v), refresh()) }));
     }
   }
-  const row = htmlEl("div", { class: "pl-picker-row" }, root);
-  done(row, field);
   refresh();
-  openPicker(field, root);
-  focusFirst(root, ".pl-picker-lever, .pl-picker-slider");
+  openPicker(field, root, s);
+  focusFirst(root, ".pl-picker-lever, .pl-picker-slider, .pl-picker-number");
 }
 
 function optNumPicker(field: BlocklyT.FieldTextInput, spec: Extract<PickSpec, { kind: "optnum" }>): void {
-  const s = session();
+  const s = session([field]);
   const root = rootOf(spec.title, "optnum");
   const readout = htmlEl("p", { class: "pl-picker-readout", "aria-live": "polite" }, root);
   const r: NumRange = { lo: spec.lo, hi: spec.hi, step: spec.step };
@@ -540,15 +618,13 @@ function optNumPicker(field: BlocklyT.FieldTextInput, spec: Extract<PickSpec, { 
     none.setAttribute("aria-pressed", String(n === null));
     refreshStep();
   };
-  const row = htmlEl("div", { class: "pl-picker-row" }, root);
-  done(row, field);
   refresh();
-  openPicker(field, root);
+  openPicker(field, root, s);
   focusFirst(root, ".pl-picker-slider");
 }
 
 function refPicker(field: BlocklyT.FieldTextInput, spec: RefSpec | null, choices: () => Choice[], title: string, typed: ((s: string) => string | null) | undefined, empty?: string): void {
-  const s = session();
+  const s = session([field]);
   const root = rootOf(title, "ref");
   const current = String(field.getValue() ?? "");
   const input = searchList(root, {
@@ -563,7 +639,7 @@ function refPicker(field: BlocklyT.FieldTextInput, spec: RefSpec | null, choices
     },
   });
   if (spec && current && refKnown(spec, current, data(), fieldAt(field)) === false) htmlEl("p", { class: "pl-picker-warn" }, root, `“${current}” is not in the list: it is kept as it is, and the lint says why.`);
-  openPicker(field, root);
+  openPicker(field, root, s);
   if (!coarse()) input.focus();
 }
 
@@ -644,7 +720,8 @@ function condRow(parent: Element, c0: Cond, sensors: SensorInfo[], d: PickerData
   };
   const box = htmlEl("div", { class: "pl-picker-value" }, parent);
   if (sensor?.type === "percent") refreshers.push(lever(box, { label: `${c.name} (percent)`, range: r, bar: c.name.startsWith("weight") ? "weight" : c.name.startsWith("hp") ? "hp" : "level", group, get, set }));
-  refreshers.push(stepper(box, { label: "the value", unit: sensor?.type === "percent" ? "%" : "", range: r, get, set }));
+  // round 22: the lever is THE slider of a percent (no second one under it)
+  refreshers.push(stepper(box, { label: "the value", unit: sensor?.type === "percent" ? "%" : "", range: r, get, set, slider: sensor?.type !== "percent" }));
 }
 const exprTextOf = (e: Expr): string => exprText(e);
 
@@ -706,7 +783,7 @@ function argRow(parent: Element, row: ArgRow, d: PickerData, onValue: (text: str
 const COND_INPUTS = new Set(["WHEN", "UNTIL", "REARM", "COND", "X"]);
 
 function exprPicker(field: BlocklyT.FieldTextInput, spec: Extract<PickSpec, { kind: "expr" }>): void {
-  const s = session();
+  const s = session([field]);
   const d = data();
   const at = fieldAt(field);
   const pi = at.parentInput ?? "";
@@ -720,15 +797,16 @@ function exprPicker(field: BlocklyT.FieldTextInput, spec: Extract<PickSpec, { ki
   const sugg = htmlEl("ul", { class: "pl-picker-list pl-picker-suggest", role: "listbox", "aria-label": "suggestions" }, root);
   const err = htmlEl("p", { class: "pl-picker-warn", "aria-live": "polite" }, root);
   const sensors = sensorsOf(d);
-  let cancelled = false;
+  root.setAttribute("tabindex", "-1"); // where the focus waits while a part is drawn again
   let items: { from: number; to: number; choices: Choice[] } = { from: 0, to: 0, choices: [] };
   let active = -1;
 
   const problem = (t: string): string => {
-    if (!t.trim()) return spec.mode === "expr" ? "empty: write a condition or a value" : "";
+    // round 22: a condition's problem in a learner's words ("not finished: a value is missing after >=")
+    if (spec.mode === "expr") return exprProblem(t);
+    if (!t.trim()) return "";
     try {
-      if (spec.mode === "expr") parseExpr(t);
-      else if (spec.mode === "args") argsWith(t, "_", null);
+      if (spec.mode === "args") argsWith(t, "_", null);
       else callArgsWith(null, t, "_", null);
       return "";
     } catch (e) {
@@ -745,8 +823,18 @@ function exprPicker(field: BlocklyT.FieldTextInput, spec: Extract<PickSpec, { ki
   const emit = (t: string, rebuild: boolean) => {
     input.value = t;
     apply(t);
-    if (rebuild) drawBuilder();
+    if (rebuild) redraw();
     drawCheck();
+  };
+  /** Draw the parts again KEEPING the focus (round 22: ArrowDown on a select inside the picker
+   * changed it, the select was drawn again, the focus fell to the page and the picker closed): the
+   * focus waits on the picker itself, then goes to the new control of the same name. */
+  const redraw = () => {
+    const was = document.activeElement as HTMLElement | null;
+    const name = was && builder.contains(was) ? was.getAttribute("aria-label") : null;
+    if (name !== null) root.focus({ preventScroll: true });
+    drawBuilder();
+    if (name !== null) ([...builder.querySelectorAll("[aria-label]")].find((e) => e.getAttribute("aria-label") === name) as HTMLElement | undefined)?.focus({ preventScroll: true });
   };
   const rowsFail = (e: unknown) => {
     err.textContent = e instanceof ExprError ? e.message : "it cannot be read";
@@ -761,7 +849,7 @@ function exprPicker(field: BlocklyT.FieldTextInput, spec: Extract<PickSpec, { ki
       if (c && sensors.length) condRow(builder, c, sensors, d, emit, s.group);
       else if (!isCond && n !== null) {
         const r: NumRange = { lo: 0, hi: Math.max(100, n), step: 1 };
-        const refresh = stepper(builder, { label: title, range: r, presets: pi === "TIMES" ? [1, 2, 3, 5, 10] : undefined, get: () => numberOf(input.value) ?? 0, set: (v) => (emit(String(v), false), refresh()) });
+        const refresh = stepper(builder, { label: title, range: { ...r, step: 1 }, presets: pi === "TIMES" ? [1, 2, 3, 5, 10] : undefined, get: () => numberOf(input.value) ?? 0, set: (v) => (emit(String(v), false), refresh()) });
       } else if (t.trim()) htmlEl("p", { class: "pl-picker-note" }, builder, "This one is edited as text: and / or, sums and actions stay text (each and / or term is its own block).");
     } else if (spec.mode === "args") {
       const rows = argRows(at.sibling("BLOCK"), t, d.catalogue);
@@ -834,16 +922,16 @@ function exprPicker(field: BlocklyT.FieldTextInput, spec: Extract<PickSpec, { ki
       e.preventDefault();
       apply(input.value);
       closePicker(field);
-    } else if (e.key === "Escape") cancelled = true;
+    }
+    // (Escape: openPicker cancels the whole session -- the text as it was when the picker opened)
   });
-  const row = htmlEl("div", { class: "pl-picker-row" }, root);
-  done(row, field, () => apply(input.value));
   drawBuilder();
   drawCheck();
-  // a tap outside keeps what was typed (as Blockly's own text field does); Escape does not
-  openPicker(field, root, () => {
-    if (!cancelled) apply(input.value);
-  });
+  // Done, Enter or a tap outside keep what was typed (as Blockly's own text field does); Escape and
+  // Cancel put the text back as it was (round 22: one rule for every picker)
+  openPicker(field, root, s, () => {
+    if (!s.cancelled()) apply(input.value);
+  }, () => apply(input.value));
   if (!coarse()) input.focus();
 }
 
@@ -918,8 +1006,8 @@ export function displayOf(f: BlocklyT.Field, plain: string): string {
   const v = String(f.getValue() ?? "");
   const flyout = Boolean(f.getSourceBlock()?.isInFlyout);
   const known = spec?.kind === "ref" && !flyout ? refKnown(spec, v, data(), fieldAt(f)) : null;
-  const out = closedText(spec, plain, v, known, compact);
-  if (spec?.kind === "expr") f.setTooltip(out !== plain ? v : null); // shortened: the whole text on hover
+  const out = closedText(spec, plain, v, known);
+  if (spec?.kind === "expr") f.setTooltip(out !== plain ? v : null); // wrapped: the whole text on hover
   return out;
 }
 
