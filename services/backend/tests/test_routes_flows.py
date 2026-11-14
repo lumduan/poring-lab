@@ -424,6 +424,34 @@ def test_a_chunked_body_is_capped_while_it_is_read(make: Make) -> None:
     assert r.status_code == 413 and r.json()["detail"]["reason"] == "too_large"
 
 
+def test_the_map_list_comes_from_the_kb_at_run_time(make: Make, tmp_path: Path) -> None:
+    """Round 21 (live-blocks.md 12.5): GET /flows/maps lists the map names the world knows (the
+    map pickers' list), each with whether a Kafra is there; synthetic KB here, nothing committed."""
+    kb = tmp_path / "data" / "kb"
+    (kb / "bindings").mkdir(parents=True)
+    l3 = {
+        "warp": {"cells": {"by_map": {"m_town": [
+            {"x": 5, "y": 1, "to_map": "m_field", "to_x": 2, "to_y": 2}]}}},
+        "npc": {"kafra": {"npcs": [{"name": "Kafra#t", "map": "m_town", "x": 3, "y": 4}]}},
+    }  # fmt: skip
+    (kb / "bindings" / "lab-rathena.json").write_text(json.dumps(l3))
+    client = make()
+    r = client.get("/flows/maps?source=local&server=lab-rathena", headers=H)
+    assert r.status_code == 200
+    assert r.json() == {
+        "server": "lab-rathena",
+        "source": "local",
+        "maps": [{"id": "m_field", "kafra": False}, {"id": "m_town", "kafra": True}],
+        "notes": [],
+    }
+    sample = client.get("/flows/maps?source=sample", headers=H).json()
+    assert [m["id"] for m in sample["maps"]] == ["field_1", "town_1"]
+    assert client.get("/flows/maps?server=../x", headers=H).status_code == 422
+    assert client.get("/flows/maps?source=other", headers=H).status_code == 422
+    # the console's gate: a request without the console's Origin is refused, as /flows/world's
+    assert client.get("/flows/maps?source=sample").status_code != 200
+
+
 def test_world_reads_are_rate_limited(make: Make) -> None:
     client = make()
     codes = [
@@ -431,3 +459,5 @@ def test_world_reads_are_rate_limited(make: Make) -> None:
         for _ in range(61)
     ]
     assert codes[:60] == [200] * 60 and codes[60] == 429
+    # the map list (round 21) reads files too: the same budget
+    assert client.get("/flows/maps?source=sample", headers=H).status_code == 429

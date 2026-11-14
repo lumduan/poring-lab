@@ -320,3 +320,16 @@ def sample_world(maps: list[str] | None = None) -> World:
     root = Path(str(_examples() / "sheets"))
     names = maps if maps is not None else ["town_1", "field_1"]
     return load_world(SAMPLE_SERVER, names, root=root)
+
+
+def sample_maps() -> list[dict[str, Any]]:
+    """Round 21 (the map pickers): the committed SYNTHETIC sample's maps, each with whether a Kafra
+    stands there -- kbsheet.known_maps' shape for the sample world."""
+    folder = Path(str(_examples() / "sheets")) / SAMPLE_SERVER
+    names = sorted(p.stem for p in folder.glob("*.json") if not p.stem.startswith("_"))
+    world = sample_world(names)
+    return [
+        {"id": m, "kafra": any(n.kafra is not None for n in world.sheets[m].npcs)}
+        for m in names
+        if m in world.sheets
+    ]

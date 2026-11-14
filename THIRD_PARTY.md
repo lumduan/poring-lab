@@ -159,6 +159,49 @@ checked id, and the flow IR inside the file.
 | same | `4022c87` | same | `src/app/globals.css` (the "Dialogs (Save, Load, GitHub)" rules) | `services/frontend/src/components/flowfile/flowfile.css` (renamed `.dialog-*`, `.flow-list*`) |
 | same | `4022c87` | same | `docs/adr/0011-save-load-github.md` (the decision and the GitHub facts it checked); `src/lib/github/files.ts` (read only: robots and mats, not ported) | `docs/planning/flows-save-load.md` |
 
+### The block editor's pickers: matpilot's picture fields (round 21, 2026-11-14)
+
+Batt (2026-11-14 ~19:4x): "check matpilot: where a value must be entered, I made it a visual UI, e.g.
+the turn angle, more/less speed. Our project should do that too"
+([docs/planning/live-blocks.md](docs/planning/live-blocks.md) 12.5). MatPilot at commit
+`4022c870083c38c7ed4c62ff8361ef65a57d41f8`; its LICENSE was read at that commit (MIT, sha256
+`519e79d4387e85cd8fb36588804fdadfa5e65bb1183f732ed2947a00b9f1e606`, unchanged), and the reviewer
+confirmed it: `src/lib/blocks/fields/` is matpilot's own code with no third-party parts. CODE was
+ported, no picture: the hub, the robot and the dial drawings were not copied (our lever bar, the
+game-picture preview and the lists are our own drawings and DOM). No dependency was added; the
+DOM is built element by element (no innerHTML: the console's CSP). MatPilot's vitest tests were
+re-written in spirit for `node:test` (`pickers.test.ts`, `blockly_pickers.test.ts`).
+
+| Source | Commit | License | File read | Ported into |
+|---|---|---|---|---|
+| [lumduan/matpilot](https://github.com/lumduan/matpilot) | `4022c87` | MIT, © 2026 Sarat Sonsuk (`LICENSE`) | `src/lib/blocks/fields/common.ts` (`svgEl`, `htmlEl`, `button`, `clamp`, `openPicker` / `keepInside` / `closePicker` in Blockly's DropDownDiv, `onDrag`, `sliderKey`, `makeSlider`, the picker CSS), `throttle.ts` (the lever: a FieldNumber whose editor is a picture), `turn.ts` (the FieldNumber-underneath pattern), `index.ts` (the field registry), `fields.test.ts` (value in = value out, the clamp, the words) | `services/frontend/src/components/flows/blockly-pickers.ts` (the DOM kit, `field_pl_num` / `field_pl_text`), `services/frontend/src/lib/flow/pickers.ts` (`sliderKey`, the steps), `services/frontend/src/components/flows/flows.css` (`.pl-picker*`), the tests above |
+| same | `4022c87` | same | `src/lib/blocks/search.ts` (`matchEntries`: every query word starts a word) | `rankChoices` in `pickers.ts` (with substring and fuzzy steps of our own) |
+| same | `4022c87` | same | `src/lib/blocks/fields/port.ts`, `controller.ts`, `hints.ts`, `images.ts`; `docs/adr/0010-simple-blocks.md`, `0012-controller-blocks.md` (read only: the pickers' pattern and keyboard rules; not ported) | -- |
+
+The notice, as each ported file carries it:
+
+    MIT License
+
+    Copyright (c) 2026 Sarat Sonsuk
+
+    Permission is hereby granted, free of charge, to any person obtaining a copy
+    of this software and associated documentation files (the "Software"), to deal
+    in the Software without restriction, including without limitation the rights
+    to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+    copies of the Software, and to permit persons to whom the Software is
+    furnished to do so, subject to the following conditions:
+
+    The above copyright notice and this permission notice shall be included in all
+    copies or substantial portions of the Software.
+
+    THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+    IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+    FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+    AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+    LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+    OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+    SOFTWARE.
+
 ## Our own code from public standards
 - **What:** `scripts/grf_des.py`, the GRF archive's header-only "DES" (flag 0x04).
 - **Sources:** the DES tables are FIPS PUB 46-3. The GRF construction is the publicly described one:

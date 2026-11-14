@@ -1422,7 +1422,7 @@ and in 12.1's last paragraph "the one box with its 121 blocks": it holds 116 (be
 | # | Finding (the reviewer's measure) | Fixed how |
 |---|---|---|
 | 1 | The footer's Python sheet at 390: 14 file buttons in wrapped rows took 295 of 331 px; the code box was 390 x 0, unreachable (the sheet did not scroll) | On a phone the file buttons are ONE row that scrolls sideways (the selected one kept in view: the row scrolls, never the page), in the sheet and in the Python view; the sheet scrolls (`overflow-y: auto`) and the code keeps at least 12rem (studio.css; editor_css.test.ts pins the rules) |
-| 2 | Setting blocks cut at 390 (scale 0.6, blocks from x 135): 108 of 121; alarm_fast 447 px (57 % shown), near_single_still; main's block 397 px; the zoom buttons over REGEN_STOP's "50" and POS_FLY_S's "20", the trashcan over NPC_NO_FIGHT's "cells" | A setting block is laid out on ROWS (settings.ts `settingRows`, blockdefs `settingDef`): its words wrapped (balanced) over one or more rows, a point-or-none's at / none menu on its own row, then the value with its unit and `· var` (the var on a row of its own where that row would be too wide), then a safety switch's warning rows, then 3 rows for the lint's note. Budget: no row over 300 workspace units = 180 px at 0.6, so a block ends by x 315 px, before the trashcan's column at x 323 (390 - 20 - 47): the controls no longer cover any value, by construction. main's blocks too: the hat's title on two rows (`titleLines`), the runner's block a role a row, the save point on three. MEASURED by a model of Blockly's text widths (no browser here; Blockly's getHeightWidth needs a rendered workspace, the real-Blockly tests are headless): per-character widths of a wide sans at 12 pt, zelos' paddings FITTED to the reviewer's own numbers (npc_guard's row 430 units, with its warning 1018, alarm_fast's 745: the model gives +2.4 %, +4.5 % and +2.6 % of them: it errs wide; settings.test.ts allows -3 / +10 %). Every one of the 121 blocks' rows, the note rows' longest kinds and main's rows are under the budget (settings.test.ts). Average 2.8 rows a block |
+| 2 | Setting blocks cut at 390 (scale 0.6, blocks from x 135): 108 of 121; alarm_fast 447 px (57 % shown), near_single_still; main's block 397 px; the zoom buttons over REGEN_STOP's "50" and POS_FLY_S's "20", the trashcan over NPC_NO_FIGHT's "cells" | A setting block is laid out on ROWS (settings.ts `settingRows`, blockdefs `settingDef`): its words wrapped (balanced) over one or more rows, a point-or-none's at / none menu on its own row, then the value with its unit and `· var` (the var on a row of its own where that row would be too wide), then a safety switch's warning rows, then 3 rows for the lint's note. Budget: no row over 300 workspace units = 180 px at 0.6, so a block ends by x 315 px, before the trashcan's column at x 323 (390 - 20 - 47): the controls no longer cover any value, by construction. main's blocks too: the hat's title on two rows (`titleLines`), the runner's block a role a row, the save point on three (➡️ NOT what Blockly drew: with inputs inline, zelos joins a message's leftover fields to the NEXT row, so the save point stayed one row and the runner's rows were off by one; the reviewer's re-measure, fixed in 12.5 A). MEASURED by a model of Blockly's text widths (no browser here; Blockly's getHeightWidth needs a rendered workspace, the real-Blockly tests are headless): per-character widths of a wide sans at 12 pt, zelos' paddings FITTED to the reviewer's own numbers (npc_guard's row 430 units, with its warning 1018, alarm_fast's 745: the model gives +2.4 %, +4.5 % and +2.6 % of them: it errs wide; settings.test.ts allows -3 / +10 %). Every one of the 121 blocks' rows, the note rows' longest kinds and main's rows are under the budget (settings.test.ts). Average 2.8 rows a block |
 | 3 | Safety switches (respawn, npc_guard, garm_fly, alarm_fast): the "⚠ off" warning a field at the end of the row (258 -> 611 px at 390, all off-screen); a switch off added no lint finding; tooltips said "While it is off: off: ..." | The warning on rows of its own, shown while the switch is off (the `pl_setting` extension, blockly-register.ts `syncSetting`; no event, no undo step); a switch off where a hunt core reads it is a `settings_safety` WARNING on its block (a warning never blocks a Run; the chip and the /maps card count it); its Python line ends `· ⚠ off: <warning>`; the registry's `warn` no longer starts with "off:" (the tooltip says "While it is off: ...") |
 | 4a | Five settings of the ready-made box never used in a Run (potion_below, fly_below, weight_home, respawn_at, respawn_confirm_at: drink, fly_away, bag_full and the exits tab's respawn_button / respawn_ok play them) read as live; the respawn tab had no IN A RUN line | DECISION (the parent): REMOVED from the box (`project_xmas_dun02.json` = `xmasProject()`, byte-identical canonical; project.ts `BOX_PLAYS_THEM`, which test_settings.py pins to the engine's live.takeovers for that box): it holds 116 setting blocks. The argv is unchanged: test_settings_blocks.py still gives today's 97 arguments (the five are passed at their defaults, as before) and proves them NOT USED -- the box plays them, so the runner's own handler is off (its plays) -- and that a block a person adds changes that flag's value only. The frozen stage 2/3/4 arms are byte-identical (their sha256 pinned). DECISION: a block a Run of this box does not use -- a takeover (live.takeovers) or a `needs` not met (quick_drop_scaled while quick_drop is off, near_single_still while near_single is off, NPC_NO_FIGHT while npc_guard is off; the ROOT switch is named) or a map without a hunt core -- is GREYED (a light-slate block style of its own with dark words, never Blockly's disabled state) with rows "· not used here: the drink event plays it" / "· not used while npc_guard is off", the same in its tooltip and as its Python line's comment. ONE computation: `poring_flow/lint/settings.py` `notes` (the lint's own `_analyse`), sent by POST /flows/lint as `settings` and printed by pyproject, so the lint, the block and the Python never disagree. The ready-made box shows two such blocks (quick_drop_scaled, near_single_still: their switches are off by default). The respawn and exits tabs' IN A RUN lines now say which function of another tab plays their group's setting ("respawn_button (tab exits) replaces the runner's clicks on the death dialog (its setting respawn_at is not used in this box)") |
 | 4b | 11 blocks read as fragments ("…" first; HP_DROP_PTS "…" last) | Each names its subject in the registry's `words`: "a hit the Battle Log missed: her HP falls by at least" / "... that HP fall within", "the walk toward a target stops this far short of it", "a still screen: this many frame pairs in a row", "exploring favours the regions seen least", "a near strike too (from 2 cells): one click, then wait", "the quick drop's wait grows with the distance", "Garm Baby alarm: seen in this many detections in a row", "Garm Baby alarm also read on the HUD's boxes and inside a strike or a wait", "Garm Baby alarm: one box this sure is enough (0 = off)", "the HUD: a fresh box every". Nothing pinned the old words but the tests updated here (runner_flow_export's outline has its own describe strings and pins none of the registry's) |
@@ -1437,6 +1437,147 @@ block width (#2: getBoundingClientRect of each setting block at 390 and 1440, an
 heights and the gaps the editor keeps (a block that grows pushes the ones under it down: BlockEditor
 `restack`), the greyed style's look in light and dark, the Python sheet at 390 (#1), the flyout's
 width at 390 (#5), and the /maps page height after selecting the card (#6).
+
+### 12.5 Round 21: pickers instead of textboxes (Batt 2026-11-14 ~19:4x ICT; built 2026-11-14, branch feat/pickers, written 20:54 ICT from `date`; offline only)
+
+**Batt's words (2026-11-14 ~19:4x, Thai, translated; with screenshots of the main tab's hat --
+"geffen x 119 y 40", `use_model ( model="xmas02" )`, the hunt block's "heal: call heal", "Fly Wing:
+call fly_wing", "Knife on: call knife_on" --, "stop home", and the survival tab's drink event --
+`this node when hp_percent() < 50`, `until hp_percent() >= 51`, rank, pause 0.7 s, "at most _ a
+minute", "escalate to _", `do call heal ( )`):** "Fields that choose a value, like use_model or
+'this node when', should be DROPDOWNS with the values to choose from, so you know what there is.
+Typing should work like a search, guessing the word, and help with AUTO-COMPLETION. Check matpilot:
+where a value must be entered, I made it a visual UI, e.g. the turn angle, more/less speed. Our
+project should do that too, for values that are not naming, such as functions or variables."
+
+**The rule** (the parent's reading; ADR-0020 Amendment K): free text ONLY where a name is DEFINED
+(a function's name, a variable's name, an event's name, a tab's name); every other field is a
+picker: (a) a REFERENCE to something that exists is a dropdown of what exists, with type-to-filter
+search; (b) a NUMBER is a visual control in matpilot's way; (c) a CONDITION is a structured picker
+with a typed fallback that autocompletes. The stored IR and the Python text stay EXACTLY as they
+were: a picker edits the same string or number, so old projects load unchanged, and a value that
+is not in the list is kept, marked, and named by the lint.
+
+#### 12.5.1 The kit
+
+| Piece | Where | What |
+|---|---|---|
+| Two field types | `components/flows/blockly-pickers.ts` | `field_pl_num` (a FieldNumber: it saves, validates and loads as field_number did, the field's own min / max / precision unchanged) and `field_pl_text` (a FieldTextInput: any text saves and loads as field_input did). Each carries a `pick` (the JSON block definition) saying which picker opens in Blockly's DropDownDiv, in the block's colour. Registered by `register()` before the block types, so the headless tests register exactly what the page does |
+| The DOM kit | the same file, ported from matpilot 4022c87 `src/lib/blocks/fields/common.ts` (MIT; THIRD_PARTY.md) | `svgEl` / `htmlEl` / `button`, `openPicker` (the block's colours, never taller than the blocks area, `keepInside`), `closePicker`, `onDrag` (a press and its drag are ONE undo step), `makeSlider` (role slider, aria values). Every picker session is one Blockly event group (one undo step). Every key typed in a picker stays in it (Backspace never deletes the block); Escape closes. The DOM is built element by element: no innerHTML (the CSP, gamefile.test.ts) |
+| stepper | seconds, counts, ranks, a setting's number | − value +, a native range slider over the control's range and step (`lo` / `hi` / `step`; widened to hold a loaded value outside it, so a step never jumps), presets (0.5, 1, 2, 5, 10 s ...), a number box to type an exact value (kept exactly as typed: the field's own validation decides) |
+| percent | a setting's share (knife_hp_min, WEIGHT_MAX, ...) | the LEVER BAR (matpilot's throttle, lying down): a bar that fills to the value like an HP bar -- red low, green high; the bag's (weight_home, WEIGHT_MAX, REGEN_STOP) the other way round --, dragged or tapped, arrows / Page Up / Down / Home / End; with the stepper under it |
+| point | respawn_at, respawn_confirm_at (x, y in the 1280 x 720 game picture) | both fields' steppers in ONE picker, and the picture with its dot: tap or drag to place it |
+| cell | the save point, walk to, a walk exit (a map cell's x, y) | both fields' steppers in one picker (no picture: the map's size is not known at edit time) |
+| optnum | an event's rank, "at most … a run / a minute", "in 10 min:", "insert fails:" (text fields where EMPTY means none or the engine's default) | a "no limit" / "the table order" / "the default (10)" button and a stepper over the converter's own range; the empty field shows `auto`, `—` or `default 10`; a text that is no whole number is kept (`abc ⚠`), the converter says why, as before |
+| ref | every reference (12.5.2) | a search box and the list under it: typing ranks the list (`pickers.ts rankChoices`: the word itself, a start, every typed word starting a word of it -- matpilot's block search --, inside it, its letters in order); arrows and Enter, or a tap; a word the list does not have is offered "as typed" where the converter would take it (a new stop reason, a function not written yet), else refused with why; a model must be one of the list. Closed, the field shows its value and `▾`, and `⚠` when the value is not one of what exists (kept as it is: the lint names it); an empty optional role shows `none` |
+| expr | a pl_expr's text (a condition or a value), a catalogue block's inputs (pl_action, pl_do), a call's inputs (pl_call, pl_callv) | ABOVE: a condition as `sensor ▾  comparison ▾  value` (the catalogue's sensors, live ones first, and the node's functions; a sensor's own input such as hotbar_count's key as a dropdown; the value's control follows the sensor: the lever for hp_percent(), a stepper for a count, the map names for current_map()); a count (repeat's times) as a stepper; a block's inputs as rows of pickers (use_model's model from the models list, use_skill's key F1-F9, a number as a number box; a call's inputs by the function's own parameters, `eat("F6")` keeping its input by position). BELOW: the text itself, which AUTOCOMPLETES while typing (`completions`: sensors with their parentheses, functions, variables and the function's own inputs, True / False / OK / FAILED, and / or / not, mob( item( map_id( cell(; after a value the comparisons; after `key=` the hotbar keys). Every builder change prints the text with the block's own printer (expr.ts exprText), so `hp_percent() < 50` stays exactly that (pickers.test.ts: every event condition of the ready-made projects prints back byte for byte). Escape keeps the old text; a tap outside keeps what was typed (as Blockly's own text field) |
+| name | a function's name (pl_def NAME) | free text (Blockly's own editor); on the monsters tab it first offers `attack_<class>` for each monster of the node's model (the ones not written yet first), a suggestion only |
+| Phone | all of them | on a touch screen a picker does not focus its text box (the keyboard would cover the list); inputs are 16 px (no zoom-in); touch targets 40 px; the DropDownDiv is never taller than the blocks area and is moved into it when it fits neither below nor above (matpilot keepInside); Blockly's phone `prompt()` for text fields is no longer used by any picker |
+| Pure part | `lib/flow/pickers.ts` (+ pickers.test.ts) | the ranking, the steps (`snap`, `stepBy`, `sliderKey` ported from matpilot), the option sources, `condOf` / `condText`, `completions`, the input rows, `closedText` (what a closed field shows: the width model uses it) |
+
+#### 12.5.2 Each block and field
+
+Converted (field: picker, its options' source):
+
+| Block | Field | Picker | Options from |
+|---|---|---|---|
+| main's save point (pl_save_point) | MAP | ref, maps with a Kafra first | GET /flows/maps (the local KB at run time: names, a Kafra there) + the project's map nodes |
+| | X, Y | cell | -- |
+| use_model, and every other catalogue block (pl_action, pl_do) | ARGS | expr (inputs as rows) | the catalogue's parameters of that block; use_model's `model` from the models (models.yaml via the catalogue: id, its map, live / not adopted) |
+| the runner (pl_dungeon_hunt) | HEAL, FLY, KNIFE_ON, KNIFE_BACK, HOME, RESPAWN, RESPAWN_OK, EAT | ref (role), the role's usual function first, then the functions that press a key, then the others; never an event | the node's and Global's functions (each with what it does: "presses F1 · tab keys", "calls wield_knife", "clicks a point", its inputs) + those written on the tab and not converted yet |
+| stop (pl_stop) | REASON | ref, typing a new one allowed | the project's own stop reasons (with how often), then done / home |
+| call (pl_call), a function's value (pl_callv) | PROC | ref | functions, then events (the node's and Global's) |
+| | ARGS | expr (callargs) | the called function's own inputs (a key-like input as F1-F9) |
+| event (pl_event) | WHEN, UNTIL, REARM (their pl_expr) | expr (condition) | the catalogue's sensors (not the trained models' -- they have blocks of their own -- nor `position`) and the node's functions; the comparisons |
+| | RANK | optnum 1..99, empty `auto` | -- |
+| | COOLDOWN | stepper 0..30 s, step 0.1 (the field's own 0..3600 kept) | -- |
+| | MAX_RUN, MAX_MIN, MAX_10, FAILS | optnum (1..100, 1..60, 1..100, 1..10), empty `—` / `default 10` / `default 3` | -- |
+| | ESCALATE | ref (escalate), empty `none` | the node's and Global's functions (no events: the engine resolves a procedure) |
+| | PRIORITY, MODE, THEN | Blockly's dropdowns already (unchanged) | -- |
+| wait (pl_wait) | SECONDS | stepper 0..60 s, step 0.5 | -- |
+| wait until (pl_wait_until) | TIMEOUT | stepper 0..120 s | -- |
+| if / while / wait until / not / and / or | their condition (pl_expr) | expr (condition) | as the event's |
+| repeat | TIMES (its pl_expr) | expr (a number: a stepper, presets 1 2 3 5 10) | -- |
+| press key (pl_press_key), log in's credential, the detector blocks' model and class, the hunt block's rule versions | -- | Blockly's dropdowns already (unchanged) | -- |
+| walk to (pl_walk_to) | MAP; X, Y | ref (map); cell | as the save point's |
+| Kafra teleport | TO | ref (map) | as above |
+| the exits (walk, npc, item, item by function) | TO_BLOCK; TO_ENTRY | ref (node); ref (entry of that node) | the project's map nodes; the entries of the node TO_BLOCK names |
+| | walk exit's MAP, X, Y; item-by-function's FN | ref (map), cell; ref (function) | as above |
+| open window | WINDOW | ref | the catalogue's `windows` (the L2 windows of the client) |
+| log in | SERVER | ref | the catalogue's `servers` (config/environments.yaml, the lab's marked) |
+| set (pl_set) | VAR | ref (variable), typing allowed | the function's own inputs, then the variables of the node's tabs and Global's |
+| a function (pl_def) | NAME | name (free text; attack_<class> suggested on the monsters tab) | the node's model's monsters (catalogue models, `strikes`) |
+| every setting block (116 in the box, 121 in all) | VALUE (number, int) | stepper over the registry's lo..hi, step and unit | the registry (settings.gen.ts) |
+| | VALUE (share) | percent lever bar | the registry |
+| | X, Y (point, point or none) | point (with the game picture) | -- |
+| | VALUE (switch, choice), AT | Blockly's dropdowns already (unchanged) | -- |
+
+Left as TEXT, and why:
+
+| Block | Field | Why |
+|---|---|---|
+| a function (pl_def) | NAME (off the monsters tab), PARAMS | names it DEFINES (its inputs are names too) |
+| a variable (pl_vardecl) | NAME | a name it defines |
+| an event (pl_event) | NAME | a name it defines (the event's key) |
+| a tab | its name | a name it defines (the tab row, not a block) |
+| talk to the NPC, set the save point at / teleport with / rent a cart from the Kafra, buy, sell, store, take, npc warp | NPC | an NPC KEY (`n_` + 8 hex of a hash: one-way, local only, ADR-0020 Q11); the names behind them are the KB's local labels. A picker needs the node map's world sheet fetched per map (GET /flows/world): not built in this round (a follow-up) |
+| choose menu option, npc warp | OPTION / OPTIONS | option keys, the same as the NPC's |
+| use item, item warp, buy / sell / store / take | ITEM / ITEMS / KEEP | item ids or variables, comma separated; the item names are client data (no list served yet) |
+| choose the character | CHAR | a character's name on the server: no list exists at edit time (empty = the remembered slot) |
+| extend / disable event (retired blocks) | KEY | refused in the project model since 2026-11-13 (a map replaces Global's event by writing its own); not offered |
+| the raw blocks (pl_raw, pl_raw_expr) | TEXT | read-only labels (edited in the JSON view) |
+
+#### 12.5.3 The map names
+
+The backend knows them at run time: `GET /flows/maps?source=local|sample&server=` (routes_flows,
+read gate and the /flows/world read budget) returns `{server, source, maps: [{id, kafra}], notes}`
+-- `kbsheet.known_maps` reads the local KB (data/kb: the generated sheets' names, the L3 warps' both
+ends, the NPCs' and the Kafras' maps, the spawn lines'; a Kafra there = a save point can be set
+there), `editor.sample_maps` the committed synthetic sample. Nothing is written and no list of map
+names is committed (test_kbsheet.py and test_routes_flows.py use synthetic files). The studio
+fetches it once per world and server (ProjectStudio `maps`); until it arrives a map picker lists the
+project's own maps and marks nothing unknown.
+
+#### 12.5.4 Round 20's re-measure leftovers (the reviewer, live on main bb6d41eb at 1440 x 900 and 390 x 844; each decision the parent's)
+
+The reviewer PASSED the 116 setting blocks (widest 172 px at 390, right edge <= 307), the zoom /
+trash on the safety tab, the footer Python sheet, the greyed unused settings, safety-off as a lint
+WARNING, the flyout sub-categories, /maps' folds and the page height. The rest:
+
+| # | Finding | Decision | Done how |
+|---|---|---|---|
+| A | main's stack at 390 cut (main's block 287 px from x 135, right edge 422): "the save point is on geffen x 119 y 40" (404), "use_model ( model="xmas02" ) ● plays live" (402), "Fly Wing: call fly_wing Knife on: call knife_on" (413); the runner's rows OFF BY ONE ("call knife_back home (Butterfly Wing):" as one step) | one role per row, its label with its picker; the hat and use_model wrap to the 300-unit budget; main's stack ends before x 315; a width-model test | FIXED (by the model; a browser re-measures). The cause: zelos draws every input inline and ends a row only after an END-ROW input (or around a statement, or before every input when the block's inputs are not inline: `zelos/info.ts shouldStartNewRow_`), and Blockly's JSON puts a message's leftover fields in an implicit DUMMY input -- so round 20's messages-as-rows were not rows. Now every row ends with an end-row input: the save point "the save point is" / "on geffen ▾" / "x 119 y 40"; the runner one role a row, its words with its picker ("heal: heal ▾" ... "Knife off: knife_back ▾", "home:", "died:", "confirm:", "eat:"; "call" dropped, "home (Butterfly Wing)" / "after a death" / "then confirm" shortened to fit); every statement block's badge and its last-run line on rows of their own, shown only while they say something (`blockdefs.ownLabelRows`, a pass over the definitions, so a block added later -- 5b-2's -- gets it too; `pl_label_rows`); a catalogue block's inputs on their own row ("use_model" / `( model="xmas02" )`). THE MODEL: `lib/flow/layout.ts` (zelos' row rules over the definitions, settings.ts' text widths, a 20-unit statement indent and a 20-unit field box: zelos' 16 + 4); its positive case is the reviewer's three rows (the model gives +5.8 %, +9.4 %, +10.6 %: it errs wide); layout.test.ts: every row of every block of every tab of the ready-made projects AND the frozen A/B arms <= 300 units (the box's widest per tab: main 282 "died: respawn_button ▾", survival 296 the shortened `hotbar_count(…) > 0`, knife 276 "call wield_damascus ▾", exits 256, monsters 235, keys 228 a badge row); blockly_pickers.test.ts: the REAL Blockly builds those rows (each role's words and picker in ONE end-row input) |
+| B | a second copy of a setting (knife_max_s into main while knife has it): refused under the canvas, Simulate off, but the block unmarked, the message naming only the other tab; Run (amber) ENABLED -- what would it play? | mark the copy (⚠ + "already set in tab knife; one block per setting on a node"); the message names both tabs; Run and Check DISABLED while the editor holds a problem, with the reason; never a Run of a project other than what the screen shows | FIXED. How Run gets its project TODAY (checked): BlockEditor converts the tab after every edit (`tabFromWorkspace`); when it fails, `onProject` is NOT called, so the studio's `project` stays the last good one, and `projectRun = { project, node }` -> `useLiveRun`'s `runRef` -> the POST of a start or a check sent THAT project: Run would have played the project from before the copy, without it. Now: the message is "knife_max_s is set on this tab (main) and on the tab knife of xmas_dun02: one block per setting on a node (delete one of the two)"; the copy's own note rows say "⚠ already set in tab knife; one block per setting on a node" in the warning colour (an Issue's `note`, BlockEditor paint; any other block with such a problem gets Blockly's warning); `editorHeld` holds Run (footer and Before Run) and "Check the game" (and its automatic first check), the reason shown under Run ("Run is held: the blocks of tab main have 1 problem ...") and under the problems ("Run and Check wait until these are fixed") |
+| C | the five settings the box leaves out still in the flyout and the search, looking live ("heal" lists potion_below and fly_below first) | in the flyout and the search, mark a setting the open node's box replaces with the lint's notes (greyed, "not used here: the drink event plays it"); keep it listed | FIXED. `box.ts boxReplaced` (the lint's `box[node]` takeovers, the lint's own words: box.test.ts pins them to lint/settings.py `_use`); the `pl_setting` extension writes them into a FLYOUT block's note rows before the flyout measures it, and greys it once drawn; the search's results are flyout blocks too. Deleting the drink event makes the next lint drop it, and the setting is live in the flyout again |
+| D | with fly_below gone, fly_rate / fly_rate_below read "or HP falling faster than 150 HP/s", "while under 50 %"; the IN A RUN line repeats it | name the subject; check every block that began as a continuation of a removed one | FIXED: "Fly Wing when HP falls faster than", "the Fly Wing's fall rule: only while HP is under"; respawn_confirm_at (it continued respawn_at, also removed) "the OK button that confirms the respawn"; the IN A RUN line "The HP-rate fly stays the runner's: Fly Wing when HP falls faster than 150 HP/s (fly_rate); the Fly Wing's fall rule: only while HP is under 50 % (fly_rate_below)." (poring_flow settings.py; settings.gen.ts regenerated, drift-tested). Checked the rest: knife_hp_min ("or at once under HP") continues knife_max_s, which is still there beside it: KEPT. The words change the Python view's comments of these three settings (the comments are words; the values and the round trips are unchanged) |
+| E | "Global" named in a project without a Global node: the SETTINGS strip line, IMPORTS, main's tab title, the /maps inspector | name Global only when the project has one | FIXED: `settingTabNote(..., hasGlobal)` ("a deleted one falls back to the default"), the IMPORTS part (its tabs only), main's tab title, the inspector's "Tabs and names" line |
+| F | at 390 the events and functions under the controls (fly_away 306 px, 83 % shown: rank, "resume ▾", "s after each run · at most"; attack_cruiser's "t, priority=1", strike's / wait_steal's / wait_kill's / loot's "● plays live") | the event, function and recipe blocks wrap to the same budget | FIXED (by the model): the event one or two fields a row ("this node when" / its condition / "event drink" / "class ▾" / "rank auto" / "mode ▾" / "then ▾" / "until" / ... / "insert fails: default 3" / "then escalate to none ▾"); and / or a BLOCK of its terms, one a row (`sees_boss() or hp_percent() < 25` was one 31-character text; blocks.ts exprBlock, the IR the same: the round trips cover it); "function" / its name / its inputs on three rows; a call's inputs on their own row; if / while / wait until their condition on its own row; on a phone a condition wider than the row (the eat events' `hotbar_count(key="F6") == 0`) shows shortened in the middle, `hotbar_count(…) == 0`, whole in its tooltip and its picker (`shortExpr`, `EXPR_SHOW_UNITS` = the budget less the sides) |
+| G | the folded strip at 390 cut on survival, knife, exits, respawn ("IN A RUN: 3 events replace the runner's own · 4 m…", 380-421 px in 366) | it fits | FIXED by words: "IN A RUN: 3 events replace the runner · +4"; the respawn tab "2 functions in exits play it"; box.test.ts: every tab's line <= 45 characters (`FOLD_MAX_CHARS`, from the reviewer's ~7.3 px a character) |
+| H1 | weight_exit's tooltip "a switch for the settings it needs" (weight_home is out of the box) | say what it switches | FIXED: a switch with no flag of its own says which settings it turns on: "a switch with no flag of its own: weight_home (go home when the bag is over) is used only while it is on" |
+| H2 | /maps' folds show "off · near_single_still" with no not-used note; NPC_NO_FIGHT none | the same notes on /maps | FIXED: the inspector's setting rows carry the lint's words (`settings[path].unused`), and a safety switch off is marked "⚠ off" (its warning on hover) |
+| H3 | at 390 with Settings open the toolbox is 22 rows; Functions and Advanced scroll below the canvas | collapse, or keep them reachable | FIXED: Settings is the LAST category (studio.test.ts pins the order), so opening it never moves Functions and Advanced |
+| H4 | the 390 Python sheet: the code box takes the file's full height, the sheet scrolls, the file row and the × scroll away | keep them sticky, let the code scroll | FIXED: the code box takes the room left (at least 12rem) and scrolls inside; the header and the file row are sticky (studio.css; editor_css.test.ts) |
+
+#### 12.5.5 Not measured here (no browser): the re-measure list
+
+- every picker's position at 390 x 844 and 1440 x 900: opening under its field or above it, never
+  past the blocks area (the DropDownDiv), and with a phone's keyboard open (a ref's search box, a
+  condition's text);
+- touch: the lever bar's drag, the point picture's tap, the steppers' 40 px buttons, the native
+  sliders and selects;
+- keyboard: Enter on a focused field opens its picker, arrows in the lists and the sliders, Escape;
+- the closed fields' `▾` and `⚠` (and the amber unknown text), the empty words (`auto`, `—`,
+  `default 10`, `none`);
+- every block's width at 390 against the model (layout.test.ts: main's widest row 282 units =
+  169 px, so its right edge at ~304 px; survival's 296; the events', functions' and recipes'); the
+  badge and run rows appearing and hiding (the blocks under them move: `restack` now for nested
+  blocks too);
+- and / or as blocks of their terms (fly_away), and the shortened condition on a phone with its
+  tooltip;
+- the Settings flyout's and the search's greyed blocks with their note rows;
+- the duplicate setting's own rows and Run / Check held with the reason;
+- the folded strip line on survival, knife, exits and respawn; the Python sheet's sticky rows; the
+  toolbox with Settings last and open.
 
 ## 13. Stage 5b-1: HuntState and the loop as steps (design written 2026-11-14 18:3x ICT from `date`, before any 5b code; offline only)
 

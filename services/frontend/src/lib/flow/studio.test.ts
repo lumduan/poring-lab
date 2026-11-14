@@ -2,6 +2,7 @@
 // our mapping onto it, the per-browser preferences and their fallbacks, the problems wording, the
 // model blocks' menus, the block search, and the starter program.
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import { test } from "node:test";
 
 import { BLOCK_DEFS, categoryOf, toolbox, toolboxBlocks } from "./blockdefs.ts";
@@ -46,7 +47,9 @@ test("every block type has a MatPilot style, as the brief maps them", () => {
 test("the toolbox is in MatPilot's order, each category styled as MatPilot's", () => {
   const tb = toolbox({ walk_to: { concept: "nav.walk_to", timeout_s: 120 }, talk_npc: { concept: "npc.talk", timeout_s: 60 }, sit: { concept: "char.sit", timeout_s: 5 } }, { node: "map", main: true });
   // live-blocks.md 12: the runner's settings, one block each, after the variables (a setting IS one)
-  assert.deepEqual(tb.contents.map((c) => c.name), ["Search", "Movement", "Actions", "Control", "Conditions", "Sensors", "Operators", "Variables", "Settings", "Functions", "Advanced"]);
+  // round 21 (the re-measure of round 20): Settings last, so opening it never pushes Functions and
+  // Advanced below the canvas at 390
+  assert.deepEqual(tb.contents.map((c) => c.name), ["Search", "Movement", "Actions", "Control", "Conditions", "Sensors", "Operators", "Variables", "Functions", "Advanced", "Settings"]);
   assert.equal(tb.contents[0].kind, "search");
   for (const c of tb.contents) assert.ok(CATEGORY_STYLES[c.categorystyle], c.name);
   const sensors = categoryOf(tb, "Sensors")!.contents.filter((i) => i.kind === "block").map((i) => (i as { type: string }).type);
@@ -200,4 +203,20 @@ test("the flows row reads the studio's saved flow name, never failing", () => {
   assert.equal(savedFlowName(null), "my flow");
   const throws: StorageLike = { getItem: () => { throw new Error("blocked"); }, setItem: () => {}, removeItem: () => {} };
   assert.equal(savedFlowName(throws), "my flow");
+});
+
+// round 21 (the re-measure of round 20, B): a setting dragged onto a second tab of a node keeps the
+// tab from becoming the project, so the project is the one from before it -- what Run and Check
+// would send (useLiveRun's ProjectRun). Both are held, with the reason shown, while the blocks hold
+// a problem; the copy itself is marked (blocks.ts issue note, BlockEditor paint)
+test("Run and Check are held while the blocks hold a problem, and say why", () => {
+  const studio = readFileSync(new URL("../../components/flows/ProjectStudio.tsx", import.meta.url), "utf8");
+  assert.match(studio, /const editorHeld = editor\.issues\.length/);
+  assert.match(studio, /<LiveRunButtons live=\{live\} blocked=\{editorHeld \?\? runWhy \?\? lintBlock\} \/>/);
+  assert.equal((studio.match(/held=\{editorHeld\}/g) ?? []).length, 2);
+  const run = readFileSync(new URL("../../components/flows/LiveRun.tsx", import.meta.url), "utf8");
+  assert.match(run, /disabled=\{!cc\.can \|\| live\.busy \|\| held !== null\}/);
+  assert.match(run, /data-testid="live-run-blocked"/);
+  const editor = readFileSync(new URL("../../components/flows/BlockEditor.tsx", import.meta.url), "utf8");
+  assert.match(editor, /noteLines\(problem\.note \?\? problem\.text, "⚠"\)/);
 });

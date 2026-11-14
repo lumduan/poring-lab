@@ -8,6 +8,7 @@ import type { Flow } from "./ir.ts";
 import type { Project } from "./project.ts";
 import type { SettingNote } from "./settings.ts";
 import type { Models } from "./models.ts";
+import type { MapsDoc } from "./pickers.ts";
 import type { ZonesCheck, ZonesFile } from "./zones.ts";
 
 // "readiness" (Batt 2026-10-09, ADR-0020 contradictions #6): a binding not there YET for the target
@@ -224,7 +225,8 @@ export interface CatalogueBlockDoc {
 export interface CatalogueDoc {
   version: number;
   blocks: Record<string, CatalogueBlockDoc>;
-  sensors: Record<string, { name: string; badge: Badge; spec: { type: string; passive: boolean } }>;
+  // round 21 (the condition picker): a sensor's range, inputs, note and whether it plays live
+  sensors: Record<string, { name: string; badge: Badge; spec: { type: string; passive: boolean; range?: [number, number]; params?: { name: string; type: string; options?: string[]; required?: boolean }[]; live?: boolean; note?: string } }>;
   palette: string[];
   windows: string[];
   safety_critical: string[];
@@ -239,6 +241,8 @@ export interface CatalogueDoc {
   // the engine's tab-name rule (the browser refuses the same names at once)
   runner_maps?: string[];
   credentials?: string[];
+  /** the login block's servers (config/environments.yaml: id, status, the lab's): its picker */
+  servers?: { id: string; status: string; lab: boolean }[];
   tab_name_rule?: { pattern: string; refused: string[] };
 }
 
@@ -337,6 +341,12 @@ export class FlowsApi {
   world(source: WorldSource, server: string, maps: string[], walk = false): Promise<WorldDoc> {
     const q = new URLSearchParams({ source, server, maps: maps.join(","), walk: String(walk) });
     return this.get(`/flows/world?${q}`);
+  }
+
+  /** round 21: the map names the world knows (the pickers' list; the local KB at run time). */
+  maps(source: WorldSource, server: string): Promise<MapsDoc> {
+    const q = new URLSearchParams({ source, server });
+    return this.get(`/flows/maps?${q}`);
   }
 
   lint(project: Project, world: WorldSource): Promise<LintDoc> {

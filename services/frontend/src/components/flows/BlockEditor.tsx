@@ -15,15 +15,18 @@ import type * as BlocklyT from "blockly/core";
 import { useEffect, useRef, useState } from "react";
 
 import { followModel, registerDetectorMenus } from "@/components/flows/blockly-fields";
-import { huntKey, register, registerHunt, syncSetting, themesOf } from "@/components/flows/blockly-register";
+import { refreshPickers, setCompact, setPickerSource } from "@/components/flows/blockly-pickers";
+import { huntKey, register, registerHunt, setFlyoutNotes, syncLabelRows, syncSetting, themesOf } from "@/components/flows/blockly-register";
 import { registerSearch } from "@/components/flows/blockly-search";
 import type { CatalogueDoc, Finding, LintDoc, Trace } from "@/lib/flow/api";
 import { BADGE_TEXT, sitePath } from "@/lib/flow/api";
+import { boxReplaced } from "@/lib/flow/box";
 import { SENTENCE_BY_TYPE, titleLines, type Toolbox, toolbox, type ToolboxScope } from "@/lib/flow/blockdefs";
 import { type Defaults, type TabScope, tabFromWorkspace, tabToWorkspace, type Workspace } from "@/lib/flow/blocks";
 import { defaultFields, HUNT_TYPE, huntTooltip, omitted } from "@/lib/flow/hunt";
 import { canonical } from "@/lib/flow/ir";
 import { firstDetector, monstersOf, notAdopted } from "@/lib/flow/models";
+import type { MapsDoc, PickerData } from "@/lib/flow/pickers";
 import type { Project } from "@/lib/flow/project";
 import { noteLines, SETTING_NOTE_ROWS, settingFallback, type SettingNote, settingOfType, settingTooltip } from "@/lib/flow/settings";
 import { runLine } from "@/lib/flow/status";
@@ -72,6 +75,9 @@ export type BlockEditorProps = {
    * kept while a new lint runs (the rows would blink on every edit otherwise). */
   notes: Record<string, SettingNote> | null;
   trace: Trace | null;
+  /** Round 21 (live-blocks.md 12.5): the map names the world knows (GET /flows/maps), the map
+   * pickers' list; null while it loads or where the world is not here. */
+  maps: MapsDoc | null;
   hidden: boolean;
   onProject: (project: Project) => void;
   onState: (state: EditorState) => void;
@@ -84,6 +90,7 @@ export default function BlockEditor(p: BlockEditorProps) {
   const ws = useRef<BlocklyT.WorkspaceSvg | null>(null);
   const blockly = useRef<typeof BlocklyT | null>(null);
   const paths = useRef<Record<string, string>>({}); // block id -> its node path, as converted last
+  const issues = useRef<Issue[]>([]); // round 21: the tab's problems as converted last (marked on their blocks)
   const [ready, setReady] = useState(false);
   const [failed, setFailed] = useState(false);
   // the latest props, read by Blockly's listeners (they outlive a render)
@@ -111,6 +118,7 @@ export default function BlockEditor(p: BlockEditorProps) {
       const json = B.serialization.workspaces.save(w) as unknown as Workspace;
       const project = latest.current.getProject();
       const r = tabFromWorkspace(project, latest.current.scope, json, defaults());
+      issues.current = r.ok ? [] : r.issues;
       if (r.ok) {
         paths.current = r.paths;
         if (announce && canonical(r.project) !== canonical(project)) latest.current.onProject(r.project);
@@ -123,7 +131,7 @@ export default function BlockEditor(p: BlockEditorProps) {
         canUndo: w.getUndoStack().length > 0,
         canRedo: w.getRedoStack().length > 0,
       });
-      decorate(B, w, latest.current.catalogue, latest.current.lint, latest.current.notes, latest.current.trace, paths.current, latest.current.scope, r.ok ? r.project : project);
+      decorate(B, w, latest.current.catalogue, latest.current.lint, latest.current.notes, latest.current.trace, paths.current, latest.current.scope, r.ok ? r.project : project, issues.current);
     };
 
     const api: EditorApi = {
@@ -159,12 +167,25 @@ export default function BlockEditor(p: BlockEditorProps) {
         registerSearch(B, () => tbRef.current);
         registerDetectorMenus(B, () => latest.current.catalogue?.models ?? null);
         blockly.current = B;
+        // round 21: what the pickers list when one opens -- the project as converted last, this tab,
+        // the catalogue, the map list, and the functions written here and not converted yet
+        setPickerSource((): PickerData => ({
+          project: latest.current.getProject(),
+          node: latest.current.scope.node,
+          tab: latest.current.scope.tab,
+          catalogue: latest.current.catalogue,
+          maps: latest.current.maps,
+          extraDefs: (ws.current?.getBlocksByType("pl_def", false) ?? []).map((b) => String(b.getFieldValue("NAME") ?? "").trim()),
+        }));
         const cat = latest.current.catalogue;
         const hunt = registerHunt(B, cat?.hunt_rules ?? null) ? (cat?.hunt_rules ?? null) : null;
         const th = themesOf(B);
         tbRef.current = toolboxOf(cat, latest.current.toolboxScope);
         // matpilot round 18 #4: a phone starts smaller (more of each row shows beside the toolbox)
         const phone = typeof window !== "undefined" && !!window.matchMedia && window.matchMedia("(max-width: 48rem)").matches;
+        setCompact(phone); // round 21: a long expression shows shortened on a phone (its tooltip whole)
+        // round 21: the Settings flyout and the search grey a setting this node's box replaces
+        setFlyoutNotes((name) => boxReplaced(latest.current.lint?.box?.[latest.current.scope.node]).get(name) ?? null);
         const w = B.inject(host.current, {
           ...injectFor(phone),
           theme: media?.matches ? th.dark : th.light,
@@ -215,6 +236,9 @@ export default function BlockEditor(p: BlockEditorProps) {
       }
       resize?.disconnect();
       if (onMedia) media?.removeEventListener("change", onMedia);
+      blockly.current?.DropDownDiv.hideWithoutAnimation(); // a picker open on this tab closes with it
+      setPickerSource(null);
+      setFlyoutNotes(null);
       ws.current?.dispose();
       ws.current = null;
       latest.current.onApi(null);
@@ -235,9 +259,9 @@ export default function BlockEditor(p: BlockEditorProps) {
       tbRef.current = next;
       ws.current.updateToolbox(tbRef.current as unknown as BlocklyT.utils.toolbox.ToolboxDefinition);
     }
-    if (blockly.current) decorate(blockly.current, ws.current, catalogue, lint, notes, trace, paths.current, scope, p.getProject());
+    if (blockly.current) decorate(blockly.current, ws.current, catalogue, lint, notes, trace, paths.current, scope, p.getProject(), issues.current);
     // the scopes as plain values: their objects are new on every render of the page
-  }, [ready, catalogue, lint, notes, trace, scope.node, scope.tab, p.toolboxScope.node, p.toolboxScope.main, p.toolboxScope.tab, p.toolboxScope.model]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [ready, catalogue, lint, notes, trace, p.maps, scope.node, scope.tab, p.toolboxScope.node, p.toolboxScope.main, p.toolboxScope.tab, p.toolboxScope.model]); // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
     <>
@@ -273,18 +297,22 @@ function toolboxOf(catalogue: CatalogueDoc | null, scope: ToolboxScope): Toolbox
 /** Badges (L1 verification), lint warnings and the last run on each block. `paths`: block id ->
  * node path, as converted last (edits move blocks; their ids stay). The labels change with events
  * off: a decoration is not an edit (no undo step, no conversion). */
-function decorate(B: typeof BlocklyT, w: BlocklyT.WorkspaceSvg, catalogue: CatalogueDoc | null, lint: LintDoc | null, notes: Record<string, SettingNote> | null, trace: Trace | null, paths: Record<string, string>, scope: TabScope, project: Project | null): void {
+function decorate(B: typeof BlocklyT, w: BlocklyT.WorkspaceSvg, catalogue: CatalogueDoc | null, lint: LintDoc | null, notes: Record<string, SettingNote> | null, trace: Trace | null, paths: Record<string, string>, scope: TabScope, project: Project | null, issues: readonly Issue[] = []): void {
   const was = B.Events.isEnabled();
   if (was) B.Events.disable();
   let grew: BlocklyT.BlockSvg[] = [];
   try {
-    grew = paint(B, w, catalogue, lint, notes, trace, paths, scope, project);
+    grew = paint(B, w, catalogue, lint, notes, trace, paths, scope, project, issues);
+    // round 21: a reference that became known (a function written since, the map list arrived)
+    // loses its ⚠, one that is gone gains it
+    refreshPickers(w);
   } finally {
     if (was) B.Events.enable();
   }
   // a setting block that gained rows (its warning, the lint's note) pushes the blocks under it down
   // once Blockly has drawn it (its new height is known only then)
-  if (grew.length) void B.renderManagement.finishQueuedRenders().then(() => restack(B, w, grew), () => undefined);
+  // (a statement block that grew moves its stack: the stack's top block is the one restacked)
+  if (grew.length) void B.renderManagement.finishQueuedRenders().then(() => restack(B, w, [...new Set(grew.map((b) => b.getRootBlock()))]), () => undefined);
 }
 
 /** The gap kept between two setting blocks when one grew (workspace units). */
@@ -337,8 +365,13 @@ function tabFindings(lint: LintDoc | null, scope: TabScope): Map<string, Finding
 export const UNUSED_STYLE = "pl_unused_blocks";
 const SETTING_STYLE = "mp_setup_blocks";
 
-function paint(B: typeof BlocklyT, w: BlocklyT.WorkspaceSvg, catalogue: CatalogueDoc | null, lint: LintDoc | null, notes: Record<string, SettingNote> | null, trace: Trace | null, paths: Record<string, string>, scope: TabScope, project: Project | null): BlocklyT.BlockSvg[] {
+function paint(B: typeof BlocklyT, w: BlocklyT.WorkspaceSvg, catalogue: CatalogueDoc | null, lint: LintDoc | null, notes: Record<string, SettingNote> | null, trace: Trace | null, paths: Record<string, string>, scope: TabScope, project: Project | null, issues: readonly Issue[] = []): BlocklyT.BlockSvg[] {
   const byPath = tabFindings(lint, scope);
+  // round 21 (the re-measure of round 20): a problem that keeps the tab from becoming the project is
+  // marked on ITS block -- a setting block's rows say it (⚠ "already set in tab knife; ..."), any
+  // other block shows Blockly's warning with the words under the canvas
+  const issueOf = new Map<string, Issue[]>();
+  for (const it of issues) if (it.id) issueOf.set(it.id, [...(issueOf.get(it.id) ?? []), it]);
   const prefix = `${scope.node}/${scope.tab}/`;
   const grew: BlocklyT.BlockSvg[] = [];
   const hasGlobal = Boolean(project?.nodes.some((n) => n.kind === "global"));
@@ -349,7 +382,9 @@ function paint(B: typeof BlocklyT, w: BlocklyT.WorkspaceSvg, catalogue: Catalogu
     const setting = settingOfType(b.type);
     if (setting && !b.isInFlyout) {
       const note = notes?.[`${prefix}${setting.var}`] ?? null;
-      const lines = noteLines(note?.unused ?? "");
+      const problem = issueOf.get(b.id)?.[0] ?? null;
+      const lines = problem ? noteLines(problem.note ?? problem.text, "⚠") : noteLines(note?.unused ?? "");
+      b.getSvgRoot()?.classList.toggle("pl-setting-problem", problem !== null);
       for (let i = 0; i < SETTING_NOTE_ROWS; i++) b.getField(`NOTE${i}`)?.setValue(lines[i] ?? "");
       const unused = Boolean(note?.unused);
       if (b.getStyleName() !== (unused ? UNUSED_STYLE : SETTING_STYLE)) b.setStyle(unused ? UNUSED_STYLE : SETTING_STYLE);
@@ -379,12 +414,20 @@ function paint(B: typeof BlocklyT, w: BlocklyT.WorkspaceSvg, catalogue: Catalogu
       }
     }
     const path = paths[b.id] ?? (b.id.startsWith("n:") ? b.id.slice(2).split("#")[0] : null);
-    if (path === null || b.isInFlyout) continue;
+    if (path === null || b.isInFlyout) {
+      if (!b.isInFlyout) {
+        if (syncLabelRows(B, b)) grew.push(b); // round 21: the badge row once it says something
+        const mine = issueOf.get(b.id);
+        if (!settingOfType(b.type) && !b.outputConnection) b.setWarningText(mine?.length ? mine.map((it) => `error: ${it.text}`).join("\n") : null);
+      }
+      continue;
+    }
     const runField = b.getField("RUN");
     if (runField) runField.setValue(trace ? runLine(trace.nodes[prefix + path] ?? trace.nodes[path]) || "not run" : "");
+    if (syncLabelRows(B, b)) grew.push(b); // round 21: the run line's row shows while it says something
     if (b.outputConnection) continue; // findings sit on the statement that holds the value
-    const own = byPath.get(path);
-    b.setWarningText(own?.length ? own.map((f) => `${f.severity}: ${f.text}`).join("\n") : null);
+    const own = [...(issueOf.get(b.id) ?? []).map((it) => `error: ${it.text}`), ...(byPath.get(path) ?? []).map((f) => `${f.severity}: ${f.text}`)];
+    if (!settingOfType(b.type)) b.setWarningText(own.length ? own.join("\n") : null);
   }
   return grew;
 }

@@ -40,6 +40,7 @@ import { type FileMeta, newFileMeta, readFileMeta, writeFileMeta } from "@/lib/f
 import { canonical } from "@/lib/flow/ir";
 import { ACTIVE, busyWhy, PROJECT_FLOW } from "@/lib/flow/liverun";
 import { liveReady } from "@/lib/flow/liveready";
+import type { MapsDoc } from "@/lib/flow/pickers";
 import { browserStorage, hasOldFlow, KEYS, pythonDefault, readChoice, readProjectText, writeChoice, writeProjectText } from "@/lib/flow/prefs";
 import {
   GLOBAL_ID,
@@ -147,6 +148,9 @@ export default function ProjectStudio({ backendUrl, initialNode = null }: { back
   const [tabName, setTabName] = useState<string>(MAIN_TAB);
   const [renaming, setRenaming] = useState<{ tab: string; text: string } | null>(null);
   const [catalogue, setCatalogue] = useState<CatalogueDoc | null>(null);
+  // round 21 (live-blocks.md 12.5): the map names the world knows, for the map pickers (the local
+  // KB at run time; never a committed list); null while it loads or where there is none
+  const [maps, setMaps] = useState<MapsDoc | null>(null);
   const [engineErr, setEngineErr] = useState<string | null>(null);
   const [lint, setLint] = useState<{ doc: LintDoc; for: string } | null>(null);
   const [sim, setSim] = useState<{ doc: SimDoc; for: string } | null>(null);
@@ -322,6 +326,17 @@ export default function ProjectStudio({ backendUrl, initialNode = null }: { back
       })
       .catch((e) => setEngineErr(e instanceof ApiError ? e.reason : String(e)));
   }, [api, project.target.client]);
+
+  useEffect(() => {
+    let live = true;
+    api
+      .maps(world, project.target.server)
+      .then((m) => live && setMaps(m))
+      .catch(() => live && setMaps(null));
+    return () => {
+      live = false;
+    };
+  }, [api, world, project.target.server]);
 
   const runLint = useCallback(
     async (p: Project, w: WorldSource) => {
@@ -507,6 +522,13 @@ export default function ProjectStudio({ backendUrl, initialNode = null }: { back
   const errors = lintStale ? [] : lintErrors(lintDoc);
   // matpilot round 16 #4: a lint ERROR blocks Run (the Run route refuses it too: lint_errors)
   const lintBlock = errors.length ? `the lint has ${errors.length} error${errors.length > 1 ? "s" : ""}: ${errors[0].message}` : null;
+  // round 21 (the re-measure of round 20): while the blocks hold a problem that keeps this tab from
+  // becoming the project (a setting on two tabs, a field that does not read), the project is the
+  // one from BEFORE it -- what Run and Check would send (useLiveRun's ProjectRun). Neither may play
+  // a project different from what the screen shows: both are held, and say why
+  const editorHeld = editor.issues.length
+    ? `the blocks of tab ${tab?.name ?? "?"} have ${editor.issues.length} problem${editor.issues.length > 1 ? "s" : ""} (listed under the canvas): fix ${editor.issues.length > 1 ? "them" : "it"} first. Until then the project is the one from before ${editor.issues.length > 1 ? "them" : "it"}, which Run would play`
+    : null;
   const showFinding = (f: Finding) => {
     const id = f.node && nodeById(project, f.node) ? f.node : node.id;
     const t = f.tab || MAIN_TAB;
@@ -641,7 +663,7 @@ export default function ProjectStudio({ backendUrl, initialNode = null }: { back
   const boxNote = tab ? boxTabNote(box, node.id, tab.name, runValues) : null;
   if (boxNote && tab) strip.push({ head: "IN A RUN", text: boxNote, short: boxTabShort(box, node.id, tab.name) });
   // live-blocks.md 12: a settings tab says what its blocks are (the group's title, the name rule)
-  const settingsNote = tab ? settingTabNote(tab, node.kind) : null;
+  const settingsNote = tab ? settingTabNote(tab, node.kind, globalOf(project) !== undefined) : null;
   if (settingsNote) strip.push({ head: "SETTINGS", text: settingsNote });
 
   return (
@@ -709,7 +731,7 @@ export default function ProjectStudio({ backendUrl, initialNode = null }: { back
             <PlayIcon />
             <span className="button-text">{simBusy ? "Simulating…" : "Simulate"}</span>
           </button>
-          {runnable ? <LiveRunButtons live={live} blocked={runWhy ?? lintBlock} /> : <RunNotReady why={notRunWhy} />}
+          {runnable ? <LiveRunButtons live={live} blocked={editorHeld ?? runWhy ?? lintBlock} /> : <RunNotReady why={notRunWhy} />}
         </div>
       </header>
 
@@ -811,7 +833,7 @@ export default function ProjectStudio({ backendUrl, initialNode = null }: { back
                       className="block-tab-name"
                       onClick={() => goTab(t.name)}
                       onDoubleClick={() => t.name !== MAIN_TAB && setRenaming({ tab: t.name, text: t.name })}
-                      title={t.name === MAIN_TAB ? "main: this node's program (it imports the other tabs and Global)" : "A tab of functions, events and variables (double-click to rename)"}
+                      title={t.name === MAIN_TAB ? `main: this node's program (it imports the other tabs${globalOf(project) ? " and Global" : ""})` : "A tab of functions, events and variables (double-click to rename)"}
                       data-testid={`tab-${t.name}`}
                     >
                       {t.name}
@@ -855,6 +877,7 @@ export default function ProjectStudio({ backendUrl, initialNode = null }: { back
                 lint={lintStale ? null : lintDoc}
                 notes={lintDoc?.settings ?? null}
                 trace={simDoc && !simStale ? simDoc.trace : null}
+                maps={maps}
                 hidden={view === "python"}
                 onProject={fromBlocks}
                 onState={onEditorState}
@@ -960,7 +983,7 @@ export default function ProjectStudio({ backendUrl, initialNode = null }: { back
                 {p === "run" && runnable && !runnerLive && (
                   <div className="run-pane" data-testid="run-pane-blocks">
                     <p className="muted">Run (the amber button at the top) plays this project in the game from {node.id}, box by box, where she stands (the live block player; player mode, no GM line).</p>
-                    <LiveRun live={live} check={false} blocked={runWhy ?? lintBlock} />
+                    <LiveRun live={live} check={false} blocked={editorHeld ?? runWhy ?? lintBlock} held={editorHeld} />
                   </div>
                 )}
                 {p === "run" && runnerLive && runnerMap && runValues && (
@@ -969,7 +992,7 @@ export default function ProjectStudio({ backendUrl, initialNode = null }: { back
                       Run (the amber button at the top) plays this project in the game from {node.id}, box by box, where she stands (the live block player; player mode, no GM line); its block &ldquo;hunt with the runner&rdquo; is the runner&apos;s hunt on {runnerMap}, in the same process. Its keys are this node&apos;s functions
                       (its own first, then Global&apos;s): {keysLine}.
                     </p>
-                    <LiveRun live={live} checklist={startChecklist(runValues, runnerMap, runKeys ?? undefined)} minutes={Number(runValues.minutes)} keys={runKeys} blocked={runWhy ?? lintBlock ?? (runnable ? null : notRunWhy)} />
+                    <LiveRun live={live} checklist={startChecklist(runValues, runnerMap, runKeys ?? undefined)} minutes={Number(runValues.minutes)} keys={runKeys} blocked={editorHeld ?? runWhy ?? lintBlock ?? (runnable ? null : notRunWhy)} held={editorHeld} />
                     {/* live-blocks.md 12 (Batt 2026-11-14: "make them ALL blocks"): the settings are blocks */}
                     <p className="muted" data-testid="run-pane-settings">
                       Its settings are BLOCKS: one per setting in the tabs {SETTING_TABS.filter((g) => tabs.some((t) => t.name === g)).join(", ") || "of its groups"} ({SETTING_TABS.map((g) => groupOf(g)?.title ?? g).join("; ")}). This node&apos;s block replaces Global&apos;s; a deleted one falls back to Global&apos;s, else the default. A Run and the check send the project: the blocks you see are what the runner gets (the Lint pane names any it cannot take, or does not use).
@@ -1000,6 +1023,8 @@ export default function ProjectStudio({ backendUrl, initialNode = null }: { back
                   </li>
                 ))}
               </ul>
+              {/* round 21: what Run would play now, said where a phone shows it (no hover) */}
+              {runnable && <p className="notice-sub" data-testid="block-problems-run">Run and Check wait until these are fixed: until then the project is the one from before them.</p>}
             </div>
           )}
           {errors.length > 0 && (
@@ -1094,7 +1119,10 @@ function nodeStrip(p: Project, n: PNode, overrides: string[]): StripPart[] {
     if (exits.length) out.push({ head: "EXITS", text: exits.join(" · ") });
     if (home && runnerBlockOn(n)) out.push({ head: "RUN", text: "hunt with the runner: Run (amber, at the top) plays it in the game" });
   }
-  out.push({ head: "IMPORTS", text: `${n.tabs.length > 1 ? `its tabs (${n.tabs.filter((t) => t.name !== MAIN_TAB).map((t) => t.name).join(", ")}) and ` : ""}Global${g ? ` (${g.tabs.map((t) => t.name).join(", ") || "no tab yet"})` : ""}` });
+  // round 21 (the re-measure of round 20): Global only where the project has a Global node
+  const own = n.tabs.filter((t) => t.name !== MAIN_TAB).map((t) => t.name);
+  const imports = [own.length ? `its tabs (${own.join(", ")})` : "", g ? `Global (${g.tabs.map((t) => t.name).join(", ") || "no tab yet"})` : ""].filter(Boolean);
+  if (imports.length) out.push({ head: "IMPORTS", text: imports.join(" and ") });
   if (overrides.length) out.push({ head: "REPLACES GLOBAL'S", text: overrides.join(", ") });
   return out;
 }
