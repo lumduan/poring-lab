@@ -31,6 +31,27 @@
   fill: #fde68a !important;
   font-weight: 600;
 }
+/* matpilot round 20 #4a: a setting block the lint says is NOT USED in a Run of this box (the box's
+   own event plays it, or a setting it needs is off): greyed -- the light slate pl_unused_blocks
+   style with dark words -- and its note rows ("· not used here: the drink event plays it") in
+   italics. Blockly's disabled state is never used: it would drop the block from the project. */
+.blocklyText.pl-setting-note,
+.pl-setting-note .blocklyText {
+  font-style: italic;
+}
+.pl-setting-unused .blocklyText,
+.pl-setting-unused .blocklyText.pl-setting-note,
+.pl-setting-unused .pl-setting-note .blocklyText {
+  fill: #1e293b !important;
+}
+.pl-setting-unused .blocklyText.pl-setting-var,
+.pl-setting-unused .pl-setting-var .blocklyText {
+  fill: #334155 !important;
+}
+.pl-setting-unused .blocklyText.pl-setting-warn,
+.pl-setting-unused .pl-setting-warn .blocklyText {
+  fill: #92400e !important;
+}
 
 /* Blockly hides an <svg> with the SVG PRESENTATION ATTRIBUTE display="none" (Scrollbar.updateDisplay_:
    the flyout's and the workspace's scrollbars). Tailwind's preflight (`svg { display: block }`, in

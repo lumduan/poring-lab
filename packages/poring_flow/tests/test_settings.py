@@ -60,12 +60,28 @@ def test_the_browsers_copy_is_the_registry() -> None:
     assert all(f["default"] == st.DEFAULTS[f["name"]] for f in reg["fields"])
 
 
-def test_the_one_box_holds_every_setting_block_at_its_default_in_its_groups_tab() -> None:
+# matpilot round 20 #4a (the parent's decision, 2026-11-14): the five settings the box's own events
+# and functions play in a Run hold no block in the box (project.ts BOX_PLAYS_THEM)
+BOX_PLAYS_THEM = {"potion_below", "fly_below", "weight_home", "respawn_at", "respawn_confirm_at"}
+
+
+def test_the_one_box_holds_every_setting_block_it_uses_at_its_default_in_its_groups_tab() -> None:
+    from poring_flow import live
+
     p = P.from_json(XMAS.read_text())
     (x,) = p.nodes
     got = {k: (t.name, v.value) for t in x.tabs for k, v in t.vars.items()}
-    assert got == {f.var: (f.group, f.default) for f in st.BLOCKS}
-    assert len(got) == 121 and not any(f.var in got for f in st.FIELDS if not f.block)
+    assert got == {f.var: (f.group, f.default) for f in st.BLOCKS if f.name not in BOX_PLAYS_THEM}
+    assert len(got) == 116 and not any(f.var in got for f in st.FIELDS if not f.block)
+    # the five are exactly what the engine's takeovers say this box plays itself (live.takeovers)
+    c = P.compile_project(p)
+    assert c.flow is not None
+    tk = live.takeovers(c.flow, "xmas_dun02")
+    assert tk is not None
+    assert {s for row in tk["takeovers"] for s in row["settings"]} == BOX_PLAYS_THEM
+    ts = (REPO / "services/frontend/src/lib/flow/project.ts").read_text()
+    assert ('export const BOX_PLAYS_THEM: readonly string[] = ["potion_below", "fly_below", '
+            '"weight_home", "respawn_at", "respawn_confirm_at"];') in ts  # fmt: skip
     # the same rule as the browser's withSettingTabs: the box before plus the setting tabs
     before = xmas()
     for t in node(before, "xmas_dun02")["tabs"]:
@@ -73,7 +89,8 @@ def test_the_one_box_holds_every_setting_block_at_its_default_in_its_groups_tab(
     before["nodes"][0]["tabs"] = [t for t in before["nodes"][0]["tabs"]
                                   if t["name"] in ("main", "keys", "survival", "knife", "exits",
                                                    "monsters")]  # fmt: skip
-    before["nodes"][0]["tabs"] = st.with_setting_tabs(before["nodes"][0]["tabs"])
+    before["nodes"][0]["tabs"] = st.with_setting_tabs(
+        before["nodes"][0]["tabs"], only=lambda f: f.name not in BOX_PLAYS_THEM)  # fmt: skip
     assert build(before) == p
     # and it lints without an error; every info names a setting the box does not use
     errs = [f for f in P.project_lint(p)[1] if f.severity == "error"]
@@ -93,7 +110,8 @@ def test_the_name_rule_the_maps_own_over_globals_over_the_default() -> None:
     # the Python view says the map's block replaces Global's (the project model's override line)
     by = {f.path: f.text for f in V.print_files(p)}
     assert "# overrides Global's potion_below (tab survival)\npotion_below = 0.5  # heal at HP " \
-           "under (50 %)\n" in by["xmas_dun02/survival.py"]  # fmt: skip
+           "under (50 %) · not used here: the hp_low event plays it\n" in by[
+               "xmas_dun02/survival.py"]  # fmt: skip
     # a deleted block falls back: the map's -> Global's; Global's too -> the default
     node(d, "xmas_dun02")["tabs"] = [t for t in node(d, "xmas_dun02")["tabs"]
                                      if t["name"] != "survival"]  # fmt: skip
@@ -118,8 +136,8 @@ def test_the_setting_blocks_round_trip_through_the_python_view() -> None:
     g = files["global/knife.py"]
     assert "\nknife_swap = False  # Batt's Knife swap (on / off)\n" in g
     assert '\nsteal_cue = "both"  # the steal cue (popup / both)\n' in g
-    assert '\nrespawn_confirm_at = "none"  # then confirm (OK) at ("X,Y" in the game picture or ' \
-           '"none")\n' in files["global/respawn.py"]  # fmt: skip
+    assert '\nrespawn_confirm_at = "none"  # then confirm with the OK button ("X,Y" in the game ' \
+           'picture or "none")' in files["global/respawn.py"]  # fmt: skip
     assert "\nLOOT_MAX_S = 30.0  # a loot step at most (s)\n" in files["global/loot.py"]
     # a comment is not the value: the parser reads the assignment, the comment is the words
     loot = files["global/loot.py"]
@@ -140,7 +158,7 @@ def test_the_lint_says_each_setting_problem_in_words() -> None:
     got = rules(build(d), "settings")
     assert ("error", "xmas_dun02/knife/knife_hp_min", "knife_hp_min: or at once under HP: 95 % is "
             "not from 20 % to 90 %") in got  # fmt: skip
-    assert ("error", "xmas_dun02/loop/hud", "hud: show the boxes on the console's HUD (display "
+    assert ("error", "xmas_dun02/timing/hud", "hud: show the boxes on the console's HUD (display "
             "only): 'yes' is not on or off (True / False)") in got  # fmt: skip
     assert ("warning", "xmas_dun02/survival/potion_bellow", "potion_bellow is not a setting: did "
             "you mean potion_below (heal at HP under)? As written it is an ordinary variable, and "
@@ -165,12 +183,110 @@ def test_the_clash_rule_is_an_error_and_unused_settings_are_info() -> None:
     info = {w: t for s, w, t in rules(p, "settings_use") if s == "info"}
     assert "is not in use while Batt's Knife swap (knife_swap) is off" in info[
         "xmas_dun02/knife/knife_max_s"]  # fmt: skip
-    # the box replaces the runner's potion with its drink event (live.takeovers)
+    # the one box as shipped: no clash, no setting error, no safety switch off; the two blocks it
+    # holds that are not in use say so (their needs are off by default)
+    shipped = P.from_json(XMAS.read_text())
+    assert rules(shipped, "settings_clash", "settings", "settings_safety") == []
+    c = P.compile_project(shipped)
+    assert ls.notes(shipped, c) == {
+        "xmas_dun02/fight/quick_drop_scaled": {"unused": "not used while quick_drop is off"},
+        "xmas_dun02/aim/near_single_still": {"unused": "not used while near_single is off"},
+    }
+    assert sorted(w for _s, w, _t in rules(shipped, "settings_use")) == [
+        "xmas_dun02/aim/near_single_still", "xmas_dun02/fight/quick_drop_scaled"]  # fmt: skip
+
+
+def test_a_block_the_box_plays_itself_is_marked_not_used_here_by_lint_block_and_python() -> None:
+    """matpilot round 20 #4a: a person ADDS potion_below to the box: the drink event plays it, so
+    the block did nothing. The lint's info, the block's row (POST /flows/lint ``settings``) and the
+    Python line's comment say it, from one computation (lint/settings.py notes)."""
+    d = xmas()
+    put(d, "xmas_dun02", "potion_below", 0.3)
+    put(d, "xmas_dun02", "respawn_at", "600,400")
+    p = build(d)
+    info = {w: t for s, w, t in rules(p, "settings_use") if s == "info"}
     assert info["xmas_dun02/survival/potion_below"].startswith(
         "potion_below (heal at HP under) is not used in a Run of this box: drink plays the "
         "runner's potion on HP instead")  # fmt: skip
-    # the one box as shipped: no clash, the infos only
-    assert rules(P.from_json(XMAS.read_text()), "settings_clash", "settings") == []
+    notes = ls.notes(p, P.compile_project(p))
+    assert notes["xmas_dun02/survival/potion_below"] == {
+        "unused": "not used here: the drink event plays it"}  # fmt: skip
+    assert notes["xmas_dun02/respawn/respawn_at"] == {
+        "unused": "not used here: the respawn_button function plays it"}  # fmt: skip
+    by = {f.path: f.text for f in V.print_files(p)}
+    assert "\npotion_below = 0.3  # heal at HP under (30 %) · not used here: the drink event " \
+           "plays it\n" in by["xmas_dun02/survival.py"]  # fmt: skip
+    assert "\nquick_drop_scaled = False  # the quick drop's wait grows with the distance (on / " \
+           "off) · not used while quick_drop is off\n" in by["xmas_dun02/fight.py"]  # fmt: skip
+    # the lint document sends the same rows for the blocks to show
+    doc = P.lint_doc(p, world=None, resolver=None)
+    assert doc["settings"] == notes
+    assert V.parse_files(by) == p  # a comment is no value: the round trip is exact
+
+
+def test_a_safety_switch_off_is_a_warning_on_its_block_its_row_and_its_python_line() -> None:
+    """matpilot round 20 #3: npc_guard off said nothing (only a setting that needs it got an
+    info). Now a WARNING on the block (the chip and the /maps card count it), its warning as the
+    block's own row and as the Python line's comment; its dependent setting is not in use."""
+    d = xmas()
+    put(d, "xmas_dun02", "npc_guard", False)
+    p = build(d)
+    got = rules(p, "settings_safety")
+    want = (
+        "npc_guard (no fight click near an NPC) is off: a strike near an NPC may open its "
+        "dialog and stop the run"
+    )
+    assert got == [("warning", "xmas_dun02/safety/npc_guard", want)]
+    c, found = P.project_lint(p)
+    assert not [f for f in found if f.severity == "error"]  # a warning never blocks a Run
+    notes = ls.notes(p, c)
+    assert notes["xmas_dun02/safety/npc_guard"] == {
+        "safety": "a strike near an NPC may open its dialog and stop the run"}  # fmt: skip
+    assert notes["xmas_dun02/safety/NPC_NO_FIGHT"] == {"unused": "not used while npc_guard is off"}
+    by = {f.path: f.text for f in V.print_files(p)}
+    assert "\nnpc_guard = False  # no fight click near an NPC (on / off) · ⚠ off: a strike " \
+           "near an NPC may open its dialog and stop the run\n" in by[
+               "xmas_dun02/safety.py"]  # fmt: skip
+    # garm_fly off: its own warning; alarm_fast then is not in use (no second warning), its
+    # dependents' rows name the ROOT switch
+    d2 = xmas()
+    put(d2, "xmas_dun02", "garm_fly", False)
+    p2 = build(d2)
+    assert [w for _s, w, _t in rules(p2, "settings_safety")] == ["xmas_dun02/safety/garm_fly"]
+    n2 = ls.notes(p2, P.compile_project(p2))
+    assert n2["xmas_dun02/safety/alarm_solo"] == {"unused": "not used while garm_fly is off"}
+    assert n2["xmas_dun02/safety/alarm_fast"] == {"unused": "not used while garm_fly is off"}
+    # every safety switch is ON by default (a box at its defaults warns of none)
+    assert all(f.default is True for f in st.BLOCKS if f.warn)
+    assert {f.name for f in st.BLOCKS if f.warn} == {"respawn", "npc_guard", "garm_fly",
+                                                       "alarm_fast"}  # fmt: skip
+    assert not any(f.warn.startswith("off") for f in st.FIELDS)  # "off: off: ..." (round 20 #3)
+
+
+def test_one_setting_on_two_tabs_of_a_node_is_refused_naming_both_tabs() -> None:
+    """matpilot round 20 #5: does anything stop a SECOND block of a setting on ANOTHER tab of the
+    same node? Yes: a node's tabs are one namespace, so the engine refuses the project naming both
+    tabs (a run would otherwise take the first tab's silently), and so does the Python view's
+    reader; the block editor refuses it on the block itself (blocks.ts, blocks.test.ts)."""
+    import pytest
+
+    d = xmas()
+    put(d, "xmas_dun02", "D0_PX", 300, tab="loot")
+    with pytest.raises(P.ProjectError) as e:
+        build(d)
+    assert e.value.messages == ["xmas_dun02/loot/D0_PX: D0_PX is defined twice on xmas_dun02: a "
+                                "variable in tab aim and a variable in tab loot (a node's tabs are "
+                                "one namespace)"]  # fmt: skip
+    files = {f.path: f.text for f in V.print_files(P.from_json(XMAS.read_text()))}
+    files["xmas_dun02/loot.py"] += "D0_PX = 300\n"
+    with pytest.raises(Exception, match="D0_PX is defined twice on xmas_dun02: a variable in tab "
+                       "aim and a variable in tab loot"):  # fmt: skip
+        V.parse_files(files)
+    # a Global and a map node each with their own: no error (the name rule, not a duplicate)
+    s2 = session()
+    put(s2, "global", "D0_PX", 300)
+    put(s2, "xmas_dun02", "D0_PX", 200)
+    assert [x for x in rules(build(s2), "settings") if x[0] == "error"] == []
 
 
 def test_settings_on_a_node_without_a_hunt_core_are_said_not_read() -> None:
@@ -208,6 +324,36 @@ def test_typo_of_finds_near_names_only() -> None:
     assert st.typo_of("d0_px") is st.BY_NAME["vt.D0_PX"]
     for plain in ("x", "counter", "my_loot", "potion_below", "floor"):
         assert st.typo_of(plain) is None, plain
+
+
+def test_each_setting_names_its_subject_and_says_its_unit_right() -> None:
+    """matpilot round 20 #4b/c: no block reads as a fragment ("... from 2 cells already"), "at"
+    is not said twice, a value of 1 takes a singular unit, the screen reads "5 times a second"."""
+    for f in st.FIELDS:
+        assert not f.words.startswith(("...", "…")) and not f.words.endswith(("...", "…")), f.name
+        # a point-or-none block's menu says "at" itself ("then confirm (OK) at at x 714")
+        assert not (f.kind == "point_or_none" and f.words.endswith(" at")), f.name
+    assert st.shown(st.BY_NAME["WALK_PICK_TOL"], 1) == "1 cell"
+    assert st.shown(st.BY_NAME["WALK_PICK_TOL"], 2) == "2 cells"
+    assert st.shown(st.BY_NAME["READ_HZ"], 5.0) == "5 times a second"
+    assert st.shown(st.BY_NAME["READ_HZ"], 1.0) == "1 time a second"
+    assert st.shown(st.BY_NAME["HP_DROP_PTS"], 2) == "2 % of max HP"
+    assert st.comment(st.BY_NAME["NOENTRY_CARVE_R"], 1) == "# a no-entry cursor closes this " \
+                                                           "radius (cell)"  # fmt: skip
+
+
+def test_the_block_search_finds_every_setting_by_its_groups_words() -> None:
+    """matpilot round 20 #5: "knife" found 3 of the 6 knife settings."""
+    knife = [f.name for f in st.BLOCKS if "knife" in f.find]
+    assert knife == [f.name for f in st.BLOCKS if f.group == "knife"]
+    assert len(knife) == 6
+    for f in st.BLOCKS:
+        assert f.group in f.find and len(set(f.find)) == len(f.find), f.name
+    assert {"garm"} <= set(st.BY_NAME["alarm_fast"].find)
+    assert {"fly", "wing", "heal"} <= set(st.BY_NAME["fly_rate"].find)
+    # "loop" names Control's loop block: no setting is found by it (round 20: the group is timing)
+    assert not any("loop" in f.find for f in st.FIELDS)
+    assert "loop" not in st.TABS and "timing" in st.TABS
 
 
 def test_every_kind_reads_back_the_value_it_shows() -> None:

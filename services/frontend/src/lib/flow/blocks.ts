@@ -15,7 +15,7 @@ import { CREDENTIALS, DEF_BY_TYPE, DEFAULT_FAILS, DEFAULT_MAX_10, HOTKEYS, RUNNE
 import { argsText, callArgsText, ExprError, exprText, hasDo, parseArgs, parseCallArgs, parseExpr, parseParams } from "./expr.ts";
 import { fieldOf, HUNT_TYPE, type HuntRules, omitted, paramOf, params as huntParams } from "./hunt.ts";
 import { CLASS_KEY, DETECT_SENSOR, MODEL_KEY, SENSOR_BLOCK } from "./models.ts";
-import { SETTING_BY_VAR, settingFields, settingFromFields, settingLit, settingOfType, settingProblem, settingType } from "./settings.ts";
+import { SETTING_BY_VAR, settingFields, settingFromFields, settingLit, settingOfType, settingProblem, settingRows, settingType } from "./settings.ts";
 import { blockWords, type Issue, type Loose, stackSize } from "./words.ts";
 import {
   type ActionStmt,
@@ -481,7 +481,9 @@ function mapEventHat(ev: MapEvent, block: MapBlock, order: number, ids: Ids): Ws
 function height(b: WsBlock | undefined): number {
   let n = 0;
   for (let cur = b; cur; cur = cur.next?.block) {
-    n += cur.type === HUNT_TYPE ? 4 : 1; // the hunt block is five lines tall
+    // the hunt block is five lines tall; the runner's block fourteen (round 20: a role a row), the
+    // save point four
+    n += cur.type === HUNT_TYPE ? 4 : cur.type === "pl_dungeon_hunt" ? 11 : cur.type === "pl_save_point" ? 4 : 1;
     for (const inp of Object.values(cur.inputs ?? {})) if (inp.block && !DEF_BY_TYPE[inp.block.type]?.output) n += height(inp.block);
   }
   return n;
@@ -1157,8 +1159,20 @@ export const TAB_TOP_Y = 90;
 export const FIRST_ROWS_Y = 3 * 56;
 /** An event block's extra height in workspace units: its trigger's eight rows (round 17 N4). */
 const EVENT_ROWS_Y = 6 * 48;
-/** A setting block's row and the gap under it (live-blocks.md 12: a tab of settings is a list). */
-export const SETTING_ROWS_Y = 60;
+/** A setting block's row, and the gap under the block (live-blocks.md 12: a tab of settings is a
+ * list; matpilot round 20 #2: a block is several rows, settings.ts settingRows), workspace units,
+ * generously (a zelos label row is ~32-40). The editor pushes a block down when the lint's "not
+ * used" rows make the one above it taller (BlockEditor restack). */
+export const SETTING_ROW_Y = 40;
+export const SETTING_GAP_Y = 24;
+/** A setting block's height as placed: its words, value (and var) rows, and its warning while off. */
+export function settingHeight(type: string, fields: Record<string, unknown> | undefined): number {
+  const f = settingOfType(type);
+  if (!f) return 0;
+  const r = settingRows(f);
+  const off = f.kind === "switch" && fields?.VALUE === "off";
+  return (r.words.length + (r.menuRow ? 1 : 0) + 1 + (r.varOwnRow ? 1 : 0) + (off ? r.warn.length : 0)) * SETTING_ROW_Y + SETTING_GAP_Y;
+}
 
 /** One tab's blocks: the main hat (the main tab only), then its functions and events, then its
  * variables. A statement's node path is the engine's site inside the tab ("main.2", "heal.0"). */
@@ -1172,8 +1186,8 @@ export function tabToWorkspace(p: Project, scope: TabScope, opts: ConvertOptions
   const place = (b: WsBlock) => {
     b.x = 20;
     b.y = y;
-    const setting = settingOfType(b.type); // one row (two with a safety switch's warning)
-    y += setting ? (setting.warn ? SETTING_ROWS_Y * 2 : SETTING_ROWS_Y) : 90 + 46 * height(b.inputs?.DO?.block) + (b.type === "pl_event" ? EVENT_ROWS_Y : 0);
+    const setting = settingOfType(b.type); // its rows (a safety switch's warning while off)
+    y += setting ? settingHeight(b.type, b.fields) : 90 + 46 * height(b.inputs?.DO?.block) + (b.type === "pl_event" ? EVENT_ROWS_Y : 0);
     top.push(b);
   };
   if (t.main) place({ type: "pl_main", id: ids.take("h:main"), inputs: chainInput("DO", t.main, "main", ids), extraState: {} });
@@ -1254,8 +1268,13 @@ export function tabFromWorkspace(p: Project, scope: TabScope, ws: Workspace, def
       // a SETTING block (live-blocks.md 12): its fields are its value; its node path is its name
       r.under(b, f.var, () => {
         const got = settingFromFields(f, b.fields);
+        // matpilot round 20 #5: a node's tabs are ONE namespace (the engine refuses a name on two
+        // tabs; a run would take only the first): a setting another tab of the node holds is refused
+        // on this block, naming that tab
+        const other = node.tabs.find((x) => x.name !== t.name && f.var in x.vars);
         if ("error" in got) r.err(`setting ${f.var}`, got.error);
         else if (f.var in vs || seen.has(f.var)) r.err(`setting ${f.var}`, "this setting is on this tab twice (one block each)");
+        else if (other) r.err(`setting ${f.var}`, `the tab ${other.name} of ${node.id} sets it already: one block per setting on a node (delete one of the two)`);
         else vs[f.var] = settingLit(got.value);
       });
       continue;

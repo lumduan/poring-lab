@@ -1531,6 +1531,10 @@ def lint_doc(
             doc = live.takeovers(c.flow, b.name, lambda s: c.where(s).path)
             if doc is not None:
                 box[b.name] = doc
+    # matpilot round 20 #3, #4a: per setting block, the lint's own facts in a few words (a block
+    # not used in a Run of this box, a safety switch off): the blocks show them, greyed
+    from poring_flow.lint import settings as setting_rules
+
     return {
         "project_hash": shown_hash(p),
         "findings": docs,
@@ -1538,6 +1542,7 @@ def lint_doc(
         "by_node": by_node,
         "run": run,
         "box": box,
+        "settings": setting_rules.notes(p, c),
         "effective": effective_doc(c),
         "world": {
             "server": world.server if world is not None else None,

@@ -10,7 +10,7 @@ import { sessionProject } from "../flow/testkit.ts";
 import { connectExit, connectSession, exitsInto, moveNodes, removeExit, removeNode, removeSession, renameNode, renameProblem, sessionLinkProblem, setStart, setZones, updateMapNode } from "./edit.ts";
 import { exitRows, nodeLinks } from "./links.ts";
 import { addMapNode } from "./build.ts";
-import { bySeverity, cappedFindings, findingWhere, lintGroups, nodeLint, nodeTitle, runnerSpecies, SEVERITY_WORDS, tabRows } from "./nodewords.ts";
+import { bySeverity, cappedFindings, findingWhere, lintGroups, nodeLint, nodeTitle, runnerSpecies, SEVERITY_WORDS, tabRows, tabSummary } from "./nodewords.ts";
 import { readRules, ruleMaps, setUnknownMap } from "./rules.ts";
 
 const ok = (r: { ok: true; project: Project } | { ok: false; error: string }): Project => {
@@ -160,6 +160,31 @@ test("what a node says: its tabs and names, the overrides both ways, its lint", 
   assert.deepEqual(nodeLint(lint, "xmas_dun02").counts, { error: 1, readiness: 0, warning: 0, info: 0 });
   assert.deepEqual(nodeLint(lint, "geffen").counts, { error: 0, readiness: 0, warning: 1, info: 0 });
   assert.equal(readRules(p).custom, false);
+});
+
+// matpilot round 20 #6: "Tabs and names" listed 162 raw lines (potion_below = 0.4): each tab folds
+// with a line saying what it holds; a setting shows its value as its block does; a changed one first
+test("the inspector's tabs: a summary line each, the settings in words with units, a changed one first and marked", () => {
+  const p = xmasProject();
+  const xm = nodeById(p, "xmas_dun02")!;
+  const aim = xm.tabs.find((t) => t.name === "aim")!;
+  aim.vars.FAR_CELLS = { kind: "lit", value: 6 }; // a person changed it
+  const rows = tabRows(p, xm);
+  const by = Object.fromEntries(rows.map((t) => [t.tab, t]));
+  assert.equal(tabSummary(by.aim), "33 settings (1 changed)");
+  assert.equal(tabSummary(by.main), "the node's program, 4 statements");
+  assert.equal(tabSummary(by.keys), "8 functions");
+  assert.equal(tabSummary(by.survival), "5 events, 2 settings");
+  assert.equal(tabSummary(by.monsters), "4 functions");
+  assert.deepEqual(by.aim.rows[0], { name: "FAR_CELLS", kind: "var", text: "from this far: one click, no re-click 6 cells", overrides: false, overriddenOn: [], key: null, clash: [], setting: { var: "FAR_CELLS", changed: true } });
+  assert.equal(by.aim.rows.find((r) => r.name === "WALKER_PX")?.text, "feet moving this far = a walking target 10 px");
+  assert.equal(by.knife.rows.find((r) => r.name === "knife_hp_min")?.text, "or at once under HP 50 %");
+  assert.equal(by.walk.rows.find((r) => r.name === "WALK_PICK_TOL")?.text, "the client's pick within 1 cell");
+  assert.equal(by.knife.rows.find((r) => r.name === "knife_swap")?.text, "Batt's Knife swap on");
+  // an ordinary variable keeps its line
+  aim.vars.my_count = { kind: "lit", value: 3 };
+  assert.equal(tabRows(p, xm).find((t) => t.tab === "aim")!.rows[0].text, "my_count = 3");
+  assert.equal(tabSummary(tabRows(p, xm).find((t) => t.tab === "aim")!), "1 variable, 33 settings (1 changed)");
 });
 
 // matpilot round 16 #7: the /maps chip said "3 warnings", the xmas_dun02 card "2 warnings"; the

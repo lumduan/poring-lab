@@ -90,11 +90,14 @@ def test_the_xmas_dun02_fixture_is_one_box_and_says_what_batt_asked() -> None:
     # their groups' tabs -- knife, survival and exits beside their functions, the rest their own
     assert [t.name for t in x.tabs] == ["main", "keys", "survival", "knife", "exits", "monsters",
                                         "respawn", "start", "fight", "aim", "loot", "walk",
-                                        "safety", "loop"]  # fmt: skip
+                                        "safety", "timing"]  # fmt: skip
     from poring_flow import settings as st
 
     shown = {k: (t.name, v.value) for t in x.tabs for k, v in t.vars.items()}
-    assert shown == {f.var: (f.group, f.default) for f in st.BLOCKS}  # every one, at its default
+    # every one at its default, but the five the box's own events and functions play (matpilot
+    # round 20 #4a: project.ts BOX_PLAYS_THEM, test_settings.py)
+    gone = {"potion_below", "fly_below", "weight_home", "respawn_at", "respawn_confirm_at"}
+    assert shown == {f.var: (f.group, f.default) for f in st.BLOCKS if f.name not in gone}
     assert not x.tabs[0].vars and not x.tabs[1].vars  # main and the keys hold no setting
     save, model, hunt, stop = x.main
     # stage 4a (live-blocks.md 3.4): the trained data before the hunt core
@@ -810,7 +813,7 @@ def test_the_python_view_s_start_line_names_the_map() -> None:
                         "xmas_dun02/knife.py", "xmas_dun02/exits.py",
                         "xmas_dun02/monsters.py", "xmas_dun02/respawn.py", "xmas_dun02/start.py",
                         "xmas_dun02/fight.py", "xmas_dun02/aim.py", "xmas_dun02/loot.py",
-                        "xmas_dun02/walk.py", "xmas_dun02/safety.py", "xmas_dun02/loop.py",
+                        "xmas_dun02/walk.py", "xmas_dun02/safety.py", "xmas_dun02/timing.py",
                         "project.py"]  # fmt: skip
     # live-blocks.md 12: a setting is a plain assignment with its words as a comment
     assert "\nknife_hp_min = 0.5  # or at once under HP (50 %)\n" in by["xmas_dun02/knife.py"]
@@ -818,8 +821,9 @@ def test_the_python_view_s_start_line_names_the_map() -> None:
     assert '\nsteal_cue = "popup"  # the steal cue (popup / both)\n' in by["xmas_dun02/knife.py"]
     assert "\nD0_PX = 150  # the distance that halves a monster's worth (px)\n" in by[
         "xmas_dun02/aim.py"]  # fmt: skip
-    assert '\nrespawn_at = "645,481"  # respawn button at ("X,Y" in the game picture)\n' in by[
-        "xmas_dun02/respawn.py"]  # fmt: skip
+    respawn = by["xmas_dun02/respawn.py"]
+    assert "\nRESPAWN_SETTLE_S = 1.0  # wait for the death menu (s)\n" in respawn
+    assert "respawn_at" not in respawn  # the box's respawn_button plays it
     assert (
         "@on(sees_boss() or hp_percent() < 25, priority=CRITICAL, cooldown_s=3)\n"
         "def fly_away():\n    fly_wing()\n"

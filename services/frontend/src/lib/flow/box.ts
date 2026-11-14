@@ -10,9 +10,12 @@
 // /flows/lint's `box` (poring_flow.live.takeovers, from hunt_plan, the same plan the live player
 // plays), per map node. ➡️ 2026-11-14 (live-blocks.md 12): the settings are SETTING BLOCKS of the
 // project (settings.ts; Before Run's settings panel went with the runner page): the words name the
-// setting block, and the lint's info on that block says the same. Pure functions; every word renders
-// as text.
-import { SETTING_BY_NAME, type SettingValue, shownValue, unitOf } from "./settings.ts";
+// setting block, and the lint's info on that block says the same. ➡️ matpilot round 20 #4a: the
+// ready-made box holds no block of a setting its own events and functions play (project.ts
+// BOX_PLAYS_THEM): the note says the setting is not used there, and a settings tab whose group's
+// setting another tab's event or function plays (respawn: the exits tab's respawn_button) says so
+// too. Pure functions; every word renders as text.
+import { SETTING_BY_NAME, type SettingValue, settingValueText } from "./settings.ts";
 
 /** One thing the box plays and what of the runner's it replaces (live.takeovers' rows). */
 export type BoxTakeover = {
@@ -34,8 +37,15 @@ function settingText(name: string, values: Record<string, SettingValue> | null):
   const f = SETTING_BY_NAME.get(name);
   if (!f) return name;
   const v = values?.[name];
-  const u = unitOf(f);
-  return v === undefined ? `${f.words} (${f.var})` : `${f.words} ${shownValue(f, v)}${u ? ` ${u}` : ""} (${f.var})`;
+  return v === undefined ? `${f.words} (${f.var})` : `${f.words} ${settingValueText(f, v)} (${f.var})`;
+}
+const varOf = (name: string) => SETTING_BY_NAME.get(name)?.var ?? name;
+const unusedHere = (t: BoxTakeover) => (t.settings.length ? ` (its setting ${t.settings.map(varOf).join(" and ")} is not used in this box)` : "");
+const tabOfPath = (path: string | null) => path?.split("/")[1] ?? "?";
+/** The box's rows that play a setting of the group ``tab`` from ANOTHER tab (respawn_button, tab
+ * exits, plays the respawn tab's respawn_at). */
+function playedFromElsewhere(box: BoxDoc, node: string, tab: string): BoxTakeover[] {
+  return box.takeovers.filter((t) => t.by && t.path && !t.path.startsWith(`${node}/${tab}/`) && t.settings.some((s) => SETTING_BY_NAME.get(s)?.group === tab));
 }
 
 /** PURE: the note on a tab whose events or functions the box plays in a Run of this project
@@ -46,17 +56,22 @@ function settingText(name: string, values: Record<string, SettingValue> | null):
 export function boxTabNote(box: BoxDoc | null | undefined, node: string, tab: string, values: Record<string, SettingValue> | null): string | null {
   if (!box) return null;
   const here = box.takeovers.filter((t) => t.path !== null && t.path.startsWith(`${node}/${tab}/`));
-  if (!here.length) return null;
+  const away = playedFromElsewhere(box, node, tab);
+  if (!here.length && !away.length) return null;
   const byName = new Map<string, BoxTakeover[]>();
   for (const t of here) byName.set(t.by ?? "", [...(byName.get(t.by ?? "") ?? []), t]);
   const parts = [...byName].map(([by, ts]) => {
-    const each = ts.map((t) => `${t.replaces}${t.settings.length ? ` (the setting ${t.settings.map((s) => settingText(s, values)).join("; ")})` : ""}`);
+    const each = ts.map((t) => `${t.replaces}${unusedHere(t)}`);
     return `${by} replaces ${[...new Set(each)].join(" and ")}`;
   });
   const flies = here.some((t) => t.play === "fly_hp");
   const stays = flies && box.stays.length ? ` The HP-rate fly stays the runner's (the settings ${box.stays.map((s) => settingText(s, values)).join(" ")}).` : "";
-  const head = box.playable ? "In a Run of this project these play inside the hunt core, and the runner's own are off" : "Once this box can play (Run refuses it as it is), these play inside the hunt core, and the runner's own are off";
-  return `${head}: ${parts.join("; ")}.${stays}`;
+  const soon = box.playable ? "In a Run of this project" : "Once this box can play (Run refuses it as it is)";
+  const head = parts.length ? `${soon} these play inside the hunt core, and the runner's own are off: ${parts.join("; ")}.${stays}` : "";
+  // round 20 #4a: the group's settings another tab's event or function plays (the respawn tab)
+  const other = away.map((t) => `${t.by} (tab ${tabOfPath(t.path)}) replaces ${t.replaces}${unusedHere(t)}`);
+  const tail = other.length ? `${head ? " " : `${soon}, `}${head ? "And " : ""}${other.join("; ")}${parts.length ? "" : "; the other settings here stay the runner's"}.` : "";
+  return `${head}${tail}`;
 }
 
 /** PURE (matpilot round 18 #4): the IN A RUN note in one short line, for the strip folded on a
@@ -66,10 +81,16 @@ export function boxTabShort(box: BoxDoc | null | undefined, node: string, tab: s
   if (!box) return null;
   const kinds = new Map<string, BoxTakeover["kind"]>();
   for (const t of box.takeovers) if (t.path !== null && t.by && t.path.startsWith(`${node}/${tab}/`)) kinds.set(t.by, t.kind);
-  if (!kinds.size) return null;
-  const count = (word: BoxTakeover["kind"]) => [...kinds.values()].filter((k) => k === word).length;
-  const words = (["event", "function", "model"] as const).map((k) => [count(k), k] as const).filter(([n]) => n > 0).map(([n, k]) => `${n} ${k}${n === 1 ? "" : "s"}`);
-  return `${box.playable ? "" : "once it can play, "}${words.join(" and ")} replace${kinds.size === 1 ? "s" : ""} the runner's own`;
+  const away = new Map<string, BoxTakeover["kind"]>();
+  for (const t of playedFromElsewhere(box, node, tab)) away.set(t.by ?? "", t.kind);
+  if (!kinds.size && !away.size) return null;
+  const counted = (m: Map<string, BoxTakeover["kind"]>) => {
+    const count = (word: BoxTakeover["kind"]) => [...m.values()].filter((k) => k === word).length;
+    return (["event", "function", "model"] as const).map((k) => [count(k), k] as const).filter(([n]) => n > 0).map(([n, k]) => `${n} ${k}${n === 1 ? "" : "s"}`).join(" and ");
+  };
+  const soon = box.playable ? "" : "once it can play, ";
+  if (!kinds.size) return `${soon}${counted(away)} of another tab play${away.size === 1 ? "s" : ""} part of it`;
+  return `${soon}${counted(kinds)} replace${kinds.size === 1 ? "s" : ""} the runner's own`;
 }
 
 /** PURE: one name's words in a node's list of tabs and names (the /maps inspector), when the box

@@ -72,3 +72,39 @@ test("on a phone the drawer is as tall as its panes and the page is the one scro
   assert.doesNotMatch(body?.body ?? "", /max-height|(^|[^-])height:/);
   assert.match(ruleWith(studio, '.studio[data-testid="flows-app"] > .studio-status', phone)?.body ?? "", /position:\s*sticky/);
 });
+
+// matpilot round 20 #1 (390 x 844): the footer's Python sheet (331 px) gave its 14 file buttons
+// 295 px in wrapped rows and the code box 0 px, with no way to scroll to it. Not measured in a
+// browser here: these pin the rules (the reviewer re-measures).
+test("on a phone the Python file buttons are one row that scrolls sideways; the sheet scrolls; the code keeps its room", () => {
+  const sheet = studio.indexOf("height: 55%");
+  assert.ok(sheet > 0, "the phone's Python sheet");
+  const side = ruleWith(studio, ".studio-side", studio.lastIndexOf(".studio-side {", sheet) - 1);
+  assert.match(side?.body ?? "", /overflow-y:\s*auto/);
+  const files = ruleWith(studio, '.studio[data-testid="flows-app"] .python-files', sheet);
+  assert.ok(files, "the phone's rule for the file buttons");
+  assert.match(files.body, /flex-wrap:\s*nowrap/);
+  assert.match(files.body, /overflow-x:\s*auto/);
+  const code = ruleWith(studio, ".studio-side .code-view", sheet);
+  assert.match(code?.body ?? "", /min-height:\s*12rem/);
+  assert.match(code?.body ?? "", /flex:\s*1 0 auto/);
+  // still inside the phone's media block (not a wide screen's rule)
+  const media = studio.lastIndexOf("@media (max-width: 48rem)", files.at);
+  assert.ok(media > 0 && studio.indexOf("@media", media + 1) > files.at);
+});
+
+// matpilot round 20 #6 (1440 x 900): after a click selected the xmas_dun02 card the PAGE was 1,064 px
+// tall: the inspector's visually hidden words (position: absolute) had the stage's body as their
+// containing block, outside the side panel's scroll box.
+test("the /maps side panel's scroll box contains what sits in it absolutely; the body never grows the page on a wide screen", () => {
+  const maps = readFileSync(join(import.meta.dirname, "..", "..", "components", "maps", "maps.css"), "utf8").replace(/\/\*[\s\S]*?\*\//g, "");
+  const body = ruleWith(maps, ".maps-side-body");
+  assert.match(body?.body ?? "", /position:\s*relative/);
+  assert.match(body?.body ?? "", /overflow-y:\s*auto/);
+  assert.match(ruleWith(maps, ".maps-body")?.body ?? "", /overflow:\s*hidden/);
+  const phone = maps.indexOf("@media (max-width: 48rem)");
+  assert.match(ruleWith(maps, ".maps-body", phone)?.body ?? "", /overflow:\s*visible/); // a phone's page scrolls
+  // the lint chip's scrollIntoView moves the page on a phone only
+  const app = readFileSync(join(import.meta.dirname, "..", "..", "components", "maps", "MapsApp.tsx"), "utf8");
+  assert.match(app, /if \(narrow\) requestAnimationFrame\(\(\) => sideRef\.current\?\.scrollIntoView/);
+});

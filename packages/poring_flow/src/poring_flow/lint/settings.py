@@ -11,10 +11,24 @@ backend's POST /flows/run/project refuses a project with an error):
   functions dungeon_hunt names, never from a setting;
 - ``settings_clash`` ERROR: the values a map node's hunt core takes cannot run together
   (settings.clash: two roles on one key, the HUD's fresh box not faster than the detector);
+- ``settings_safety`` WARNING (matpilot round 20 #3): a SAFETY switch (one with ``warn``) that is
+  off where a hunt core reads it ("npc_guard (...) is off: a strike near an NPC may open its
+  dialog and stop the run"): the chip and the /maps card count it;
 - ``settings_use`` INFO: a setting that is not in use on a map node while another is off or set
   otherwise ("not in use on xmas_dun02 while Batt's Knife swap (knife_swap) is off"), or that the
   box replaces in a Run (live.takeovers: drink plays the potion), or a node whose settings no hunt
   core reads.
+
+One setting on two tabs of one node never gets here (matpilot round 20 #5): a node's tabs are ONE
+namespace, so project.validate refuses it naming both tabs ("D0_PX is defined twice on xmas_dun02:
+a variable in tab aim and a variable in tab loot"), and the block editor refuses the second block
+at once (blocks.ts tabFromWorkspace).
+
+``notes`` (matpilot round 20 #3, #4a) is the same facts per setting BLOCK, in a few words: its
+"unused" row ("not used here: the drink event plays it", "not used while npc_guard is off") and its
+"safety" row (the warning while it is off). POST /flows/lint sends them (``settings``) for the
+blocks to show, greyed, and the Python view puts them on the setting's line as a comment: the
+lint, the block and the Python never disagree, because they are one computation.
 """
 
 from __future__ import annotations
@@ -62,11 +76,30 @@ def _hunt_nodes(c: Compiled) -> list[str]:
     return out
 
 
+Notes = dict[str, dict[str, str]]  # a setting block's path ("node/tab/var") -> its rows' words
+
+
 def findings(p: Project, c: Compiled) -> list[Found]:
+    return _analyse(p, c)[0]
+
+
+def notes(p: Project, c: Compiled) -> Notes:
+    """Per setting block (its path, "xmas_dun02/survival/potion_below"): {"unused": its short
+    not-used words, "safety": a safety switch's warning while it is off} -- the lint's own facts
+    (findings), for the blocks (POST /flows/lint ``settings``) and the Python view's comments."""
+    return _analyse(p, c)[1]
+
+
+def _note(out: Notes, path: str, key: str, text: str) -> None:
+    out.setdefault(path, {}).setdefault(key, text)
+
+
+def _analyse(p: Project, c: Compiled) -> tuple[list[Found], Notes]:
     from poring_flow.project import MapNode, Where
     from poring_flow.project import runner_keys as _runner_keys
 
     out: list[Found] = []
+    rows: Notes = {}
     hunts = _hunt_nodes(c)
     for n in p.nodes:
         set_here = False
@@ -95,6 +128,12 @@ def findings(p: Project, c: Compiled) -> list[Found]:
             out.append(("settings_use", "info", Where(n.id), f"{n.id}'s settings are not read: "
                         "only hunt with the runner (dungeon_hunt) reads them, and this node's "
                         "main has none", 3))  # fmt: skip
+            for t in n.tabs:
+                for name in t.vars:
+                    f = st.BY_VAR.get(name)
+                    if f is not None and f.block:
+                        _note(rows, Where(n.id, t.name, name).path, "unused",
+                              "not used: no hunt with the runner on this map reads it")  # fmt: skip
     for node in hunts:
         rk = _runner_keys(p, node, c)
         nv = node_values(p, node, dict(rk.keys) if rk.keys else None)
@@ -102,25 +141,43 @@ def findings(p: Project, c: Compiled) -> list[Found]:
         if why:
             out.append(("settings_clash", "error", Where(node), f"the settings {node}'s hunt "
                         f"core takes cannot run together: {why}", 1))  # fmt: skip
-        out += _use(p, c, node, nv)
-    return out
+        out += _use(p, c, node, nv, rows)
+    return out, rows
 
 
-def _use(p: Project, c: Compiled, node: str, nv: st.NodeValues) -> list[Found]:
-    """INFO on each setting block a run on ``node`` reads that it does not use."""
+def _replaced(c: Compiled, node: str) -> dict[str, tuple[str, str, str]]:
+    """The settings the box replaces in a Run on ``node`` (live.takeovers): name -> (who plays it,
+    "event" / "function", what of the runner's it replaces)."""
     from poring_flow import live
-    from poring_flow.project import Where
 
-    out: list[Found] = []
-    replaced: dict[str, str] = {}
+    out: dict[str, tuple[str, str, str]] = {}
     tk = live.takeovers(c.flow, node) if c.flow is not None else None
     for row in (tk or {}).get("takeovers") or []:
         by = row.get("by")
         for s in row.get("settings") or []:
-            if by and s not in replaced:
-                replaced[s] = f"{by} plays {row.get('replaces')} instead"
+            if by and s not in out:
+                out[s] = (str(by), str(row.get("kind") or "function"), str(row.get("replaces")))
+    return out
+
+
+def _use(p: Project, c: Compiled, node: str, nv: st.NodeValues, rows: Notes) -> list[Found]:
+    """INFO on each setting block a run on ``node`` reads that it does not use; a WARNING on each
+    safety switch it reads off. ``rows`` gets each block's short words (notes)."""
+    from poring_flow.project import Where
+
+    out: list[Found] = []
+    replaced = _replaced(c, node)
     for f in st.BLOCKS:
         where = nv.src.get(f.name, "default")
+        if f.warn and f.kind == "switch" and nv.vals.get(f.name) is False \
+                and st.in_use(f.name, nv.vals):  # fmt: skip
+            n_id, _, tab = where.partition("/")
+            w = Where(node) if where == "default" else Where(n_id, tab, f.var)
+            on = "" if n_id == node else f" on {node}"
+            out.append(("settings_safety", "warning", w, f"{f.var} ({f.words}) is off{on}: "
+                        f"{f.warn}", 1))  # fmt: skip
+            if where != "default":
+                _note(rows, w.path, "safety", f.warn)
         if where == "default":
             continue
         n_id, _, tab = where.partition("/")
@@ -130,10 +187,15 @@ def _use(p: Project, c: Compiled, node: str, nv: st.NodeValues) -> list[Found]:
         if why is not None:
             out.append(("settings_use", "info", w, f"{f.var} ({f.words}) is not in use{on} while "
                         f"{why}: the runner is not given it", 3))  # fmt: skip
+            short = st.unused_words(f.name, nv.vals) or "not used"
+            _note(rows, w.path, "unused", short.replace("not used", f"not used{on}", 1))
         elif f.name in replaced:
+            by, kind, replaces = replaced[f.name]
             out.append(("settings_use", "info", w, f"{f.var} ({f.words}) is not used in a Run of "
-                        f"this box{on}: {replaced[f.name]} (the value counts only in a box "
-                        "without it)", 3))  # fmt: skip
+                        f"this box{on}: {by} plays {replaces} instead (the value counts only in a "
+                        "box without it)", 3))  # fmt: skip
+            _note(rows, w.path, "unused", f"not used {'here' if not on else on[1:]}: the {by} "
+                  f"{kind} plays it")  # fmt: skip
     return out
 
 

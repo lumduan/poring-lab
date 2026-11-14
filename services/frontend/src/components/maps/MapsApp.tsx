@@ -546,7 +546,9 @@ export default function MapsApp({ backendUrl, initialNode }: { backendUrl: strin
   const onLint = useCallback(() => {
     setSelection({ kind: "lint" });
     openPanel("node");
-    requestAnimationFrame(() => sideRef.current?.scrollIntoView({ block: "nearest" }));
+    // round 20 #6: only a phone's page scrolls; on a wide screen a scrollIntoView moved the PAGE
+    const narrow = typeof window !== "undefined" && Boolean(window.matchMedia?.("(max-width: 48rem)").matches);
+    if (narrow) requestAnimationFrame(() => sideRef.current?.scrollIntoView({ block: "nearest" }));
   }, [openPanel]);
   // the Python pane: the selected node's files (else every file), and the project's JSON
   const files = python?.doc.files ?? [];

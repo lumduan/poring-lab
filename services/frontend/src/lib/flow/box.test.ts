@@ -34,23 +34,40 @@ const BOX: BoxDoc = {
 };
 const values = nodeSettings(xmasProject(), "xmas_dun02").values;
 
-test("the survival tab's note: each event, what it replaces with its setting block and value, and what stays", () => {
-  assert.equal(values.potion_below, 0.4); // the setting block's value (our default) the note quotes
+test("the survival tab's note: each event, what it replaces, the setting it makes unused, and what stays", () => {
+  // matpilot round 20 #4a: the box holds no block of a setting its own event plays; the note says
+  // the setting is not used in this box (it quoted the default's value as if a block held it)
+  assert.equal(values.potion_below, 0.4);
   const note = boxTabNote(BOX, "xmas_dun02", "survival", values);
   assert.equal(
     note,
     "In a Run of this project these play inside the hunt core, and the runner's own are off: " +
-      "drink replaces the runner's potion on HP (the setting heal at HP under 40 % (potion_below)); " +
-      "fly_away replaces the runner's Fly Wing on HP (the setting Fly Wing at HP under 20 % (fly_below)) and the runner's boss fly (a Battle Log boss line); " +
-      "bag_full replaces the runner's weight exit on a read weight (an unread weight drawn red keeps its own rule) (the setting go home when the bag is over 50 % (weight_home)). " +
+      "drink replaces the runner's potion on HP (its setting potion_below is not used in this box); " +
+      "fly_away replaces the runner's Fly Wing on HP (its setting fly_below is not used in this box) and the runner's boss fly (a Battle Log boss line); " +
+      "bag_full replaces the runner's weight exit on a read weight (an unread weight drawn red keeps its own rule) (its setting weight_home is not used in this box). " +
       "The HP-rate fly stays the runner's (the settings or HP falling faster than 150 HP/s (fly_rate) while under 50 % (fly_rate_below)).",
   );
-  // the exits tab: the respawn's two functions with their points
-  assert.match(boxTabNote(BOX, "xmas_dun02", "exits", values) ?? "", /^In a Run of this project .*respawn_button replaces the runner's clicks on the death dialog \(the setting respawn button at [0-9]+,[0-9]+ \(respawn_at\)\); respawn_ok replaces .*fly_home replaces the runner's Butterfly Wing press at the end\.$/);
+  // the exits tab: the respawn's two functions; and its group's weight_home, played by survival's bag_full
+  assert.equal(
+    boxTabNote(BOX, "xmas_dun02", "exits", values),
+    "In a Run of this project these play inside the hunt core, and the runner's own are off: " +
+      "respawn_button replaces the runner's clicks on the death dialog (its setting respawn_at is not used in this box); " +
+      "respawn_ok replaces the runner's clicks on the death dialog (its setting respawn_confirm_at is not used in this box); " +
+      "fly_home replaces the runner's Butterfly Wing press at the end. " +
+      "And bag_full (tab survival) replaces the runner's weight exit on a read weight (an unread weight drawn red keeps its own rule) (its setting weight_home is not used in this box).",
+  );
+  // round 20: the respawn tab had no IN A RUN line at all; its points are the exits tab's functions'
+  assert.equal(
+    boxTabNote(BOX, "xmas_dun02", "respawn", values),
+    "In a Run of this project, respawn_button (tab exits) replaces the runner's clicks on the death dialog (its setting respawn_at is not used in this box); " +
+      "respawn_ok (tab exits) replaces the runner's clicks on the death dialog (its setting respawn_confirm_at is not used in this box); the other settings here stay the runner's.",
+  );
+  assert.equal(boxTabShort(BOX, "xmas_dun02", "respawn"), "2 functions of another tab play part of it");
   // a tab the box plays nothing of, no box: no note; without the settings: their words only
   assert.equal(boxTabNote(BOX, "xmas_dun02", "keys", values), null);
+  assert.equal(boxTabNote(BOX, "xmas_dun02", "aim", values), null);
   assert.equal(boxTabNote(null, "xmas_dun02", "survival", values), null);
-  assert.match(boxTabNote(BOX, "xmas_dun02", "survival", null) ?? "", /drink replaces the runner's potion on HP \(the setting heal at HP under \(potion_below\)\)/);
+  assert.match(boxTabNote(BOX, "xmas_dun02", "survival", null) ?? "", /HP-rate fly stays the runner's \(the settings or HP falling faster than \(fly_rate\) while under \(fly_rate_below\)\)/);
 });
 
 test("the /maps inspector's tabs list says what the box plays of each name in a Run", () => {

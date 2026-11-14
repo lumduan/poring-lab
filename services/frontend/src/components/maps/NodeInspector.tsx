@@ -23,7 +23,7 @@ import { nodeById, type MapNode, type PNode, type Project, sessionPath } from "@
 import { lintLine } from "@/lib/flow/status";
 import { type Edit, removeNode, renameNode, renameProblem, setStart, setZones, updateMapNode } from "@/lib/maps/edit";
 import { entryCaption, nodeLinks } from "@/lib/maps/links";
-import { cappedFindings, findingWhere, KIND_TITLE, nodeLint, nodeTitle, runnerSpecies, SEVERITY_WORDS, tabRows } from "@/lib/maps/nodewords";
+import { cappedFindings, findingWhere, KIND_TITLE, nodeLint, nodeTitle, runnerSpecies, SEVERITY_WORDS, tabRows, tabSummary } from "@/lib/maps/nodewords";
 import { readRules, wingText } from "@/lib/maps/rules";
 import { characterOf, characterWords, CHAR_NAME, CREDENTIAL_NAME, CREDENTIALS, credentialOf, loginOf, loginWords, MAX_SLOT, SERVERS, setCharacter, setLogin } from "@/lib/maps/session";
 
@@ -426,20 +426,26 @@ function TabsSection({ project, node, lint }: { project: Project; node: PNode; l
         </p>
       )}
       {tabs.length === 0 && <p className="ni-muted">No tabs yet.</p>}
+      {/* matpilot round 20 #6: 162 raw lines (about 10 screens): each tab FOLDS, folded by default,
+          its line saying what it holds; a setting shows its value as its block does, and one that
+          differs from our default comes first, marked */}
       {tabs.map((t) => (
-        <div key={t.tab} className="ni-tab" data-testid={`inspector-tab-${t.tab}`}>
-          <span className="ni-tab-name">{t.tab}</span>
-          {t.main && (
-            <span className="ni-muted">
-              {" "}
-              · the node&apos;s program, {t.statements} statement{t.statements === 1 ? "" : "s"}
-            </span>
-          )}
+        <details key={t.tab} className="ni-tab" data-testid={`inspector-tab-${t.tab}`}>
+          <summary className="ni-tab-summary">
+            <span className="ni-tab-name">{t.tab}</span>
+            <span className="ni-muted"> · {tabSummary(t)}</span>
+          </summary>
           {t.rows.length > 0 ? (
             <ul className="ni-names">
               {t.rows.map((x) => (
-                <li key={x.name}>
+                <li key={x.name} data-setting={x.setting ? (x.setting.changed ? "changed" : "default") : undefined}>
                   {x.text}
+                  {x.setting && <span className="ni-muted"> · {x.setting.var}</span>}
+                  {x.setting?.changed && (
+                    <span className="ni-mark" data-k="changed" title="Not our default: this block was set to another value">
+                      changed
+                    </span>
+                  )}
                   {x.kind === "event" && <span className="ni-mark" data-k="event">event</span>}
                   {boxNameWords(box, `${node.id}/${t.tab}/${x.name}`) && (
                     <span className="ni-muted" data-testid={`inspector-box-${x.name}`}>
@@ -469,7 +475,7 @@ function TabsSection({ project, node, lint }: { project: Project; node: PNode; l
           ) : (
             !t.main && <div className="ni-muted">empty</div>
           )}
-        </div>
+        </details>
       ))}
     </section>
   );

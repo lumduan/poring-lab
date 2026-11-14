@@ -183,9 +183,39 @@ def vars_in_order(t: Tab) -> list[tuple[str, ir.Lit]]:
     return plain + ranked
 
 
-def print_tab(p: Project, n: NodeT, t: Tab, cat: Catalogue | None = None) -> str:
-    """One tab's file (the module docstring)."""
+def setting_notes(p: Project, cat: Catalogue | None = None) -> dict[str, dict[str, str]]:
+    """The setting blocks' notes the lint computes (lint/settings.py notes: a block not used in a
+    Run of this box, a safety switch off), by "node/tab/var"; {} when the project does not compile
+    (the lint says why)."""
+    from poring_flow.lint import settings as setting_rules
+    from poring_flow.project import compile_project
+
+    try:
+        c = compile_project(p, cat)
+    except ProjectError:
+        return {}
+    return setting_rules.notes(p, c)
+
+
+def setting_tail(f: setting_reg.Field, v: Any, note: dict[str, str] | None = None) -> str:
+    """A setting line's comment: its words and how to read the value, then what the lint says of
+    THIS block (matpilot round 20 #3, #4a): "⚠ off: ..." while a safety switch is off, "· not used
+    here: the drink event plays it" while the box or another setting stops it."""
+    out = f"  {setting_reg.comment(f, v)}"
+    if note and note.get("safety"):
+        out += f" · ⚠ off: {note['safety']}"
+    if note and note.get("unused"):
+        out += f" · {note['unused']}"
+    return out
+
+
+def print_tab(p: Project, n: NodeT, t: Tab, cat: Catalogue | None = None,
+              notes: dict[str, dict[str, str]] | None = None) -> str:  # fmt: skip
+    """One tab's file (the module docstring). ``notes``: the setting blocks' (setting_notes; None:
+    computed here, so a tab printed alone reads as it does among the project's files)."""
     cat = cat or catalogue()
+    if notes is None:
+        notes = setting_notes(p, cat)
     gdefs = {} if isinstance(n, GlobalNode) else defs_of(p.global_node)
     head = [*pyview.GENERATED, LEARNER]
     if not isinstance(n, GlobalNode) and p.global_node is not None:
@@ -197,7 +227,8 @@ def print_tab(p: Project, n: NodeT, t: Tab, cat: Catalogue | None = None) -> str
         for k, v in vars_in_order(t):
             # a SETTING (live-blocks.md 12): a plain assignment with its words as a comment
             f = setting_reg.BY_VAR.get(k)
-            tail = f"  {setting_reg.comment(f, v.value)}" if f is not None and f.block else ""
+            note = (notes or {}).get(f"{n.id}/{t.name}/{k}")
+            tail = setting_tail(f, v.value, note) if f is not None and f.block else ""
             lines += [*_override(k, gdefs), f"{k} = {pyview._lit_src(v.value)}{tail}"]
         chunks.append((False, lines, "Setup"))
     for d in t.defs:
@@ -257,8 +288,9 @@ def print_files(p: Project, cat: Catalogue | None = None) -> list[PyFile]:
     """Every tab's file, node by node in the project's order, then project.py."""
     cat = cat or catalogue()
     shown = _redacted(p)
+    notes = setting_notes(p, cat)
     files = [
-        PyFile(n.id, t.name, file_path(n.id, t.name), print_tab(shown, n, t, cat))
+        PyFile(n.id, t.name, file_path(n.id, t.name), print_tab(shown, n, t, cat, notes))
         for n in shown.nodes
         for t in n.tabs
     ]

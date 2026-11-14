@@ -562,6 +562,19 @@ export default function ProjectStudio({ backendUrl, initialNode = null }: { back
     const t = setTimeout(() => setCopied("idle"), 2000);
     return () => clearTimeout(t);
   }, [copied]);
+  // matpilot round 20 #1: on a phone the file buttons are one row that scrolls sideways: the
+  // selected file is kept in view there (the row scrolls, never the page)
+  const shownPath = fileShown?.path ?? null;
+  useEffect(() => {
+    for (const row of document.querySelectorAll<HTMLElement>('[data-testid="flows-app"] .python-files')) {
+      const sel = row.querySelector<HTMLElement>('[aria-selected="true"]');
+      if (!sel || row.scrollWidth <= row.clientWidth) continue;
+      const r = row.getBoundingClientRect();
+      const b = sel.getBoundingClientRect();
+      if (b.left < r.left) row.scrollLeft -= r.left - b.left + 8;
+      else if (b.right > r.right) row.scrollLeft += b.right - r.right + 8;
+    }
+  }, [shownPath, pythonOpen, view]);
 
   const codePane = (full: boolean) => (
     <>
@@ -840,6 +853,7 @@ export default function ProjectStudio({ backendUrl, initialNode = null }: { back
                 getProject={getProject}
                 catalogue={catalogue}
                 lint={lintStale ? null : lintDoc}
+                notes={lintDoc?.settings ?? null}
                 trace={simDoc && !simStale ? simDoc.trace : null}
                 hidden={view === "python"}
                 onProject={fromBlocks}

@@ -112,6 +112,26 @@
   font-family: var(--font-mono);
   font-weight: 700;
 }
+/* matpilot round 20 #6: a tab folds (a <details>, folded by default): its line says what it holds */
+.ni-tab-summary {
+  cursor: pointer;
+  overflow-wrap: anywhere;
+}
+.ni-tab-summary:focus-visible {
+  outline: 3px solid var(--accent);
+  outline-offset: 2px;
+}
+.ni-tab[open] > .ni-tab-summary {
+  margin-bottom: 0.2rem;
+}
+/* a setting's value as its block shows it, in words (not the mono of a name) */
+.ni-names li[data-setting] {
+  font-family: var(--font-sans, inherit);
+}
+.ni-mark[data-k="changed"] {
+  background: var(--warn-bg);
+  color: var(--warn-text);
+}
 .ni-names {
   margin: 0.2rem 0 0;
   padding: 0;

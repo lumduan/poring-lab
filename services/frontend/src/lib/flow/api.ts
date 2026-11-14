@@ -6,6 +6,7 @@ import type { BoxDoc } from "./box.ts";
 import type { HuntRules } from "./hunt.ts";
 import type { Flow } from "./ir.ts";
 import type { Project } from "./project.ts";
+import type { SettingNote } from "./settings.ts";
 import type { Models } from "./models.ts";
 import type { ZonesCheck, ZonesFile } from "./zones.ts";
 
@@ -66,6 +67,10 @@ export interface LintDoc {
   /** matpilot round 17 N1: per map node with a hunt core, what its box plays in a box run and which
    * run settings that replaces (poring_flow.live.takeovers); absent on an older backend. */
   box?: Record<string, BoxDoc>;
+  /** matpilot round 20 #3, #4a: per setting block ("<node>/<tab>/<var>"), the lint's own words for
+   * it (poring_flow lint/settings.py notes): "unused" (not used in a Run of this box, and why),
+   * "safety" (a safety switch's warning while it is off); absent on an older backend. */
+  settings?: Record<string, SettingNote>;
   effective: Record<string, EffectiveEvent[]>;
   world: { server: string | null; maps: string[] };
   world_notes?: string[]; // how the static data was found (e.g. no GAT here: routes are estimates)
