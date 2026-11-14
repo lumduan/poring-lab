@@ -979,8 +979,8 @@ unchanged).
   steals/h -9.1, loot/h +3.0: one pair, no standard error, not judged.
 - Proven live: the box's use_model chose the detector (box_model choice "box", the same xmas02gb
   file and sha256); every B4 lock asked the box's recipe for the struck species (187 asks over
-  the three B4 runs: mystcase, cruiser, cookie, cookie_xmas, and 5 unknown-species scan strikes per
-  run on the runner's own recipe), 0 mismatches; the box's respawn again (r01B3, r05B3).
+  the three B4 runs: mystcase, cruiser, cookie, cookie_xmas; in r02B4, 5 of its 59 were scan
+  strikes of unknown species, on the runner's own recipe), 0 mismatches; the box's respawn again (r01B3, r05B3).
 - r02B4's low openers (33.2/h) were HP-gated, not the recipes: 59 of 59 recipes said the Knife;
   she spent 70 % of that run under 50 % HP (r01B3: 43 %), where the runner skips the Knife
   (knife_hp_min 0.5; bare_skip_hp 41).
