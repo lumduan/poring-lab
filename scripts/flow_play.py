@@ -87,6 +87,18 @@ cannot read is unknown -- an event that reads it is then not evaluated (it never
 repeating one pauses). Elsewhere it is unknown. An event's presses through dungeon_hunt's eat
 function are EAT presses: the runner presses them through its own press path (run(box_eat=...)).
 
+THE BOX'S HUNT LOOP (stage 5b-2, live-blocks.md section 14; dungeon@9.55): a map node's function
+`hunt_loop(t)` (its tab hunt) is its hunt core's loop. Its hunt core gets a DriveHook, and run()
+calls its ``drive(cursor)`` INSTEAD of its own driver loop (dungeon_hunt.hook_drives; a box without
+a hunt loop gets the plain HuntHook, and run() plays exactly 5b-1's program). The player plays the
+function's statements NOW, inside run(), with the engine's interpreter (LivePlayer.hunt_drive): each
+block -- find_target, choose_target, walk_to_target, strike, wait_steal, wait_kill, loot, look,
+use_skill (the hunt core's heal key, between two steps), fight(t) (the monsters tab's recipe for the
+species the runner locked) -- is ONE bounded call through the runner's tick cursor
+(dungeon_hunt.HuntCursor), and hands back on its exit, at the run's end or on Stop. No engine tick
+sits between two blocks; the box's survival events keep playing through the tick hook inside the
+runner's common steps. poring_flow.huntloop refuses, before any input, what the loop cannot play.
+
 THE START, before any input: the project validates; the node is a map node; every block plays live;
 the time box fits the Settings maximum (--max-s); each hunt core's keys resolve from the node's
 functions (project.runner_keys) and its runner settings from the config file; then the START CHECK
@@ -1217,7 +1229,7 @@ class LivePlayer(Sim):
             if v == "pressed":
                 self.keys_sent.append(str(key))
                 self.rec.ev({"kind": "key", "key": key, "node": self.node_path, "in": "hunt"})
-        elif self._eval(a.params["target"]) is None:
+        elif self._eval(a.params.get("target")) is None:
             c.skip(b)  # no target (find_target's time box passed): nothing to do
             v = "none"
         elif b == hl.ATTACK:

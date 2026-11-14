@@ -107,3 +107,14 @@ test("Run's readiness reaches the hunt loop from the hunt core", () => {
   assert.ok(!reachable(xmasProject(), "xmas_dun02").blocks.includes("find_target"));
   assert.equal(huntLoopDef().params[0].name, "t");
 });
+
+test("the lint's words land on the hunt blocks: their ids are the engine's statement paths, each has a badge", () => {
+  // the editor puts a finding of "<node>/<tab>/<site>" on the block whose id is n:<site>
+  // (BlockEditor tabFindings / sitePath): hunt_spin on the while, hunt_target on a block, ...
+  const ws = tabToWorkspace(xmasHuntProject(), { node: "xmas_dun02", tab: HUNT_TAB });
+  const byId = new Map(all(ws.blocks.blocks).map((b) => [b.id, b.type]));
+  assert.equal(byId.get("n:hunt_loop.0"), "pl_while");
+  assert.equal(byId.get("n:hunt_loop.0.body.0"), "pl_hunt_take");
+  assert.equal(byId.get("n:hunt_loop.0.body.1"), "pl_hunt_step");
+  for (const t of ["pl_hunt_take", "pl_hunt_step"]) assert.ok(namesOf(t).fields.has("BADGE"), t);
+});

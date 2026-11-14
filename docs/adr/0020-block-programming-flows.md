@@ -2716,3 +2716,31 @@ live-blocks.md section 12 (5b, the loop itself as playable blocks, is planned th
   and its GET / PUT /flows/config (the file was empty, `{"v": 2, "global": {}, "maps": {}}`, so
   nothing was imported), the generated runners/*.gen.ts and Before Run's settings panel.
   scripts/runner_flow_export.py stays for its outline (`show`): stage 5b's map of the loop.
+
+## Amendment K (2026-11-14 ~20:5x, 5b-2 of Batt's shape; Batt 2026-11-14 18:1x: "go on, no need to ask me again"): the hunt loop -- the hunt core's steps as live blocks
+
+**Batt:** "break the runner into blocks" (2026-11-13); "everything in the xmas_dun02 flow, as tabs
+... make them ALL blocks" (2026-11-14). This amendment ADDS to Amendments C-J; nothing above is
+rewritten. The design and its proofs: [live-blocks.md](../planning/live-blocks.md) 13.4 and
+section 14 (built offline; its live A/B pre-registered there, not run).
+
+- **A map node's function `hunt_loop(t)`** (the editor's tab `hunt`) is its hunt core's loop: the
+  runner (scripts/dungeon_hunt.py run) calls the live player's `hook.drive(cursor)` instead of its
+  own driver loop, and the player plays the function's statements with the engine's interpreter.
+  Without one, run() is 5b-1's program (an AST identity, `huntstate_check.py drive`).
+- **New blocks** (blocks.yaml, `live: true`, live ONLY in the hunt loop): `find_target()` (the
+  search until a fight begins: the monster engaged), `choose_target()`, `walk_to_target(t)`,
+  `look()`, `fight(t)` (the monsters tab's recipe for the species the runner locked, played as
+  blocks); the recipe primitives (Amendment H) may stand in the loop too, and `use_skill(key)`
+  plays there with the hunt core's heal key. Each is ONE bounded call through the TICK CURSOR (the
+  tick and its next step; its time box the IR's timeout_s) that hands back on its exit, at the
+  run's end or on Stop; the common steps (perception, safety, the box's survival events) run on
+  every tick whichever block plays.
+- **Refused before any input** (poring_flow.huntloop, the lint's `hunt_*` errors, the backend's
+  not_live): a hunt block outside the loop, a loop on a node without a hunt core or without its
+  input t, a statement the runner cannot wait for (a wait, a press, a call, a stop, an exit), a
+  sensor in its conditions (known() alone), a target that is no variable, a `while` that could spin
+  (it begins with `t = find_target()` and holds a fight player on t), use_skill with another key.
+- The canonical loop `t = find_target(); fight(t)` calls the runner's own step sequence tick for
+  tick (scripts/hunt_trace.py, on scripted mode changes).
+

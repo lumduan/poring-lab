@@ -411,6 +411,14 @@ Amendment B); a not-adopted model is never offered.
   wait_steal, knife_back(), wait_kill, loot; use_skill marked "not played live yet: 4b"). The steps
   are no longer listed under "More skills" (they play only inside a monster's function). Run's
   readiness reads the monsters' functions too.
+  ➡️ **2026-11-14 (stage 5b-2, [planning/live-blocks.md](planning/live-blocks.md) 14):** a tab named
+  `hunt` of a map node offers a **Hunt** category: `def hunt_loop(t)`, `while True`, `t =
+  find_target()` and `fight(t)` (the canonical loop: the hunt core then plays this loop instead of
+  its own, `fight(t)` being the monsters tab's recipe for t's species), walk_to_target, the recipe
+  steps, choose_target, look, use_skill (the heal key) and `if known(value=t)`. The hunt loop's own
+  blocks show their value's variable and their time box ("t = find_target ( ) · at most 120 s").
+  The Load lists of /flows and /maps offer **xmas_dun02_hunt** (the one box plus that tab); the
+  one box itself has no hunt tab. Run's readiness reads the hunt loop too.
   - **/maps:** a small **START** pill left of the start map, joined to its entry; drag that
     connection onto another map and the run starts there (or "Start here" in a node's inspector).
     **Run** (amber, beside Simulate; press, then press again within 4 s) plays the project in the
