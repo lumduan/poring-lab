@@ -297,7 +297,11 @@ def test_use_skill_in_a_recipe_is_linted_and_refused_live_as_4b() -> None:
     got = [(f.rule, f.severity) for f in P.project_lint(p)[1] if f.rule == "recipe_skill"]
     assert got == [("recipe_skill", "warning")]  # expressible: not a design error
     words = not_live(d)
-    assert any("use_skill cannot play live yet (stage 4b" in w for w in words), words
+    # ➡️ 5b-2 (live-blocks.md 14): use_skill plays in the hunt loop now (the catalogue's live set),
+    # so in a recipe the refusal is the recipe's own words (fight(t) knows t's recipe only at the
+    # lock, after the strike): still refused before any input
+    assert any("use_skill(key='F6') in attack_mystcase cannot play live yet (4b)" in w
+               for w in words), words  # fmt: skip
     # without its hotbar key it is an error (the key is what 4b presses)
     bad = box({**sk, "body": [*body(*TODAY[:4]), act("use_skill"), *body(*TODAY[4:])]})
     assert ("recipe_skill", "error", "xmas_dun02/monsters/attack_mystcase.4") in rules(bad)
@@ -326,7 +330,10 @@ def test_the_editor_gets_the_primitives_and_the_live_words() -> None:
     for b in (*rc.PRIMITIVES, rc.MODEL_BLOCK):
         assert doc["blocks"][b]["spec"]["live"] is True, b
     assert doc["live"]["hunt_core"]["recipes"]["shapes"] == [list(x) for x in rc.SHAPES]
-    assert doc["live"]["later"]["use_skill"].startswith("stage 4b")
+    # ➡️ 5b-2: use_skill plays live in the hunt loop (a declared key); a recipe's is still refused
+    assert doc["blocks"]["use_skill"]["spec"]["live"] is True
+    assert "use_skill" not in doc["live"]["later"]
+    assert "use_skill" in doc["live"]["hunt_core"]["loop"]["blocks"]
     assert doc["models"]["xmas02"]["strikes"] == ["mystcase", "cruiser", "cookie", "cookie_xmas"]
     assert {b: doc["blocks"][b]["status"] for b in ("use_model", "wait_steal", "wait_kill")} == {
         "use_model": "core", "wait_steal": "core", "wait_kill": "core"}  # fmt: skip

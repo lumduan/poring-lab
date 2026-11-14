@@ -242,6 +242,7 @@ blocks:
     # (a monster's recipe: use_skill(key="F6")); `skill` is no longer required (one of the two names
     # it). Expressible and linted in a recipe; it does NOT play live in 4a (poring_flow.recipes: 4b).
     concept: combat.use_skill
+    live: true  # stage 5b-2: in the hunt loop only, a declared role key (poring_flow.huntloop)
     params:
       - {name: skill, type: skill, positional: true}
       - {name: target, type: mob}
@@ -294,6 +295,55 @@ blocks:
     long: true
     live: true  # stage 4a: inside a monster's recipe only (the runner's kill read)
     note: the runner's kill read (the EXP line, else the kill gap) -- no input of its own; live only inside a monster's recipe
+  # --- live blocks STAGE 5b-2 (Batt 2026-11-13: "break the runner into blocks"; 2026-11-14 ~15:2x:
+  # "make them ALL blocks"; docs/planning/live-blocks.md 13.4 / 14): the HUNT LOOP's blocks. A map
+  # node's function hunt_loop(t) (its tab `hunt`) is its hunt core's loop: each block is the
+  # runner's own code (run()'s steps through dungeon_hunt.HuntCursor), ONE bounded call -- its time
+  # box its timeout_s -- that hands back on its exit, at the run's end or on Stop. Live only inside
+  # the hunt loop (strike / wait_steal / wait_kill / loot(t) also in a recipe, 4a); refused anywhere
+  # else before any input (poring_flow.huntloop); their binding is the runner's (live.OWN_BINDING).
+  find_target:
+    # (13.4 called it explore(): the box's walk tab has a SETTING named explore -- its exploring
+    # rule -- and a catalogue name cannot be a variable, so the block is find_target)
+    concept: combat.hunt
+    timeout_s: 120
+    long: true
+    moves: near
+    live: true  # stage 5b-2: in the hunt loop only (the runner's search steps)
+    affects: {position: "~", hp_percent: "-", weight_percent: "+", sees: "~", count_visible: "~", engagement_seen: "~"}
+    note: the runner's search -- the walk, the rest, the White Plant sweep, the idle watchdog, the unread position's Fly Wing -- until a fight begins; its value the monster engaged (none at its time box); live only in the hunt loop
+  choose_target:
+    concept: core.choose_target
+    kind: core
+    timeout_s: 1
+    live: true  # stage 5b-2: in the hunt loop only (a read of the runner's state)
+    note: at once, the monster of the fight that runs (none without a fight); no input of its own; live only in the hunt loop
+  walk_to_target:
+    concept: combat.attack_target
+    params: [{name: target, type: mob, required: true, positional: true, note: "the hunt loop's target t"}]
+    timeout_s: 30
+    long: true
+    moves: near
+    live: true  # stage 5b-2: in the hunt loop only (the fight's approach)
+    note: the runner's fight until its target is in reach (its strike landed -- the client walks up on it -- or a far approach walk ended); "in_reach" or "gone"; live only in the hunt loop
+  look:
+    concept: core.look
+    kind: core
+    timeout_s: 1
+    live: true  # stage 5b-2: in the hunt loop only (the tick's reads)
+    note: the tick's reads (HP, SP, dead, her cell, the mode); no input of its own; live only in the hunt loop
+  fight:
+    # (13.4 called it attack(t): the locale-pack guard refuses that word as a code literal -- a
+    # client UI string -- so the block that plays t's recipe is fight)
+    concept: combat.attack_target
+    params: [{name: target, type: mob, required: true, positional: true, note: "the hunt loop's target t (find_target's value)"}]
+    timeout_s: 300
+    long: true
+    moves: near
+    adds_weight: true
+    live: true  # stage 5b-2: in the hunt loop only (the monster's recipe, played as blocks)
+    affects: {hp_percent: "-", sp_percent: "~", base_level: "+", job_level: "+", weight_percent: "+", item_count: "+", sees: "~", count_visible: "~", engagement_seen: "~"}
+    note: the monsters tab's recipe for t's species (the species the runner locked; its own recipe where there is none), played as blocks -- strike(t), wait_steal(t), wait_kill(t), loot(t), the Knife's knife_on() / knife_back() at the runner's moments; live only in the hunt loop
   use_model:
     # The TRAINED DATA (Batt 2026-11-13: "the flow page should also have a block to LOAD THE TRAINED
     # DATA, with the monsters the bot already knows"): a models.yaml entry by its id. Its `strikes`

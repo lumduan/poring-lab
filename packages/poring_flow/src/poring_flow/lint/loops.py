@@ -9,6 +9,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from poring_flow import huntloop as hl
 from poring_flow import ir
 from poring_flow.lint.common import Ctx, body_actions, sensors_in, vars_in
 from poring_flow.lint.semantics import exit_edges
@@ -72,6 +73,8 @@ def check(ctx: Ctx) -> None:
             continue
         if st.max_iter is not None or st.max_s is not None or _leaves(st.body, flow):
             continue
+        if hl.loop_ok(flow, site):  # 5b-2: a hunt loop's turns each take a step of the hunt core,
+            continue  # whose time box, end and Stop bound it (live-blocks.md 14)
         sensors = sensors_in(st.cond)
         variables = vars_in(st.cond)
         if not sensors and not variables:

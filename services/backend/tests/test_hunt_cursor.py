@@ -73,11 +73,11 @@ def test_the_tables_name_every_step_once() -> None:
     assert set(dh.HANDBACK_AT) <= set(dh.MODE_STEPS) and set(dh.STEP_GUARD) <= set(dh.MODE_STEPS)
     for owns in dh.BLOCK_OWNS.values():
         assert set(owns) <= set(dh.MODE_STEPS)
-    # the canonical loop's blocks own every mode step between them: explore all but fight and loot
-    assert set(dh.BLOCK_OWNS["explore"]) | {"fight", "loot"} == set(dh.MODE_STEPS)
+    # the canonical loop's blocks own every mode step between them: find_target all but fight, loot
+    assert set(dh.BLOCK_OWNS["find_target"]) | {"fight", "loot"} == set(dh.MODE_STEPS)
 
 
-def test_explore_runs_a_search_tick_and_hands_back_before_the_fight_step() -> None:
+def test_find_target_runs_a_search_tick_and_hands_back_before_the_fight_step() -> None:
     hs, clock = _state(), Clock()
 
     def engage() -> None:
@@ -85,7 +85,7 @@ def test_explore_runs_a_search_tick_and_hands_back_before_the_fight_step() -> No
         hs.box_fight.update(spot=[12, 11], box=[1.0, 2.0, 3.0, 4.0])
 
     c = _cursor(hs, {(2, "engage"): engage}, clock)
-    t = c.explore(max_s=60)
+    t = c.find_target(max_s=60)
     assert t == dh.HuntTarget((12, 11), "cookie", (1.0, 2.0, 3.0, 4.0))
     assert _called(c, 1) == list(dh.STEP_NAMES)  # a whole search tick: fight / loot no-ops
     assert _called(c, 2) == list(dh.COMMON_STEPS) and c.at == "fight"  # handed back there
@@ -119,21 +119,21 @@ def test_a_fight_tick_ends_at_the_fight_step_and_wait_kill_hands_back_after_it()
 def test_a_step_the_playing_block_does_not_own_is_passed_only_in_its_mode() -> None:
     hs, clock = _state(mode="after"), Clock()
     c = _cursor(hs, {(1, "after"): lambda: setattr(hs, "mode", "search")}, clock)  # type: ignore[func-returns-value]
-    assert c.explore(max_s=0.1) is None  # (its time box)
+    assert c.find_target(max_s=0.1) is None  # (its time box)
     assert c.passed == {"loot": 1}  # no loot(t): the loot step of mode after is passed
     assert "fight" in _called(c, 1)  # fight in mode after: its guard is false, so it is called
-    # a fight block never passes the fight step; explore never plays one (it hands back first)
+    # a fight block never passes the fight step; find_target never plays one (it hands back first)
     hs2 = _state(mode="fight")
     c2 = _cursor(hs2, {}, Clock())
-    assert c2.explore(max_s=5) == dh.HuntTarget(None, None, None)
+    assert c2.find_target(max_s=5) == dh.HuntTarget(None, None, None)
     assert c2.at == "fight" and not c2.passed
 
 
 def test_the_time_box_and_the_runs_end() -> None:
     hs, clock = _state(), Clock()
     c = _cursor(hs, {}, clock, t_end=1.0)
-    assert c.explore(max_s=0.5) is None and c.ended is None
-    assert c.explore() is None and c.ended == "time_box" and c.at == "begin"
+    assert c.find_target(max_s=0.5) is None and c.ended is None
+    assert c.find_target() is None and c.ended == "time_box" and c.at == "begin"
     assert c.strike() == "ended" and c.wait_kill() == "ended"
     hs2 = _state(mode="fight")
     c2 = _cursor(hs2, {(2, "battle_log"): lambda: dh.RUN_END}, Clock())
@@ -179,10 +179,10 @@ def test_look_runs_the_first_ticks_common_steps_and_use_skill_presses_between_st
 def test_blocks_that_take_no_step_end_the_drive_as_a_spin() -> None:
     hs, clock = _state(mode="fight"), Clock()
     c = _cursor(hs, {}, clock)
-    c.explore()  # (at the start: the common steps run, then it hands back: a step taken)
+    c.find_target()  # (at the start: the common steps run, then it hands back: a step taken)
     for _ in range(dh.DRIVE_SPIN_MAX):
-        assert c.explore() is not None and c.ended is None
-    c.explore()
+        assert c.find_target() is not None and c.ended is None
+    c.find_target()
     assert c.ended == "spin"
 
 
@@ -190,9 +190,16 @@ def test_loot_with_nothing_to_loot_hands_back_at_once() -> None:
     hs, clock = _state(mode="search"), Clock()
     c = _cursor(hs, {}, clock)
     assert c.loot() == 0 and c.tick == 0
-    hs.mode = "after"
-    c.explore(max_s=0.001)  # a search tick's after step makes it search; hands back before after?
-    assert c.loot() == 0  # (past the loot step of this tick, or no fight: nothing)
+    hs.mode, c.i = "after", dh.STEP_NAMES.index("after")  # mode after, but past the loot step
+    n0 = sum(c.calls.values())
+    assert c.loot() == 0 and sum(c.calls.values()) == n0 and c.at == "after"
+    # a time box bounds the fight loot(t) waits for, never its loot step: after the fight's end
+    # it plays on to the step (hunt_trace.py found the pass a time box there made)
+    hs2, clock2 = _state(mode="after"), Clock()
+    c2 = _cursor(hs2, {(1, "hold"): lambda: dh.TICK_DONE, (2, "hold"): lambda: dh.TICK_DONE},
+                 clock2)  # fmt: skip
+    assert c2.loot(max_s=0.0001) == 0 and c2.at == "after" and c2.tick == 3
+    assert c2.passed == {} and "loot" in _called(c2, 3)
 
 
 def test_hunt_drive_refuses_a_hook_without_the_others_and_records_its_end() -> None:
@@ -213,7 +220,7 @@ def test_hunt_drive_refuses_a_hook_without_the_others_and_records_its_end() -> N
 
         def drive(self, cur: dh.HuntCursor) -> str | None:
             while cur.ended is None:
-                cur.explore()
+                cur.find_target()
             return None
 
     recs.clear()

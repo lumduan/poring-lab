@@ -134,6 +134,7 @@ import flow_run as fr  # noqa: E402
 
 from poring_env.protocol import Key, ReleaseAll  # noqa: E402
 from poring_flow import functions as fn  # noqa: E402
+from poring_flow import huntloop as hl  # noqa: E402
 from poring_flow import ir, live  # noqa: E402
 from poring_flow import project as pj  # noqa: E402
 from poring_flow import recipes as rc  # noqa: E402
@@ -207,6 +208,11 @@ class RunnerPlan:
     eat_keys: tuple[str, ...] = ()
     eat_name: str | None = None
     hotbar_keys: tuple[str, ...] = ()
+    # live-blocks 5b-2 (14): the hunt loop the hunt core plays instead of its own driver (its
+    # function's IR name; None: run()'s own loop, exactly 5b-1's) and the keys its use_skill may
+    # press. Not a run() argument: the hook's `drive` (DriveHook) is what plays it
+    loop: str | None = None
+    skill_keys: tuple[str, ...] = ()
 
     def box_kwargs(self) -> dict[str, Any]:
         """dungeon_hunt run(...)'s box arguments: none at all for a box without events, functions,
@@ -277,7 +283,9 @@ class Prepared:
                                 **({"box_eat": list(p.eat_keys), "eat": p.eat_name}
                                    if p.eat_keys else {}),
                                 **({"hotbar_keys": list(p.hotbar_keys)}
-                                   if p.hotbar_keys else {})} for b, p in
+                                   if p.hotbar_keys else {}),
+                                **({"loop": p.loop, "skill_keys": list(p.skill_keys)}
+                                   if p.loop else {})} for b, p in
                             self.runners.items()}}  # fmt: skip
 
 
@@ -346,7 +354,7 @@ def prepare(text: str, node: str, max_s: int | None, *,
                                     dict(hp.calls), dict(hp.call_names), hp.weight_events,
                                     hp.knife_ends, hp.model_doc, dict(hp.recipes),
                                     hp.default_species, hp.eat_keys, hp.eat_name,
-                                    hp.hotbar_keys)  # fmt: skip
+                                    hp.hotbar_keys, hp.loop, hp.skill_keys)  # fmt: skip
         roles.update({k: ROLE_PRESS[f] for f, k in rk.keys.items() if f in ROLE_PRESS})
         roles.update({k: "eat" for k in hp.eat_keys})  # 2026-11-14: the live line's words
     return Prepared(p, c, node, h, float(min(p.max_runtime_s, max_s)), runners, roles)
@@ -521,6 +529,7 @@ class HuntResult:
     survive_calls: int = 0  # stage 2: the hook's survive calls (main ticks and quick reads)
     calls: int = 0  # stage 3: the hook's calls of the box's role functions
     recipes: int = 0  # stage 4a: the hook's recipe answers (one per target, at its lock)
+    drive: dict[str, Any] | None = None  # 5b-2: the hunt loop drove the steps (the cursor's end)
 
     @property
     def left(self) -> bool:
@@ -587,6 +596,18 @@ class HuntHook:
         self.player.rec.ev(out)
 
 
+class DriveHook(HuntHook):
+    """live-blocks 5b-2 (14): the hook of a hunt core whose box has a hunt loop -- run() calls its
+    ``drive(cursor)`` INSTEAD of its own driver loop (dungeon_hunt.hook_drives), and the player
+    plays the loop's blocks through the cursor (LivePlayer.hunt_drive). A box without a hunt loop
+    gets the plain HuntHook: run() plays exactly as 5b-1."""
+
+    def drive(self, cursor: Any) -> str | None:
+        got = self.player.hunt_drive(cursor)
+        self.res.drive = cursor.doc()
+        return got
+
+
 class HuntCore:
     """A dungeon_hunt block, played by the runner IN THIS PROCESS (one input writer)."""
 
@@ -618,8 +639,9 @@ class HuntCore:
                        **({"box_model": box["box_model"]["id"]} if "box_model" in box else {}),
                        **({"box_recipes": box["box_recipes"],
                            "default_species": list(plan.default_species)}
-                          if "box_recipes" in box else {})})  # fmt: skip
-        hook = HuntHook(player, res)
+                          if "box_recipes" in box else {}),
+                       **({"loop": plan.loop} if plan.loop else {})})  # fmt: skip
+        hook = DriveHook(player, res) if plan.loop else HuntHook(player, res)  # 5b-2: its loop
         try:
             a = args_fn(argv)
             res.rc = run_fn(a, hook=hook, session=(player.io.agent, player.io.screen), **box)
@@ -628,7 +650,8 @@ class HuntCore:
         player.rec.ev({"kind": "hunt_end", "n": self.n, "reason": res.reason, "error": res.error,
                        "home": res.home, "respawned": res.respawned, "dead": res.dead,
                        "ticks": res.ticks, "survive_calls": res.survive_calls,
-                       "calls": res.calls, "recipes": res.recipes, "rc": res.rc})  # fmt: skip
+                       "calls": res.calls, "recipes": res.recipes, "rc": res.rc,
+                       **({"drive": res.drive} if res.drive is not None else {})})  # fmt: skip
         return res
 
 
@@ -670,6 +693,10 @@ class LivePlayer(Sim):
         # 2026-11-14: hotbar_count inside the hunt core -- the keys it reads, each one's last read
         self._hunt_hotbar: tuple[str, ...] = ()
         self._hotbar_t: dict[str, float] = {}
+        # live-blocks 5b-2: the hunt loop's cursor while it drives (None: no drive), and the
+        # recipe the runner's lock last asked for (species, its Recipe or None: the runner's own)
+        self._cursor: Any = None
+        self._lock_answer: tuple[str | None, Any] | None = None
 
     # -- the clock and the sensors --
     def stop_due(self) -> str | None:
@@ -795,6 +822,11 @@ class LivePlayer(Sim):
         if isinstance(st, ir.Stop):
             self.words = f'the flow stopped at {path or owner} (stop "{st.reason}")'
             self.flow_stop = st.reason
+        if self._cursor is not None and isinstance(st, ir.ActionStmt) and st.block in hl.BLOCKS:
+            out = yield from self._action(st, owner)  # 5b-2: a hunt block's outcome is a VALUE
+            if st.outcome_to:  # (a monster, a word, a count): never a failure that stops
+                self._assign(st.outcome_to, out)
+            return "next"
         return (yield from super()._stmt(st, owner))
 
     def _action(self, a: ir.ActionStmt, owner: str) -> Generator[_Tick, str | None, str]:
@@ -833,6 +865,8 @@ class LivePlayer(Sim):
             return "ok"
         if a.block == fn.RUNNER_BLOCK:
             return (yield from self._hunt_core())
+        if self._cursor is not None and a.block in hl.BLOCKS:  # 5b-2: the hunt loop's blocks
+            return self._drive_block(a)  # (one bounded call into the runner's steps: no tick)
         raise _Halt(f"not_live_{a.block}")  # never: prepare() refused it before any input
 
     def _hunt_core(self) -> Generator[_Tick, str | None, str]:
@@ -1111,6 +1145,7 @@ class LivePlayer(Sim):
         once per target (`recipe`: the species, the function, its node path, its steps)."""
         plan = self.prep.runners.get(self.block)
         r = None if plan is None or species is None else plan.recipes.get(species)
+        self._lock_answer = (species, r)  # 5b-2: fight(t) plays THIS target's recipe after it
         rec: dict[str, Any] = {"kind": "recipe", "species": species, "why": why, "in": "hunt"}
         if r is None:
             self.rec.ev({**rec, "function": None, "default": True})
@@ -1118,6 +1153,116 @@ class LivePlayer(Sim):
         self.rec.ev({**rec, "function": r.function, "node": self.c.where(r.function).path
                      or r.function, "steps": list(r.steps), "knife": r.knife})  # fmt: skip
         return dict(r.doc())
+
+    # -- live-blocks 5b-2 (14): the box's hunt loop drives the hunt core's steps --
+    def hunt_drive(self, cursor: Any) -> str | None:
+        """The hunt loop, played NOW inside run() (its hook's drive): the function's statements
+        by the engine's own interpreter, each hunt block one bounded call through ``cursor``
+        (dungeon_hunt.HuntCursor) -- no engine tick between them; the box's survival events keep
+        playing through the tick hook inside the steps. None: the loop returned or the run ended
+        (the cursor says how); words: why it stopped otherwise (run()'s normal end follows)."""
+        plan = self.prep.runners.get(self.block)
+        if plan is None or plan.loop is None:
+            return "the box has no hunt loop"
+        name = plan.loop
+        path = self.c.where(name).path or name
+        sig = self.flow.signatures.get(name) or ir.Signature()
+        self.rec.ev({"kind": "drive", "what": "start", "loop": name, "node": path, "in": "hunt"})
+        saved = (self.frame, self._cursor)
+        self._cursor, self._lock_answer = cursor, None
+        self.frame = _Frame(name, MAIN_RANK, iter(()))  # the loop's own frame: its locals
+
+        def body() -> Generator[_Tick, str | None, str]:
+            envs = self._envs()
+            envs.append({p.name: None for p in sig.params})  # t: none at the start
+            try:
+                return (yield from self._stmts(list(self.flow.procedures.get(name, [])), name))
+            finally:
+                envs.pop()
+
+        words: str | None = None
+        gen = body()
+        try:
+            try:
+                next(gen)
+            except StopIteration:
+                pass  # the loop function returned
+            else:  # a statement that waits for an engine tick: refused before any input (lint)
+                gen.close()
+                words = "the hunt loop waited for a tick (a wait or a press): it plays blocks only"
+        except _DriveEnd:
+            pass  # the run ended (the cursor's RUN_END, its time box, a spin)
+        except _Halt as h:
+            words = f"the hunt loop stopped: {h.reason}"
+        finally:
+            self.frame, self._cursor = saved
+        self.rec.ev({"kind": "drive", "what": "end", "loop": name, "words": words, "in": "hunt",
+                     **cursor.doc()})  # fmt: skip
+        return words
+
+    def _drive_block(self, a: ir.ActionStmt) -> Any:
+        """One hunt block (poring_flow.huntloop) through the cursor: its value."""
+        c, b = self._cursor, a.block
+        lim = float(a.timeout_s)
+        if b == hl.EXPLORE:
+            self._lock_answer = None  # a new search: the next lock is the next target's
+            v: Any = c.find_target(lim)
+        elif b == hl.CHOOSE:
+            v = c.choose_target()
+        elif b == hl.LOOK:
+            v = c.look()
+        elif b == rc.SKILL:
+            key = self._eval(a.params.get("key")) if "key" in a.params else None
+            v = c.use_skill(str(key), f"box use_skill ({self.node_path})")
+            if v == "pressed":
+                self.keys_sent.append(str(key))
+                self.rec.ev({"kind": "key", "key": key, "node": self.node_path, "in": "hunt"})
+        elif self._eval(a.params["target"]) is None:
+            c.skip(b)  # no target (find_target's time box passed): nothing to do
+            v = "none"
+        elif b == hl.ATTACK:
+            v = self._drive_fight(a)
+        else:
+            play = {hl.WALK: c.walk_to_target, rc.STRIKE: c.strike, rc.WAIT_STEAL: c.wait_steal,
+                    rc.WAIT_KILL: c.wait_kill, rc.LOOT: c.loot}[b]  # fmt: skip
+            v = play(lim)
+        if c.ended is not None:
+            raise _DriveEnd(c.ended)
+        return v
+
+    def _drive_fight(self, a: ir.ActionStmt) -> str:
+        """fight(t): the monsters tab's recipe for the species the runner LOCKED at its strike
+        (its answer to the lock, LivePlayer.hunt_recipe; no recipe for it: the runner's own,
+        rc.DEFAULT_SHAPE), played as blocks -- strike first (both shapes begin with it after the
+        Knife, which plays at the runner's moment), then its steps; knife_on() / knife_back() play
+        at the runner's moments (stage 3's calls), so here they take no step."""
+        c = self._cursor
+        plan = self.prep.runners.get(self.block)
+        got: list[list[Any]] = [["strike", c.strike(self._limit(None, rc.STRIKE))]]
+        species, r = self._lock_answer or (None, None)
+        steps = tuple(r.steps) if r is not None else rc.DEFAULT_SHAPE
+        fn_name = None if r is None else r.function
+        for s in steps[steps.index(rc.STRIKE) + 1 :]:
+            if c.ended is not None:
+                break
+            if s in (rc.KNIFE_ON, rc.KNIFE_BACK):
+                got.append([s, "at the runner's moment"])
+                continue
+            play = {rc.WAIT_STEAL: c.wait_steal, rc.WAIT_KILL: c.wait_kill, rc.LOOT: c.loot}[s]
+            got.append([s, play(self._limit(fn_name, s))])
+        path = (self.c.where(fn_name).path or fn_name) if fn_name else None
+        self.rec.ev({"kind": "fight", "species": species, "function": fn_name, "node": path,
+                     "default": r is None, "steps": got, "in": "hunt",
+                     "recipes_known": bool(plan and plan.recipes)})  # fmt: skip
+        kill = next((x[1] for x in got if x[0] == rc.WAIT_KILL), None)
+        return str(kill if kill is not None else got[0][1])
+
+    def _limit(self, function: str | None, block: str) -> float:
+        """A recipe step's time box: its statement's timeout_s in the recipe, else the block's."""
+        for st in self.flow.procedures.get(function or "", []):
+            if isinstance(st, ir.ActionStmt) and st.block == block:
+                return float(st.timeout_s)
+        return hl.DEFAULT_TIMEOUT[block]
 
     def _preempt_now(self, keys: frozenset[str]) -> None:
         """The box's due PRE-EMPTS, each played to its end now (the runner it suspends is between
@@ -1153,6 +1298,10 @@ class LivePlayer(Sim):
             self.words = BUILT_IN_WORDS.get(e.key, f"{e.key}: the run ends")
             raise _Halt(e.key)
         return (yield from super()._handler_gen(e))
+
+
+class _DriveEnd(Exception):  # noqa: N818 -- a control signal: the hunt loop's run ended
+    """The cursor ended (a RUN_END, the run's time box, a spin): the hunt loop stops at once."""
 
 
 HUNT_HALT_WORDS = {

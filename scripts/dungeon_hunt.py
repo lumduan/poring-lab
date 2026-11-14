@@ -6373,8 +6373,10 @@ HANDBACK_AT = ("fight", "after")
 STEP_GUARD = {"fight": "fight", "loot": "after"}
 # the mode steps each block runs; a mode step the playing block does not own, in the mode its
 # guard names (or with no guard), is PASSED: the only way a block program plays unlike the driver
+# (find_target is 13.4's explore(): the box's walk tab has a setting named explore)
 BLOCK_OWNS: dict[str, tuple[str, ...]] = {
-    "explore": ("hold", "after", "ready", "rest", "idle", "plant", "search", "position", "pace"),
+    "find_target": ("hold", "after", "ready", "rest", "idle", "plant", "search", "position",
+                    "pace"),
     "walk_to_target": ("fight",),
     "strike": ("fight",),
     "wait_steal": ("fight",),
@@ -6383,7 +6385,7 @@ BLOCK_OWNS: dict[str, tuple[str, ...]] = {
     "look": (),
     "choose_target": (),
     "use_skill": (),
-}
+}  # fmt: skip
 DRIVE_SPIN_MAX = 50  # block calls in a row that call no step: the box's loop would spin; it ends
 # the run normally (the lint refuses such a loop before any input; this is the run time's own)
 DRIVE_SKILL_ROLES = ("potion",)  # use_skill's keys: a role key the start's slot check reads and
@@ -6394,7 +6396,7 @@ DRIVE_HOOK = ("tick", "survive", "call", "recipe", "event")  # what a driving ho
 
 @dataclass(frozen=True)
 class HuntTarget:
-    """live-blocks 5b-2: a monster as a VALUE of the box's hunt loop (explore()'s and
+    """live-blocks 5b-2: a monster as a VALUE of the box's hunt loop (find_target()'s and
     choose_target()'s): what the runner engaged -- its cell (the lock's, else the engage box's
     spot), the detector's species of the box the runner struck (None: not known, e.g. an engage by
     a hit before any box strike) and that box."""
@@ -6467,11 +6469,11 @@ class HuntCursor:
     - a MODE step: when the playing block owns it (BLOCK_OWNS), or when its guard is false
       (STEP_GUARD: its body then does nothing); else it is PASSED (not called; counted).
 
-    The box's canonical loop (`t = explore(); attack(t)`, attack = the recipe of t's species) calls
-    exactly the driver's step sequence, tick for tick (scripts/hunt_trace.py shows it on scripted
-    mode changes): explore owns the search's steps and hands back before `fight` once a fight
-    began; the recipe's blocks own `fight` and hand back on their exits, loot(t) owns the loot
-    step and hands back before `after`. ``press``: use_skill's key, the runner's own press."""
+    The box's canonical loop (`t = find_target(); fight(t)`, fight = the recipe of t's species)
+    calls exactly the driver's step sequence, tick for tick (scripts/hunt_trace.py shows it on
+    scripted mode changes): find_target owns the search's steps and hands back before `fight` once
+    a fight began; the recipe's blocks own `fight` and hand back on their exits, loot(t) owns the
+    loot step and hands back before `after`. ``press``: use_skill's key, the runner's own press."""
 
     def __init__(self, steps: Sequence[tuple[str, Callable[[], str | None]]], view: HuntView, *,
                  t_end: float, clock: Callable[[], float] = time.monotonic,
@@ -6567,11 +6569,11 @@ class HuntCursor:
         return v if how == "done" else (on_time if how == "time" else "ended")
 
     # -- the blocks (each one bounded call; its value) --
-    def explore(self, max_s: float | None = None) -> HuntTarget | None:
+    def find_target(self, max_s: float | None = None) -> HuntTarget | None:
         """The search (the walk, the rest, the plant sweep, the idle watchdog, ...) until a fight
         began: the target engaged; None at its time box (or the run's end)."""
         v = self.view
-        got = self.play("explore", lambda: (v.mode() == "fight", v.target()), max_s)
+        got = self.play("find_target", lambda: (v.mode() == "fight", v.target()), max_s)
         return got[1] if got[0] == "done" else None
 
     def walk_to_target(self, max_s: float | None = None) -> str:
@@ -6628,15 +6630,24 @@ class HuntCursor:
     def loot(self, max_s: float | None = None) -> int:
         """The fight's loot step (and the fight first, if one still runs): the loot clicks it made.
         At once (0) when there is nothing to loot: no fight, and no fight's end before the loot
-        step of this tick."""
+        step of this tick. Its time box bounds the FIGHT it waits for, never the loot step it is
+        for: once the fight is over it plays on to that step (the step's own budget bounds it), as
+        the driver does -- handing back there would pass the loot step (hunt_trace.py found it)."""
         v = self.view
         if not (v.mode() == "fight" or (v.mode() == "after"
                                         and self.i <= STEP_NAMES.index("loot"))):  # fmt: skip
             self.blocks["loot"] += 1
             self._progress(sum(self.calls.values()))
             return 0
-        r0, c0 = self.loot_reached, v.loot_clicks()
-        got = self.play("loot", lambda: (self.loot_reached > r0, v.loot_clicks() - c0), max_s)
+        r0, c0, t0 = self.loot_reached, v.loot_clicks(), self.clock()
+
+        def done() -> tuple[bool, Any]:
+            if self.loot_reached > r0:
+                return True, v.loot_clicks() - c0
+            boxed = max_s is not None and self.clock() - t0 >= max_s
+            return (True, v.loot_clicks() - c0) if boxed and v.mode() == "fight" else (False, None)
+
+        got = self.play("loot", done)
         return int(got[1]) if got[0] == "done" else v.loot_clicks() - c0
 
     def look(self) -> dict[str, Any] | None:
@@ -6644,6 +6655,12 @@ class HuntCursor:
         steps first when none has run yet."""
         got = self.play("look", lambda: (self.sensed, None))
         return self.view.reads() if got[0] == "done" else None
+
+    def skip(self, block: str) -> None:
+        """A block that hands back at once without the cursor (a target block with no target):
+        counted, and toward the spin guard."""
+        self.blocks[block] += 1
+        self._progress(sum(self.calls.values()))
 
     def choose_target(self) -> HuntTarget | None:
         """At once: the target of the fight that runs (None: no fight)."""

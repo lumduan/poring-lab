@@ -10,6 +10,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from poring_flow import huntloop as hl
 from poring_flow import ir
 from poring_flow.lint.common import Ctx, handler_exprs
 
@@ -275,8 +276,8 @@ def _action(ctx: Ctx, path: str, a: ir.ActionStmt, types: dict[str, str]) -> Non
     for p in spec.params:
         if p.required and p.name not in a.params:
             ctx.add("block_params", "error", 1, path, f"{a.block} needs {p.name}")
-    if a.outcome_to:
-        _set_var(ctx, path, a.outcome_to, "outcome", types)
+    if a.outcome_to:  # 5b-2: a hunt loop block's value is a monster or a word (any value)
+        _set_var(ctx, path, a.outcome_to, "?" if a.block in hl.NEW_BLOCKS else "outcome", types)
 
 
 def _membership_ok(right: Any, types: dict[str, str]) -> bool:

@@ -98,6 +98,7 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from poring_flow import functions as fn
+from poring_flow import huntloop as hl
 from poring_flow import ir
 from poring_flow import recipes as rc
 from poring_flow.catalogue import Catalogue, catalogue
@@ -133,8 +134,8 @@ LATER: dict[str, str] = {
     "walk_away": "stage 4",
     "attack_nearest": "stage 4",
     "finish_target": "stage 4",
-    "use_skill": "stage 4b: a skill press of a declared role key at the strike, in a monster's "
-    "recipe",
+    "use_skill": "stage 5b-2: in the hunt core's hunt loop only, a declared role key (in a "
+    "monster's recipe: a later stage)",
     "hunt": "stage 4",
     "sees": "stage 4",
     "count_visible": "stage 4",
@@ -240,6 +241,9 @@ def problems(flow: ir.Flow, cat: Catalogue | None = None) -> list[NotLive]:
     for iss in rc.analyse(flow)[1]:  # stage 4a: the model, the recipes, the primitives' places
         if iss.live:
             bad(iss.path, iss.what, iss.words)
+    for iss in hl.analyse(flow)[1]:  # 5b-2: the hunt loop, its blocks' places (live-blocks 14)
+        if iss.live:
+            bad(iss.path, iss.what, iss.words)
     for nl in click_problems(flow):  # stage 3: click_at only in the death exit
         if (nl.path, nl.what) not in seen:
             seen.add((nl.path, nl.what))
@@ -306,9 +310,11 @@ def _reached(flow: ir.Flow, name: str) -> set[str]:
 # Blocks whose live binding is the player's OWN code, not an L2 binding: the hunt core is the
 # runner (scripts/dungeon_hunt.py run, in-process), so a readiness item of combat.hunt's L2
 # binding (L2.input.attack_click ...) is answered by it. Every other readiness item still refuses.
-OWN_BINDING = (fn.RUNNER_BLOCK, fn.CLICK, *rc.PRIMITIVES, rc.MODEL_BLOCK)
+OWN_BINDING = (fn.RUNNER_BLOCK, fn.CLICK, *rc.PRIMITIVES, rc.MODEL_BLOCK, *hl.NEW_BLOCKS,
+               rc.SKILL)  # fmt: skip
 # (stage 3: click_at is the runner's own respawn press; stage 4a: a recipe's primitives are the
-# runner's own strike, steal cue, kill read and loot step, and use_model its own box detector)
+# runner's own strike, steal cue, kill read and loot step, and use_model its own box detector;
+# 5b-2: the hunt loop's blocks are run()'s steps, use_skill the runner's own press of its key)
 
 
 def own_binding_paths(c: Any) -> set[str]:
@@ -392,6 +398,11 @@ class HuntPlan:
     eat_keys: tuple[str, ...] = ()
     eat_name: str | None = None
     hotbar_keys: tuple[str, ...] = ()
+    # live-blocks 5b-2 (14): the hunt loop the hunt core plays instead of its own (its function's IR
+    # name; None: the runner's own driver, exactly 5b-1's) and the keys its use_skill may press.
+    # Not a play: run() gets the same arguments; a hook with drive is what makes it play the loop
+    loop: str | None = None
+    skill_keys: tuple[str, ...] = ()
 
 
 def _sensors(e: Any) -> set[str]:
@@ -599,6 +610,9 @@ def hunt_plan(flow: ir.Flow, block: str, cat: Catalogue | None = None) -> HuntPl
                          ("respawn", ("respawn", "respawn_confirm"))):  # fmt: skip
         if play in plays:
             by[play] = [names[r] for r in roles_ if r in names]
+    lp = hl.analyse(flow)  # 5b-2: the hunt loop of THIS hunt core (its issues: problems())
+    loop = lp[0].get(block)
+    out += [NotLive(i.path, i.what, i.words) for i in lp[1] if i.live and i.block == block]
     rplans, issues = rc.analyse(flow)  # stage 4a: the model and the recipes of THIS hunt core
     out += [NotLive(i.path, i.what, i.words) for i in issues if i.live and i.block == block]
     rp = rplans.get(block)
@@ -615,7 +629,9 @@ def hunt_plan(flow: ir.Flow, block: str, cat: Catalogue | None = None) -> HuntPl
                     None if rp is None else rp.model_doc(), {} if rp is None else dict(rp.recipes),
                     () if rp is None else rp.default,
                     {k: tuple(v) for k, v in by.items()}, tuple(sorted(eat_keys)),
-                    eat_fn if eat_keys else None, tuple(sorted(hot)))  # fmt: skip
+                    eat_fn if eat_keys else None, tuple(sorted(hot)),
+                    None if loop is None else loop.function,
+                    () if loop is None else loop.skill_keys)  # fmt: skip
 
 
 def _weight_event(e: Any, conds: list[Any], out: list[NotLive]) -> None:
@@ -895,6 +911,18 @@ def document(cat: Catalogue | None = None) -> dict[str, Any]:
                 "food item (one press_key of its input, the item's key); hotbar_count(key) is the "
                 "count on that slot, read from the hunt core's frame (an empty slot reads 0, an "
                 "unreadable one is unknown); an event that reads it eats from the slots it reads",
+            },
+            # 5b-2 (live-blocks.md 14): the hunt loop, the hunt core's steps as blocks
+            "loop": {
+                "function": hl.HUNT_LOOP,
+                "tab": hl.HUNT_TAB,
+                "blocks": list(hl.BLOCKS),
+                "fight_players": list(hl.FIGHT_PLAYERS),
+                "statements": list(hl.STATEMENTS),
+                "words": "a map node's hunt_loop(t) is its hunt core's loop: each block is the "
+                "runner's own steps, one bounded call (its timeout_s) that hands back on its exit, "
+                "at the run's end or on Stop; t = find_target() then fight(t) plays the runner's "
+                "own sequence; use_skill presses the hunt core's heal key between two steps",
             },
             # stage 4a: the box's model and its monsters' recipes (poring_flow.recipes)
             "recipes": {
