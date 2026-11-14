@@ -2309,3 +2309,10 @@ The tests: pickers.test.ts (the variable rows, the declared key, the variable li
 layout.test.ts (the hunt box), and huntloop.test.ts / project.test.ts / blockly_headless.test.ts
 (the hunt box's round trips, byte for byte, on the merged converter).
 
+**Re-run on the merged tree (a198b384):** the full Python suite 5,873 passed, 94 skipped, 3 failed
+-- the three worktree-only ones of 14.9; ruff check and mypy clean; ruff format --check clean but
+main's two old files; the frontend's test (487 passed, 1 skipped), typecheck and lint clean;
+`huntstate_check.py drive` and `check` rc 0; `hunt_trace.py check --seeds 200` YES on all 223
+scenarios; stage5b2_ab's plan and its refusals (test_stage5b2_ab, in-process, no live run) and
+stage5b_ab's refusal of the 5b-2 runner as its B (test_stage5b_ab) hold.
+
