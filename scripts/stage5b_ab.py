@@ -267,9 +267,12 @@ def verdict(scores: Sequence[Score5b], minutes: float, a_kinds: set[str],
     lines["openers_h"] = {**op, "pass": op["A"] * (1 - share) <= op["B"] <= op["A"] * (1 + share)}
     pa = {x: pace([g for s in arm[x] for g in s.gaps_ms]) for x in ("A", "B")}
     lim = float(bar["pace_ms"])
+    # live-blocks 13.7 / 14.7a: a bar may judge the median alone (`pace_p95: False`): the p95 gap
+    # is the long actions' (noise 46-70 ms per run), not a tick's cost. 5b-1's own BAR keeps both.
+    p95_judged = bool(bar.get("pace_p95", True))
     ok_pace = None if pa["A"]["median"] is None or pa["B"]["median"] is None else (
         pa["B"]["median"] <= pa["A"]["median"] + lim  # type: ignore[operator]
-        and pa["B"]["p95"] <= pa["A"]["p95"] + lim)  # type: ignore[operator]  # fmt: skip
+        and (not p95_judged or pa["B"]["p95"] <= pa["A"]["p95"] + lim))  # type: ignore[operator]  # fmt: skip
     lines["pace"] = {**pa, "pass": ok_pace}
     for key, attr, se_key in (("kills_h", "kills", "kills_h_se"),
                               ("loot_h", "loot_steps", "loot_h_se")):  # fmt: skip

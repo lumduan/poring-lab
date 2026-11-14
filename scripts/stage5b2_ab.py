@@ -65,7 +65,11 @@ BAR = {
     "kills_h_se": 2.0,  # mean paired (B - A) kills / h >= -this x its standard error
     "loot_h_se": 2.0,  # the same for the loot steps / h
     "openers_h_share": 0.20,  # B's Knife openers / h within +-this of A's (valid runs pooled)
-    "pace_ms": 10.0,  # B's median and 95th-percentile hp_read gap each <= A's + this
+    # 14.7a (2026-11-15 02:5x ICT, BEFORE any 5b-2 run; 13.7's lesson): the MEDIAN hp_read gap
+    # (a tick's own cost: `pace` holds a tick at 200 ms) <= A's + this; the 95th percentile is the
+    # long actions' (per-run SD 46-70 ms in s5b1-ab), REPORTED, not judged
+    "pace_ms": 5.0,
+    "pace_p95": False,
     "kinds": "every record kind B's runner sessions write is one the 5b-1 runner's source writes "
              "(its literal kinds), one A's sessions wrote, or the drive's own (drive)",
     "errors": "no B run ends by an exception of the runner (a traceback in its log, or hunt_end "

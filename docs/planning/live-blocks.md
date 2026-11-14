@@ -2133,6 +2133,58 @@ HuntState; series.json records the base revision and both sha256s.
 - HuntTick could be built from hs (the hook's view), and the steps could move out of run() to take
   (hs, io): later stages.
 
+### 13.7 Result of s5b1-ab (run 2026-11-15 00:37-02:47 ICT, scored 02:4x): FAIL by the bar -- on the pace p95 line only
+
+`stage5b_ab.py score --label s5b1-ab`: 3 pairs, all 6 runs valid (19.9-20.0 min, each ended by its
+time box), 0 invalid, 0 deaths. A = eb160ee1's runner (pinned a1bb5728), B = 5b-1's (521e86ac).
+
+    run      arm  min   deaths kills/h loot/h open/h  tick median  p95     errors
+    r01A     A    19.9    0    151.1   193.4  117.9    201.2      1044.4    -
+    r02B     B    19.9    0    151.0   193.3  120.8    201.7       991.1    -
+    r03B     B    19.9    0    142.0   163.2  136.0    201.6      1108.7    -
+    r04A     A    19.9    0    142.0   169.2  129.9    201.6       974.1    -
+    r05A     A    20.0    0    138.3   159.3  132.3    201.6       956.9    -
+    r06B     B    19.9    0    147.4   168.5  138.4    201.5       985.1    -
+
+The bar, line by line:
+- deaths A 0, B 0 -> PASS;
+- record kinds: none new in B -> PASS;
+- runner errors: none -> PASS;
+- openers/h: A 126.7, B 131.7 (within +-20 %) -> PASS;
+- kills/h: paired -0.1, 0.0, +9.1; mean +3.0, SE 3.0 -> PASS;
+- loot steps/h: paired -0.1, -6.0, +9.1; mean +1.0, SE 4.4 -> PASS;
+- **tick pace:**
+  - median: A 201.5, B 201.6 ms (n 10,714 / 10,596) -> within +10;
+  - p95: A 991.3, B 1016.7 ms -> **+25.4 > +10 -> FAIL**.
+
+**The verdict stays FAIL, as pre-registered; it is not re-scored** (5b-1's BAR is unchanged:
+`stage5b_ab.py score` still prints FAIL). What the failing line measured:
+- **The p95 gap between hp_read records is not a tick's cost.** It is the long actions: a walk, a
+  strike, the loot step, which hold the tick for about a second. It moves with the game, not the code.
+- **Its noise dwarfs its tolerance:**
+  - the per-run p95 SD is 46.4 ms in A and 69.7 in B;
+  - the three A runs alone, the same code, spread 87.5 ms;
+  - the PAIRED B - A p95 differences are -53.3, +134.6 and +28.2: mean +36.5, SE 54.4, i.e. zero
+    within noise.
+- **The median shows a tick's own cost:** the `pace` step holds a tick at 200 ms, so driver overhead
+  would push it up. It is equal, +0.1 ms, and its per-run spread is 0.5 ms.
+- **The code is the same program:** huntstate_check proves run() is the same program as eb160ee1's
+  (13.3).
+- **Lesson for the next bar** (the same family as 10.2's): set a tolerance from the measured noise, or
+  pick a statistic the change can move. 14.7a corrects 5b-2's pace line BEFORE any 5b-2 data.
+
+**The decision (the parent, 2026-11-15 02:5x ICT; within Batt's 18:1x "5b: go on, no need to ask me
+again"):** 5b-1 stays on main, and 5b-2 goes ahead.
+- **Why:**
+  - every outcome line passes;
+  - the only line that failed is noise-dominated by the numbers above;
+  - the AST proof stands;
+  - the median, the line that would show a slower runner, is equal.
+- **Not done:** a re-run of 5b-1 with a new bar. It would re-measure noise for 2 h on a proven-equal
+  program.
+- **Recorded for Batt to overrule:** if he wants "proven before the next" read strictly, the step is a
+  fresh s5b1-ab2 with 14.7a's corrected pace line.
+
 ## 14. Stage 5b-2: the steps as live blocks (➡️ BUILT 2026-11-14 20:1x-20:5x ICT, feat/hunt-blocks; offline only, NOT run live; its A/B pre-registered below, not run)
 
 **What it is.** 13.4 as designed, but for the refinements of 14.2: a map node's function
@@ -2408,6 +2460,20 @@ PASS. Why: B calls the same steps by construction (14.3), so the rates are held 
 noise as in 13.5; the tick pace is what the drive can cost (a few Python calls a block: far below
 10 ms); the drive line catches a pass or a spin that the rates would hide. No line is a strict "<"
 against an arm that may read 0 (10.2's lesson); deaths count over every run that played (section 7's).
+
+#### 14.7a CORRECTION to the pace line, pre-registered 2026-11-15 02:5x ICT from `date`, BEFORE any 5b-2 run (13.7's lesson)
+
+- **Judged now: the MEDIAN alone.** The pace line judges the MEDIAN hp_read gap: B's <= A's + 5 ms,
+  pooled over the valid runs (`stage5b2_ab.BAR`: `pace_ms` 5.0, `pace_p95` False).
+- **Why the median:**
+  - 5b-2's possible cost is the block interpreter's work per step, which lands in every tick;
+  - `pace` holds a tick at 200 ms, so a cost shows as a higher median;
+  - s5b1-ab's per-run medians spread 0.5 ms, so 5 ms is 10x that and still catches a real per-tick
+    cost;
+  - test_stage5b_ab's new test fails a B tick 6 ms slower.
+- **Reported, no longer judged: the 95th percentile.** It is the long actions' (per-run SD 46-70 ms in
+  s5b1-ab).
+- **Every other line of 14.7 is unchanged.** `stage5b_ab`'s own BAR (5b-1's, scored) is untouched.
 
 ### 14.8 The first real block experiment after it (NOT built)
 

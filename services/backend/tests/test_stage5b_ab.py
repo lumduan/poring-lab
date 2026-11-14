@@ -192,3 +192,26 @@ def test_the_launcher_refuses_a_text_whose_sha256_is_not_the_pinned_one(tmp_path
     out = _launch(tmp_path, "X = 1\n", "0" * 64)
     assert out.returncode == 2 and "runner_pin refused" in out.stderr
     assert not (tmp_path / "rec.json").exists() and out.stdout == ""  # the script never ran
+
+
+def test_a_bar_may_judge_the_median_alone_and_5b1s_own_bar_keeps_the_p95() -> None:
+    """live-blocks 13.7 / 14.7a: s5b1-ab FAILED its pace line on the p95 alone (+25.4 ms against
+    +10, with a per-run noise of 46-70 ms); 5b-2's bar judges the MEDIAN (a tick's own cost) and
+    reports the p95. 5b-1's own BAR is unchanged, so its pre-registered verdict stays."""
+    import stage5b2_ab as ab2
+
+    def slow_tail() -> list[ab.Score5b]:
+        out = _pairs()
+        for sc in out:
+            if sc.arm == "B":
+                sc.gaps_ms = [201.0] * 90 + [1500.0] * 10  # same median, a much longer p95
+        return out
+
+    assert ab.BAR.get("pace_p95", True) is True
+    assert ab.verdict(slow_tail(), 20.0, {"hp_read", "kill"})["lines"]["pace"]["pass"] is False
+    assert ab2.BAR["pace_p95"] is False and ab2.BAR["pace_ms"] == 5.0
+    assert ab.verdict(slow_tail(), 20.0, {"hp_read", "kill"}, ab2.BAR)["lines"]["pace"]["pass"] \
+        is True  # fmt: skip
+    # the median still decides: a tick 6 ms slower fails 5b-2's line
+    assert ab.verdict(_pairs(b_gap=207.0), 20.0, {"hp_read", "kill"}, ab2.BAR)["lines"]["pace"][
+        "pass"] is False  # fmt: skip
