@@ -4575,7 +4575,12 @@ xmas02gb. GPU_WEIGHTS keeps the entry (served only, like the failed fi rounds).
   held-out, never applied to this one); a fresh held-out recorded with the party apart from other
   Goblins is not possible (the summons are the knight's skill); or the alarm's own measure (party in
   view by packets, as live-blocks.md 11.1/11.2) on recordings, offline.
-- **Outputs:** local `data/train/eval/xmas02sk/` (refs, predictions, scores, D1), sha256 above;
+- **Outputs:** `data/train/eval/xmas02sk/` (refs, predictions, scores, D1), moved by the guarded
+  `archive:` (00:33) to the NAS **`archive/train/eval/xmas02sk/`** (and S4.2's GPU check to
+  `archive/train/eval/goblin-s4/`); the scratch (the masks' checks and looked-at frames, sk3a's
+  labels, pack, key, the labellers' pack and answers, the briefs, the logs) to
+  **`scratch-archive/2026-11-15/goblin-s4/`** (966 files, `SHA256SUMS` `f956a6fb...`, verified, then
+  the /dev/shm originals deleted); sha256 above;
   `q1-score-sk3a.json` `9408e860...`, `q1-score-gw3.json` `7fb8fc8b...`, `q1-score-test.json`
   `6705236b...`, `d1-xmas02sk.json` `6d477bd6...`, `d1-xmas02gb.json` `721e6487...`.
 
