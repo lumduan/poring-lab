@@ -1324,6 +1324,13 @@ excluded labels' boxes in the cached frame instead of dropping the frame, then t
 M/S (the sk1a/sk2a DEV recordings on the NAS, init xmas02gb, the held-out sk3a unread so far), its
 bars pre-registered before any data step.
 
+➡️ **RESULT (2026-11-15 00:32 ICT, xmas02-detector.md Amendment S4, scored once): FAIL, NOT
+deployed.** The masked cache (S4.1-S4.7) gave TRAIN 1,138 Goblin boxes (S3: 12); 10 epochs from
+xmas02gb (`xmas02sk`, last.pt `0b43ebbf...`, ONNX `76316fb4...`, archived, registered in GPU_WEIGHTS
+only). On sk3a the Goblin's Q1s recall is 0.807 but its precision **0.597 < 0.80** (31 boxes charged,
+26 of them on real Goblins not drawn into the pack: the scorer's crowd rule, S4.10); the knight 59 /
+59 (reported); Garm Baby, the four species and D1 (17.96 ms) PASS. The alarm stays xmas02gb's.
+
 ### 11.5 The Butterfly Wings (done 14:02 ICT)
 
 The lab GM's `@item 602 4` (crusader.py, `"typed": true`), read back from the hotbar: F9 1 -> **5**.

@@ -4231,3 +4231,356 @@ the knight's labels are right. It does not say whether there are enough of them 
 - **Next (rogue-xmas02.md 4CR, pre-registered):** the pair p90 + p91 with `--loot-items xmas02fi5`
   on today's base, judged by bars I-a, I-b and I-c.
 
+
+### Amendment S4 (2026-11-14 19:05 ICT from `date`, written BEFORE the cache, any GPU step of the round and any read of sk3a's labels, packets or frames): the Christmas Goblin class -- a MASKED cache, then S2's round
+
+**Why (Batt 2026-11-14 ~18:1x, live-blocks.md 10.2 decision 2: "if it can run in parallel, do it
+now"; 11.1 / 11.4):** the Goblin (1607) is a summon only on this map and came first in all 11
+deaths of 11-13/14; the deployed alarm boxes it only by accident (as garm_baby). S3 found the sk1a /
+sk2a labels plentiful (T2: G and H 100 %), but the cache's WHOLE-frame rule kept 12 Goblin boxes:
+the knight's party almost never leaves a frame whole. This amendment changes how the cache WRITES
+those two sessions, then runs S2's round. The label rule (FROZEN `d4cc0a5d...`), the label files
+(S1: `301c06af...` / `340c5643...`, restored byte-identical from the NAS archive of 11-12
+`scratch-archive/2026-11-12/shm-before-cpu-swap/poring-lab-tmp/xmas-sk/`), the class list
+(`classes-xmas02-sk.json`, `b871a2f6...`: + 8 Christmas Goblin 1607, 9 Stormy Knight 1251) and 3c
+(both sessions ADDED) are unchanged. The model is NOT deployed by this amendment (below).
+
+#### S4.1 The masked rule (code `d5c73f23` + `957afbbd`, branch `feat/goblin-class`; a subagent, offline, CPU, a 4 GB scope without swap)
+
+`build_frame_cache.py --labels map ... --mask-sessions sk1a sk2a` (tests:
+`services/backend/tests/test_build_frame_cache_mask.py`). For those sessions only:
+1. **Still dropped, as before:** a frame exclusion (4g: dying_in_view, warp, another player,
+   unchecked species), the label pass's own drop, a species without a class; our own `player` box
+   placed as before (self_dead / self_unknown drop the frame).
+2. **No longer a frame drop:** every EXCLUDED label (any reason: occluded_model / _terrain, crowd,
+   next_move, ambiguous_view, facing_unknown, unfit, ui) and every `weak_fit` label (clear of the
+   models, NCC below T_h 0.536) becomes a MASK.
+3. **A mask's region** (`map_labels.label_regions`, packets + sprites, no pixel): the sprite's
+   ENVELOPE at the labeller's own predicted anchor (FixLabeler's Timeline world at tw = t - 120 ms,
+   its scene, the 1b anchor), the union over the 8 headings and the action groups IDLE, WALK and the
+   unit's state's, every frame of each (the facing and the phase are not trusted); a weak_fit
+   label's fitted box joined; grown by the species' fit radius (6 px) + `MASK_PAD_PX` 4; clipped.
+4. **Painted** `MASK_FILL` 114 grey (BGR 114, 114, 114: ultralytics' letterbox and mosaic fill) in
+   the cached PNG, EXCEPT inside the written boxes: no written box (our own, a TRAIN monster)
+   loses a pixel.
+5. **Demotion** (a TRAIN box would otherwise carry a masked unit's body unlabelled): a kept box that
+   holds a mask's CENTRE (the envelope's, or a weak_fit / demoted label's fitted box's), or that
+   touches a mask left more than `MAX_EXPOSED` 0.5 unpainted inside the written boxes, is masked
+   too (its fitted box, grown the same), repeated until neither holds. A mask centred in our own
+   box, or left over half unpainted by it, drops the frame (`mask_on_self`); a label without a
+   region drops it (`mask_unknown`: none happened).
+6. Each frame's json lists its masks (`masked`, `mask_fill`); its rule name is
+   `xmas02-o3h-t-all-mask`; the session row counts the masks and runs the positive check below.
+
+**Why pixels, and not ignore regions in the loss** (the brief: the detector must not be taught that
+a masked region is background):
+- the hidden unit's pixels are REMOVED, so no monster pixel is ever a background example; the
+  anchors on a grey patch learn "grey = nothing", which the same 114 grey of every mosaic border
+  and letterbox pad of every round has always taught;
+- ignore regions need train.py, ultralytics' loss, its augmentation (mosaic, perspective and flips
+  must carry the ignore boxes) and its validator changed: a new recipe, untested, and a merge before
+  any GPU step (the vision worker runs the MAIN checkout's trainer). With pixel masks the trainer,
+  the recipe and the evaluation code stay exactly the deployed model's;
+- **the risk this leaves, recorded:** a context shortcut. In TRAIN, 1,117 of the 1,138 Goblin
+  boxes (98 %) lie within 20 px of a grey patch, and live frames have none. The held-out (sk3a) is
+  RAW, unmasked frames, so a shortcut that costs recall shows up in the bar; mosaic training also
+  puts grey edges beside every class.
+
+**Only sk1a + sk2a are masked.** xmas02gb's TRAIN (xw2, xw3 x 2, gw2: 2,291 frames) and VAL (xw1
+x 2: 1,106) join BY REFERENCE (`--link-cache xmas02-gb-o3h-t-20261109`, manifest `6a030c33...`):
+the very frames the deployed model trained on. S3's dry run gave those sessions the same counts
+under the sk list, and the xw3 Goblin labels (from the 11-06 T2, which failed) stay out.
+
+#### S4.2 The positive cases (before the cache)
+
+1. **Every KEPT label inside its own region:** the fitted box of every kept label of both sessions
+   (sk1a 2,907, sk2a 3,234; all seven species; Goblin 1,421 + 1,402) lies inside its region grown
+   by the fit radius alone: **100 %, worst overshoot 0 px** (the dry run's `mask_check`).
+2. **Looked at (7 masked frames, painted exactly as the rule writes them, written boxes drawn):**
+   sk1a 263, 272, 321, 442 and sk2a 141, 276, 886. The party is grey, the written Goblins / dogs /
+   species keep their pixels, a grey frame with only our box occurs (276). sk2a 886 shows the
+   failure mode: a WALKING Myst Case one frame before a move packet (`next_move`) is drawn ~1.5
+   cells from the Timeline's position, so it is neither boxed nor painted.
+3. **The escape check (how often an unlabelled monster survives; scratch `escaped.py` `03712a67...`):**
+   the DEPLOYED xmas02gb's own GPU detections (predict_dir in the worker, conf 0.25, 1,441 frames of
+   sk1a + sk2a, `pred-gb-sk12.json` `e36d4716...`) against each frame the rule writes. ESCAPED = a
+   detection of its five monster classes at conf >= 0.5 that matches no written box (IoU >= 0.3)
+   and is less than half painted. The sensor cannot see Goblins or the knight; it is a check of
+   the masks, not of the labels.
+
+| rule | frames written | frames with an escape | escaped boxes | Goblin boxes |
+|---|---|---|---|---|
+| the WHOLE-frame rule (the baseline: what TRAIN has always had) | 231 | **20 (8.7 %)** | 21 | (12) |
+| **the masked rule (chosen)** | 1,322 | **54 (4.1 %)** | 55 | **1,138** |
+| next_move frames dropped | 1,001 | 44 (4.4 %) | 45 | 974 |
+| next_move regions over tw .. tw + 0.3 / 0.6 / 1.0 s | 1,322 / 1,321 / 1,321 | 53 / 52 / 52 | 54 / 53 / 53 | 1,124 / 1,125 / 1,127 |
+
+   Of the 55: 18 lie under the chat window or the top bar (units the label rule calls hidden: in
+   every rule's frames alike), others are the floor paintings that depict the map's monsters
+   (sk1a 835: a painted Garm Baby, conf 0.98, in a frame with no label at all), and a few are real
+   misses like sk2a 886. **The masked frames leak no more than the whole frames always did**, so
+   next_move keeps the plain rule (a drop or a time window changes 1-10 boxes at a cost of up to
+   164 Goblin boxes).
+4. **Rules tried on the dry run before this choice** (TRAIN labels and packets only; nothing of sk3a):
+   (a) demote any kept box a mask TOUCHES: 13 + 9 = 22 Goblin boxes (the grown envelopes swallow
+   the party: S3 again); (b) the centre rule alone: 1,269, but 65 masks over half unpainted (up to
+   75 %); (c) the centre rule + MAX_EXPOSED 0.5: **1,138, none over half (chosen)**.
+
+#### S4.3 The dry run (`d5c73f23`, 18:42:46-18:44:35; output `cache-dry.json` sha256 `671cd07a79aa49ca81a1a1bf596adbf578b0f9e88a1ec3b02270073c6dcb3c75`; re-run through the guarded `cache:` step at 19:03-19:05, the same counts)
+
+| session | frames considered | written (whole rule: S3) | dropped | Myst / Cruiser / Cookie / Xmas Cookie / Garm Baby / **Goblin** / **Knight** boxes | masks painted (frames with one) | painted area p50 / p90 / max | mask left unpainted p50 / p90 / max |
+|---|---|---|---|---|---|---|---|
+| sk1a | 700 | **655** (112) | mask_on_self 44, dying_in_view 1 | 255 / 128 / 83 / 82 / 110 / **585** / **47** | 3,207 (543) | 3.1 / 4.6 / 7.5 % | 0.6 / 28.3 / 50.0 % |
+| sk2a | 741 | **667** (119) | mask_on_self 74 | 282 / 201 / 170 / 81 / 141 / **553** / **65** | 3,260 (548) | 3.0 / 4.8 / 7.1 % | 0.0 / 26.5 / 49.2 % |
+| **masked total** | 1,441 | **1,322** | 119 | 537 / 329 / 253 / 163 / 251 / **1,138 (534 frames)** / **112 (112 frames)** | 6,467 | | |
+| linked xmas02gb TRAIN | | 2,291 | | 1,170 / 627 / 344 / 310 / 398 / 0 / 0 | | | |
+| **TRAIN** | | **3,613** | | **1,707 / 956 / 597 / 473 / 649 / 1,138 / 112** (+ 3,613 player) | | | |
+| linked VAL (xw1 x 2, monitor only, D13) | | 1,106 | | 511 / 205 / 206 / 210 / 0 / 0 / 0 | | | |
+
+- The masks by reason (both sessions): weak_fit 1,793, demoted 983, occluded_model 943, crowd 953,
+  next_move 870, occluded_terrain 588, ambiguous_view 242, facing_unknown 48, unfit 45, ui 2; by
+  species: Goblin 3,264, Garm Baby 1,691, knight 864, the four species 648. Demoted kept boxes:
+  Goblin 709, knight 158, Garm Baby 96, others 20.
+- The class names (the cache's, from data/kb): player, npc, warp, mystcase, cruiser, cookie,
+  cookie_xmas, garm_baby, **g_gobline_xmas**, **knight_of_windstorm**.
+- The Goblin's 1,138 boxes are many views of ~96 summoned Goblins a session (16 knights x 6, S1);
+  the knight's 112 are views of 32 knights. Garm Baby's round (M5) trained on 398 boxes.
+- The estimated new shards: 6, ~2.86 GB (the recorded PNG sizes: an upper bound, grey compresses).
+
+#### S4.4 The cache step (the WORKTREE's builder: the guarded `cache:` step runs `scripts/build_frame_cache.py` of the checkout it is started from, so it is started from the worktree, with the main checkout's venv linked there; no env built)
+
+    WT=/dev/shm/poring-lab-wt/goblin; F=/dev/shm/poring-lab-tmp/xmas-det/fit; K=/dev/shm/poring-lab-tmp/goblin/sk
+    SK1=20261112T070331-rdp-xmas02-sk1a; SK2=20261112T072541-rdp-xmas02-sk2a
+    cd $WT && LAB_HOST_PROFILE=dedicated-intel PYTHONPATH=<the worktree's sources> python3 scripts/guarded_build.py \
+      --threshold 30 --sustain 30 "cache@7200=--labels map --classes species \
+      --class-list config/detector/classes-xmas02-sk.json --kb data/kb --map-params $F/params.json \
+      --map-params-sha256 d4cc0a5d9e530e382e31ea9c9ae1fc1087dd31c37577b43b307eff65994fdb6e \
+      --map-labels $K/labels/$SK1.json $K/labels/$SK2.json --own-c1 $K/own-c1/$SK1.json $K/own-c1/$SK2.json \
+      --train $SK1 $SK2 --mask-sessions $SK1 $SK2 --link-cache xmas02-gb-o3h-t-20261109 --image png \
+      --cache-id xmas02-sk-mask-o3h-t-20261114"
+
+- Output: `/mnt/poring-lab-datasets/.framecache/xmas02-sk-mask-o3h-t-20261114` (its sk shards; the
+  gb cache's shards by `../xmas02-gb-o3h-t-20261109/...`, which must stay where they are).
+- The written counts must equal the dry run's (S4.3); a difference stops before any GPU step.
+
+#### S4.5 The training launch (committed BEFORE the GPU step)
+
+- **The recipe: M6's**, unchanged except the cache, the init, the run name and the epochs: YOLO11n,
+  imgsz 1280, seed 20261004, batch 2, `--workers 2`, close_mosaic 3, hsv_s 0.2, hsv_h 0.015, scale
+  0.1, `--mid-ckpt`, FP32 on the Arc (xpu); ultralytics' `optimizer=auto` (AdamW, lr 0.01 / (4 +
+  10) = 0.000714 for 10 classes). The guarded `execdev:` step WITHOUT train-day's duty arguments
+  (M6's reason: no duty file on a dedicated host). train.py is the main checkout's, unchanged (the
+  masks are pixels).
+- **The init: xmas02gb's last.pt**, `/datasets/archive/train/xmas02-gb-20261109/weights/last.pt`,
+  sha256 `85fb37a4...` (the deployed model; M8). ultralytics' `cls_remap` seeds the 8 old class rows
+  by name; `g_gobline_xmas` and `knight_of_windstorm` start fresh (M6's check: the log's remap line).
+- **10 epochs** (S2 left the number to this amendment). Why not M's 20:
+  - the init has already trained 20 epochs on 2,291 of the 3,613 TRAIN frames;
+  - the new classes still get more box-passes than M's new class did: 1,138 x 10 = 11,380
+    against Garm Baby's 398 x 20 = 7,960;
+  - the wall time: 1,807 batches an epoch at M8's ~1.04 s + VAL ~4 min = ~36 min, so 10 epochs ~6 h
+    against ~12 h (the step's limit). **The worker runs ONE job at a time: while it trains, a Run's
+    detect server is REFUSED** (guarded_build `worker_not_ready`, and flow_run's `detect_up` then
+    fails the start), so the shorter occupation is Batt's time too.
+- **The command (from the main checkout), detached** (`systemd-run --user`, unit
+  `poring-train-xmas02sk`; guard output `/dev/shm/poring-lab-tmp/goblin/train/train-guarded.out`):
+
+        cd /home/bot/docker/poring-lab && python3 scripts/guarded_build.py --threshold 30 --sustain 30 \
+          "execdev:vision@43200=python -m poring_vision.train --cache /datasets/.framecache/xmas02-sk-mask-o3h-t-20261114 --epochs 10 --batch 2 --workers 2 --name xmas02-sk-20261114 --mid-ckpt --weights /datasets/archive/train/xmas02-gb-20261109/weights/last.pt --hsv-s 0.2 --close-mosaic 3 --scale 0.1"
+
+  A resume (the same run, the exact mid-epoch resume): the same line with `--resume` in place of
+  `--weights ... --scale 0.1`.
+- **If Batt presses Run while it trains** (the brief): a watcher polls `flow_run.py status` every
+  10 s and the process table; on a start attempt or a live runner (`dungeon_hunt`, `flow_play`), it
+  stops the training through its own guard (SIGINT to the step's `docker exec` client: guarded_build
+  verifies the stop in exec mode) and logs it; the training resumes by the line above once the run
+  has ended and the worker is idle. The press that found the worker busy has failed ("the detect
+  server refused"); the next one runs. Recorded in the result.
+- **The scored checkpoint:** `data/train/xmas02-sk-20261114/weights/last.pt` after epoch 10 (if it
+  ends early: the last completed epoch's, and why). Never best.pt or mid.pt.
+
+#### S4.6 The evaluation, pre-registered NOW (S2's bars, unchanged; each step once)
+
+1. **The freeze:** the step ends OK, results.csv has 10 rows; `last.pt`'s sha256 is recorded in an
+   amendment BEFORE anything of sk3a is read. (Before this amendment only sk3a's directory listing
+   and its manifest header were looked at, to confirm the recording exists: no frame, label or
+   packet.)
+2. **The export and the archive BEFORE any registration** (M9's recipe, the archived
+   `onnx-export/build.sh`, a temporary RAM env removed after): `xmas02sk-last-736x1280.onnx` + its
+   names (they must read the cache's 10 names in order) to `archive/models` (sha256 read back); the
+   run to `archive/train/xmas02-sk-20261114` (guarded `archive:`).
+3. **Registered, NOT deployed:** `unit_detector.GPU_WEIGHTS["xmas02sk"]` (+ fi_gpu_latency's ONNX
+   map), NOT in MAP_MODELS; models.yaml unchanged (its only statuses are live / not_adopted); a 60-s
+   serve test of every registered model listens before anything uses it. MAP_MODELS["xmas_dun02"],
+   the runner's map default and the alarm stay xmas02gb.
+4. **sk3a's labels** (`map_labels.py labels --map xmas_dun02 --eval-test`, the FROZEN params, the
+   TRAIN labels' `classes-none.json`), then its **pack**: `pack --eval-test --per-species 60 --seed 53
+   --min-fit 0.536` (M7 point 2's floor), the instructions `dc48fb15...`; **two NEW blind labellers W
+   and X** (A-V are spent), M9's brief with the paths changed.
+5. **The predictions** (predict_dir in the worker, imgsz 1280, conf 0.25, the frozen last.pt): sk3a's
+   pack frames (`eval_q1.py refs`); pooled TEST (`q1-refs.json` `c640936a...`); gw3 (`q1-refs-gw3.json`
+   `0144eab7...`). **The scores, once each** (`eval_q1.py score`, `--cache-manifest` = the new cache's):
+   - **Christmas Goblin on sk3a, Q1 SPECIES-STRICT** (`Q1.per_species.g_gobline_xmas`: the alarm keys on
+     the class, as M7 point 3 for Garm Baby): >= 50 evaluated crops, **recall >= 0.80 AND precision
+     >= 0.80**. Q1c beside it, reported.
+   - **Stormy Knight on sk3a:** Q1 and Q1c recall REPORTED (no bar).
+   - **Garm Baby: Q1s on gw3** (M11's key `99f2acc7...`, answers G `42c6bae1...` / H `76dd9859...`):
+     >= 50, recall and precision >= 0.80.
+   - **The four species: Q1c on pooled TEST** (11-07's key `fc9facb1...`, answers C / D): >= 50 each,
+     recall and precision >= 0.80.
+   - sk3a's four species and Garm Baby: reported only.
+6. **D1 p95 <= 35 ms:** a live D1 needs a Run, which this round may not do. It is measured as O27's
+   I5 was: the guarded OpenVINO serve step holding every registered model, a host client
+   `GpuDetector(weights="xmas02sk")` over 300 of sk3a's refs (every k-th sorted key), one model a run,
+   then xmas02gb on the same frames. **The bar: xmas02sk's server forward p95 <= 35 ms**; the call
+   p95 (harness included) and xmas02gb's are reported. The deployment step's own pilot measures the
+   live D1.
+7. **Then:** the results here and in live-blocks.md 11.4; the scratch to the NAS. Deployment
+   (MAP_MODELS, the alarm's Goblin rule, S2's "runner" paragraph, a live flee proof) is a later step
+   of its own, decided by the parent / Batt on this result.
+
+#### S4.7 (2026-11-14 19:15 ICT from `date`, BEFORE the GPU step): the cache as built
+
+S4.4's command, 19:07:14-19:13:30 (375.4 s; the guard watched no capture service, worst stall
+0.0 %): **`/mnt/poring-lab-datasets/.framecache/xmas02-sk-mask-o3h-t-20261114`**, 1,322 frames written
+(sk1a 655, sk2a 667) in 6 shards (2.77 GB), + the linked xmas02gb cache (6 sessions, 3,397 frames,
+16 shards, by reference). **Every count equals the dry run's** (frames, boxes per class, the mask
+counts). `manifest.json` sha256 `9d7a9b3850896c3bea607a2d55ebc543502a9ddbb03522f38f82c91dd164f7d5`,
+`split.json` `08912f97...`; its names player ... garm_baby, g_gobline_xmas, knight_of_windstorm; its
+class list `b871a2f6...`. Read back through `poring_vision.shards.load_split` (the trainer's
+reader): TRAIN 3,613 frames, boxes 0: 3,613 / 3: 1,707 / 4: 956 / 5: 597 / 6: 473 / 7: 649 /
+**8: 1,138** / **9: 112**; VAL 1,106. sk2a 886 read from its shard: 4.65 % of its pixels are 114
+grey, its 4 YOLO lines our own box + cookie_xmas + Goblin + Garm Baby. Next: S4.5's launch.
+
+**S4.5 as launched (19:15:42 ICT, the unit `poring-train-xmas02sk`; the guard printed "host profile
+dedicated-intel is DEDICATED" and ran S4.5's command unchanged):** the trainer's log reads
+`Overriding model.yaml nc=8 with nc=10`, **`Remapped 8/10 cls head rows from pretrained weights by
+class name`** (g_gobline_xmas and knight_of_windstorm fresh), `Transferred 499/499 items`,
+`AdamW(lr=0.000714, momentum=0.9)`, `amp=False`, `Using 3613 train, 1106 val images`, `Using 2
+dataloader workers`, `Starting training for 10 epochs`. A watcher (S4.5) yields the worker to a Run.
+
+#### S4.8 (2026-11-15 00:12 ICT from `date`, BEFORE anything of sk3a is read): the training ended; THE SCORED MODEL FROZEN
+
+- `train ended rc=0` at 00:12:03 ICT (started 2026-11-14 19:15:43): **all 10 epochs**, 17,776.3 s
+  (~29.5 min an epoch), FP32 on the Arc A380 (torch 2.15.0+xpu), peak VRAM 2,178 MiB, no step sleep;
+  the guard's worst stall 0.0 %; the step ended "worker up and idle, nothing of ours on the GPU".
+- **No Run was pressed during it:** the watcher (S4.5) read the Run helper `idle` with `busy` null
+  every 10 s from 19:16:04 to the end (00:12:05); no runner process appeared; nothing yielded.
+- VAL (xw1 x 2, monitor only; NO Goblin, knight or Garm Baby in it) by epoch, P / R / mAP50 /
+  mAP50-95: 1: 0.982 / 0.984 / 0.993 / 0.905 ... 10: **0.985 / 0.992 / 0.994 / 0.927** (xmas02gb's
+  epoch 20, M8: 0.983 / 0.984 / 0.993 / 0.922); results.csv sha256 `40a3ed2f...`.
+- **The scored checkpoint: `data/train/xmas02-sk-20261114/weights/last.pt` after epoch 10, sha256
+  `0b43ebbfe8e2bb5c4333d2297520f4f05d9ce79b6fa1cdcde12663879d167a10`** (5,533,786 bytes). Nothing is
+  refitted after this line. Next: S4.6 steps 2-6.
+
+#### S4.9 (2026-11-15 00:19 ICT from `date`, BEFORE any labeller sees the pack or any prediction exists): the export, the registration, sk3a's labels and the evaluation pack
+
+- **The export (M9's recipe, 00:12:37-00:13:27; the archived `onnx-export/build.sh` `0b1db27c...`, a
+  1.5 GB RAM env removed after; the lab's /dev/shm 2.44 GB at its peak):** torch 2.15.0+cpu,
+  ultralytics 8.4.165, opset 18, input [1, 3, 736, 1280], output [1, 14, 19320] (4 + 10 classes).
+  **`xmas02sk-last-736x1280.onnx` sha256 `76316fb4e58102aaf015de597eec2b188f9f103e29fb4ca74f87d2f636d19473`**
+  and its names `535a31c7...`: player, npc, warp, mystcase, cruiser, cookie, cookie_xmas, garm_baby,
+  g_gobline_xmas, knight_of_windstorm (the cache's order). In `/dev/shm/poring-lab-detector/model`
+  and **copied to the NAS `archive/models` BEFORE the registration** (sha256 read back; that folder's
+  SHA256SUMS lists only deployed models and is unchanged).
+- **The run archived** (guarded `archive:`, 00:13:37-00:13:43: copy, check, local delete):
+  `archive/train/xmas02-sk-20261114`, its last.pt re-hashed on the NAS: `0b43ebbf...` (S4.8).
+- **Registered, NOT deployed** (`376a0137`): `unit_detector.GPU_WEIGHTS["xmas02sk"]` (+
+  fi_gpu_latency's map, a test); MAP_MODELS["xmas_dun02"] stays `xmas02gb`. **The serve test**
+  (00:16:29-00:17:32, the worktree's serve-cmd, OpenVINO, 60 s): `"listening"` with all 9 models,
+  `xmas02sk: 76316fb4e581`; it ended by its time box (rc 124), the worker idle after.
+- **sk3a's labels** (`map_labels.py labels --map xmas_dun02 --eval-test`, `957afbbd`'s
+  eval_suffixes, the FROZEN params, `classes-none.json`; 00:12:42-00:18:08):
+  `/dev/shm/poring-lab-tmp/goblin/eval/labels-test/20261112T074222-rdp-xmas02-sk3a.json`, **sha256
+  `cf0e8610f643e582115b9381b3493d3a92a4e73852dda5419fc5e53b2cd5f8ee`**, `eval_test: true`. 903 frames
+  recorded, 738 candidates (gm_window 126, map_change 39), 176 whole. Kept labels: Myst Case 210,
+  Cruiser 183, Cookie 153, Christmas Cookie 158, Garm Baby 488, **Christmas Goblin 1,423**, **Stormy
+  Knight 348**.
+- **The pack** (`pack --eval-test --per-species 60 --seed 53 --min-fit 0.536`, 00:18:08-00:18:28):
+  **420 crops (60 per species x 7), 309 frames, 21 grids**; the pools after the floor: 204 / 166 / 144
+  / 137 / 146 / **999** / 175 (weak_fit removed 6 / 17 / 9 / 21 / 342 / **424** / 173).
+  - the instructions `dc48fb15...` (T2's and every evaluation's, checked by the tool); `reference.png`
+    **`2cae63ad...`, byte-identical to the 11-07 and M9 evaluation packs'** (the same 9 species and seed:
+    A Garm Baby, B Myst Case, C Poring, D Cookie, E Cruiser, F Christmas Cookie, G Stormy Knight, H
+    Christmas Goblin, I Santa Poring);
+  - **the answer key `/dev/shm/poring-lab-tmp/goblin/eval/key/answer_key.json`
+    `d77b9767de645bfa9adbdf1eeb16ba3158a963b4add9fcea594312e721eb5281`**; `pack.json` `5f68d60f...`; the
+    file list (444 files) `1af0eaad...`; `pack-build.json` `286c47ec...`.
+- **The labellers' copy: `/dev/shm/poring-lab-tmp/blind-sk53-sk3a/pack`** (checked 444 / 444), an
+  empty `answers/` beside it; the key lives only under `goblin/eval/key`. **Two NEW blind labellers, W
+  and X** (A-V are spent), each with ONLY M9's brief, the paths changed (W `e974c879...`, X
+  `2089f76a...`; they differ in the letter and the answers path).
+- The four species and Garm Baby on sk3a are reported only (S4.6 point 5); the Goblin's verdict is
+  `Q1.per_species.g_gobline_xmas` on this pack.
+
+#### S4.10 (2026-11-15 00:32 ICT from `date`): THE RESULT (scored once) -- THE GOBLIN CLASS FAILS ITS PRECISION BAR
+
+S4.6's steps 5-6, each once. The labellers' answers were scored as given.
+
+**The inputs (B0, 00:30:10, before any score):** labellers W and X (both NEW, blind: the pack only;
+each answered all 420 crops; X also ran a parse check on its OWN answers file, nothing on the pack),
+sha256 **W `7face8503940bc8fa6faebd36e130bc12b80154adafbb6e982d594fc1fc9c6c2`**, **X
+`d8226762efd4234890987c809e3e809005e193abc8eeb82cc4b1e1113e9ed034`**. The labellers' pack matched its
+file list (444 / 444). Re-hashed and equal to their records: the key `d77b9767...`, last.pt
+`0b43ebbf...` (the NAS copy), the cache manifest `9d7a9b38...`; the reused 11-07 key `fc9facb1...`, C
+`01808a2b...`, D `9c3817ba...`, refs `c640936a...`; M11's gw3 key `99f2acc7...`, G `42c6bae1...`, H
+`76dd9859...`, refs `0144eab7...`.
+
+**The predictions (the worker, predict_dir, imgsz 1280, conf 0.25, the frozen last.pt from the NAS
+archive; 00:20-00:23, before the labellers' answers, never shown to them):** sk3a's 309 pack frames
+(`q1-refs-sk3a.json` `a896bbc1...` -> `q1-pred-sk3a.json` `e68d8d3b...`), pooled TEST 231 frames
+(`531b7cdc...`), gw3 261 frames (`ffa36882...`). (The TEST and gw3 steps first stopped at once on a
+missing refs copy, B0's copy step not yet run, and were re-run unchanged at 00:21:45.)
+
+**The scores (00:30:15, `eval_q1.py score`, the new cache's manifest):**
+
+| bar (S4.6) | measured | rule | verdict |
+|---|---|---|---|
+| **Christmas Goblin on sk3a, Q1s** (`Q1.per_species.g_gobline_xmas`) | **57 evaluated; recall 46 / 57 = 0.807; precision 46 / (46 + 31) = 0.597** | >= 50; recall >= 0.80 AND precision >= 0.80 | **FAIL (precision)** |
+| Stormy Knight on sk3a (reported) | Q1s 59 evaluated, recall 59 / 59 = 1.000, precision 0.908; Q1c recall 1.000 | no bar | - |
+| **Garm Baby on gw3, Q1s** | 59 evaluated (24 dogs), recall 1.000, precision 59 / 64 = 0.922 (xmas02gb, M11: the same 1.000 / 0.922) | >= 50; >= 0.80 / >= 0.80 | **PASS** |
+| **Myst Case, pooled TEST, Q1c** | 59, recall 0.983, precision 0.935 (M11: 1.000 / 0.937) | same | **PASS** |
+| **Cruiser, pooled TEST, Q1c** | 56, recall 1.000, precision 0.933 (0.982 / 0.932) | same | **PASS** |
+| **Cookie, pooled TEST, Q1c** | 60, recall 0.983, precision 0.937 (1.000 / 0.938) | same | **PASS** |
+| **Christmas Cookie, pooled TEST, Q1c** | 58, recall 1.000, precision 0.935 (1.000 / 0.935) | same | **PASS** |
+| **D1, the detect server's forward p95** (S4.6 point 6: OpenVINO on the Arc, 300 of sk3a's pack frames, one model a run, 00:23:49-00:25:00) | **xmas02sk 17.96 ms** (p50 17.18); xmas02gb 17.39 ms (1.03 x); the call p95 (harness included) 66.9 vs 71.7 ms; all 600 calls on the GPU path | <= 35 ms | **PASS** |
+
+**THE VERDICT: FAIL** -- the Goblin's Q1s precision (0.597) is below 0.80; every other bar passes.
+Not re-scored. **xmas02sk is NOT deployed**: MAP_MODELS["xmas_dun02"], the runner and the alarm stay
+xmas02gb. GPU_WEIGHTS keeps the entry (served only, like the failed fi rounds).
+
+**Reported, deciding nothing (the geometry of the failure; no frame opened):**
+- **The 31 Goblin boxes charged against precision are almost all on real Goblins.** Scratch
+  `fp_goblin.py` (eval_q1's own match, then sk3a's own labels): **26 of the 31 overlap (IoU >= 0.5) a
+  KEPT Goblin label of the same frame that was not drawn into the pack**, 3 lie on an excluded
+  Goblin's region (crowd, occluded_model, ambiguous_view), 1 on an excluded Garm Baby (next_move), 1 on
+  an excluded knight (occluded_terrain). Their centres fall inside evaluated boxes of a knight (12),
+  another Goblin (11) and a Garm Baby (8): the party stands in a heap. Q1's precision charges every
+  unmatched class-s box whose centre lies in ANY evaluated box (gef10-eval.md's rule), so in the
+  knight's crowd a correct box on a Goblin that is not one of the 60 crops counts as false. M11 met
+  the same with two stacked dogs (5 boxes); here the party is 6 Goblins deep. Frame 779 holds two
+  near-identical Goblin boxes (443-484 x 377-462): possibly one double box.
+- **Recall:** 46 / 57 Q1s (clear 38 / 46, under a model 8 / 11); the 11 misses: 9 unboxed, 1 boxed
+  garm_baby, 1 knight_of_windstorm. Q1c recall 48 / 57.
+- **sk3a's other species (reported):** Q1s Myst Case 60 / 1.000 / 1.000, Cruiser 57 / 0.930 / 1.000,
+  Cookie 60 / 1.000 / 1.000, Christmas Cookie 59 / 1.000 / 1.000, Garm Baby 57 / 0.930 / 0.841. Q1c on
+  sk3a: precision 0.54-0.57 for every species (the collapsed rule charges each species all 45
+  unmatched monster boxes inside any evaluated box of the crowd); Q1c pooled 392 / 409, precision 0.897.
+- **The labellers:** W q1 yes 417 / no 1 / unsure 2; X yes 419 / no 1. 409 of 420 crops evaluated
+  (W excluded 11, X 7). No crop was read as Poring (C) or Santa Poring (I).
+- **What the masks did:** the class learnt to SEE the party -- the knight at 59 / 59, the Goblin
+  boxes landing on real Goblins -- but the pre-registered bar, scored in the crowd, fails. A next
+  round's options, each needing its own amendment (none is taken here): a precision rule that does
+  not charge boxes on labelled units of the same species (a scorer change, decided BEFORE a new
+  held-out, never applied to this one); a fresh held-out recorded with the party apart from other
+  Goblins is not possible (the summons are the knight's skill); or the alarm's own measure (party in
+  view by packets, as live-blocks.md 11.1/11.2) on recordings, offline.
+- **Outputs:** `data/train/eval/xmas02sk/` (refs, predictions, scores, D1), moved by the guarded
+  `archive:` (00:33) to the NAS **`archive/train/eval/xmas02sk/`** (and S4.2's GPU check to
+  `archive/train/eval/goblin-s4/`); the scratch (the masks' checks and looked-at frames, sk3a's
+  labels, pack, key, the labellers' pack and answers, the briefs, the logs) to
+  **`scratch-archive/2026-11-15/goblin-s4/`** (966 files, `SHA256SUMS` `f956a6fb...`, verified, then
+  the /dev/shm originals deleted); sha256 above;
+  `q1-score-sk3a.json` `9408e860...`, `q1-score-gw3.json` `7fb8fc8b...`, `q1-score-test.json`
+  `6705236b...`, `d1-xmas02sk.json` `6d477bd6...`, `d1-xmas02gb.json` `721e6487...`.
+

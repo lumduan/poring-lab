@@ -349,6 +349,7 @@ XMAS02_FIT = ("-rdp-hunt-xmas02-fiH1", "-rdp-hunt-xmas02-fiH2", "-rdp-xmas02-fsH
 # Amendment S (2026-11-12, the Stormy Knight class): the held-out lattice watch sk3a (3a's TEST
 # stands, `--label xmas02-sk3a`) is refused by NAME like TEST, before it records (labels, T2's
 # pool, the cache); not in eval_suffixes (its scoring is the amendment after the model is frozen)
+# ➡️ S4 (2026-11-14): in eval_suffixes, like gw3 since M7 (the Goblin round scores on it once)
 XMAS02_SK3A = "-rdp-xmas02-sk3a"
 # Amendment S (2026-11-12): sk1a's first stand had a OneDrive toast over the client's bottom-right
 # (game region x >= 980, y >= 470): frames 22-46, the first and last frame showing it (a pixel test
@@ -399,8 +400,10 @@ XMAS02 = MapSpec(
     c1_rules=("round2",),  # 4h / 5: C1 always drops a label under a pickup notice (T-8)
     eval_flag="eval_test",  # 9 (T-9): the evaluation reads TEST only
     # Amendment M7 (2026-11-09): gw3, the held-out Garm Baby watch, is scored with TEST -- read only
-    # after the model is frozen (its last.pt sha256 recorded first)
-    eval_suffixes=("-rdp-xmas02-xw5", "-rdp-xmas02-xp1", XMAS02_X2, XMAS02_GW3),
+    # after the model is frozen (its last.pt sha256 recorded first); Amendment S4 (2026-11-14):
+    # sk3a, the held-out knight-party watch, the same way (read once, after the Goblin round's
+    # last.pt sha256 is recorded)
+    eval_suffixes=("-rdp-xmas02-xw5", "-rdp-xmas02-xp1", XMAS02_X2, XMAS02_GW3, XMAS02_SK3A),
     t2_seed=51,
     eval_seed=53,
     eval_per_species=60,
@@ -637,6 +640,54 @@ def envelope(sheet: Any, pred: Any, group: int) -> Any:
     return replace(pred, box=(ax + k * ext[0], ay + k * ext[1], ax + k * ext[2], ay + k * ext[3]),
                    action=int(group), action_index=ai, motion=None, phase_known=False,
                    mask=None, mask_origin=None)  # fmt: skip
+
+
+# xmas02-detector.md Amendment S4 (2026-11-14, the masked cache): the action groups a label's mask
+# region covers at every heading, beside the unit's own Timeline state's group
+REGION_GROUPS = (MonsterAction.IDLE, MonsterAction.WALK)
+
+
+def label_regions(lab: Any, params: dict[str, Any], t: int, gids: Iterable[int]
+                  ) -> dict[int, Box | None]:  # fmt: skip
+    """xmas02-detector.md Amendment S4 (the masked cache; packets + sprites, NO pixel): for each
+    monster ``gid`` of the recorded frame at ``t``, the screen box its sprite can cover at the
+    labeller's own predicted anchor (FixLabeler.frame's Timeline world at tw = t - offset, its
+    scene and the 1b anchor): the union over the 8 headings and the action groups REGION_GROUPS +
+    the unit's state's group of EVERY frame of the group (``envelope``: the phase is not trusted).
+    None: no such visible monster in that world, or its sprite draws nothing there. Not grown and
+    not clipped (the cache does both). The label rule itself is untouched: nothing here decides
+    whether a label is kept."""
+    from poring_dataset.render import Actor, predict_sprite
+
+    out: dict[int, Box | None] = dict.fromkeys(int(g) for g in gids)
+    tw = int(t) - int(float(params["offset_ms"]) * 1e6)
+    _replay, world, all_states, _rules = lab.timeline.at_world(tw)
+    if world.self_pos is None or not world.map:
+        return out
+    scene = occ.scene_for(lab, world.map, world.self_pos)
+    states = {s.gid: s for s in all_states}
+    anchors = olf.anchors_of(params)
+    for e in world.entities:
+        if e.gid not in out or e.objtype != 5 or e.hidden:
+            continue
+        st, sheet = states.get(e.gid), lab.sheets(e.job)
+        if st is None or sheet is None:
+            continue
+        groups = sorted({int(g) for g in REGION_GROUPS}
+                        | {int(STATE_ACTION.get(st.state, MonsterAction.IDLE))})  # fmt: skip
+        dx, dy = anchors.get(int(e.job), (0.0, 0.0))
+        boxes: list[Box | None] = []
+        for heading in range(8):
+            base = predict_sprite(Actor((float(e.x), float(e.y)), heading,
+                                        int(MonsterAction.IDLE)), sheet, scene, olf.K)  # fmt: skip
+            if base is None:  # behind the camera, or IDLE draws nothing at this heading
+                continue
+            base = olf.shifted(base, dx, dy)
+            for g in groups:
+                p = envelope(sheet, base, g)
+                boxes.append(None if p is None else p.box)
+        out[e.gid] = union(boxes)
+    return out
 
 
 def without_box(valid: npt.NDArray[np.bool_], box: Box, pad: float = SELF_MASK_PAD_PX
