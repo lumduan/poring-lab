@@ -811,6 +811,27 @@ SWITCHES: tuple[Field, ...] = (
         needs=(("garm_fly", _ON),),
     ),  # fmt: skip
     Field(
+        "alarm_fast",
+        "safety",
+        "switch",
+        "... also read on the HUD's boxes and inside a strike or a wait",
+        flag="--alarm-fast",
+        needs=(("garm_fly", _ON),),
+        warn="off: the Garm Baby alarm is read only between steps (the knight's party killed her "
+        "10 times on 11-13/14 with the alarm never read in time)",
+    ),  # fmt: skip
+    Field(
+        "alarm_solo",
+        "safety",
+        "share",
+        "... or one box this sure (0 = off)",
+        0.0,
+        1.0,
+        0.05,
+        "--alarm-solo",
+        needs=(("alarm_fast", _ON),),
+    ),  # fmt: skip
+    Field(
         "boss_walk",
         "safety",
         "switch",

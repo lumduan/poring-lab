@@ -4312,6 +4312,8 @@ def test_hud_fast_on_the_cpu_keeps_its_calls_between_the_watchers_own() -> None:
     assert "self.hud_last = (t_h," in loop and "self.hud_det.detect(img_h)" in loop
     for decision in ("self.last =", "self.alarm =", "self.meta =", "self.n += 1", "kick"):
         assert decision not in loop, decision
+    # 9.53: the alarm only through _feed_alarm, and only with --alarm-fast (alarm_hud)
+    assert 'if getattr(self, "alarm_hud", False):' in loop and "self._feed_alarm(t_h," in loop
     assert 'if self.hud_det.last_path != "gpu":' in loop
     assert 'ev({"kind": "hud_watch", **hud_rec})' in src
     base = dict(plant_sweep=False, box_ignore=2, ag_match=40.0, walk_trust=False, rest="spot",
@@ -4365,3 +4367,60 @@ def test_kill_gap_yields_to_exp_lines_in_the_source() -> None:
     src = (ROOT / "scripts" / "dungeon_hunt.py").read_text()
     assert 'if getattr(a, "kill_gap", False) and not exp_seen' in src  # n_lock: 0 hits
     assert 'elif typ == "base_exp" or (exp_first and typ == "job_exp"):' in src
+
+
+def test_alarm_fast_one_box_at_the_solo_score_flies_without_the_streak() -> None:
+    """dungeon@9.53 (--alarm-fast, live-blocks.md 11; Batt 2026-11-14: "Fly Wing away"): one fresh
+    alarm box at score >= --alarm-solo passes without --garm-confirm's streak (the highest-scoring
+    box is the one returned); below it the streak still decides; stale is stale; solo 0 or None
+    is 9.19b unchanged."""
+    import unit_detector as ud
+
+    assert dh.ALARM_SOLO_SCORE == 0.7 and dh.ALARM_FAST_VERSION == "9.53"
+    weak = ud.Box(100.0, 200.0, 160.0, 260.0, 0.45, "garm_baby")
+    strong = ud.Box(300.0, 200.0, 360.0, 260.0, 0.82, "garm_baby")
+    assert dh.alarm_seen((0.0, [weak, strong]), 0.1, streak=1, need=2, solo=0.7) is strong
+    assert dh.alarm_seen((0.0, [weak]), 0.1, streak=1, need=2, solo=0.7) is None
+    assert dh.alarm_seen((0.0, [weak]), 0.1, streak=2, need=2, solo=0.7) is weak  # the streak
+    assert dh.alarm_seen((0.0, [strong]), 1.6, streak=1, need=2, solo=0.7) is None  # stale
+    for off in (None, 0.0):
+        assert dh.alarm_seen((0.0, [strong]), 0.1, streak=1, need=2, solo=off) is None
+
+
+def test_alarm_fast_feeds_both_streams_in_grab_order() -> None:
+    """9.53: the watcher's and the HUD twin's detections feed ONE alarm in grab order -- a
+    detection grabbed before the alarm's own is late and changes nothing; the streak counts
+    across both; the HUD detections with a box are counted."""
+    import threading
+
+    bw = dh.BoxWatch.__new__(dh.BoxWatch)
+    bw.lock = threading.Lock()
+    bw.alarm, bw.alarm_n, bw.n_alarm_hud = (0.0, []), 0, 0
+    dog = object()
+    bw._feed_alarm(1.0, [dog])  # the watcher's
+    bw._feed_alarm(1.2, [dog], True)  # the HUD twin's
+    assert bw.alarm == (1.2, [dog]) and bw.alarm_n == 2 and bw.n_alarm_hud == 1
+    bw._feed_alarm(1.1, [], True)  # grabbed before 1.2: late, ignored
+    assert bw.alarm == (1.2, [dog]) and bw.alarm_n == 2
+    bw._feed_alarm(1.4, [])  # a detection without: the streak ends
+    assert bw.alarm == (1.4, []) and bw.alarm_n == 0 and bw.n_alarm_hud == 1
+
+
+def test_alarm_fast_is_off_by_default_and_recorded_when_on() -> None:
+    """9.53: OFF by default (flags and record); on only with --garm-fly; the run's fixes record
+    the solo score, whether the HUD stream feeds it, and the version; guard_tick reads the alarm
+    INSIDE long actions and flies there with the runner's own press (the dagger first when bare)."""
+    a = dh.build_parser().parse_args(["run", "--strategy", "P2", "--seed", "1"])
+    assert a.alarm_fast is False and a.alarm_solo == dh.ALARM_SOLO_SCORE
+    base = {"plant_sweep": False, "box_ignore": 2, "ag_match": 40.0, "walk_trust": True,
+            "rest": "spot", "npc_guard": True, "miss_cue": True,
+            "walk_ahead": dh.WALK_AHEAD, "walk_through": False}  # fmt: skip
+    assert "alarm_fast" not in dh.fixes_of(dh.argparse.Namespace(**base, garm_fly=True))
+    assert "alarm_fast" not in dh.fixes_of(dh.argparse.Namespace(**base, alarm_fast=True))
+    rec = dh.fixes_of(dh.argparse.Namespace(**base, garm_fly=True, alarm_fast=True,
+                                            alarm_solo=0.7, hud_fast=0.2))  # fmt: skip
+    assert rec["alarm_fast"] == [0.7, True, "9.53"]
+    src = Path(dh.__file__).read_text()
+    assert "if alarm_inside(now_):  # dungeon@9.53 (--alarm-fast): the party seen mid-action" in src
+    assert 'press("fly", "garm")' in src
+    assert '"--alarm-fast",' in src and '"--alarm-solo",' in src

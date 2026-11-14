@@ -1,13 +1,13 @@
 ---
 doc_type: design
 hypothesis: null
-status: "DECIDED 2026-11-13 ~21:4x (Batt): build the live block player first; one box (START > xmas_dun02); break the runner into blocks. Stage 1: BUILT 2026-11-13 ~22:3x and run live 23:01 (PASS, section 6). Stage 2 (heal and the Fly Wing as the box's events inside the hunt core): BUILT 2026-11-14 (feat/stage2, offline tests only; section 3.2); its live A/B pre-registered, NOT run yet. Stage 3 (the Knife swap, the respawn, the weight home and the way home as the box's functions and event at the runner's moments): BUILT 2026-11-14 (feat/stage3, offline tests only; section 3.3); its live A/B (the stage-2 box vs the stage-3 box) pre-registered, NOT run yet; the Knife's open question is Batt's (3.3). Stage 4a (use_model and one recipe per monster: the box decides which technique per monster, the runner plays every step): BUILT 2026-11-14 (feat/stage4, offline tests only; section 3.4); its live A/B (the stage-3 box vs the stage-4a box, an equivalence check) pre-registered, NOT run yet."
+status: "DECIDED 2026-11-13 ~21:4x (Batt): build the live block player first; one box (START > xmas_dun02); break the runner into blocks. Stage 1 BUILT and PASSED live (section 6). Stages 2, 3 and 4a BUILT 2026-11-14 and their live A/Bs RUN 2026-11-14 00:4x-09:52 ICT: all three INCONCLUSIVE by their pre-registered bars (too few valid pairs: the Stormy Knight killed her in 10 of 30 played runs), the box's survival, Knife, home, respawn and recipes proven live (sections 7-9). Batt's 2026-11-14 ~14:0x answers: the Knight -> a Fly Wing away (section 11: dungeon@9.53 --alarm-fast BUILT; the Goblin class proposed); the HP band -> the drink raised to 50 % and the candies eaten at once (section 10); the Knife question delegated to the agent -> answer (a) KEPT (section 11.3)."
 role: null
 verdict_date: null
 verdict_ticket: null
 supersedes: null
 related: [project-model.md, player-mode.md, ADR-0020, ../../scripts/dungeon_hunt.py, ../../scripts/runner_flow_export.py, ../../packages/poring_flow/src/poring_flow/runtime.py]
-next_action: "Stage 2's A/B (3.2, scripts/stage2_ab.py) first. Then merge feat/stage3, deploy (backend, Run helper), and the A/B of section 3.3 (scripts/stage3_ab.py run; its bar pre-registered there) -- the parent runs it. Batt answers the Knife question (3.3: the strike between F4 and F5, or not). Then merge feat/stage4, deploy, and stage 4a's A/B (3.4, scripts/stage4_ab.py; its bar pre-registered there); only after it holds, B4 vs B4' (no Knife swap on the cookies)."
+next_action: "Merge feat/candy-box (section 10) and feat/fast-alarm (section 11), deploy (backend, Run helper), then a live check of both on the lab server (the drink at 50 %, the candies eaten, the alarm read inside actions; deaths and false flies counted from packets). The Christmas Goblin class (11.4) is the next detector round if the check confirms the alarm still comes too late."
 title: "Live blocks: the player that plays a project's blocks in the game, and the runner broken into blocks"
 date: 2026-11-13
 owner: Batt
@@ -493,7 +493,7 @@ before any input, named):
 The lint names the same shapes in the editor (`hunt_function`: a body's caps, its keys, the
 respawn functions' clicks).
 
-**THE OPEN QUESTION FOR BATT (not decided; both are written and both play):** "press F4, wait
+➡️ **DECIDED 2026-11-14: (a) KEPT** (Batt delegated it to the agent: section 11.3). The question as it stood: **THE OPEN QUESTION FOR BATT (both are written and both play):** "press F4, wait
 100 ms, press F5" -- is the strike between F4 and F5, or not?
 - (a) The strike between (BUILT as the one box's, and the runner's own today): knife_on = the
   Knife's key before the steal strike, knife_back = the Damascus's key after the steal's cue. Batt's
@@ -990,3 +990,100 @@ unchanged).
   and the box 0, 0, 21, 32 and 47 % (5 runs): a small sample (where she fought), but the band is
   real. The runner's tick rate is the same in both arms (2.2-2.5 reads/s, median gap 201 ms), so
   the box's hook does not slow it.
+
+## 11. Batt's 2026-11-14 answers (~14:0x ICT): the Knight, the Knife, the Butterfly Wings
+
+**Batt's words (Thai, translated), answering the morning report's four questions:**
+1. The Stormy Knight: "a Fly Wing away, or walk around it; I recommend the Fly Wing."
+2. The 30-50 % HP band: "raise the drink, and the moment we get a Candy Cane or a Candy, eat it to add
+   HP; that also cuts the weight." (Built as section 10.)
+3. The Knife (F4 -> F5, the strike between or not): "decide it yourself, then report to me."
+4. "Top up the Butterfly Wings on F9" (1 was left).
+
+### 11.1 Why the Fly Wing came too late: the 11 deaths of 2026-11-13/14, from packets
+
+The analysis (packets = the offline truth; the runner's own events and detections; scratch scripts,
+read-only, over the 30 series sessions in /dev/shm/poring-lab-demo): for each death, when the
+knight's party last came into view (no member in view -> one in view), the nearest member, the first
+garm_baby box of the deployed model (xmas02gb) in either detection stream, and the runner's escapes.
+
+| Run | Min into the run | Party in view before the death | Nearest at the death (cells; s after entry) | First garm_baby box before the death | Two boxes in a row before the death |
+|---|---|---|---|---|---|
+| s2ab-1114b-r01A | 19.0 | 4.6 s | Goblin 2; 3.6 s | 1.6 s | none |
+| s2ab-1114c-r01A | 1.0 | 4.6 s | Goblin 6; 0.5 s | 4.0 s | 3.8 s |
+| s2ab-1114d-r03B (the desync run; she died ~50 s AFTER its end, section 7) | 18.0 + ~0.8 | 3.2 s | - (no position read) | 1.9 s | 1.8 s |
+| s2ab-1114e-r01A | 1.4 | 4.8 s | Goblin 4; 3.2 s | 3.8 s | none |
+| s2ab-1114e-r04A | 2.2 | 3.4 s | Goblin 2; 3.4 s | 1.6 s | 0.6 s |
+| s2ab-1114e-r07B | 2.1 | 6.1 s | Goblin 2; 4.3 s | 4.3 s | 4.3 s |
+| s3ab-1114-r04B2 | 9.4 | 5.3 s | Goblin 5; 5.1 s | 0.2 s | none |
+| s3ab-1114-r05B2 | 0.3 | 5.4 s | Goblin 1; 4.3 s | 2.7 s | none |
+| s3ab-1114b-r03B3 | 8.0 | 6.4 s | Goblin 1; 3.9 s | none | none |
+| s4ab-1114-r01B3 | 15.1 | 2.4 s | Goblin 7; 2.3 s | 1.9 s | 1.6 s |
+| s4ab-1114-r05B3 | 5.5 | 2.8 s | Goblin 2; 1.4 s | 2.2 s | none |
+
+- At every death the party in view was **6 Christmas Goblins and the knight, no Garm Baby** (the
+  knight's two Garm Babies were gone by then). It came into view 2.4-6.4 s before the death; the
+  Goblins came first and closest (1-2 cells in 7 of 10).
+- The deployed model has no Goblin class (xmas02-detector.md S3: the cache could not carry one), but
+  it boxes some of them as garm_baby: a box came before 10 of the 11 deaths, 0.2-4.3 s ahead.
+- **The runner flew on none of them.** The alarm (`--garm-fly --garm-confirm 2`) read only the
+  watcher's ~1-s detections (the HUD twin's, ~4x as many, never fed it: 9.29c by design), and only
+  between steps: in the seconds before each death the loop was inside a target's settle wait or a
+  strike (1.5-2.5 s each). In one run (s3ab-1114b-r03B3) a Fly Wing was pressed 0.65 s before the
+  death packet, on the HP, not the alarm: too late.
+- No zone avoids it: the deaths were all over the map ((7, 71) to (192, 54)), so "walk around" has
+  nothing fixed to walk around; Batt's recommended Fly Wing it is.
+
+### 11.2 Built: dungeon@9.53 `--alarm-fast` (branch feat/fast-alarm; ON in the Run's xmas_dun02 flow)
+
+- The HUD twin's detections feed the alarm too: one streak over both streams, in grab order (a
+  detection grabbed before the alarm's own is late and changes nothing).
+- `guard_tick` reads the alarm INSIDE long actions (every QUICK_S, 0.25 s) and flies there: the
+  runner's own `press("fly", "garm")` (the dagger first when bare), then the action stops (the
+  loop's after-the-fly steps, as for an HP fly inside an action). Not within 2 s of a Fly Wing, never
+  twice in one action.
+- `--alarm-solo T` (default 0.7): one alarm box at score >= T flies without --garm-confirm's streak.
+- Both are Run settings (flow_config: "safety"), a person's to change: `alarm_fast` (needs
+  garm_fly) and `alarm_solo` (0 = off). Recorded in run_start `fixes.alarm_fast` = [solo, HUD fed,
+  "9.53"]; the run's end record counts `n_alarm_hud`; events `garm_seen` with `inside: true`.
+- **What to expect, offline on the same 30 runs (7.66 h; deaths caught >= 1.5 s before the death
+  packet, a fire within 5 s of another merged; false = no party member in view +-2 s):**
+
+| Rule | Deaths caught >= 1.5 s | False flies |
+|---|---|---|
+| today: the watcher's stream, 2 in a row | 1 of 11 (but never read in time live) | 0.3/h |
+| both streams, 2 in a row | 4 of 11 | 1.2/h |
+| **both streams, 2 in a row or one box >= 0.7 (the default)** | **5 of 11** | **1.7/h** |
+| both streams, 2 in a row or one box >= 0.6 | 5 of 11 | 2.3/h |
+| both streams, 2 in a row or one box >= 0.4 | 6 of 11 | 4.0/h |
+
+  This assumes the loop reacts within its 0.25-s guard read, which 9.53 makes true inside actions;
+  a live check measures it. **At best about half the deaths: the model sees the Goblins only by
+  accident.**
+
+### 11.3 The Knife: answer (a) KEPT -- the strike between F4 and F5 (the agent's decision, Batt's delegation)
+
+- (a) is Batt's own technique: his 2026-11-12 benchmark run struck with the Knife, then put the
+  Damascus on 1.36 s after the steal (91 % stolen). The strike falls between the two presses.
+- (b) ("press F4, wait 100 ms, press F5" before the strike) would wear the Knife for 100 ms and
+  never strike with it: every steal would have to come from Damascus hits -- a different technique
+  from Batt's, measured by no run.
+- (a) plays live: stage 3's B3 runs made 161 openers through the box's knife_on and 159 of 161
+  swaps back through knife_back (the other 2 were the runner's own escape dagger), 0 failed swaps.
+- (b) stays written (knife_ends "armed", section 3.3): a person may try it by editing the knife tab.
+
+### 11.4 Next (proposed, not started): a Christmas Goblin class
+
+The Goblin is a summon only on this map and came first in every death above, so a Goblin class
+in the alarm would see the party 2.4-6.4 s ahead. S3's blocker was the cache's WHOLE-frame rule (a
+frame with any excluded label is not written; the knight's crowded party almost never leaves a frame
+whole: 12 Goblin boxes from 2,823 kept labels). The proposal: a new detector amendment that masks the
+excluded labels' boxes in the cached frame instead of dropping the frame, then the round as Amendment
+M/S (the sk1a/sk2a DEV recordings on the NAS, init xmas02gb, the held-out sk3a unread so far), its
+bars pre-registered before any data step.
+
+### 11.5 The Butterfly Wings (done 14:02 ICT)
+
+The lab GM's `@item 602 4` (crusader.py, `"typed": true`), read back from the hotbar: F9 1 -> **5**.
+She stands in geffen at full HP; F8 8, F1 10, F6 2 Candy Canes, F7 7 Candies; the chat closed again
+by the UI gate's own step.
