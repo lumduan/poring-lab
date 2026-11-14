@@ -418,7 +418,8 @@ example. The live bot on xmas_dun02 is not an IR flow: "How the bot hunts here" 
 (dungeon_hunt.py) as blocks made from its code, and the Run button plays it.
 ➡️ Since 2026-11-13 ~13:2x that flow is NAMED **xmas_dun02** (Batt: "name it after the map"): the
 first entry of Load, `/flows?runner=xmas_dun02`, four tabs (the run, the knife swap, the respawn, the
-safety rules); docs/console.md has the details. It stays a description of the runner, not an IR
+safety rules); docs/console.md has the details. ➡️ 2026-11-14 (live-blocks.md section 12): that page is GONE: its
+settings are blocks in the map node's tabs, and `/flows?runner=xmas_dun02` opens that node. It stays a description of the runner, not an IR
 flow: the IR's hunt block cannot hold the Knife swap's two halves (one at idle, one on every tick).
 ➡️ SUPERSEDED the same evening (section 15): xmas_dun02 is an ordinary IR flow; its map tab holds ONE
 block, "hunt with the runner" (dungeon_hunt), and the runner's own blocks are its read-only inside.

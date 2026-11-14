@@ -1,13 +1,13 @@
 ---
 doc_type: design
 hypothesis: null
-status: "DECIDED 2026-11-13 ~21:4x (Batt): build the live block player first; one box (START > xmas_dun02); break the runner into blocks. Stage 1 BUILT and PASSED live (section 6). Stages 2, 3 and 4a BUILT 2026-11-14 and their live A/Bs RUN 2026-11-14 00:4x-09:52 ICT: all three INCONCLUSIVE by their pre-registered bars (too few valid pairs: the Stormy Knight killed her in 10 of 30 played runs), the box's survival, Knife, home, respawn and recipes proven live (sections 7-9). Batt's 2026-11-14 ~14:0x answers: the Knight -> a Fly Wing away (section 11: dungeon@9.53 --alarm-fast BUILT; the Goblin class proposed); the HP band -> the drink raised to 50 % and the candies eaten at once (section 10); the Knife question delegated to the agent -> answer (a) KEPT (section 11.3)."
+status: "DECIDED 2026-11-13 ~21:4x (Batt): build the live block player first; one box (START > xmas_dun02); break the runner into blocks. Stage 1 BUILT and PASSED live (section 6). Stages 2, 3 and 4a BUILT 2026-11-14 and their live A/Bs RUN 2026-11-14 00:4x-09:52 ICT: all three INCONCLUSIVE by their pre-registered bars (too few valid pairs: the Stormy Knight killed her in 10 of 30 played runs), the box's survival, Knife, home, respawn and recipes proven live (sections 7-9). Batt's 2026-11-14 ~14:0x answers: the Knight -> a Fly Wing away (section 11: dungeon@9.53 --alarm-fast BUILT; the Goblin class proposed); the HP band -> the drink raised to 50 % and the candies eaten at once (section 10); the Knife question delegated to the agent -> answer (a) KEPT (section 11.3). Batt's 2026-11-14 ~15:2x ask ("no runner [page]; make them ALL blocks"): stage 5a BUILT offline on feat/settings-blocks (section 12: every runner setting a block in the project's tabs, the Run and the check read them, the runner page and the settings file gone); 5b (the loop as playable blocks) planned, not built."
 role: null
 verdict_date: null
 verdict_ticket: null
 supersedes: null
 related: [project-model.md, player-mode.md, ADR-0020, ../../scripts/dungeon_hunt.py, ../../scripts/runner_flow_export.py, ../../packages/poring_flow/src/poring_flow/runtime.py]
-next_action: "Merge feat/candy-box (section 10) and feat/fast-alarm (section 11), deploy (backend, Run helper), then a live check of both on the lab server (the drink at 50 %, the candies eaten, the alarm read inside actions; deaths and false flies counted from packets). The Christmas Goblin class (11.4) is the next detector round if the check confirms the alarm still comes too late."
+next_action: "Merge feat/candy-box (section 10) and feat/fast-alarm (section 11), deploy (backend, Run helper), then a live check of both on the lab server (the drink at 50 %, the candies eaten, the alarm read inside actions; deaths and false flies counted from packets). The Christmas Goblin class (11.4) is the next detector round if the check confirms the alarm still comes too late. Section 12 (5a): review and merge feat/settings-blocks, then a guarded backend restart and a Run helper restart (the check route, the project-only requests); a browser re-measure of the setting blocks; 5b after that."
 title: "Live blocks: the player that plays a project's blocks in the game, and the runner broken into blocks"
 date: 2026-11-13
 owner: Batt
@@ -1262,3 +1262,80 @@ bars pre-registered before any data step.
 The lab GM's `@item 602 4` (crusader.py, `"typed": true`), read back from the hotbar: F9 1 -> **5**.
 She stands in geffen at full HP; F8 8, F1 10, F6 2 Candy Canes, F7 7 Candies; the chat closed again
 by the UI gate's own step.
+
+## 12. Stage 5a: the settings are blocks, the runner page is gone (Batt 2026-11-14 ~15:2x)
+
+**Batt's words (2026-11-14 ~15:2x, Thai, translated; with screenshots of /flows?runner=xmas_dun02
+and of his /flows project):** "We should not make the page /flows?runner=xmas_dun02 like this: it
+makes learning very hard. There should be no runner. Everything should be in the xmas_dun02 flow,
+split into tabs, e.g. the knife swap as its own tab on the /flows page of xmas_dun02. Move all the
+blocks of xmas_dun02 on the runner page into /flows, in map xmas_dun02. And these values [the
+settings panel: the Knife swap, heal and escape, leaving the map, the respawn, and 'all the other
+numbers (102: the start, the fight, aiming, loot, walking, safety, the loop)'] -- make them ALL
+blocks, no hardcoding like this. The xmas_dun02 map in /flows may have as many tabs as needed."
+
+**The plan, in two steps** (the parent's):
+- **5a (BUILT here, branch feat/settings-blocks, offline only):** every Run setting becomes a BLOCK
+  in the project's tabs; the Run reads its values from the blocks; the settings form and the
+  runner description page go.
+- **5b (NOT built):** the runner's loop itself becomes the flow's own playable blocks (the
+  HuntState refactor of section 2b's 4b). Only then do the loop's DESCRIPTION blocks (the outline
+  scripts/runner_flow_export.py still prints: look, choose, approach, strike, loot, explore, the
+  safety rules) move into the map's tabs: moving them earlier would put blocks on the page that do
+  nothing when edited.
+
+### 12.1 The design as built
+
+| Piece | Where | What |
+|---|---|---|
+| The registry | `packages/poring_flow/src/poring_flow/settings.py` (moved from scripts/flow_config.py, which re-exports it) | the 126 fields as before (group, kind, range, words, flag or --tune, needs, warn) plus each one's DEFAULT (`DEFAULTS`: the Run's values of 2026-11-14; a runner constant's is the runner's own number, test_flow_config pins each equal to dungeon_hunt's / value_target's). `flow_run.FLOWS["xmas_dun02_rogue"].defaults` is DERIVED from it (`flag_defaults()`, pinned to the old dict key for key). The catalogue serves it (`settings`); the browser's copy is `lib/flow/settings.gen.ts` (`typescript_module`, drift-tested; scripts/gen_protocol.sh writes it) |
+| A setting in a project | a tab's `vars` (a literal), the existing model | named like the setting; the three that cannot be, in ONE table (`VAR_NAMES`): `vt.D0_PX` -> `D0_PX` (a dotted name is no variable), `loot` -> `loot_step` and `respawn` -> `respawn_on_death` (catalogue names). It stays an ordinary variable too (a block may read it). The five hotbar keys are NOT setting blocks: they are the functions dungeon_hunt names, as before |
+| The tabs | one per group (`TABS`): knife, survival, exits, respawn, start, fight, aim, loot, walk, safety, loop | in the one box, knife, survival and exits hold their settings BESIDE their functions (the tab of the same name); the other eight are tabs of settings |
+| The name rule | `settings.node_values` (the project's JSON), `lint/settings.node_values` (the models), `lib/flow/settings.ts nodeSettings` (the browser) | per setting: the map node's variable (any of its tabs) > Global's > the default. A deleted block falls back; a value it cannot take is no value (the default stands in; the lint's error refuses the run) |
+| The block | `lib/flow/blockdefs.ts settingDef` (one Blockly type `pl_set_<var>` per setting), `blocks.ts` | its words; its value by kind (number / int with the range, step and unit; a share as a PERCENT; a switch on / off; a choice's options; a point's x and y; point_or_none's at / none); `· <var>` after it; a safety switch (respawn, npc_guard, garm_fly, alarm_fast) has a row its warning fills while it is off. Its tooltip: the range, our default, the runner's flag, and what deleting it falls back to (Global's block, else the default). A value the block cannot hold (out of range, the wrong kind) stays a plain `variable` block, so nothing is clamped and the lint says why. In a tab: the plain variables first, then the settings in the registry's order, one row apart |
+| The toolbox | blockdefs `settingItems` | a **Settings** category on map nodes and Global: every setting at our default, by group, the shown tab's group first. The same setting twice on a tab is refused ("on this tab twice") |
+| The Python view | `pyproject.print_tab` | `knife_hp_min = 0.5  # or at once under HP (50 %)`, `knife_swap = True  # Batt's Knife swap (on / off)`, `respawn_at = "645,481"  # respawn button at ("X,Y" in the game picture)`; the settings in the registry's order after the plain variables; a map's that overrides Global's says so in the line above. The parser reads the assignment (the comment is words), so the round trip is exact |
+| The lint | `poring_flow/lint/settings.py` (from project._project_rules), in words on the block | `settings` ERROR: the wrong kind, out of range or off the grid ("or at once under HP: 95 % is not from 20 % to 90 %"); `settings` WARNING: a name that looks like a typo of a setting's (another case, or difflib >= 0.85: "potion_bellow is not a setting: did you mean potion_below ...?"; any other name is an ordinary variable and says nothing), and a hotbar key as a variable ("not read: the hunt core takes its hotbar keys from the functions ..."); `settings_clash` ERROR on the node: flow_config's clash rule on the values its hunt core takes (two roles on one key, hud_fast not faster than BOX_EVERY_S); `settings_use` INFO: a setting not in use ("not in use while Batt's Knife swap (knife_swap) is off: the runner is not given it"), one the box replaces in a Run (live.takeovers: "potion_below ... is not used in a Run of this box: drink plays the runner's potion on HP instead"), settings on a node without a hunt core ("not read") |
+| The Run | `flow_play.prepare` (`flow_run.project_values`) | a hunt core's runner settings = the checked project's setting blocks on its node (> Global's > the defaults), the node's keys over them, then the clash rule; `runner_vals` (an A/B series' runner-config.json) still replaces them for a block. `settings.argv` skips a runner constant AT ITS DEFAULT (the runner keeps its own number), so a box whose blocks hold every default runs exactly today's command |
+| The check | `POST /flows/run/check {project, node}` (routes_flowrun `check_values`) -> request `{action: "check", flow: "project", node, keys, vals}` -> flow_run `check_start` | the backend validates the project, the node's hunt core, its keys and its setting blocks (`settings_refused`, `no_hunt_core`, `keys_refused`, `not_a_map_node`, `invalid_project`) and sends every setting block's value; the helper checks them again (`check_level`, every block named, the clash rule) and runs the runner's read-only check with them. The checklist on /flows states the same values (`startChecklist(nodeSettings(...))`) |
+| The stage tools | `stage2_ab.box_vals` / `same_vals`; stage3-5 `run_vals` | each arm's box's setting blocks and keys; a series REFUSES before any input when two arms' runner settings differ ("the boxes' runner settings differ: knife_hp_min is 0.5 in B4, 0.6 in B5 (an A/B changes the box, not the settings)"). A still plays `flow_run.command` with those values |
+
+**The settings file is not imported:** settings/flowrun/config.json was `{"v": 2, "global": {},
+"maps": {}}` on bot-server when it went (read 2026-11-14 16:4x ICT; its mtime 2026-11-13 15:29), so
+no value moved into a project. The file stays on disk, unread.
+
+**The same argv, before and after** (`services/backend/tests/test_settings_blocks.py`): the three
+frozen A/B arms (`project_xmas_dun02_stage2/3/4.json`, byte-identical: their sha256 pinned) and the
+one box with its 121 blocks at their defaults all give the runner argv main 2d19014d gave them
+(computed with that commit's flow_config / flow_run / flow_play and an empty settings file; one
+list, pinned literally). A changed block is what the runner gets; a deleted one falls back.
+
+### 12.2 What moved where, what went
+
+| Before | Now |
+|---|---|
+| the runner page `/flows?runner=xmas_dun02` (RunnerView, its blocks, its Simulate, its Run) | GONE; the link opens the map's node on /flows (page.tsx maps `xmas_dun02_rogue` and a map's name to that node) |
+| Before Run's settings panel (ConfigPanel, "saved on the bot server at once") | the setting BLOCKS in the node's tabs; Before Run keeps the checklist, the live line and the check, and says the settings are blocks |
+| settings/flowrun/config.json, GET / PUT /flows/config, `flow_config.read_config / effective / put_level`, `flow_run.run_values / config_of / CONFIG_DIR` | GONE (the project's blocks; `flow_run.project_values` / `values_of`) |
+| the runner-only Run (POST /flows/run start of flow `xmas_dun02_rogue`, `Helper.start`) | GONE (refused in words: `project_has_its_own_route`); a start is a project's |
+| the check `POST /flows/run/check {flow, keys}` | `{project, node}` (the backend computes the keys and settings) |
+| lib/flow/runner.ts, runner_sim.ts, config.ts, runners/index.ts, runners/xmas_dun02_rogue.gen.ts, components/flows/blockly-runner.ts, their tests (runner.test.ts, runner_sim.test.ts, config.test.ts), the "Inside the runner" chip and Load entry, the runner page's CSS | GONE; the checklist helpers moved to lib/flow/settings.ts |
+| scripts/runner_flow_export.py `export` / `check` (the gen.ts and its drift test) | GONE; `show` and `build()` stay (the loop's outline: 5b's map, the docs; its own tests keep its numbers, flags and code symbols honest) |
+| the registry in scripts/flow_config.py | poring_flow.settings (flow_config re-exports it: dungeon_hunt's --tune, flow_run, flow_play, the tests) |
+
+**Not a setting block (what a person still cannot set as a block):** the five hotbar keys (they
+are FUNCTIONS: the keys tab, as before); the runner's fixed part (`flow_run.FIXED`: the character
+rogue, the map, --strategy P2, the seed) and the flags flow_config.NOT_SETTINGS lists with their
+reasons (--player-mode, the GM trial lines, --heal-candy ...); the loop itself (5b).
+
+**Deploy (after the merge):** a guarded backend restart (routes_flowrun: the check route, the config
+routes gone) and a restart of the Run helper (`poring-lab-flowrun.service`: parse_request takes
+project checks only). Until both, a running helper still accepts the old runner-only start; the
+new page never sends one. A series started from main before the merge keeps main's code.
+
+### 12.3 Not yet (5b, planned, not built)
+
+The loop as playable blocks: HuntState (section 2b, 4b) moves the loop's state out of run()'s
+closures so look, choose_target, walk_to_target, strike, wait_kill, loot and explore each play as
+a bounded live block; then the outline's description blocks become the map's tabs, each one doing
+what it shows. Each step A/B'd against the step before, the hunt never playing worse.

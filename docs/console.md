@@ -264,6 +264,11 @@ Amendment B); a not-adopted model is never offered.
   `config/map_zones/README.md`). `zones_engine_unavailable` = the backend cannot import
   `scripts/map_zones.py`: the dev backend needs its read-only `./scripts` mount (compose.dev.yaml,
   a guarded `recreate:backend`).
+- ➡️ **SUPERSEDED 2026-11-14 ~15:2x: the runner view below is GONE** (Batt: "there should be no
+  runner [page]; everything in the xmas_dun02 flow, split into tabs; make them ALL blocks"): every
+  setting it showed is a SETTING BLOCK in the map node's tabs, and `/flows?runner=...` opens that
+  map's node ([planning/live-blocks.md](planning/live-blocks.md) section 12; the last bullet of
+  this section). The history it carried stays below as written.
 - ➡️ **Since 2026-11-13 the xmas_dun02 runner view has a Run button** (`/flows?runner=xmas_dun02`, "Run in the game"): it starts the proven runner in player mode through the host helper `scripts/flow_run.py`, NOT the flow IR (ADR-0020's executor is still unbuilt). How and why: [planning/player-mode.md](planning/player-mode.md), [setup/new-lab-host.md](setup/new-lab-host.md) 11.1.
   ➡️ **Since 2026-11-13 11:3x** Run sits beside Simulate (amber; press, then press again within 4 s
   to confirm) with Stop; a "your run settings" strip sets the Fly Wing key, the Butterfly Wing key
@@ -474,6 +479,31 @@ Amendment B); a not-adopted model is never offered.
     as many lines as fit -- never under a card; a shortened label's full words are its tooltip. A
     label whose text would be under 9 px at the view's zoom is not drawn (the cards' port rows
     name the exits).
+  ➡️ **2026-11-14 ~15:2x, THE SETTINGS ARE BLOCKS; the runner page is gone** (Batt: "there should
+  be no runner [page]: it makes learning very hard. Everything in the xmas_dun02 flow, split into
+  tabs ... make them ALL blocks, no hardcoding"; [planning/live-blocks.md](planning/live-blocks.md)
+  section 12):
+  - **Every setting of the runner's hunt core is a block** (121 of them: the Knife swap, heal and
+    escape, leaving the map, the respawn, the start, the fight, choosing and striking, loot,
+    walking and exploring, safety and the end, the loop), in the TAB of its group on a map node or
+    on Global: its words, its value as it is set (a number or a percent with its range, step and
+    unit; on / off; a choice's options; a point's x and y, or none), its Python name after it
+    (`· knife_hp_min`), and for a safety switch a warning row while it is off. In Python it is a
+    plain assignment with its words as a comment (`knife_hp_min = 0.5  # or at once under HP (50 %)`).
+    The hotbar keys stay the keys tab's functions.
+  - **The name rule:** a map node's block replaces Global's there; a deleted block falls back to
+    Global's, else our default (each block's tooltip says which). The toolbox has a **Settings**
+    category (every setting at its default, by group, the tab's own first).
+  - **The ready-made xmas_dun02** shows every setting it runs with: knife, survival and exits hold
+    their settings beside their functions; respawn, start, fight, aim, loot, walk, safety and loop
+    are tabs of settings. A Run, and "Check the game", send the project: the blocks are what the
+    runner gets. The lint says it in words on the block: a value out of range or of the wrong kind
+    (an error: Run refuses), a name that looks like a typo of a setting's or a hotbar key as a
+    variable (a warning), two settings that cannot run together (an error), and a setting not in
+    use ("while the Knife swap is off") or replaced by the box's own event (info).
+  - **Gone:** the runner description page (`/flows?runner=...` now opens that map's node), its
+    "Inside the runner" link and Load entry, Before Run's settings panel ("saved on the bot server
+    at once") and the settings file behind it (GET / PUT /flows/config).
 - **No live run (the block editor):** nothing in the block editor reaches the executor, the mux or an input path (➡️ Run, above, is the one live path: the Run helper's player, never the editor). The backend's
   `/flows/*` routes only compute (public listener, LAN viewer, Origin; POSTs need the CSRF token,
   20 a minute; the Python view 120 a minute on its own budget since 2026-11-09). See [planning/mw2-block-editor.md](planning/mw2-block-editor.md) and

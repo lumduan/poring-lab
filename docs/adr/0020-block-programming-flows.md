@@ -21,6 +21,9 @@ next_action: "ACCEPTED by Batt 2026-10-08, with the decisions recorded at the op
 > executor's FIRST STAGE exists: the live block player (`scripts/flow_play.py`, Amendment E) plays a
 > PROJECT's map node through POST /flows/run/project. The runner's own Run path above is unchanged
 > until the browser switches to it.
+> ➡️ **2026-11-14 ~15:2x (Amendment J, Batt: "there should be no runner [page] ... make them ALL
+> blocks"):** the runner view and its own Run are GONE; every runner setting is a block of the
+> project (the map node's over Global's over the default), read by the project Run and the check.
 
 - **Status:** ~~PROPOSED (2026-10-07). Batt accepts or not. Nothing is built.~~ ➡️ **ACCEPTED (Batt,
   2026-10-08)**, with his answers recorded at the open questions. MW1 / F1 (the IR and the
@@ -2671,3 +2674,45 @@ Amendments F and H (a pointer in F); nothing above is rewritten.
 - **The one box** drinks under 50 % (until 51 %) and eats a Candy Cane (F6) or a Candy (F7) the
   moment its slot shows one, at any HP; the box as stage 4a left it is kept as
   `project_xmas_dun02_stage4.json`.
+
+## Amendment J (2026-11-14 ~15:2x, Batt decided): every runner setting is a BLOCK; the runner page goes
+
+**Batt (2026-11-14 ~15:2x, Thai, translated; [live-blocks.md](../planning/live-blocks.md) section
+12):** "We should not make the page /flows?runner=xmas_dun02 like this: it makes learning very
+hard. There should be no runner. Everything should be in the xmas_dun02 flow, split into tabs ...
+make them ALL blocks, no hardcoding like this. The xmas_dun02 map in /flows may have as many tabs as
+needed." This amendment ADDS to Amendments C-I; nothing above is rewritten. It is stage 5a of
+live-blocks.md section 12 (5b, the loop itself as playable blocks, is planned there, not built).
+
+- **The registry is the engine's:** `poring_flow.settings` (moved from scripts/flow_config.py,
+  which re-exports it for the runner side) names each of the runner's 126 settings -- its group,
+  kind, range, words, how the runner takes it -- and, new, its DEFAULT (our value: what the Run
+  played on 2026-11-14; a runner constant's is the runner's own number, pinned by test). The
+  catalogue serves it (`settings`) and the browser carries the same table (settings.gen.ts,
+  drift-tested).
+- **A setting is a project variable** (Tab.vars, a literal) named like the setting (three names
+  differ, in ONE table: `vt.D0_PX` -> `D0_PX`, `loot` -> `loot_step`, `respawn` ->
+  `respawn_on_death`: a dotted name is no variable, and two are catalogue names), shown as a
+  SETTING BLOCK of its own (one Blockly type per setting) in the tab of its group. In the Python
+  view it is a plain assignment with its words as a comment. The five hotbar keys are NOT setting
+  blocks: they stay the functions dungeon_hunt names (Amendment C).
+- **The name rule decides** (project-model.md section 3): a run on a map node takes that node's
+  block, else Global's, else the default. A deleted block falls back; a value the setting cannot
+  take is no value (the lint's error; the run refuses before any input).
+- **Lint** (`lint/settings.py`, in words on the block): a value of the wrong kind or out of its
+  range / grid is an ERROR; a variable whose name looks like a typo of a setting's (another case, a
+  near spelling) and a hotbar key as a variable are WARNINGS (any other name is an ordinary
+  variable); two settings that cannot run together (flow_config's clash rule) are an ERROR on the
+  node; a setting not in use (its `needs`), one the box replaces in a Run (`live.takeovers`), and
+  settings on a node without a hunt core are INFO.
+- **The Run reads the blocks:** flow_play.prepare takes a hunt core's runner settings from the
+  checked project (the node's keys over them, then the clash rule); the read-only check carries the
+  settings the backend computed from the project (`POST /flows/run/check {project, node}`). A
+  runner constant at its default is not passed (the runner keeps its own number), so every box that
+  ran before -- the three frozen A/B arms byte for byte, the one box with its blocks at their
+  defaults -- gets exactly the argv it got before (test_settings_blocks.py).
+- **Gone:** the runner description page (`/flows?runner=...` opens that map's node now), its Run
+  (the runner-only start of flow `xmas_dun02_rogue`), the settings file settings/flowrun/config.json
+  and its GET / PUT /flows/config (the file was empty, `{"v": 2, "global": {}, "maps": {}}`, so
+  nothing was imported), the generated runners/*.gen.ts and Before Run's settings panel.
+  scripts/runner_flow_export.py stays for its outline (`show`): stage 5b's map of the loop.
