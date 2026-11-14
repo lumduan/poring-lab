@@ -166,6 +166,20 @@ MAP LABELS: recorder sessions labelled by scripts/map_labels.py (docs/planning/p
 - ``--dry-run``: the label files and the packets only (no image, no directory): per session the
   frames considered, written, excluded by reason, boxes per class id, and the estimated shards and
   bytes (from the recorded PNG sizes); the linked cache's frames and boxes per class id beside.
+- ``--mask-sessions S [S ...]`` (docs/planning/xmas02-detector.md Amendment S4, 2026-11-14: the
+  Christmas Goblin class; each a --train session): those sessions are written by the MASKED rule
+  ("<rule>-mask") instead of the whole-frame rule. A frame exclusion (4g), the label pass's own
+  drop and a species without a class still drop the frame, and our own character is placed as
+  before. But an excluded monster label (any reason) or a ``weak_fit`` one no longer drops it:
+  each becomes a MASK, its region the label's sprite envelope at the labeller's predicted anchor
+  (map_labels.label_regions: 8 headings, IDLE + WALK + its state's group, every frame; a weak_fit
+  label's fitted box too), grown by the species' fit radius + MASK_PAD_PX and clipped, and painted
+  MASK_FILL grey in the cached image (ultralytics' own letterbox / mosaic fill) -- so the frame
+  carries no unlabelled monster pixel. A kept box that touches a mask is demoted to a mask too
+  (its fitted box + the same growth), until none touches; a mask that touches OUR OWN box drops
+  the frame (``mask_on_self``); a label without a region drops it (``mask_unknown``). The frame's
+  json lists its masks; the session row counts them, and checks the regions against the KEPT
+  labels' fitted boxes (the positive case: ``mask_check``). The trainer reads the frames as any.
 
 FLOOR ITEMS: the separate one-class item model ``xmas02-fi`` (docs/planning/xmas02-detector.md
 Amendment O.8, ACCEPTED by O1 2026-11-10; tool T-O2), from scripts/fi_labels.py label files:
@@ -1254,6 +1268,186 @@ def map_frame(f: dict[str, Any], floor: float, index: dict[int, int]
             for k in f["kept"]], []  # fmt: skip
 
 
+# --- the MASKED rule (docs/planning/xmas02-detector.md Amendment S4, 2026-11-14) ---------------
+
+MASK_SUFFIX = "-mask"  # the masked sessions' rule name: map_rule(spec) + this
+MASK_FILL = 114  # ultralytics' letterbox / mosaic fill (BGR 114, 114, 114): "no image" to YOLO
+MASK_PAD_PX = 4  # a mask region's growth beyond the species' fit radius (the labeller's window)
+DEMOTED = "demoted"  # a kept box that would carry a masked unit's body, masked too
+MAX_EXPOSED = 0.5  # a mask region may stay unpainted (inside written boxes) up to this fraction
+
+Box4 = tuple[float, float, float, float]
+# (class id, mob, box, gid) / (gid, mob, why, fitted box or None)
+Train = tuple[int, int, list[float], int]
+Mask = tuple[int, int, str, list[float] | None]
+
+
+def map_frame_masked(f: dict[str, Any], floor: float, index: dict[int, int]
+                     ) -> tuple[list[Train], list[Mask], list[str]]:  # fmt: skip
+    """PURE (S4's masked rule): one frame of a label file -> (its TRAIN monster boxes as (class
+    id, mob, box, gid), the labels to MASK as (gid, mob, why, fitted box or None), or the reasons
+    it is not written). As map_frame, a frame exclusion (4g), the label pass's own drop and a
+    species without a class (kept or excluded) drop the frame; unlike it, every excluded label
+    (its reason kept) and every ``weak_fit`` label (clear of the models, fit below ``floor``) is
+    a mask instead."""
+    if "kept" not in f:  # the label pass's own drop (ui_layout_mismatch, no_scene)
+        return [], [], list(dict.fromkeys(f.get("excluded_frame") or ["unlabelled"]))
+    whole = not f["excluded"] and not f["excluded_frame"]
+    if bool(f.get("whole")) != whole:
+        raise SystemExit(f"frame {f.get('frame_id')}: 'whole' contradicts its exclusions")
+    mobs = {int(k["mob"]) for k in f["kept"]} | {int(x[1]) for x in f["excluded"]}
+    reasons = list(f["excluded_frame"])
+    reasons += [f"species_unlisted:{m}" for m in sorted(mobs) if m not in index]
+    if reasons:
+        return [], [], list(dict.fromkeys(reasons))
+    masks: list[Mask] = [(int(g), int(m), str(why), None) for g, m, why in f["excluded"]]
+    train: list[Train] = []
+    for k in f["kept"]:
+        ncc, box = k.get("ncc"), [float(v) for v in k["box"]]
+        if not k.get("under") and (ncc is None or float(ncc) < floor):
+            masks.append((int(k["gid"]), int(k["mob"]), "weak_fit", box))
+        else:
+            train.append((index[int(k["mob"])], int(k["mob"]), box, int(k["gid"])))
+    return train, masks, []
+
+
+def grown(box: Sequence[float], px: float, size: tuple[int, int]) -> Box4 | None:
+    """PURE: ``box`` grown by ``px`` on every side and clipped to the frame; None if nothing of it
+    is left inside."""
+    w, h = size
+    x0, y0 = max(0.0, float(box[0]) - px), max(0.0, float(box[1]) - px)
+    x1, y1 = min(float(w), float(box[2]) + px), min(float(h), float(box[3]) + px)
+    return (x0, y0, x1, y1) if x1 > x0 and y1 > y0 else None
+
+
+def touches(a: Sequence[float], b: Sequence[float]) -> bool:
+    """PURE: the two boxes share an area (an edge or a corner alone is not one)."""
+    return min(a[2], b[2]) > max(a[0], b[0]) and min(a[3], b[3]) > max(a[1], b[1])
+
+
+def contains(outer: Sequence[float], inner: Sequence[float], slack: float = 0.0) -> bool:
+    """PURE: ``inner`` lies inside ``outer`` (``slack`` px of tolerance)."""
+    return (inner[0] >= outer[0] - slack and inner[1] >= outer[1] - slack
+            and inner[2] <= outer[2] + slack and inner[3] <= outer[3] + slack)  # fmt: skip
+
+
+def center(box: Sequence[float]) -> tuple[float, float]:
+    return (float(box[0]) + float(box[2])) / 2.0, (float(box[1]) + float(box[3])) / 2.0
+
+
+def inside(pt: tuple[float, float], box: Sequence[float]) -> bool:
+    """PURE: the point lies strictly inside the box."""
+    return box[0] < pt[0] < box[2] and box[1] < pt[1] < box[3]
+
+
+@dataclass(frozen=True)
+class Resolved:
+    """S4: one frame's masks, resolved (``why`` None: the frame is written)."""
+
+    train: list[Train]  # the TRAIN monster boxes left
+    paint: list[tuple[int, str, Box4]]  # (mob, why, region) painted MASK_FILL ...
+    keep: list[Box4]  # ... except inside these: every written box (our own + the TRAIN boxes)
+    why: str | None = None
+
+
+def resolve_masks(train: Sequence[Train], masks: Sequence[Mask],
+                  regions: dict[int, Box4 | None], own: Sequence[float],
+                  radius: dict[int, float], size: tuple[int, int]) -> Resolved:  # fmt: skip
+    """PURE (S4): the frame's masks resolved. A mask's region is its label's ``regions`` envelope
+    (with a weak_fit label's fitted box) grown by ``radius[mob]`` (the fit radius + MASK_PAD_PX)
+    and clipped; no envelope -> ``mask_unknown:<mob>``. Its CENTRE is where the label's body is:
+    the envelope's centre (an excluded label), the fitted box's (weak_fit / demoted). Every region
+    is painted EXCEPT inside the written boxes (our own and the TRAIN boxes), so no written box
+    loses a pixel. A TRAIN box would carry a masked unit's body unlabelled when it holds the
+    mask's centre, or when more than MAX_EXPOSED of the mask's region would stay unpainted inside
+    the written boxes (then every TRAIN box touching that region): it is DEMOTED to a mask (its
+    fitted box, grown the same), repeated until neither holds. A centre inside OUR OWN box, or a
+    region still over MAX_EXPOSED (our own box is never masked) -> ``mask_on_self:<mob>``."""
+    paint: list[tuple[int, str, Box4]] = []
+    centres: list[tuple[int, tuple[float, float]]] = []
+    for gid, mob, why, fitted in masks:
+        env = regions.get(gid)
+        if env is None:
+            return Resolved(list(train), [], [], f"mask_unknown:{mob}")
+        box = (min(env[0], fitted[0]), min(env[1], fitted[1]), max(env[2], fitted[2]),
+               max(env[3], fitted[3])) if fitted is not None else env  # fmt: skip
+        centres.append((mob, center(fitted if fitted is not None else env)))
+        g = grown(box, radius.get(mob, float(MASK_PAD_PX)), size)
+        if g is not None:
+            paint.append((mob, why, g))
+    own4: Box4 = (float(own[0]), float(own[1]), float(own[2]), float(own[3]))
+    left = list(train)
+
+    def keep_of(ts: Sequence[Train]) -> list[Box4]:
+        return [own4] + [(t[2][0], t[2][1], t[2][2], t[2][3]) for t in ts]
+
+    while True:
+        hit = [t for t in left if any(inside(c, t[2]) for _m, c in centres)]
+        if not hit:
+            keep = keep_of(left)
+            over = [p for p in paint if exposure(p[2], keep, size) > MAX_EXPOSED]
+            hit = [t for t in left if any(touches(t[2], p[2]) for p in over)]
+        if not hit:
+            break
+        for t in hit:
+            centres.append((t[1], center(t[2])))
+            g = grown(t[2], radius.get(t[1], float(MASK_PAD_PX)), size)
+            if g is not None:
+                paint.append((t[1], DEMOTED, g))
+        left = [t for t in left if t not in hit]
+    keep = keep_of(left)
+    on_self = next((m for m, c in centres if inside(c, own4)), None)
+    if on_self is None:
+        on_self = next((p[0] for p in paint if exposure(p[2], keep, size) > MAX_EXPOSED), None)
+    why = None if on_self is None else f"mask_on_self:{on_self}"
+    return Resolved(left, paint, keep, why)
+
+
+def paint_masks(img: np.ndarray, regions: Sequence[Sequence[float]],
+                keep: Sequence[Sequence[float]] = (), fill: int = MASK_FILL
+                ) -> np.ndarray:  # fmt: skip
+    """PURE: a copy of ``img`` with every region (outward to whole pixels) set to ``fill``, except
+    the pixels of the ``keep`` boxes (inward to whole pixels: a written box keeps every pixel it
+    touches)."""
+    out = img.copy()
+    h, w = out.shape[:2]
+    m = pixel_mask(regions, (w, h), outward=True)
+    if keep:
+        m &= ~pixel_mask(keep, (w, h), outward=True)
+    out[m] = fill
+    return out
+
+
+def pixel_mask(boxes: Sequence[Sequence[float]], size: tuple[int, int], outward: bool = True
+               ) -> np.ndarray:  # fmt: skip
+    """PURE: the (h, w) bool union of the boxes, each taken outward to whole pixels."""
+    w, h = size
+    m = np.zeros((h, w), bool)
+    for r in boxes:
+        x0, y0 = max(0, int(np.floor(r[0]))), max(0, int(np.floor(r[1])))
+        x1, y1 = min(w, int(np.ceil(r[2]))), min(h, int(np.ceil(r[3])))
+        if x1 > x0 and y1 > y0:
+            m[y0:y1, x0:x1] = True
+    return m
+
+
+def exposure(region: Sequence[float], keep: Sequence[Sequence[float]], size: tuple[int, int]
+             ) -> float:  # fmt: skip
+    """PURE: the fraction of a mask region left unpainted (inside the written boxes)."""
+    r = pixel_mask([region], size)
+    n = int(r.sum())
+    return float((r & pixel_mask(keep, size)).sum()) / n if n else 0.0
+
+
+def mask_area(regions: Sequence[Sequence[float]], keep: Sequence[Sequence[float]],
+              size: tuple[int, int]) -> float:  # fmt: skip
+    """PURE: the fraction of the frame painted (the regions' union minus the written boxes)."""
+    m = pixel_mask(regions, size)
+    if keep:
+        m &= ~pixel_mask(keep, size)
+    return float(m.mean())
+
+
 def shard_count(member_sizes: Sequence[int], max_bytes: int) -> int:
     """PURE: how many shards ShardSink opens for one session's frames (``member_sizes``: each
     frame's member bytes + their headers), by its own rotation rule."""
@@ -1382,6 +1576,57 @@ class MapTally:
                 "est_shards": shard_count(self.member_sizes, max_bytes)}  # fmt: skip
 
 
+@dataclass
+class MaskTally:
+    """S4's counts for one masked session (ids, never names or pixels)."""
+
+    painted: Counter[str] = field(default_factory=Counter)  # "<why>:<mob>" -> masks painted
+    frames_masked: int = 0  # written frames holding at least one mask
+    areas: list[float] = field(default_factory=list)  # each written frame's painted fraction
+    exposed: list[float] = field(default_factory=list)  # each mask's unpainted fraction (kept in)
+    near: Counter[int] = field(default_factory=Counter)  # class id -> TRAIN boxes within 20 px
+    # the positive case: every KEPT label's fitted box against its own region (a frame not
+    # dropped by a frame rule): checked / inside region + fit radius / inside region + radius + pad
+    check: Counter[str] = field(default_factory=Counter)
+    worst: dict[str, float] = field(default_factory=dict)  # mob -> the largest overshoot (px)
+
+    def as_dict(self) -> dict[str, Any]:
+        def q(v: list[float], p: float) -> float | None:
+            a = sorted(v)
+            return round(a[min(len(a) - 1, int(p * len(a)))], 4) if a else None
+
+        return {"painted": _keyed(self.painted), "painted_total": sum(self.painted.values()),
+                "frames_masked": self.frames_masked,
+                "area_p50": q(self.areas, 0.5), "area_p90": q(self.areas, 0.9),
+                "area_max": q(self.areas, 1.0),
+                "exposed_p50": q(self.exposed, 0.5), "exposed_p90": q(self.exposed, 0.9),
+                "exposed_max": q(self.exposed, 1.0),
+                "masks_exposed_over_half": sum(e > 0.5 for e in self.exposed),
+                "train_boxes_within_20px_of_a_mask": {str(k): v for k, v in
+                                                      sorted(self.near.items())},
+                "mask_check": dict(sorted(self.check.items())),
+                "mask_check_worst_px": dict(sorted(self.worst.items()))}  # fmt: skip
+
+
+NEAR_MASK_PX = 20.0  # S4's report: a TRAIN box this close to a mask (the context it learns beside)
+
+
+def mask_provenance(sessions: Sequence[str]) -> dict[str, Any] | None:
+    """S4's settings, recorded in the progress file and the manifest (None: no masked session)."""
+    if not sessions:
+        return None
+    return {"sessions": list(sessions), "suffix": MASK_SUFFIX, "fill": MASK_FILL,
+            "pad_px": MASK_PAD_PX, "demoted": DEMOTED, "max_exposed": MAX_EXPOSED,
+            "near_px": NEAR_MASK_PX,
+            "plan": "docs/planning/xmas02-detector.md Amendment S4"}  # fmt: skip
+
+
+def overshoot(outer: Sequence[float], inner: Sequence[float]) -> float:
+    """PURE: how far (px) ``inner`` reaches outside ``outer`` at its worst side (0 inside)."""
+    return max(0.0, outer[0] - inner[0], outer[1] - inner[1], inner[2] - outer[2],
+               inner[3] - outer[3])  # fmt: skip
+
+
 def own_aid(lab: Any) -> int | None:
     """Our character's id (labels v2's Session: the Timeline's, else the login packet's)."""
     aid = lab.timeline.inferred_aid
@@ -1430,21 +1675,58 @@ def map_session(
     dead = lv.self_dead_spans(lab.timeline.events, own_aid(lab))
     off = int(float(mli.params["offset_ms"]) * 1e6)
     index, player = classes.index, classes.fixed["player"]
-    tally = MapTally()
+    masked = sid in set(getattr(a, "mask_sessions", None) or ())
+    if masked and part != "train":
+        raise SystemExit(f"{sid}: --mask-sessions are TRAIN sessions (S4)")
+    rule = map_rule(mli.spec) + (MASK_SUFFIX if masked else "")
+    fit_px = {int(k): float(v) for k, v in (mli.params.get("fit_px") or {}).items()}
+    radius = {m: fit_px.get(m, 6.0) + MASK_PAD_PX for m in classes.index}
+    tally, mt = MapTally(), MaskTally()
     row: dict[str, Any] = {"split": part, "path": str(path),
                            "format": recorded.session_format(manifest),
-                           "labels": map_rule(mli.spec),
+                           "labels": rule,
                            "join_rule_3c": VAL_MONITOR if part == "val"
                            else join_verdict(sid, mli.spec.staged, mli.own),
                            "shards": []}  # fmt: skip
     w, h = V2_SIZE
     for f in mli.frames(sid):
         tally.seen += 1
-        monsters, reasons = map_frame(f, mli.floor, index)
+        paint: list[tuple[int, str, Box4]] = []
+        keep: list[Box4] = []
+        train: list[Train] = []
+        masks: list[Mask] = []
+        regions: dict[int, Box4 | None] = {}
+        if masked:
+            train, masks, reasons = map_frame_masked(f, mli.floor, index)
+            if not reasons:  # the positive case first: the kept labels against their regions
+                fitted = [(t[3], t[1], t[2]) for t in train]
+                fitted += [(g, mob, b) for g, mob, _w, b in masks if b is not None]
+                gids = [g for g, _m, _b in fitted] + [m[0] for m in masks]
+                regions = ml.label_regions(lab, mli.params, int(f["t"]), gids)
+                for g, mob, b in fitted:
+                    mt.check[f"checked:{mob}"] += 1
+                    env = regions.get(g)
+                    if env is None:
+                        mt.check[f"no_region:{mob}"] += 1
+                        continue
+                    r = fit_px.get(mob, 6.0)
+                    mt.check[f"in_radius:{mob}"] += contains(env, b, r)
+                    mt.check[f"in_mask:{mob}"] += contains(env, b, r + MASK_PAD_PX)
+                    worst = overshoot(env, b) - r - MASK_PAD_PX
+                    mt.worst[str(mob)] = round(max(mt.worst.get(str(mob), 0.0), worst), 1)
+            monsters = [(c, m, b) for c, m, b, _g in train]
+        else:
+            monsters, reasons = map_frame(f, mli.floor, index)
         box = None
         if not reasons:
             box, why = self_box(lab, mli.spec, int(f["t"]) - off, dead)
             reasons = [why] if why else []
+        if masked and not reasons and masks:
+            assert box is not None
+            res = resolve_masks(train, masks, regions, box, radius, (w, h))
+            monsters = [(c, m, b) for c, m, b, _g in res.train]
+            paint, keep = res.paint, res.keep
+            reasons = [res.why] if res.why else []
         if reasons:
             tally.exclude(reasons)
             continue
@@ -1459,10 +1741,20 @@ def map_session(
             "frame_id": fid,
             "t_mono_ns": int(f["t"]),
             "map": mli.spec.name,
-            "labels": map_rule(mli.spec),
+            "labels": rule,
             "spot": f.get("spot"),
             "boxes": [[player, None, "self"]] + [[c, m, "fit"] for c, m, _b in monsters],
         }
+        if masked:
+            info["masked"] = [[m, why, [round(v, 1) for v in r]] for m, why, r in paint]
+            info["mask_fill"] = MASK_FILL
+            mt.painted.update(f"{why}:{m}" for m, why, _r in paint)
+            mt.frames_masked += bool(paint)
+            mt.areas.append(mask_area([r for _m, _w, r in paint], keep, (w, h)))
+            mt.exposed.extend(exposure(r, keep, (w, h)) for _m, _w, r in paint)
+            for c, _m, b in monsters:
+                near = grown(b, NEAR_MASK_PX, (w, h))
+                mt.near[c] += near is not None and any(touches(near, r) for _m, _w, r in paint)
         meta = json.dumps(info).encode()
         tally.kept += 1
         tally.source_bytes += int(f["size"])
@@ -1475,6 +1767,9 @@ def map_session(
             if img.shape[:2] != (h, w):
                 raise SystemExit(f"{sid}: frame {fid} is {img.shape[1]}x{img.shape[0]}, the "
                                  f"labels are {w}x{h}")  # fmt: skip
+            if paint:  # S4: the masks, painted before the encode (a copy; the read is untouched)
+                img = paint_masks(np.ascontiguousarray(img[:, :, :3]),
+                                  [r for _m, _w, r in paint], keep)  # fmt: skip
             image = ({"png": encode_png(np.ascontiguousarray(img[:, :, :3]))}
                      if a.image == "png" else {"jpg": jpeg(img, a.quality)})  # fmt: skip
             shard = sink.add(f"{sid}.{fid:09d}", {**image, "txt": text.encode(), "json": meta})
@@ -1483,6 +1778,9 @@ def map_session(
         if a.max_per_session and tally.kept >= a.max_per_session:
             break
     row.update(tally.as_dict(a.shard_mb << 20))
+    if masked:
+        row["mask"] = {"rule": rule, "fill": MASK_FILL, "pad_px": MASK_PAD_PX,
+                       "groups": [int(g) for g in ml.REGION_GROUPS], **mt.as_dict()}  # fmt: skip
     return row
 
 
@@ -1563,8 +1861,10 @@ def map_dry_run(a: argparse.Namespace, split: dict[str, list[str]], mli: MapLabe
     out: dict[str, Any] = {
         "dry_run": True, "labels": "map", "inputs": mli.provenance, "names": names,
         "map_sessions": {k: {x: r[x] for x in ("seen", "kept", "boxes_by_class_id", "est_bytes",
-                                               "est_shards", "join_rule_3c")}
+                                               "est_shards", "join_rule_3c", "labels",
+                                               "mask") if x in r}
                          for k, r in rows.items()},
+        "mask": mask_provenance(getattr(a, "mask_sessions", None) or []),
         "map_total": {**{k: v for k, v in total.as_dict(a.shard_mb << 20).items()
                          if k not in ("est_bytes", "est_shards")},
                       "est_bytes": sum(r["est_bytes"] for r in rows.values()
@@ -2091,6 +2391,10 @@ def main(argv: Sequence[str] | None = None) -> int:
                    help="map: map_labels.py check outputs (3c: own C1 = ADDED)")  # fmt: skip
     m.add_argument("--link-cache", default=None,
                    help="map: a finished cache id under --out, joined BY REFERENCE")  # fmt: skip
+    m.add_argument("--mask-sessions", nargs="*", default=[],
+                   help="map: these --train sessions by the MASKED rule (xmas02-detector.md "
+                        "S4): excluded / weak_fit labels painted out, not the frame dropped",
+                   )  # fmt: skip
     f = ap.add_argument_group("labels items (scripts/fi_labels.py label files; xmas02-detector.md "
                               "Amendment O.8; local inputs, never committed)")  # fmt: skip
     f.add_argument("--fi-labels", type=Path, nargs="*", default=[],
@@ -2119,6 +2423,8 @@ def main(argv: Sequence[str] | None = None) -> int:
     f.add_argument("--neg-seed", type=int, default=ITEM_NEG_SEED,
                    help="items: the seed of every negative draw")  # fmt: skip
     a = ap.parse_args(argv)
+    if a.mask_sessions and a.labels != "map":
+        raise SystemExit("--mask-sessions belongs to --labels map (xmas02-detector.md S4)")
     if a.labels == "items":
         return items_main(a)
     if a.fi_labels or a.item_params or a.neg_sessions:
@@ -2278,6 +2584,9 @@ def map_main(a: argparse.Namespace) -> int:
     if sorted(named ^ labelled):
         raise SystemExit(f"--train / --val and the label files must name the same sessions: "
                          f"{sorted(named ^ labelled)}")  # fmt: skip
+    stray = sorted(set(a.mask_sessions) - set(own["train"]))
+    if stray or len(set(a.mask_sessions)) != len(a.mask_sessions):
+        raise SystemExit(f"--mask-sessions: each once, and each a --train session (S4): {stray}")
     linked = linked_cache(a.out, a.link_cache, names) if a.link_cache else None
     split = {k: list(v) for k, v in own.items()}
     if linked is not None:
@@ -2304,7 +2613,8 @@ def map_main(a: argparse.Namespace) -> int:
             "max_per_session": a.max_per_session, "shard_mb": a.shard_mb, "image": a.image,
             "quality": a.quality if a.image == "jpeg" else None, "split": split,
             "classes": classes.provenance(), "map_labels": mli.provenance,
-            "link": None if linked is None else linked[2]}  # fmt: skip
+            "link": None if linked is None else linked[2],
+            "mask": mask_provenance(a.mask_sessions)}  # fmt: skip
     sessions: dict[str, Any] = {}
     shards: dict[str, Any] = {}
     if a.resume:
@@ -2340,6 +2650,7 @@ def map_main(a: argparse.Namespace) -> int:
         "built_at": time.strftime("%Y-%m-%dT%H:%M:%S%z"),
         "seconds": round(time.monotonic() - t0, 1), "classes": classes.provenance(),
         "map_labels": mli.provenance, "linked": None if linked is None else linked[2],
+        "mask": mask_provenance(a.mask_sessions),
     }  # fmt: skip
     for name, doc in (("manifest.json", manifest), ("split.json", split)):
         write_json(directory, name, doc)

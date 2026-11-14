@@ -639,6 +639,54 @@ def envelope(sheet: Any, pred: Any, group: int) -> Any:
                    mask=None, mask_origin=None)  # fmt: skip
 
 
+# xmas02-detector.md Amendment S4 (2026-11-14, the masked cache): the action groups a label's mask
+# region covers at every heading, beside the unit's own Timeline state's group
+REGION_GROUPS = (MonsterAction.IDLE, MonsterAction.WALK)
+
+
+def label_regions(lab: Any, params: dict[str, Any], t: int, gids: Iterable[int]
+                  ) -> dict[int, Box | None]:  # fmt: skip
+    """xmas02-detector.md Amendment S4 (the masked cache; packets + sprites, NO pixel): for each
+    monster ``gid`` of the recorded frame at ``t``, the screen box its sprite can cover at the
+    labeller's own predicted anchor (FixLabeler.frame's Timeline world at tw = t - offset, its
+    scene and the 1b anchor): the union over the 8 headings and the action groups REGION_GROUPS +
+    the unit's state's group of EVERY frame of the group (``envelope``: the phase is not trusted).
+    None: no such visible monster in that world, or its sprite draws nothing there. Not grown and
+    not clipped (the cache does both). The label rule itself is untouched: nothing here decides
+    whether a label is kept."""
+    from poring_dataset.render import Actor, predict_sprite
+
+    out: dict[int, Box | None] = dict.fromkeys(int(g) for g in gids)
+    tw = int(t) - int(float(params["offset_ms"]) * 1e6)
+    _replay, world, all_states, _rules = lab.timeline.at_world(tw)
+    if world.self_pos is None or not world.map:
+        return out
+    scene = occ.scene_for(lab, world.map, world.self_pos)
+    states = {s.gid: s for s in all_states}
+    anchors = olf.anchors_of(params)
+    for e in world.entities:
+        if e.gid not in out or e.objtype != 5 or e.hidden:
+            continue
+        st, sheet = states.get(e.gid), lab.sheets(e.job)
+        if st is None or sheet is None:
+            continue
+        groups = sorted({int(g) for g in REGION_GROUPS}
+                        | {int(STATE_ACTION.get(st.state, MonsterAction.IDLE))})  # fmt: skip
+        dx, dy = anchors.get(int(e.job), (0.0, 0.0))
+        boxes: list[Box | None] = []
+        for heading in range(8):
+            base = predict_sprite(Actor((float(e.x), float(e.y)), heading,
+                                        int(MonsterAction.IDLE)), sheet, scene, olf.K)  # fmt: skip
+            if base is None:  # behind the camera, or IDLE draws nothing at this heading
+                continue
+            base = olf.shifted(base, dx, dy)
+            for g in groups:
+                p = envelope(sheet, base, g)
+                boxes.append(None if p is None else p.box)
+        out[e.gid] = union(boxes)
+    return out
+
+
 def without_box(valid: npt.NDArray[np.bool_], box: Box, pad: float = SELF_MASK_PAD_PX
                 ) -> npt.NDArray[np.bool_]:  # fmt: skip
     """PURE (4h E2 / E3): ``valid`` with ``box`` grown by ``pad`` px set False (a copy)."""
