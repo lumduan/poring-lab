@@ -4438,3 +4438,16 @@ under the sk list, and the xw3 Goblin labels (from the 11-06 T2, which failed) s
 7. **Then:** the results here and in live-blocks.md 11.4; the scratch to the NAS. Deployment
    (MAP_MODELS, the alarm's Goblin rule, S2's "runner" paragraph, a live flee proof) is a later step
    of its own, decided by the parent / Batt on this result.
+
+#### S4.7 (2026-11-14 19:16 ICT from `date`, BEFORE the GPU step): the cache as built
+
+S4.4's command, 19:07:14-19:13:30 (375.4 s; the guard watched no capture service, worst stall
+0.0 %): **`/mnt/poring-lab-datasets/.framecache/xmas02-sk-mask-o3h-t-20261114`**, 1,322 frames written
+(sk1a 655, sk2a 667) in 6 shards (2.77 GB), + the linked xmas02gb cache (6 sessions, 3,397 frames,
+16 shards, by reference). **Every count equals the dry run's** (frames, boxes per class, the mask
+counts). `manifest.json` sha256 `9d7a9b3850896c3bea607a2d55ebc543502a9ddbb03522f38f82c91dd164f7d5`,
+`split.json` `08912f97...`; its names player ... garm_baby, g_gobline_xmas, knight_of_windstorm; its
+class list `b871a2f6...`. Read back through `poring_vision.shards.load_split` (the trainer's
+reader): TRAIN 3,613 frames, boxes 0: 3,613 / 3: 1,707 / 4: 956 / 5: 597 / 6: 473 / 7: 649 /
+**8: 1,138** / **9: 112**; VAL 1,106. sk2a 886 read from its shard: 4.65 % of its pixels are 114
+grey, its 4 YOLO lines our own box + cookie_xmas + Goblin + Garm Baby. Next: S4.5's launch.
