@@ -1740,6 +1740,18 @@ box. Both fixes stay, but they were not this cause.
   - the canvas does not jump.
 - At 390, both drags as before.
 
+**➡️ Re-measured 2026-11-15 01:06-01:11 ICT (matpilot, read only, main d350897c): ALL PASS.**
+- **1440, the compact picker opened fresh:** the FIRST drag reads y 360 / 396 / 648 and x 640 / 704 /
+  1152, by mouse and by touch. The second drag reads the same, and Escape restores 645,481.
+- **The strip:** it stays 152 px tall, and the canvas top stays at 347 through both drags. IN A RUN
+  fades to 0.6 while the lint checks and keeps its words.
+- **390:** both drags read 360 / 396 / 648; the folded strip stays 36 px.
+- **The rank, set by name:** drink's rank goes auto -> 1 (the Python's rank=1), with 0 overlaps and 0
+  covered fields on survival.
+- **The arc, rounds 20-24, all re-measured in a browser:** every setting block fits at 390, no
+  overlaps, every value field a picker, and Escape/Undo exact. Nothing is left open from the
+  reviews.
+
 ## 13. Stage 5b-1: HuntState and the loop as steps (design written 2026-11-14 18:3x ICT from `date`, before any 5b code; offline only)
 
 **Batt's words:** "break the runner into blocks" (2026-11-13); "there should be no runner [page]
