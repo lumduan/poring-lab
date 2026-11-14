@@ -4472,3 +4472,43 @@ dataloader workers`, `Starting training for 10 epochs`. A watcher (S4.5) yields 
 - **The scored checkpoint: `data/train/xmas02-sk-20261114/weights/last.pt` after epoch 10, sha256
   `0b43ebbfe8e2bb5c4333d2297520f4f05d9ce79b6fa1cdcde12663879d167a10`** (5,533,786 bytes). Nothing is
   refitted after this line. Next: S4.6 steps 2-6.
+
+#### S4.9 (2026-11-15 00:20 ICT from `date`, BEFORE any labeller sees the pack or any prediction exists): the export, the registration, sk3a's labels and the evaluation pack
+
+- **The export (M9's recipe, 00:12:37-00:13:27; the archived `onnx-export/build.sh` `0b1db27c...`, a
+  1.5 GB RAM env removed after; the lab's /dev/shm 2.44 GB at its peak):** torch 2.15.0+cpu,
+  ultralytics 8.4.165, opset 18, input [1, 3, 736, 1280], output [1, 14, 19320] (4 + 10 classes).
+  **`xmas02sk-last-736x1280.onnx` sha256 `76316fb4e58102aaf015de597eec2b188f9f103e29fb4ca74f87d2f636d19473`**
+  and its names `535a31c7...`: player, npc, warp, mystcase, cruiser, cookie, cookie_xmas, garm_baby,
+  g_gobline_xmas, knight_of_windstorm (the cache's order). In `/dev/shm/poring-lab-detector/model`
+  and **copied to the NAS `archive/models` BEFORE the registration** (sha256 read back; that folder's
+  SHA256SUMS lists only deployed models and is unchanged).
+- **The run archived** (guarded `archive:`, 00:13:37-00:13:43: copy, check, local delete):
+  `archive/train/xmas02-sk-20261114`, its last.pt re-hashed on the NAS: `0b43ebbf...` (S4.8).
+- **Registered, NOT deployed** (`376a0137`): `unit_detector.GPU_WEIGHTS["xmas02sk"]` (+
+  fi_gpu_latency's map, a test); MAP_MODELS["xmas_dun02"] stays `xmas02gb`. **The serve test**
+  (00:16:29-00:17:32, the worktree's serve-cmd, OpenVINO, 60 s): `"listening"` with all 9 models,
+  `xmas02sk: 76316fb4e581`; it ended by its time box (rc 124), the worker idle after.
+- **sk3a's labels** (`map_labels.py labels --map xmas_dun02 --eval-test`, `957afbbd`'s
+  eval_suffixes, the FROZEN params, `classes-none.json`; 00:12:42-00:18:08):
+  `/dev/shm/poring-lab-tmp/goblin/eval/labels-test/20261112T074222-rdp-xmas02-sk3a.json`, **sha256
+  `cf0e8610f643e582115b9381b3493d3a92a4e73852dda5419fc5e53b2cd5f8ee`**, `eval_test: true`. 903 frames
+  recorded, 738 candidates (gm_window 126, map_change 39), 176 whole. Kept labels: Myst Case 210,
+  Cruiser 183, Cookie 153, Christmas Cookie 158, Garm Baby 488, **Christmas Goblin 1,423**, **Stormy
+  Knight 348**.
+- **The pack** (`pack --eval-test --per-species 60 --seed 53 --min-fit 0.536`, 00:18:08-00:18:28):
+  **420 crops (60 per species x 7), 309 frames, 21 grids**; the pools after the floor: 204 / 166 / 144
+  / 137 / 146 / **999** / 175 (weak_fit removed 6 / 17 / 9 / 21 / 342 / **424** / 173).
+  - the instructions `dc48fb15...` (T2's and every evaluation's, checked by the tool); `reference.png`
+    **`2cae63ad...`, byte-identical to the 11-07 and M9 evaluation packs'** (the same 9 species and seed:
+    A Garm Baby, B Myst Case, C Poring, D Cookie, E Cruiser, F Christmas Cookie, G Stormy Knight, H
+    Christmas Goblin, I Santa Poring);
+  - **the answer key `/dev/shm/poring-lab-tmp/goblin/eval/key/answer_key.json`
+    `d77b9767de645bfa9adbdf1eeb16ba3158a963b4add9fcea594312e721eb5281`**; `pack.json` `5f68d60f...`; the
+    file list (444 files) `1af0eaad...`; `pack-build.json` `286c47ec...`.
+- **The labellers' copy: `/dev/shm/poring-lab-tmp/blind-sk53-sk3a/pack`** (checked 444 / 444), an
+  empty `answers/` beside it; the key lives only under `goblin/eval/key`. **Two NEW blind labellers, W
+  and X** (A-V are spent), each with ONLY M9's brief, the paths changed (W `e974c879...`, X
+  `2089f76a...`; they differ in the letter and the answers path).
+- The four species and Garm Baby on sk3a are reported only (S4.6 point 5); the Goblin's verdict is
+  `Q1.per_species.g_gobline_xmas` on this pack.
