@@ -957,3 +957,36 @@ warp (the short-run rule, since fixed: 813893cc); s3ab-1114b (06:05-08:02, 3 pai
   back in 4.33 s (s3ab-1114b-r03B3, outside the bar: that run is invalid). NOT proven: the weight
   event (no run reached 50 %: the setup clears the bag at 40 %, and 20-min runs end at 32-43 %).
 - Deaths: 3 in 11 played runs (B2 2, B3 1), all to the Stormy Knight or a one-shot with it near.
+
+## 9. Stage 4a live A/B (2026-11-14 08:03-09:52 ICT): INCONCLUSIVE by its bar (1 valid pair of 3)
+
+`scripts/stage4_ab.py run --label s4ab-1114 --pairs 3 --minutes 20` (B3 = the stage-3 box, B4 =
+the one box: use_model("xmas02") + the monsters tab written as today's technique; the bar of 3.4,
+unchanged).
+
+| Run | Box | Min | Deaths | Kills/h | Steals/h | Loot/h | Openers/h | Recipes asked | Mismatches |
+|---|---|---|---|---|---|---|---|---|---|
+| r01B3 | B3 | 15.2 | 1 (with the Knight in view; the killing hit not decoded) | 142.5 | 55.4 | 178.2 | 75.2 | 0 | 0 |
+| r02B4 | B4 | 19.9 | 0 | 132.6 | 21.1 | 171.8 | 33.2 | 59 | 0 |
+| r03B4 | B4 | 19.9 | 0 | 151.1 | 75.6 | 184.4 | 117.9 | 60 | 0 |
+| r04B3 | B3 | 19.8 | 0 | 117.9 | 84.7 | 181.4 | 105.8 | 0 | 0 |
+| r05B3 | B3 | 5.5 | 1 (the Knight: 1,124 + goblins, from 88 %) | 141.2 | 76.0 | 184.7 | 119.5 | 0 | 0 |
+| r06B4 | B4 | 19.9 | 0 | 154.1 | 84.6 | 208.4 | 108.7 | 68 | 0 |
+
+- **Verdict: INCONCLUSIVE** (pair 2 the only valid one: the Knight invalidated pairs 1 and 3).
+  Pair 2's judged lines pass: deaths 0 / 0; Knife openers/h within +-20 % (B4 117.9, B3 105.8);
+  recipes asked at every B4 lock (60) with 0 mismatches, none asked in B3. kills/h B4 - B3 +33.2,
+  steals/h -9.1, loot/h +3.0: one pair, no standard error, not judged.
+- Proven live: the box's use_model chose the detector (box_model choice "box", the same xmas02gb
+  file and sha256); every B4 lock asked the box's recipe for the struck species (187 asks over
+  the three B4 runs: mystcase, cruiser, cookie, cookie_xmas, and 5 unknown-species scan strikes per
+  run on the runner's own recipe), 0 mismatches; the box's respawn again (r01B3, r05B3).
+- r02B4's low openers (33.2/h) were HP-gated, not the recipes: 59 of 59 recipes said the Knife;
+  she spent 70 % of that run under 50 % HP (r01B3: 43 %), where the runner skips the Knife
+  (knife_hp_min 0.5; bare_skip_hp 41).
+- **A design interaction for Batt (not a bug):** the box drinks under 30 % (Batt's number) and the
+  Knife swap needs 50 %: between 30 and 50 % she neither drinks nor swaps. The runner alone drinks
+  under 40 %. In stage 2's valid runs the runner alone spent 0 % of its time under 50 % HP (3 runs)
+  and the box 0, 0, 21, 32 and 47 % (5 runs): a small sample (where she fought), but the band is
+  real. The runner's tick rate is the same in both arms (2.2-2.5 reads/s, median gap 201 ms), so
+  the box's hook does not slow it.
