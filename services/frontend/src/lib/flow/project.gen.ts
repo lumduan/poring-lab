@@ -250,6 +250,16 @@ export type Varargs = string | null;
  * @maxItems 200
  */
 export type Defs = Def[];
+export type Layout = {
+  /**
+   * @minItems 2
+   * @maxItems 2
+   *
+   * This interface was referenced by `undefined`'s JSON-Schema definition
+   * via the `patternProperty` "^(main|(def|var):[A-Za-z][A-Za-z0-9_]{0,47})$".
+   */
+  [k: string]: unknown[];
+} | null;
 export type Main =
   | (
       | ActionStmt
@@ -575,6 +585,7 @@ export interface Pos {
  */
 export interface Tab {
   defs?: Defs;
+  layout?: Layout;
   main?: Main;
   name: Name5;
   vars?: Vars;

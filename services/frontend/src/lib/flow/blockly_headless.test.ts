@@ -17,7 +17,8 @@ import { BLOCK_DEFS, toolbox, toolboxBlocks } from "./blockdefs.ts";
 import { fromWorkspace, type Scope, tabFromWorkspace, tabToWorkspace, toWorkspace, type Workspace } from "./blocks.ts";
 import { canonical, clone, type Flow } from "./ir.ts";
 import type { Models } from "./models.ts";
-import { nodeById, sampleProject, xmasHuntProject, xmasProject } from "./project.ts";
+import { personMoved } from "./layout.ts";
+import { nodeById, sampleProject, tabOf, xmasHuntProject, xmasProject } from "./project.ts";
 import { noteLines, SETTING_BLOCKS, SETTING_BY_NAME, settingType, withSettingTabs } from "./settings.ts";
 import { FIXTURES, fixture, sessionProject } from "./testkit.ts";
 
@@ -201,4 +202,56 @@ test("MatPilot's themes and the search row are registered", () => {
   assert.equal(th.dark.blockStyles.mp_movement_blocks.colourPrimary, "#a21caf");
   assert.equal(th.light.blockStyles.mp_start_blocks.hat, "cap");
   assert.ok(B.registry.hasItem(B.registry.Type.TOOLBOX_ITEM, SEARCH_KIND));
+});
+
+// --- round 25 (live-blocks.md 12.9): a block a PERSON moves keeps its place, in the REAL Blockly ----
+test("round 25: Blockly's own drag / clean-up moves are a person's (saved); a bump, a connection or a new block are not; undo follows", async () => {
+  const p = xmasProject();
+  const scope = { node: "xmas_dun02", tab: "keys" };
+  const ws = new B.Workspace();
+  B.Events.disable();
+  try {
+    B.serialization.workspaces.load(tabToWorkspace(p, scope) as unknown as object, ws);
+  } finally {
+    B.Events.enable();
+  }
+  await new Promise((r) => setTimeout(r, 0));
+  ws.clearUndo();
+  const placed = new Set<string>();
+  ws.addChangeListener((e: BlocklyT.Events.Abstract) => {
+    const id = personMoved(e as BlocklyT.Events.BlockMove);
+    if (id) placed.add(id);
+  });
+  const byName = (n: string) => ws.getTopBlocks(false).find((b) => b.getFieldValue("NAME") === n)!;
+  const at = (b: BlocklyT.Block) => b.getRelativeToSurfaceXY();
+  const heal = byName("heal");
+  const fly = byName("fly_wing");
+  B.Events.setGroup(true);
+  heal.moveBy(600 - at(heal).x, 400 - at(heal).y, ["drag"]); // a person drags heal
+  B.Events.setGroup(false);
+  fly.moveBy(15, 15, ["bump"]); // Blockly bumps fly_wing out of the way
+  await new Promise((r) => setTimeout(r, 5));
+  assert.deepEqual([...placed], [heal.id]);
+  const saved = () => {
+    const r = tabFromWorkspace(p, scope, B.serialization.workspaces.save(ws) as unknown as Workspace, {}, placed);
+    assert.ok(r.ok);
+    return tabOf(nodeById(r.project, "xmas_dun02")!, "keys")!.layout;
+  };
+  assert.deepEqual(saved(), { "def:heal": [600, 400] });
+  // Undo (the bump, then the drag) moves it back: the place saved follows the block (the next conversion)
+  const was = tabToWorkspace(p, scope).blocks.blocks.find((b) => b.fields?.NAME === "heal")!;
+  ws.undo(false);
+  ws.undo(false);
+  await new Promise((r) => setTimeout(r, 5));
+  assert.deepEqual([at(heal).x, at(heal).y], [was.x, was.y]);
+  // the other reasons Blockly gives a move (core: drag, cleanup, bump, snap, inbounds, connect,
+  // disconnect, create): only a drag and "Clean up Blocks" are a person's choice of place
+  for (const reason of ["drag", "cleanup"]) assert.equal(personMoved({ type: "move", blockId: "a", reason: [reason] }), "a");
+  for (const reason of ["bump", "snap", "inbounds", "connect", "disconnect", "create"]) assert.equal(personMoved({ type: "move", blockId: "a", reason: [reason] }), null, reason);
+  assert.equal(personMoved({ type: "move", blockId: "a", reason: ["drag"], newParentId: "b" }), null); // into a stack
+  assert.equal(personMoved({ type: "change", blockId: "a", reason: ["drag"] }), null);
+  const back = saved()!["def:heal"];
+  assert.notDeepEqual(back, [600, 400]);
+  assert.deepEqual(back, [Math.round(at(heal).x), Math.round(at(heal).y)]);
+  ws.dispose();
 });

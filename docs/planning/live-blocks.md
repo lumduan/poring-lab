@@ -1636,7 +1636,7 @@ with the parent's decision and what was done:
 
 | # | Finding (the reviewer's measure) | Decision | Done how |
 |---|---|---|---|
-| A | The survival tab's event blocks OVERLAPPED: drink / fly_away by 78 px at 390 and 97 at 1440, fly_away / bag_full 131 / 164, bag_full / eat_cane 78 / 96; 8 fields hidden under the next block | after a tab's blocks are drawn, stack its TOP blocks again from their MEASURED heights, a fixed gap apart, in their order and at their x; again whenever a block's height changes; never change the fixtures' saved positions; save positions only when a person moves a block; a test that no two top blocks' boxes intersect -- headless real Blockly if it can give heights, else the width / height model held to the measured heights (say which) | FIXED; the test is the MODEL (node cannot draw Blockly: no SVG layout, so `getHeightWidth` has nothing to measure). The page: `BlockEditor settle` -- once Blockly has drawn the tab (`finishQueuedRenders`), its top blocks' boxes from `getRelativeToSurfaceXY` + `getHeightWidth`, stacked by `layout.ts stackTops`: the tab just opened, PACKED from its top (90 units), `STACK_GAP` 24 apart; afterwards, whenever a top block's measured height changed (a picker's value, a note, a warning row, a wrapped condition, a block plugged in or taken out: every non-UI event and every decoration settles), a block only ever moves DOWN, as far as the ones above it need. Moves are made with events off: no undo step, no conversion, nothing saved (a project keeps no block positions; the frozen fixtures are untouched); not during a drag (it waits for the gesture's end). Round 20's `restack` (only the blocks under a SETTING that grew) is gone. The first placement (`blocks.ts tabToWorkspace`) now uses `layout.ts blockHeight` (rows, statement inputs with what they hold, wrapped conditions) + 24 instead of the fixed `EVENT_ROWS_Y` (11 x 48 = 528 units, which made drink 710 units apart while it is 840 tall). The model against the reviewer (f3898e8b's placements + the overlaps at scale 0.6 / 0.75 give the heights): drink 858 vs 840 (+2.1 %), fly_away 962 vs 928 (+3.7 %), bag_full 810 vs 793 (+2.1 %); layout.test.ts holds it in [measured, measured x 1.06], proves its own positive case (f3898e8b's steps with the measured heights overlap by the reviewer's pixels, within 1 px at 390 and 1.5 at 1440; this round's are >= 24 units apart), and finds no intersection on any tab of the ready-made projects and the FROZEN ones (project_xmas_dun02.json, stage 2-4, sample, session), the blocks in their order |
+| A | The survival tab's event blocks OVERLAPPED: drink / fly_away by 78 px at 390 and 97 at 1440, fly_away / bag_full 131 / 164, bag_full / eat_cane 78 / 96; 8 fields hidden under the next block | after a tab's blocks are drawn, stack its TOP blocks again from their MEASURED heights, a fixed gap apart, in their order and at their x; again whenever a block's height changes; never change the fixtures' saved positions; save positions only when a person moves a block; a test that no two top blocks' boxes intersect -- headless real Blockly if it can give heights, else the width / height model held to the measured heights (say which) | FIXED; the test is the MODEL (node cannot draw Blockly: no SVG layout, so `getHeightWidth` has nothing to measure). ➡️ Round 25 (12.9): the places a person chose are saved with the project and WIN; on open only the unplaced blocks are laid out (left to right), and afterwards only a growth pushes what it reaches. The page: `BlockEditor settle` -- once Blockly has drawn the tab (`finishQueuedRenders`), its top blocks' boxes from `getRelativeToSurfaceXY` + `getHeightWidth`, stacked by `layout.ts stackTops`: the tab just opened, PACKED from its top (90 units), `STACK_GAP` 24 apart; afterwards, whenever a top block's measured height changed (a picker's value, a note, a warning row, a wrapped condition, a block plugged in or taken out: every non-UI event and every decoration settles), a block only ever moves DOWN, as far as the ones above it need. Moves are made with events off: no undo step, no conversion, nothing saved (a project keeps no block positions; the frozen fixtures are untouched); not during a drag (it waits for the gesture's end). Round 20's `restack` (only the blocks under a SETTING that grew) is gone. The first placement (`blocks.ts tabToWorkspace`) now uses `layout.ts blockHeight` (rows, statement inputs with what they hold, wrapped conditions) + 24 instead of the fixed `EVENT_ROWS_Y` (11 x 48 = 528 units, which made drink 710 units apart while it is 840 tall). The model against the reviewer (f3898e8b's placements + the overlaps at scale 0.6 / 0.75 give the heights): drink 858 vs 840 (+2.1 %), fly_away 962 vs 928 (+3.7 %), bag_full 810 vs 793 (+2.1 %); layout.test.ts holds it in [measured, measured x 1.06], proves its own positive case (f3898e8b's steps with the measured heights overlap by the reviewer's pixels, within 1 px at 390 and 1.5 at 1440; this round's are >= 24 units apart), and finds no intersection on any tab of the ready-made projects and the FROZEN ones (project_xmas_dun02.json, stage 2-4, sample, session), the blocks in their order |
 | B | The point picker's drag, right at 390, was wrong at 1440: respawn_at's picker opened COMPACT (176 x 99 picture at (702, 505)); a press at 50 % read y 360, moving to 55 % read 719 and stuck (mouse and touch); the focused x box showed 645 while the readout and the block said 128 | fix the mapping in compact mode; keep focused boxes in sync; test both layouts | FIXED in the code, the cause NOT reproduced here (no browser; ➡️ round 24, 12.8: the first drag at 1440 still read 719 -- the cause was the canvas rising under the picker after the press, when the strip lost its IN A RUN lines; the drag is now read against the picture as pressed). Two faults found by reading: (1) the compact CSS set only `max-width: 176px` on a picture whose box kept its 144-px height attribute, and (2) the drag's scroll lock held `.blocklyDropDownContent`, while the compact (capped) picker scrolls in its OWN root -- a drag could scroll that root under the pointer, the picture rising and the reading running to 719 (the likeliest cause). Now the picture's box is 176 x 99 (width and height), a drag holds the nearest scrolling picker root, the svg pieces are not text-selectable, and every place is mapped from the DRAWN picture's own screen box (`getBoundingClientRect` of its background rect, at each move) onto its extent (`pickers.ts toArea`), whatever size, letterboxing or scroll; the lever the same on its bar. A stepper's box follows the value unless the person is TYPING in it (first key to Enter, change or leaving; focus alone no longer freezes it). pickers.test.ts: full 255 x 143 and compact 175 x 98 read the same places (50 / 55 / 90 % -> 360 / 396 / 646; past the edge 719), the lever's middle |
 | C | Undo after a cancel was enabled, and Ctrl+Z RE-APPLIED the cancelled value (stepper 3.5 -> 4, percent 50 -> 51, cell 119 -> 120, a condition "< 50" -> "<= 50") | a cancelled session leaves the undo stack exactly as before the picker opened (Undo greyed on a fresh page); a kept session stays ONE undo step; test every kind, Ctrl+Z included | FIXED. The cause: Blockly fires its events on the next animation frame (`requestAnimationFrame` then a timeout), so round 22's clean-up timeout ran BEFORE the session's events reached the undo stack. Now `session.run` (the live preview) records NO undo step (Blockly's `recordUndo` off); `cancel` puts every field back the same way; `commit` (the picker closes any way but Escape / Cancel: Done, Enter, a tap outside, a pick from a list) sets the fields back to their values from before, unrecorded, then forward to the kept values, RECORDED, in a group of its own -- its own because Blockly merges a queued change into the one before it of the same group, block and field and keeps the first one's undo flag (in one group, "back" and "forward" became one unrecorded no-op). blockly_pickers.test.ts, with a browser's frames given to node (16-ms `requestAnimationFrame`): for stepper, percent, cell, point, condition, optnum and reference -- the preview leaves no step, Cancel leaves the stack empty and Ctrl+Z (`ws.undo(false)`) re-applies nothing; a kept session is one group, Ctrl+Z gives back the value from before and redo the kept one, also when everything happens in one frame. Both halves proved by their positive case: a recorded preview fails the first test, a commit in the preview's group the second |
 | D1 | A wrapped condition's second row was plain text: tapping it opened nothing | every wrapped row opens the same picker | FIXED: a further line is a `WrapLine` label (`blockly-pickers.ts wrapLineField`) whose editor is the block's TEXT field's (its picker); not saved; cursor pointer. blockly_pickers.test.ts: each row clickable and opening the TEXT field's editor, the saved fields still the text alone |
@@ -1753,6 +1753,148 @@ box. Both fixes stay, but they were not this cause.
 - **The arc, rounds 20-24, all re-measured in a browser:** every setting block fits at 390, no
   overlaps, every value field a picker, and Escape/Undo exact. Nothing is left open from the
   reviews.
+
+### 12.9 Round 25: remembered positions, left to right (Batt 2026-11-15 ~13:0x ICT; written 2026-11-15 13:32 ICT from `date`; branch fix/round25 from 09d5e6fb; offline only)
+
+Batt's two asks (Thai, translated by the parent, with a screenshot of the monsters tab showing its
+four functions side by side):
+- (a) "When a tab holds several functions and there is room to the right, lay them out LEFT TO
+  RIGHT, as in the monsters tab, so I don't have to scroll and can see which functions the tab
+  has."
+- (b) "Most important: /flows and /maps must REMEMBER where the user placed blocks. Today they
+  don't: after I rearrange and refresh the page, the last positions I dragged to are forgotten."
+
+**(b) Remembered positions (the main item).**
+- **Storage:** a tab's optional `layout`, `{key: [x, y]}` in workspace units. The contract is in
+  [project-model.md](project-model.md) 2.6.
+- **The key: what the project says, never a Blockly id** (an id lives only as long as one
+  workspace).
+  - `main` is the main tab's start block.
+  - `def:<name>` is a function or an event: one namespace per node, and an event's name is its
+    key.
+  - `var:<name>` is a variable or a setting block (a setting is a variable of the tab).
+  - Other top blocks have no key: a loose block is not kept by the project, so there is nothing
+    to put its place on.
+  - Code: `layout.ts layoutKey`; the engine's pattern is `project.py LAYOUT_KEY`.
+  - A rename keeps the place. The editor tracks the PLACED blocks by their workspace ids and
+    writes their current names at each conversion.
+- **Which blocks have a place: only the ones a PERSON placed.**
+  - That is a drag (mouse, touch or the keyboard's move mode, all Blockly's "drag") or "Clean
+    up Blocks" (`layout.ts personMoved`), plus the blocks the tab's layout placed when it opened
+    (`blocks.ts placedIds`).
+  - Blockly's own moves (a bump, a snap, a connection, a new block) and the editor's (settle,
+    events off) are not a person's.
+  - Undo moves a block back, and the place saved follows at the next conversion. It is undoable
+    like the drag itself because it IS the drag's position.
+- **Where it is kept: the studio's working copy.** That is this browser's localStorage project
+  (`prefs.ts writeProjectText`, written `SAVE_DEBOUNCE_MS` after every change and as the page
+  goes; shared by /flows and /maps). So it survives a refresh. It also survives Save, Load and
+  GitHub (`exportProject` / `importProject` keep it) and the engine's JSON round trip (`from_json`
+  / `to_json`).
+- **Outside the run:**
+  - The browser sends every project to the engine without it (`project.ts forEngine`): lint,
+    simulate, the Python view, Run (`projectRunBody`), the check (`checkBody`). An engine older
+    than the field reads them too.
+  - The studio's "is this the engine's answer for this project" key is the engine form's
+    (`engineKey`). A drag is no new lint, Python view or simulation, and it spends none of the
+    20-a-minute lint budget.
+  - In the engine, `project_hash` is taken WITHOUT the layouts. `compile_project`, the lint and
+    the Python view never read them.
+  - The editor's ORDER no longer follows the canvas (`tabFromWorkspace`). Definitions keep the
+    project's order (each hat's `order`, the index it was loaded at) and variables the tab's
+    order; a block new since then comes after them, in reading order.
+    - Before this round a tab's definitions were in top-to-bottom order. Side-by-side columns
+      would have reordered the project (and its hash) just by being drawn.
+    - This drops the old "move a function up to move it in the Python view". Nothing relied on
+      it: no test did.
+- **Python → project:** `project.keep_layout(new, old)` keeps the old layout of every block the
+  new project still has. `pyproject.parse_files` never sees one. There is no Python → project
+  path in the browser today.
+- **settle() (round 23) now lets saved places WIN.**
+  - When the tab opens, only the blocks no person placed are laid out again with the measured
+    sizes (the shelf below), around the placed ones.
+  - Afterwards only a GROWTH pushes (`layout.ts pushGrown`). A block that grew taller pushes the
+    blocks under its old bottom down its column; one that grew wider (a badge arriving) pushes
+    the blocks right of its old edge along its row. Each keeps the gap.
+  - A person's own overlapping drop stays where it was dropped, as the reviewer saw on the timing
+    tab: it overlapped before, so the growth did not "reach" it.
+  - ➡️ This supersedes 12.7 A's "packed from its top on open; afterwards any overlap pushed down".
+- **/maps: nothing was lost.** Its map nodes' positions are `Node.pos`, set on every drag stop
+  (`MapsCanvas onNodeDragStop` → `moveNodes`) and kept in the same working copy. START is derived
+  and not draggable.
+  - `pos` stays in the hash as it always was. Taking it out would change every frozen sha256.
+  - /maps' change key now leaves out the tabs' layouts too.
+
+**(a) Left to right, for the blocks with no saved place.** This is `layout.ts shelf`, used by
+`blocks.ts tabToWorkspace` and the first settle.
+- The blocks go left to right, in the tab's order, while they fit the canvas's visible width at
+  its scale (`shelfWidth`: the view less Blockly's controls, 72 px). Then they wrap to a new row
+  under the row's tallest block, `STACK_GAP` (24) apart both ways.
+- A block that would land on a placed one goes down its column under it.
+- The start block takes a row of its own (the editor fills in its title).
+- Widths leave room for the widest badge (`WIDEST_BADGE`), so a badge arriving with the lint
+  widens no block into the next column.
+- Every tab: functions, events, setting blocks.
+- At 390 px the canvas holds about 313 units, so one 300-unit block a row: a phone stays one
+  column. With no width given (headless callers), it is round 23's single list, unchanged.
+- The model at 1440 (the canvas beside the Python pane, ~1,028 units):
+  - the monsters tab's four recipes (228-235 units each) in ONE row;
+  - survival three a row;
+  - keys four a row;
+  - setting tabs three or four a row.
+  - With the Python pane closed (~1,604 units): five or more a row.
+
+**Tests:**
+- layout.test.ts (7 new):
+  - every key the shelf makes on every tab is one the engine accepts, and the widest badge is
+    the widest;
+  - the monsters tab: 3+ in its first row at 1440 (4 with the Python pane closed), one column
+    at 390;
+  - no two top blocks closer than 24 and none past the edge, on every tab of every ready-made
+    and FROZEN project, at widths 313 / 600 / 1028 / 1604 / 2400;
+  - a remembered place wins, and the others go around it;
+  - random positions and any top-block order leave the ENGINE's project unchanged on every tab,
+    and with nothing placed there is no layout and the JSON is as before;
+  - a rename keeps the place, a later conversion without `placed` keeps the layout's blocks, the
+    file round trip keeps it, and Run's and the check's bodies carry none;
+  - `pushGrown`: down its column, a cascade, a person's overlapping drop stays, beside stays, a
+    shrink moves nothing, a wider block pushes its row.
+- blockly_headless.test.ts (1 new, REAL Blockly): a `drag` move is saved and a `bump` is not;
+  undo moves the block back and the saved place follows; only drag and cleanup of Blockly's eight
+  move reasons count.
+- packages/poring_flow/tests/test_project_layout.py (15 new):
+  - every fixture with a layout on every tab gives the same `project_hash`, compiled IR, lint
+    findings, lint document and Python view;
+  - the canonical JSON and the round trip keep the layout;
+  - `keep_layout` after a Python round trip, including a function gone;
+  - six hostile layouts are refused;
+  - `{}` is no layout.
+- services/backend/tests/test_settings_blocks.py (4 new): the three frozen arms and the one box,
+  with every top block of every tab placed, give TODAY's 97-argument runner argv and the same
+  `project_hash` (the fixture files stay byte-identical).
+
+**Deploy note (for the parent).**
+- The browser never sends a layout to the engine, so an engine on older code keeps working with
+  the new frontend.
+- A saved FILE with a layout, read by a Python tool (`flow_play.py`, an A/B plan, the Run helper
+  reading its project file), needs poring_flow at this commit: older code refuses the field
+  (`extra="forbid"`).
+
+**Not measured here (no browser): the re-measure list.**
+1. Drag a function, an event and a setting block. Refresh: each is where it was dropped. Then on
+   /maps and back: the same.
+2. Drag, then Ctrl+Z: the block goes back, and after a refresh it is where the undo left it.
+3. Rename a dragged function: it keeps its place after a refresh.
+4. The monsters tab at 1440, with no saved places: its four recipes in one row (the Python pane
+   closed or open). keys / survival / a setting tab in rows. At 390: one column.
+5. A block that grows (a wrapped condition, a note row, a badge arriving) pushes only the blocks
+   under or right of it. A block dropped ONTO another stays where it was dropped (the timing
+   tab).
+6. A drag is no new lint: the Lint pane and the strip do not say "checking…" after a drag.
+7. Save to a file, start over, Load the file: the places come back. The Python view shows no
+   layout.
+8. Run and Check still start (their project carries no layout; the hash is the same before and
+   after a drag).
 
 ## 13. Stage 5b-1: HuntState and the loop as steps (design written 2026-11-14 18:3x ICT from `date`, before any 5b code; offline only)
 

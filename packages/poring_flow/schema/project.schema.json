@@ -2739,6 +2739,38 @@
           "title": "Defs",
           "type": "array"
         },
+        "layout": {
+          "anyOf": [
+            {
+              "maxProperties": 401,
+              "patternProperties": {
+                "^(main|(def|var):[A-Za-z][A-Za-z0-9_]{0,47})$": {
+                  "maxItems": 2,
+                  "minItems": 2,
+                  "prefixItems": [
+                    {
+                      "maximum": 1000000,
+                      "minimum": -1000000,
+                      "type": "number"
+                    },
+                    {
+                      "maximum": 1000000,
+                      "minimum": -1000000,
+                      "type": "number"
+                    }
+                  ],
+                  "type": "array"
+                }
+              },
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Layout"
+        },
         "main": {
           "anyOf": [
             {

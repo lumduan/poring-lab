@@ -5,7 +5,7 @@
 import type { BoxDoc } from "./box.ts";
 import type { HuntRules } from "./hunt.ts";
 import type { Flow } from "./ir.ts";
-import type { Project } from "./project.ts";
+import { forEngine, type Project } from "./project.ts";
 import type { SettingNote } from "./settings.ts";
 import type { Models } from "./models.ts";
 import type { MapsDoc } from "./pickers.ts";
@@ -349,16 +349,18 @@ export class FlowsApi {
     return this.get(`/flows/maps?${q}`);
   }
 
+  // round 25: every project sent to the engine is its engine form (project.ts forEngine: no tab
+  // layout), so where a person put the blocks never reaches the lint, a simulation or the Python view
   lint(project: Project, world: WorldSource): Promise<LintDoc> {
-    return this.post("/flows/lint", { project, world });
+    return this.post("/flows/lint", { project: forEngine(project), world });
   }
 
   simulate(project: Project, world: WorldSource, scenario: Scenario): Promise<SimDoc> {
-    return this.post("/flows/simulate", { project, world, scenario });
+    return this.post("/flows/simulate", { project: forEngine(project), world, scenario });
   }
 
   python(project: Project): Promise<PythonFiles> {
-    return this.post("/flows/python", { project });
+    return this.post("/flows/python", { project: forEngine(project) });
   }
 
   /** B2: config/map_zones/<map>.yaml as the editor imports it (never its reviewer). */

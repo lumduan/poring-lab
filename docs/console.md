@@ -609,6 +609,15 @@ Amendment B); a not-adopted model is never offered.
     picture is read against the picture as it was pressed, so the first drag reads like the second
     on a wide screen too; while the lint checks an edit, the strip's IN A RUN words stay (faded)
     instead of going, so the canvas under the strip never jumps.
+  - **Round 25** ([planning/live-blocks.md](planning/live-blocks.md) 12.9,
+    [planning/project-model.md](planning/project-model.md) 2.6): the block editor REMEMBERS
+    where a person puts blocks -- every block dragged (or arranged by "Clean up Blocks") keeps
+    its place through a refresh, a trip to /maps, Save and Load (saved in the project's tab as
+    `layout`, by the function's, event's or variable's name; outside the engine: no new lint,
+    hash or Run). Blocks nobody placed go LEFT TO RIGHT while they fit the canvas (the monsters
+    tab's four recipes in one row at 1440), one column on a phone. A block that grows pushes
+    only the blocks under it or right of it; a block dropped onto another stays where it was
+    dropped. /maps' nodes already kept their dragged places.
 - **No live run (the block editor):** nothing in the block editor reaches the executor, the mux or an input path (➡️ Run, above, is the one live path: the Run helper's player, never the editor). The backend's
   `/flows/*` routes only compute (public listener, LAN viewer, Origin; POSTs need the CSRF token,
   20 a minute; the Python view 120 a minute on its own budget since 2026-11-09). See [planning/mw2-block-editor.md](planning/mw2-block-editor.md) and
