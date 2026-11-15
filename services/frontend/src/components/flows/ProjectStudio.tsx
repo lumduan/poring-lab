@@ -63,6 +63,7 @@ import {
   startMap,
   type Tab,
   tabNameProblem,
+  xmasCookieNoSwapProject,
   xmasHuntProject,
   xmasProject,
 } from "@/lib/flow/project";
@@ -102,6 +103,7 @@ const NO_EDITOR: EditorState = { ready: false, failed: false, issues: [], loose:
 const READY: Record<string, () => { project: Project; world: WorldSource }> = {
   xmas_dun02: () => ({ project: xmasProject(), world: "local" }),
   xmas_dun02_hunt: () => ({ project: xmasHuntProject(), world: "local" }), // live blocks 5b-2
+  xmas_dun02_cookie_noswap: () => ({ project: xmasCookieNoSwapProject(), world: "local" }), // live blocks 16
   my_first_project: () => ({ project: sampleProject(), world: "sample" }),
 };
 

@@ -1,14 +1,14 @@
 ---
 doc_type: design
 hypothesis: null
-status: "DECIDED 2026-11-13 ~21:4x (Batt): build the live block player first; one box; break the runner into blocks. Stage 1 PASSED live (6); stages 2-4a A/Bs INCONCLUSIVE (7-9; the Knight). 2026-11-14: Batt's answers built (10, 11); s5ab-1114 FAIL by its bar on line 2 only, deaths 0/6 (10.2). Stage 5a (settings as blocks, the runner page gone) MERGED 17:2x (12), then rounds 20-24 of matpilot's browser review (12.4-12.8, all re-measured PASS): wrapped setting blocks, pickers for every value that is not a name (Batt 19:4x), no overlaps, exact Escape/Undo. Stage 5b-1 (HuntState, the loop as 20 steps; AST-proven the same program) MERGED 19:2x; its live A/B s5b1-ab FAIL by the pace p95 line only (noise), every outcome line passed (13.7; the parent's decision: keep it, go on). Stage 5b-2 (the steps as live blocks: a hunt tab, find_target / fight_target) MERGED 2026-11-15 03:0x; its live A/B s5b2-ab PASS on every line (14.11). The Christmas Goblin class round FAILED its precision bar (xmas02-detector S4.10), not deployed."
+status: "DECIDED 2026-11-13 ~21:4x (Batt): build the live block player first; one box; break the runner into blocks. Stage 1 PASSED live (6); stages 2-4a A/Bs INCONCLUSIVE (7-9; the Knight). 2026-11-14: Batt's answers built (10, 11); s5ab-1114 FAIL by its bar on line 2 only, deaths 0/6 (10.2). Stage 5a (settings as blocks, the runner page gone) MERGED 17:2x (12), then rounds 20-24 of matpilot's browser review (12.4-12.8, all re-measured PASS): wrapped setting blocks, pickers for every value that is not a name (Batt 19:4x), no overlaps, exact Escape/Undo. Stage 5b-1 (HuntState, the loop as 20 steps; AST-proven the same program) MERGED 19:2x; its live A/B s5b1-ab FAIL by the pace p95 line only (noise), every outcome line passed (13.7; the parent's decision: keep it, go on). Stage 5b-2 (the steps as live blocks: a hunt tab, find_target / fight_target) MERGED 2026-11-15 03:0x; its live A/B s5b2-ab PASS on every line (14.11). The Christmas Goblin class round FAILED its precision bar (xmas02-detector S4.10), not deployed. 2026-11-15 (Batt's answers, 14.12): no hunt tab in the ready-made box (the runner block dissolves into function tabs: 5c); the first real block experiment, no Knife swap on the Christmas Cookie and the Cookie, BUILT offline and its A/B pre-registered 13:32 ICT (16), NOT run."
 
 role: null
 verdict_date: null
 verdict_ticket: null
 supersedes: null
 related: [project-model.md, player-mode.md, ADR-0020, ../../scripts/dungeon_hunt.py, ../../scripts/runner_flow_export.py, ../../packages/poring_flow/src/poring_flow/runtime.py]
-next_action: "For Batt: (1) the ready-made xmas_dun02 box gets the hunt tab (14.11 unlocks it); (2) the first real block experiment, 14.8 (no Knife swap on the Christmas Cookie and the Cookie), with its own pre-registered A/B against B5b-2; (3) whether 5b-1 needs a strict re-run (s5b1-ab2 with 14.7a's pace line, 13.7); (4) the Goblin class: a new precision rule and a fresh held-out need his word for staged knights (xmas02-detector S4.10). The drink stays at 50 % until a long series measures it with income (10.2)."
+next_action: "The parent: run 16's A/B (stage6_ab.py plan / run / score --label s6ab, after merge and deploy) and score it. Then (14.12): 5c (the runner block as function tabs: design, build, offline proof, A/B against B5b-2); round 25 (the layout asks); the Goblin class's pre-registered rule change and a fresh held-out with staged knights (allowed). Answered by Batt 14.12: no hunt tab in the ready-made box; 5b-1 accepted, no re-run. The drink stays at 50 % until a long series measures it with income (10.2)."
 
 title: "Live blocks: the player that plays a project's blocks in the game, and the runner broken into blocks"
 date: 2026-11-13
@@ -2619,7 +2619,7 @@ against an arm that may read 0 (10.2's lesson); deaths count over every run that
   s5b1-ab).
 - **Every other line of 14.7 is unchanged.** `stage5b_ab`'s own BAR (5b-1's, scored) is untouched.
 
-### 14.8 The first real block experiment after it (NOT built)
+### 14.8 The first real block experiment after it (➡️ BUILT 2026-11-15 and pre-registered: section 16; not run yet)
 
 Only once 14.7 holds. **First: no Knife swap on the Christmas Cookie and the Cookie** -- B5b-2 vs
 B5b-2' where `attack_cookie` and `attack_cookie_xmas` are `strike(t); wait_kill(t); loot(t)` (4a's
@@ -2764,3 +2764,219 @@ against B5b-2. Not started: the next step, and the ready-made box's change, are 
    - (a) when a tab holds several functions and there is room to the right, lay them out LEFT TO RIGHT, as the monsters tab does, so a person sees every function without scrolling;
    - (b) "most important": /flows and /maps must REMEMBER where a person placed blocks and nodes. Today a refresh forgets the last drag.
    - Both are round 25 (12.9).
+
+## 16. The first real experiment in blocks: no Knife swap on the Christmas Cookie and the Cookie (➡️ BUILT 2026-11-15, feat/cookie-noswap; offline only, NOT run live; its A/B pre-registered 2026-11-15 13:32 ICT from `date`, BEFORE any run)
+
+Batt's words (14.12 #2, 2026-11-15 ~13:0x): "Test it, and make it work too." The experiment is 14.8's
+first one. The Christmas Cookie and the Cookie are fought WITHOUT the Knife swap, because they carry
+no steal worth the swap's time (2b). On every other monster the Rogue keeps Batt's technique: the
+Knife opener steals, then the dagger (Damascus) strikes.
+
+### 16.1 The box (arm C) and how it differs
+
+- **The fixture:** `services/frontend/src/lib/flow/fixtures/project_xmas_dun02_cookie_noswap.json`
+  (name `xmas_dun02_cookie_noswap`). It is the one box (`project_xmas_dun02.json`) with
+  `attack_cookie` and `attack_cookie_xmas` cut to `strike(t); wait_kill(t); loot(t)` (4a's plain
+  shape). The three statements are the one box's own, byte for byte, and `priority=1` is kept.
+  Everything else is the one box but the name and the description. `stage6_ab.box_difference`
+  checks this.
+- **Its TS twin** is `xmasCookieNoSwapProject()` (project.ts); `project.test.ts` checks it byte for
+  byte against the fixture, as it checks the other ready-made boxes.
+- **Loading it:** the /maps Load list offers it ("xmas_dun02_cookie_noswap"). /flows has it in its
+  ready-made table, like the hunt box, but no menu item of its own. A person loads it on /maps,
+  where Run is, and Runs it from START.
+- **Checked offline** (test_cookie_noswap.py):
+  - the lint finds 0 errors and the one box's four warnings;
+  - `live.problems` is empty: the backend's `not_live` check passes;
+  - the Run keys are the one box's five;
+  - `flow_play.prepare` gives the same runner argv and the same run() arguments as the one box,
+    except `box_recipes`: cookie / cookie_xmas `[strike, wait_kill, loot]` knife false, mystcase /
+    cruiser the Knife swap, every priority 1;
+  - the runner's own start check (`dungeon_hunt.box_plays_refused` / `recipes_refused`) accepts
+    both boxes with the Run config (`knife_swap`, `bare_ready`, `value_target` on).
+- **What the Run route checks that this does not cover:** the zones file and the run-start
+  verdict on the lab's static data. Those read the map node's zones and the KB, which the two
+  recipe bodies do not touch, so they are the one box's.
+
+### 16.2 The recipes PLAY as written (offline proof)
+
+The proof uses the runner's own `BareCtl` on test_dungeon_hunt's simulated client with the Run
+config's Knife: the opener on F4 through the box's knife_on, the dagger on F5 through knife_back,
+--bare-ready and the popup cue. The REAL player's hook, prepared from the fixture, answers at the
+lock. The wiring is run()'s: test_box_recipes checks it by AST, and test_cookie_noswap checks run()'s
+`recipe` record against its source.
+
+| At a lock on | With the Knife on (--bare-ready, the Run config) | With the dagger on (armed) |
+|---|---|---|
+| cookie / cookie_xmas (C) | the dagger FIRST (`box knife_back (recipe)`), its aim read again, then nothing: no opener, no swap back on the steal's popup, none at the Knife's 8 s time box. The next idle moment puts the Knife on again (`box knife_on (ready)`) | no press at all |
+| mystcase / cruiser (C) | struck bare at once (no press), the dagger back on the steal's popup: a steal, as today | the opener AT the strike, then the dagger on the popup |
+| cookie (B, the one box) | struck bare at once, the dagger back on the popup: the counter's positive case | - |
+
+- **A negative control:** a hook answer that is not C's plan makes the runner play its own recipe,
+  the swap. The reader then names that lock a Knife try, which fails C's plays line.
+- **Three things to know about the no-swap play** (the runner's code, unchanged):
+  - **The swaps per cookie lock stay two.**
+    - C: the dagger first, then the Knife at the next idle.
+    - B: the dagger on the steal's cue or the 8 s time box, then the Knife at the next idle.
+    - What C removes is the BARE PHASE: B fights a cookie with the Knife first. In s5b1-ab and
+      s5b2-ab's 12 runs that phase lasted a median 5.7 s on a Cookie (n 37) and 4.8 s on a
+      Christmas Cookie (n 50); it ended on the popup 22 / 38 times and on the time box 12 / 8 times.
+    - C instead waits for the dagger's read-back first (a median 342 ms over 506 swaps) and the aim
+      read again.
+  - **A re-lock costs C the swap again.** A cookie unlocked without a kill ("no hits") and locked
+    again gets the dagger first again, because the Knife went back on at the idle moment between.
+    B stays bare between those locks.
+  - **Strikes that know no species keep the swap in both arms.** The ring scan and a walk or loot
+    SWORD strike play the runner's own recipe (3.4's known limit). They were 29 % of the locks in
+    those 12 runs (60.4 of 205.6 an hour). So C's cookies still get the Knife when such a strike
+    finds them first, and the effect is diluted.
+
+### 16.3 The records the score counts, by the species at the lock
+
+A LOCK is one `recipe` record (run()'s `recipe_knife`): the species of the box it struck ("?" when
+the strike knew none), the answer (`knife`) and `mismatch`. The runner's records up to the next lock
+belong to it:
+- **a Knife strike:** `bare` `begin` ok (--bare-ready: already bare, the phase begins there), or
+  `bare` `opener` / `unequip` AT the strike. The idle swap (`by` "ready") is nobody's: with
+  --bare-ready the opener goes on before any species is known;
+- **a Knife TRY:** the same, a failed opener included;
+- **the no-knife play:** `bare` `recipe` with `knife` false, the runner's own record
+  (`BareCtl._no_knife`). `swap` true means the dagger went on first;
+- **a steal:** `bare` `equip` ok on the steal's cue (`popup` / `cyan`);
+- **the kills** after the lock, and the seconds from the lock to the first of them.
+
+**The reader's positive case on REAL sessions:** the 12 runs of s5b1-ab and s5b2-ab (3.98 h, the
+Knife swap on every lock; archived on the NAS, scratch-archive/2026-11-15/5b-series):
+- every lock of every species read as a Knife strike: 148 cookie / cookie_xmas locks, 148 Knife
+  strikes, 0 no-knife plays;
+- the steals attributed to a lock: 353 of 353; the kills: 555 of 555;
+- mismatches: 0.
+
+C has no real session yet. Its positive case is the offline BareCtl run of 16.2, read by the same
+reader.
+
+### 16.4 The tool
+
+`scripts/stage6_ab.py` follows stage5_ab's pattern, with stage2_ab's setup, detect server and run,
+and stage5b_ab's score lines. Run by the parent; NOT run yet:
+
+    cd /home/bot/docker/poring-lab
+    .venv/bin/python scripts/stage6_ab.py plan  --label s6ab --pairs 3 --minutes 20
+    .venv/bin/python scripts/stage6_ab.py run   --label s6ab --pairs 3 --minutes 20
+    .venv/bin/python scripts/stage6_ab.py score --label s6ab
+
+- **The series:** 3 pairs of 20 min, order B C, C B, B C. stage2_ab's setup runs before every run.
+  A STOP file in /dev/shm/poring-lab-tmp/stage6-ab/<label>/ ends the series before its next run.
+- **Before it:** merged and deployed (the backend, the Run helper); ASSIST; the Rogue in the game;
+  the Run helper idle; no chain.
+- **The arms:**
+  - B = the one box (`project_xmas_dun02.json`);
+  - C = the no-swap box.
+  - Both play the checkout's runner on run()'s own driver. 14.8 named B5b-2 (the hunt box) as the
+    base; Batt's 14.12 #1 keeps the hunt tab out of the ready-made box, and 14.11 showed the hunt
+    loop plays as the driver does. So the base is the box a person loads.
+- **`plan` refuses before any input** unless:
+  - the two boxes differ only in the two recipes' bodies;
+  - they take the same settings and keys, and the fast alarm is on;
+  - neither has a hunt loop;
+  - they give the same runner argv and the same run() arguments but box_recipes;
+  - B's four recipes are the Knife swap, C's two cookies the plain shape and its other two B's own,
+    every priority 1;
+  - the runner's `recipes_refused` accepts both with this Run config.
+
+### 16.5 THE PRE-REGISTERED BAR (`stage6_ab.BAR`, 2026-11-15 13:32 ICT, BEFORE any live data)
+
+C must hold, against B:
+
+| Line | C must hold |
+|---|---|
+| plays | over EVERY run that played: C TRIED the Knife on no cookie / cookie_xmas lock (0), and played its no-swap recipe (the runner's own record) on at least 5 of them; B struck at least 1 with the Knife (the counter sees one); no lock's answer was not its arm's plan (recipe_mismatch 0, both arms) |
+| deaths | C's deaths <= B's, over EVERY run that played (>= 1 min, or a death) |
+| kills per hour | the mean paired (C - B) >= -2 x its standard error, over at least 3 valid pairs (non-inferiority: the swap's time saved must not cost kills) |
+| the other monsters | C's Knife strikes per hour at mystcase + cruiser locks within +-25 % of B's (valid runs pooled) |
+| the tick pace | C's MEDIAN gap between hp_read records <= B's + 5 ms (valid runs pooled; 14.7a's rule; the p95 is reported) |
+| no runner error | no C run ends by an exception of the runner (a traceback in its log, or hunt_end `error` that is not a refusal); B's are reported |
+| a valid run | at least 80 % of M minutes on the runner's own clock, or a weight-home end; a pair counts when both runs are valid |
+
+- **The verdict:** FAIL when a judged line fails. INCONCLUSIVE when a line cannot be judged: fewer
+  than 3 valid pairs for kills, no valid run in an arm, or an arm that never played for plays.
+  PASS otherwise.
+- **Adjusted from the brief, each with its reason:**
+  1. **"Knife openers on cookie locks" is counted as Knife TRIES.** A failed opener counts too,
+     which is stricter. With --bare-ready the opener key goes on while idle, before a species is
+     known, so the per-species Knife is the lock's Knife STRIKE (16.3).
+  2. **"C fought at least 5 cookie locks" counts the runner's own no-knife record**, not only the
+     recipe asked: that record is what shows the recipe PLAYED.
+  3. **recipe_mismatch 0 is part of the plays line.** A mismatch plays the runner's own swap; in C
+     the Knife try would show it, in B nothing would.
+  4. **The errors line judges C** (the changed arm) and reports B's, as 13.5's line judged its new
+     arm.
+- **The +-25 % on the other monsters, derived from s5b1-ab / s5b2-ab's 12 runs** (the same technique
+  on every run):
+  - Knife strikes at mystcase + cruiser locks: a mean 107.9 an hour per run, SD 17.9;
+  - the per-run CV is 16.6 % overall and 15.1 % within a series (Poisson for ~36 counts a run:
+    16.7 %);
+  - the relative SE of the ratio of two 3-run pooled arms is sqrt(2) x CV / sqrt(3) = 12.3 %, so
+    2 SE = 24.7 %;
+  - the two equal-program series' arm ratios read 1.04 and 1.18.
+  - C may legitimately see a few % more locks of the other species (less time on cookies), well
+    inside the band.
+- **No line is a strict "<" against an arm that can read 0** (10.2's lesson): deaths are "<=", and
+  B's positive case is ">= 1". The pace tolerance comes from the measured noise of the same
+  statistic (13.7's lesson).
+
+### 16.6 Report only, and what the 12 runs say before the series
+
+The score reports, valid runs pooled, per hour and per arm:
+- steals by species, and the zeny of the steals lost on the cookies;
+- the seconds from a lock to its kill, by species;
+- loot steps (and their paired difference);
+- kills by species;
+- locks, Knife strikes, no-knife plays and dagger-first swaps by species;
+- every opener (stage 5's count, the idle ones included);
+- potions, Fly Wings, the lowest HP, the end reasons and B's runner errors.
+
+**The zeny:** the score reads data/econ/maps.json at run time (value_target's file: built locally
+from the lab server's tables, never committed). One stolen item is valued as drawn in proportion to
+its drop rate (cards cannot be stolen): sum(p x sell_oc) / sum(p). Without the file it reports the
+counts only.
+
+The 12 runs' reference (B's technique on every lock; the reader's numbers, valid as a baseline, not
+as data of this series):
+
+| Species | Locks / h | Steals / h | Steals a lock | Lock -> kill, median s (n) | Value a steal (z, OC) |
+|---|---|---|---|---|---|
+| cookie | 18.4 | 5.5 | 0.30 | 7.9 (47) | 611 |
+| cookie_xmas | 18.9 | 9.6 | 0.51 | 8.7 (55) | 351 |
+| mystcase | 64.4 | 27.4 | 0.43 | 11.9 (176) | 928 |
+| cruiser | 43.5 | 26.4 | 0.61 | 9.9 (141) | 170 |
+| ? (no species) | 60.4 | 19.9 | 0.33 | 7.7 (136) | - |
+
+- **What C gives up:** at those values (every item, the rare ones included) B's cookie steals are
+  worth about 6,700 z an hour (5.5 x 611 + 9.6 x 351). Batt's own run, the bar, made 135,737 common-item z / h (rogue-xmas02.md).
+- **What C saves:** at most a few seconds of the bare phase on ~37 cookie locks an hour, i.e. 1-3
+  minutes an hour. That is a few kills an hour, inside the pairs' noise (s5b2-ab: SE 14.5 kills / h).
+  So the kills line tests that the change costs nothing; it cannot show a gain of this size.
+- **For Batt to weigh (not judged):** by the lab's own values a Cookie steal (611 z) is worth more
+  than a Cruiser's (170 z), because its first drop sells well. The premise "no steal worth the
+  swap's time" is what the zeny line measures against the time saved.
+
+### 16.7 Commits, tests, and what stays
+
+- **The commits** (feat/cookie-noswap):
+  - 6fbf3f9d: the fixture, its TS twin, the /maps Load entry and /flows' ready-made table,
+    project.test.ts;
+  - fce18c98: scripts/stage6_ab.py, test_stage6_ab.py (19 cases), test_cookie_noswap.py (10);
+  - then this section and docs/console.md.
+- **The tests** (2026-11-15, the full suite ended ~13:4x ICT):
+  - the full Python suite: 5,914 passed, 94 skipped, 3 failed. The three are exactly the
+    worktree-only ones of 14.9 (test_mapcache_paths, test_dungeon_hunt's dagger-worn start check,
+    test_patrol_sim's gef_fild10 laps: client data a /dev/shm worktree lacks);
+  - ruff check and mypy clean; ruff format --check clean but main's two old files;
+  - the frontend's test (513: 512 passed, 1 skipped), typecheck and lint clean;
+  - `stage6_ab.py plan --label s6ab --pairs 3 --minutes 20` rc 0, in-process and as a process
+    (pure: no input, no folder written).
+- **Unchanged:** scripts/dungeon_hunt.py and scripts/flow_play.py. The no-swap recipe plays on the
+  recipe path stage 4a built.
+- **Not built:** 14.8's next step (no loot(t) for the Christmas Cookie: a new shape in
+  recipes.SHAPES).

@@ -561,6 +561,28 @@ export function xmasHuntProject(): Project {
   };
 }
 
+/** Live blocks 16 (Batt 2026-11-15 ~13:0x: "Test it, and make it work too"; 14.8): the monsters
+ * fought WITHOUT the Knife swap in the no-swap box (they carry no steal worth the swap's time). */
+export const NO_SWAP_MONSTERS = ["cookie", "cookie_xmas"] as const;
+/** The one box with no Knife swap on the Christmas Cookie and the Cookie
+ * (fixtures/project_xmas_dun02_cookie_noswap.json, stage6_ab.py's arm C): exactly xmasProject() but
+ * attack_cookie and attack_cookie_xmas, whose recipe is strike(t); wait_kill(t); loot(t) (their
+ * priority 1 kept). The other monsters keep Batt's Knife swap. */
+export function xmasCookieNoSwapProject(): Project {
+  const p = xmasProject();
+  const n = p.nodes[0];
+  if (n.kind !== "map") throw new Error("the one box's node is a map node");
+  const mon = n.tabs.find((t) => t.name === MONSTERS_TAB);
+  if (!mon) throw new Error("the one box has a monsters tab");
+  const plain = new Set<string>(NO_SWAP_MONSTERS.map((sp) => `${RECIPE_PREFIX}${sp}`));
+  mon.defs = mon.defs.map((d) => (plain.has(d.name) ? recipeDef(d.name.slice(RECIPE_PREFIX.length), false) : d));
+  return {
+    ...p,
+    name: "xmas_dun02_cookie_noswap",
+    description: "One box with no Knife swap on the Christmas Cookie and the Cookie (live-blocks 16): attack_cookie and attack_cookie_xmas are strike(t); wait_kill(t); loot(t). The other monsters keep the Knife swap; everything else is the one box.",
+  };
+}
+
 /** The two-map sample on the SYNTHETIC sample sheets (town_1 / field_1; the first screen). */
 export function sampleProject(): Project {
   return {
