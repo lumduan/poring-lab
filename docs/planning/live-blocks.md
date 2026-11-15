@@ -1904,6 +1904,28 @@ four functions side by side):
 8. Run and Check still start (their project carries no layout; the hash is the same before and
    after a drag).
 
+**➡️ Re-measured 2026-11-15 14:01-14:15 ICT (matpilot, read only, main 95583b9f): all 8 items PASS**
+(Save / Load skipped: they write).
+- **Remembered:** a dragged function, event and setting come back at exactly their dropped places
+  after a refresh and after /maps and back, by mouse at 1440 and by touch at 390.
+  - localStorage holds `def:knife_back`, `def:eat_candy` and `var:hud_fast`.
+  - Undo is remembered too.
+  - A renamed function keeps its place under its new key (`def:knife_off`).
+- **The shelf:**
+  - monsters shows ONE row of 4 at 1440, with the Python pane open or closed; keys 2 x 4 (6 + 2 with
+    the pane closed); the setting tabs 3-4 a row;
+  - 390 is one column;
+  - 0 overlaps and 0 covered fields on all 14 tabs at both sizes.
+- **Growth:** a longer condition and a safety switch off push only the blocks under them in their
+  column; a block dropped onto another stays.
+- **No new lint on a drag:** 0 POSTs in 3 s, and no "checking...".
+- **The Python view:** no layout.
+- **/maps:** a dragged node's pos is kept across a refresh at both sizes.
+- **Two notes, left as they are** (by design, recorded):
+  - after a drag is undone, the block stays "placed" at its old spot (its key is kept), so it does
+    not re-shelve at another width;
+  - within a row the gaps vary 24-77 units: the shelf aligns column slots.
+
 ## 13. Stage 5b-1: HuntState and the loop as steps (design written 2026-11-14 18:3x ICT from `date`, before any 5b code; offline only)
 
 **Batt's words:** "break the runner into blocks" (2026-11-13); "there should be no runner [page]
