@@ -422,6 +422,9 @@ Amendment B); a not-adopted model is never offered.
   declared one (live-blocks 14.10).
   The Load lists of /flows and /maps offer **xmas_dun02_hunt** (the one box plus that tab); the
   one box itself has no hunt tab. Run's readiness reads the hunt loop too.
+  The /maps Load list also offers **xmas_dun02_cookie_noswap** (live-blocks 16: the one box with
+  no Knife swap on the Christmas Cookie and the Cookie, `attack_cookie` / `attack_cookie_xmas` =
+  strike, wait_kill, loot; the other monsters keep the swap): load it there and Run it from START.
   - **/maps:** a small **START** pill left of the start map, joined to its entry; drag that
     connection onto another map and the run starts there (or "Start here" in a node's inspector).
     **Run** (amber, beside Simulate; press, then press again within 4 s) plays the project in the
