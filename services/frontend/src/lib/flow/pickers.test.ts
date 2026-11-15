@@ -57,7 +57,7 @@ import {
 import * as PLACE from "./pickers.ts";
 import { SETTINGS } from "./settings.ts";
 import { BLOCK_STYLES, contrast } from "./theme.ts";
-import { MAIN_TAB, nodeById, type Project, sampleProject, xmasHuntProject, xmasProject } from "./project.ts";
+import { MAIN_TAB, nodeById, type Project, sampleProject, tabOf, xmasHuntProject, xmasProject } from "./project.ts";
 
 const MODELS: Models = {
   v1: { kind: "detector", status: "live", file: "a.onnx", sha256: "a", maps: [], classes: ["monster"], untrained: [], mobs: {}, why: "", available: true, counts: true },
@@ -209,7 +209,13 @@ test("models, maps, stop reasons, nodes, entries, windows, servers and variables
   assert.deepEqual(refChoices(ref("server"), d).map((c) => c.value), ["lab-rathena"]);
   const vars = refChoices(ref("variable"), d, at("pl_set", "VAR", {}, { params: ["t", "priority"] }));
   assert.deepEqual(vars.slice(0, 2).map((c) => c.value), ["t", "priority"]);
-  assert.ok(vars.some((c) => c.value === "knife_swap" && /tab knife/.test(c.note ?? "")));
+  // round 26 (the reviewer's 5c review: find_target's "t" picker listed every setting): the
+  // function's inputs and PLAIN variables only -- never a setting (knife_swap, fly_rate) or a role
+  assert.ok(!vars.some((c) => c.value === "knife_swap" || c.value === "fly_rate"), vars.map((c) => c.value).join(" "));
+  const plain = structuredClone(d.project!);
+  tabOf(nodeById(plain, "xmas_dun02")!, "knife")!.vars.my_count = { kind: "lit", value: 0 };
+  const withPlain = refChoices(ref("variable"), { ...d, project: plain }, at("pl_set", "VAR", {}, { params: ["t"] }));
+  assert.ok(withPlain.some((c) => c.value === "my_count" && /tab knife/.test(c.note ?? "")));
 });
 
 test("known or not: an unknown value is marked, an empty optional one is fine, and unknown while the list is not here", () => {
@@ -357,7 +363,8 @@ test("every picker in the block definitions is a field the converter reads (a nu
   assert.ok(n >= 120, String(n)); // the setting blocks' values and points, and the blocks' fields
   // the names a block DEFINES stay text: a function's (with suggestions), a variable's, an event's
   const def = DEF_BY_TYPE.pl_def.args0!;
-  assert.deepEqual(def.filter((a) => a.type !== "input_end_row").map((a) => ("pick" in a && a.pick ? a.pick.kind : a.type)), ["name", "field_input"]);
+  // (round 26: and its two ABOUT rows, labels: decorations the editor fills for hunt_loop / hunt_tick)
+  assert.deepEqual(def.filter((a) => a.type !== "input_end_row").map((a) => ("pick" in a && a.pick ? a.pick.kind : a.type)), ["name", "field_input", "field_label", "field_label", "field_label"]);
   assert.equal(DEF_BY_TYPE.pl_vardecl.args0![0].type, "field_input");
   assert.equal(DEF_BY_TYPE.pl_event.args1![0].type, "field_input");
   assert.ok(nodeById(xmasProject(), "xmas_dun02"));

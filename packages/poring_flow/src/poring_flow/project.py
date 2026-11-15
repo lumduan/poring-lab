@@ -1622,6 +1622,15 @@ def effective_doc(c: Compiled) -> dict[str, list[dict[str, Any]]]:
     return out
 
 
+_RUNNER_WORD = re.compile(r"\bdungeon_hunt\b(?!\.py)(\(\))?")
+
+
+def _call_words(text: str) -> str:
+    """Round 26: a finding's words on a node whose main calls hunt_loop() (the lowered hunt core)
+    name the call, never the runner block no block of the node shows."""
+    return _RUNNER_WORD.sub(f"{HUNT_CALL}()", text)
+
+
 def lint_doc(
     p: Project,
     *,
@@ -1645,13 +1654,22 @@ def lint_doc(
     # Run route uses: a `bindings` readiness item on a hunt core is answered by the runner, so it is
     # shown as answered (info), never as "1 not ready" beside a Run that plays it
     own = live.own_binding_paths(c) if c.flow is not None else set()
+    lowered = set(lowered_nodes(p))
     docs = []
     for f in findings:
         d = f.doc()
         if f.rule == "bindings" and f.severity == "readiness" and f.where.path in own:
-            d = {**d, "severity": "info", "answered": True,
-                 "message": f"{d['message']} -- answered: the live player plays this block with "
-                            "the runner (its own binding)"}  # fmt: skip
+            # round 26 (the reviewer's 5c review: "info: find_target is unsupported here: L2
+            # binding L2.input.attack_click (not bound for ...)"): in a learner's words -- the
+            # runner plays these blocks with its own code, so there is nothing to set up
+            block = f.text.split(" ", 1)[0]
+            text = f"{block} is played by the runner's own code: nothing to set up for it here"
+            d = {**d, "severity": "info", "answered": True, "text": text,
+                 "message": f"{f.where.path}: {text}" if f.where.path else text}  # fmt: skip
+        if f.where.node in lowered:
+            # round 26: in the functions shape (main calls hunt_loop()) no block shows the runner
+            # block, so its words name the call
+            d = {**d, "text": _call_words(d["text"]), "message": _call_words(d["message"])}
         docs.append(d)
     zero = {"error": 0, "readiness": 0, "warning": 0, "info": 0}
     counts = dict(zero)

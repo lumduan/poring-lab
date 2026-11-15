@@ -36,14 +36,15 @@
 //
 // Our own: the substring and fuzzy steps of the ranking, every option source, the conditions.
 import type { CatalogueDoc } from "./api.ts";
-import { HOTKEYS, RECIPE_TAB, RUNNER_ROLES } from "./blockdefs.ts";
+import { HOTKEYS, HUNT_LOOP_BLOCKS, RECIPE_STEPS, RECIPE_TAB, roleOfVar, RUNNER_ROLES } from "./blockdefs.ts";
 import { argsText, callArgsText, ExprError, exprText, parseArgs, parseCallArgs, parseExpr, parseParams } from "./expr.ts";
 import { type CmpOp, type Expr, type Lit, KEY, MAP_ID, NAME, type Stmt } from "./ir.ts";
 import { type Models, monstersOf } from "./models.ts";
 import { type Def, globalOf, mapNodes, nodeById, type PNode, type Project, roleKeyOf, runnerBlockOn } from "./project.ts";
 import { normalise } from "./search.ts";
-import { SETTINGS, textUnits, tidy } from "./settings.ts";
+import { SETTING_BY_VAR, SETTINGS, textUnits, tidy } from "./settings.ts";
 import { contrast } from "./theme.ts";
+import { HUNT_CALL, STEP_BLOCKS, TICK_FN } from "./tick.ts";
 
 // --- what a picker field is (blockdefs.ts puts one on each field it converts) ---------------------
 /** What a reference picker lists. */
@@ -317,7 +318,24 @@ export type FieldAt = {
   params?: readonly string[];
 };
 
-type FnInfo = { name: string; tab: string; global: boolean; event: boolean; params: string; required: number; keys: string[]; calls: string[]; clicks: boolean };
+type FnInfo = { name: string; tab: string; global: boolean; event: boolean; params: string; required: number; keys: string[]; calls: string[]; clicks: boolean; hunt?: boolean };
+
+/** Round 26 (the reviewer's 5c review: the role pickers offered hunt_loop and hunt_tick, the loop
+ * itself): the hunt core's own blocks -- the hunt loop's, a recipe's steps, the tick's steps, the
+ * old runner block. A function that plays one (or calls hunt_loop / hunt_tick) is part of the hunt
+ * core, never a role's function. */
+const HUNT_PRIMITIVES: ReadonlySet<string> = new Set([...HUNT_LOOP_BLOCKS, ...RECIPE_STEPS, ...STEP_BLOCKS, "dungeon_hunt"]);
+const HUNT_FUNCTIONS: ReadonlySet<string> = new Set([HUNT_CALL, TICK_FN]);
+/** PURE: does a function's body play the hunt core (anywhere in it)? */
+export function playsHunt(body: readonly Stmt[]): boolean {
+  for (const s of body) {
+    if (s.kind === "action" && HUNT_PRIMITIVES.has(s.block)) return true;
+    if (s.kind === "call" && HUNT_FUNCTIONS.has(s.proc)) return true;
+    if (s.kind === "if" && (playsHunt(s.then) || playsHunt(s.orelse))) return true;
+    if ((s.kind === "while" || s.kind === "repeat" || s.kind === "for") && playsHunt(s.body)) return true;
+  }
+  return false;
+}
 
 /** The functions a body calls and whether it clicks (click_at), at its top level. */
 function bodyWords(body: readonly Stmt[]): { calls: string[]; clicks: boolean } {
@@ -362,7 +380,7 @@ export function functionsOn(data: PickerData): FnInfo[] {
       for (const d of t.defs) {
         if (seen.has(d.name)) continue;
         seen.add(d.name);
-        out.push({ name: d.name, tab: t.name, global, event: d.on !== null, params: paramNames(d), required: d.params.filter((x) => x.default === null).length, keys: pressedKeys(d.body), ...bodyWords(d.body) });
+        out.push({ name: d.name, tab: t.name, global, event: d.on !== null, params: paramNames(d), required: d.params.filter((x) => x.default === null).length, keys: pressedKeys(d.body), ...bodyWords(d.body), hunt: HUNT_FUNCTIONS.has(d.name) || playsHunt(d.body) });
       }
     }
   };
@@ -389,8 +407,9 @@ export function defOn(data: PickerData, name: string): Def | null {
 }
 
 /** A function a role or an escalation calls with no inputs: not an event, not a monster's recipe,
- * no input without a default. */
-const callableBare = (f: FnInfo): boolean => !f.event && f.required === 0 && f.tab !== RECIPE_TAB;
+ * no input without a default, not the hunt core's own (round 26: hunt_loop, hunt_tick, a function
+ * that plays the hunt loop's blocks). main's plain call picker still lists every function. */
+const callableBare = (f: FnInfo): boolean => !f.event && f.required === 0 && f.tab !== RECIPE_TAB && !f.hunt;
 
 function fnNote(f: FnInfo): string {
   const what = f.event
@@ -465,7 +484,10 @@ function variablesOn(data: PickerData, at: FieldAt | null): Choice[] {
   }
   const p = data.project;
   for (const [n, global] of [[p && data.node ? nodeById(p, data.node) : undefined, false], [p ? globalOf(p) : undefined, true]] as const) {
-    for (const t of n?.tabs ?? []) for (const [v, lit] of Object.entries(t.vars)) if (!seen.has(v)) {
+    // round 26 (the reviewer: find_target's "t ▾" listed every SETTING, fly_rate = 150, ...): the
+    // function's inputs and PLAIN variables only -- a setting or a role block is no variable to
+    // put a value in
+    for (const t of n?.tabs ?? []) for (const [v, lit] of Object.entries(t.vars)) if (!seen.has(v) && !SETTING_BY_VAR.has(v) && !roleOfVar(v)) {
       seen.add(v);
       out.push({ value: v, label: v, note: `= ${exprText(lit)} · tab ${t.name}${global ? " (Global)" : ""}`, group: "variables" });
     }
@@ -485,7 +507,7 @@ export function refChoices(spec: Extract<PickSpec, { kind: "ref" }>, data: Picke
       // stays, marked ⚠)
       // (the eat role's function takes the item's key: the box's events call eat("F6"))
       const role = RUNNER_ROLES.find((r) => r.param === spec.role);
-      const plain = fns.filter(spec.role === "eat" ? (f) => !f.event && f.tab !== RECIPE_TAB && f.required <= 1 : callableBare);
+      const plain = fns.filter(spec.role === "eat" ? (f) => !f.event && f.tab !== RECIPE_TAB && f.required <= 1 && !f.hunt : callableBare);
       const usual = plain.filter((f) => f.name === role?.fn);
       const keyed = plain.filter((f) => f.name !== role?.fn && f.keys.length);
       const rest = plain.filter((f) => f.name !== role?.fn && !f.keys.length);

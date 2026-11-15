@@ -95,10 +95,15 @@ def test_the_python_view_of_the_hunt_tab_and_its_round_trip() -> None:
     p = P.from_json(HUNT.read_text())
     files = {f.path: f.text for f in pp.print_files(p)}
     src = files["xmas_dun02/hunt.py"]
+    # (round 26: a hunt loop block at its default time box says it in a comment, as its block does)
     assert (
-        "def hunt_loop(t):\n    while True:\n        t = find_target()\n"
-        "        fight_target(t)\n" in src
+        "def hunt_loop(t):\n    while True:\n        t = find_target()  # at most 120 s\n"
+        "        fight_target(t)  # at most 300 s\n" in src
     )
+    # the names the Python view knows the time box for are the hunt loop's blocks
+    from poring_flow import pyview
+
+    assert set(pyview.HUNT_BOX_BLOCKS) == set(huntloop.NEW_BLOCKS)
     assert P.canonical_json(pp.parse_files(files)) == P.canonical_json(p)
     # every ready-made project round-trips (the one box has no hunt tab: unchanged)
     one = P.from_json(XMAS.read_text())

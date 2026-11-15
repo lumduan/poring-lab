@@ -16,12 +16,12 @@ import { useEffect, useRef, useState } from "react";
 
 import { followModel, registerDetectorMenus } from "@/components/flows/blockly-fields";
 import { keepDropDownsInside, refreshPickers, setPickerSource } from "@/components/flows/blockly-pickers";
-import { huntKey, register, registerHunt, setFlyoutNotes, syncExprWrap, syncLabelRows, syncSetting, themesOf } from "@/components/flows/blockly-register";
+import { huntKey, inTick, register, registerHunt, setFlyoutNotes, syncExprWrap, syncLabelRows, syncSetting, themesOf, tickLock } from "@/components/flows/blockly-register";
 import { registerSearch } from "@/components/flows/blockly-search";
 import type { CatalogueDoc, Finding, LintDoc, Trace } from "@/lib/flow/api";
-import { BADGE_TEXT, sitePath } from "@/lib/flow/api";
+import { BADGE_TEXT, sitePath, warningText } from "@/lib/flow/api";
 import { boxReplaced } from "@/lib/flow/box";
-import { SENTENCE_BY_TYPE, titleLines, type Toolbox, toolbox, type ToolboxScope } from "@/lib/flow/blockdefs";
+import { argsRowShown, SENTENCE_BY_TYPE, titleLines, type Toolbox, toolbox, type ToolboxScope } from "@/lib/flow/blockdefs";
 import { type Defaults, placedIds, shelfItems, TAB_TOP_Y, type TabScope, tabFromWorkspace, tabToWorkspace, type Workspace } from "@/lib/flow/blocks";
 import { defaultFields, HUNT_TYPE, huntTooltip, omitted } from "@/lib/flow/hunt";
 import { canonical } from "@/lib/flow/ir";
@@ -470,6 +470,21 @@ function paint(B: typeof BlocklyT, w: BlocklyT.WorkspaceSvg, catalogue: Catalogu
   for (const b of w.getAllBlocks(false)) {
     // round 22: a long condition wraps onto rows of its own (loaded ones too); its stack moves down
     if (b.type === "pl_expr" && !b.isInFlyout && syncExprWrap(B, b)) grew.push(b);
+    // round 26: a block inside hunt_tick() is dragged out alone, a locked step not at all (tickLock)
+    if (!b.isInFlyout && inTick(b)) tickLock(B, b);
+    // round 26 (the reviewer: find_target's empty "( )" opened a picker saying "This block takes no
+    // inputs"): a hunt loop block whose catalogue entry takes no inputs hides its inputs' row while
+    // it holds none
+    if ((b.type === "pl_hunt_take" || b.type === "pl_hunt_step") && !b.isInFlyout) {
+      const spec = catalogue?.blocks[String(b.getFieldValue("BLOCK") ?? "")]?.spec;
+      const row = b.getInput("ROW_ARGS");
+      const show = argsRowShown(spec?.params, String(b.getFieldValue("ARGS") ?? ""));
+      if (row && row.isVisible() !== show) {
+        row.setVisible(show);
+        grew.push(b);
+        void b.queueRender();
+      }
+    }
     // a SETTING block (live-blocks.md 12): a safety switch shows its warning rows while it is off;
     // matpilot round 20 #4a: the lint's "not used" words on rows of its own, the block greyed; the
     // tooltip says what deleting the block falls back to (Global's block, else the default)
@@ -511,8 +526,7 @@ function paint(B: typeof BlocklyT, w: BlocklyT.WorkspaceSvg, catalogue: Catalogu
     if (path === null || b.isInFlyout) {
       if (!b.isInFlyout) {
         if (syncLabelRows(B, b)) grew.push(b); // round 21: the badge row once it says something
-        const mine = issueOf.get(b.id);
-        if (!settingOfType(b.type) && !b.outputConnection) b.setWarningText(mine?.length ? mine.map((it) => `error: ${it.text}`).join("\n") : null);
+        if (!settingOfType(b.type) && !b.outputConnection) b.setWarningText(warningText(issueOf.get(b.id) ?? [], []));
       }
       continue;
     }
@@ -520,8 +534,10 @@ function paint(B: typeof BlocklyT, w: BlocklyT.WorkspaceSvg, catalogue: Catalogu
     if (runField) runField.setValue(trace ? runLine(trace.nodes[prefix + path] ?? trace.nodes[path]) || "not run" : "");
     if (syncLabelRows(B, b)) grew.push(b); // round 21: the run line's row shows while it says something
     if (b.outputConnection) continue; // findings sit on the statement that holds the value
-    const own = [...(issueOf.get(b.id) ?? []).map((it) => `error: ${it.text}`), ...(byPath.get(path) ?? []).map((f) => `${f.severity}: ${f.text}`)];
-    if (!settingOfType(b.type)) b.setWarningText(own.length ? own.join("\n") : null);
+    // round 26 (the reviewer: find_target's ⚠ bubble said "info: ... unsupported here: L2 binding
+    // ...", twice): an INFO never shows Blockly's warning triangle (the Lint pane lists it), and
+    // each line shows once
+    if (!settingOfType(b.type)) b.setWarningText(warningText(issueOf.get(b.id) ?? [], byPath.get(path) ?? []));
   }
   return grew;
 }

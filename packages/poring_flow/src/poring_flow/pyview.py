@@ -1519,6 +1519,15 @@ def _param_src(p: Any, e: Any, cat: Catalogue) -> str:
     return expr_src(e, cat)
 
 
+# Round 26 (the reviewer's 5c review: the hunt loop's blocks say "at most 120 s" / "at most 300 s",
+# the Python said nothing, as the time box is the block's default and a default is never printed):
+# such a line ends with the time box as a COMMENT. A comment is never read back (the parser reads
+# the code), so the round trip stays byte-identical; a time box not the default is printed as
+# timeout_s=, as every block's. The names are poring_flow.huntloop NEW_BLOCKS (pinned by
+# test_hunt_loop.py; not imported here: the Python view stays below the engine's modules).
+HUNT_BOX_BLOCKS = ("find_target", "choose_target", "walk_to_target", "look", "fight_target")
+
+
 def _action_call(a: ir.ActionStmt, cat: Catalogue) -> str:
     spec = cat.blocks[a.block].spec if a.block in cat.blocks else None
     args = _call_args(a.params, spec.params if spec else [], cat)
@@ -1578,7 +1587,11 @@ def _is_plain_wait(st: ir.WaitUntil) -> bool:
 def _stmt_src(st: Any, ind: str, cat: Catalogue) -> list[str]:
     if isinstance(st, ir.ActionStmt):
         call = _action_call(st, cat)
-        return [f"{ind}{st.outcome_to} = {call}" if st.outcome_to else f"{ind}{call}"]
+        line = f"{ind}{st.outcome_to} = {call}" if st.outcome_to else f"{ind}{call}"
+        spec = cat.blocks[st.block].spec if st.block in cat.blocks else None
+        if st.block in HUNT_BOX_BLOCKS and spec is not None and st.timeout_s == spec.timeout_s:
+            line += f"  # at most {_secs(st.timeout_s)} s"  # its block's time box (round 26)
+        return [line]
     if isinstance(st, ir.If):
         out = [f"{ind}if {expr_src(st.cond, cat)}:", *_stmts(st.then, ind + "    ", cat)]
         orelse = st.orelse

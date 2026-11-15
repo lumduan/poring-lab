@@ -76,6 +76,12 @@ export const BLOCK_STYLES: Record<string, BlockStyle> = {
   // OURS (matpilot round 20 #4a): a setting block not used in a Run of this box, greyed: a light
   // slate with dark words (flows.css .pl-setting-unused), never Blockly's disabled state
   pl_unused_blocks: { colourPrimary: "#cbd5e1" },
+  // round 26 (the reviewer's 5c review: a tick step's class was its words alone): each class of
+  // the tick's steps a colour of its own -- SAFETY red, REQUIRED blue (both locked: tick.ts
+  // STEP_STYLE), optional green (may be left out); white words on each at 4.5:1 or more
+  pl_step_safety_blocks: { colourPrimary: "#b91c1c" },
+  pl_step_required_blocks: { colourPrimary: "#1e40af" },
+  pl_step_optional_blocks: { colourPrimary: "#15803d" },
 };
 
 /** Blockly category styles (the toolbox rows), keyed as MatPilot's. */

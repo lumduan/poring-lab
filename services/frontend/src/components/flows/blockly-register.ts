@@ -5,11 +5,12 @@
 import type * as BlocklyT from "blockly/core";
 
 import { registerPickers, wrapLineField } from "./blockly-pickers.ts";
-import { BLOCK_DEFS, LABEL_ROWS } from "../../lib/flow/blockdefs.ts";
+import { ABOUT_FIELDS, BLOCK_DEFS, defAbout, LABEL_ROWS } from "../../lib/flow/blockdefs.ts";
 import { huntDef, type HuntRules } from "../../lib/flow/hunt.ts";
 import { wrapExpr } from "../../lib/flow/pickers.ts";
 import { noteLines, SETTING_NOTE_ROWS, settingOfType, unitOf } from "../../lib/flow/settings.ts";
 import { BLOCK_STYLES, CATEGORY_STYLES, COMPONENT_STYLES, FONT_STYLE } from "../../lib/flow/theme.ts";
+import { isLockedClass, STEP_OF_TYPE, TICK_FN } from "../../lib/flow/tick.ts";
 
 let registered = false;
 /** Round 21 (the re-measure of round 20): the words a setting block in the FLYOUT or the search
@@ -108,6 +109,19 @@ export function register(B: typeof BlocklyT): void {
   B.Extensions.register("pl_label_rows", function (this: BlocklyT.Block) {
     syncLabelRows(B, this);
   });
+  // round 26: the hunt core's two functions say what they are (blockdefs.ts DEF_ABOUT_WORDS), by
+  // their name, in the flyout too
+  B.Extensions.register("pl_def_about", function (this: BlocklyT.Block) {
+    syncDefAbout(B, this);
+    this.setOnChange(function (this: BlocklyT.Block, e: BlocklyT.Events.Abstract) {
+      if (e.type === B.Events.BLOCK_CHANGE && (e as BlocklyT.Events.BlockChange).blockId === this.id) syncDefAbout(B, this);
+    });
+  });
+  // round 26 (the reviewer's 5c review): a SAFETY or REQUIRED step in hunt_tick() cannot be
+  // deleted or dragged out; any step is dragged out ALONE (tickLock)
+  B.Extensions.register("pl_tick_lock", function (this: BlocklyT.Block) {
+    tickLock(B, this);
+  });
   B.common.defineBlocksWithJsonArray(BLOCK_DEFS as unknown as object[]);
   // The IR has no "disabled" statement: a block the context menu disabled would still be converted
   // and run. Detached stacks are faded by disableOrphans instead (and listed as "Not running").
@@ -174,6 +188,103 @@ export function syncLabelRows(B: typeof BlocklyT, b: BlocklyT.Block): boolean {
   const svg = b as BlocklyT.BlockSvg;
   if (changed && svg.rendered) void svg.queueRender();
   return changed;
+}
+
+/** PURE of the page (Blockly only; round 26): a function's ABOUT rows by its name (hunt_tick: who
+ * plays it; hunt_loop: its t is not an input to pass); empty and hidden for any other. True: the
+ * rows changed. */
+export function syncDefAbout(B: typeof BlocklyT, b: BlocklyT.Block): boolean {
+  const about = defAbout(String(b.getFieldValue("NAME") ?? "").trim());
+  const was = B.Events.isEnabled();
+  if (was) B.Events.disable();
+  try {
+    for (const f of ABOUT_FIELDS) {
+      const v = about[f] ?? "";
+      if (b.getField(f) && b.getFieldValue(f) !== v) b.getField(f)?.setValue(v);
+    }
+  } finally {
+    if (was) B.Events.enable();
+  }
+  return syncLabelRows(B, b);
+}
+
+/** Round 26: is the block inside hunt_tick()'s body (the tick of the hunt core)? */
+export function inTick(b: BlocklyT.Block): boolean {
+  const root = b.getRootBlock();
+  return root !== b && root.type === "pl_def" && String(root.getFieldValue("NAME") ?? "").trim() === TICK_FN;
+}
+
+/** Round 26: a step block of a LOCKED class (SAFETY, REQUIRED: tick.ts) inside hunt_tick(). Until
+ * Batt answers live-blocks.md 15.10 Q1 the editor matches the built default: such a step cannot be
+ * deleted or dragged out (the lint stays the backstop, e.g. for a Python edit). */
+export function lockedStep(b: BlocklyT.Block): boolean {
+  const t = STEP_OF_TYPE.get(b.type);
+  return !!t && isLockedClass(t.klass) && inTick(b);
+}
+
+/** Round 26: takes a block out of its stack ALONE: the blocks under it go up to where it was,
+ * whatever they are (Blockly's own heal keeps an unmovable block under it attached, so it is not
+ * used; and no block is made unmovable: a locked step is locked by its drag strategy and by
+ * isDeletable, never by setMovable). */
+export function takeOutAlone(b: BlocklyT.Block): void {
+  const parent = b.previousConnection?.targetConnection ?? null;
+  const next = b.getNextBlock();
+  if (next) b.nextConnection?.disconnect();
+  if (parent) {
+    b.previousConnection?.disconnect();
+    if (next?.previousConnection) parent.connect(next.previousConnection);
+  }
+}
+
+const frozen = new WeakSet<object>();
+let TickDrag: (new (b: BlocklyT.BlockSvg) => BlocklyT.IDragStrategy) | null = null;
+/** Round 26 (the reviewer: "dragging the optional step_loot out took 9 steps and gave 6 errors"):
+ * the drag of a block in hunt_tick() -- a step block anywhere, any block inside the tick: a locked
+ * step does not move at all (the drag is a no-op: no disconnect, no move, no drop); any other is
+ * taken out ALONE (takeOutAlone), as Delete already heals. Undo puts it back: the disconnects are in
+ * the drag's own event group. */
+export function tickDragOf(B: typeof BlocklyT): (new (b: BlocklyT.BlockSvg) => BlocklyT.IDragStrategy) | null {
+  if (TickDrag) return TickDrag;
+  const Base = B.dragging?.BlockDragStrategy;
+  if (!Base) return null;
+  class Drag extends Base {
+    override startDrag(e?: PointerEvent | KeyboardEvent): BlocklyT.IDraggable {
+      frozen.delete(this);
+      if (lockedStep(this.block)) {
+        frozen.add(this); // locked: it stays where it is
+        return this.block;
+      }
+      // (a block in the flyout has no stack: Blockly makes the copy that is dragged)
+      if (inTick(this.block) || STEP_OF_TYPE.has(this.block.type)) takeOutAlone(this.block);
+      return super.startDrag(e);
+    }
+    override drag(newLoc: BlocklyT.utils.Coordinate, e?: PointerEvent | KeyboardEvent): void {
+      if (!frozen.has(this)) super.drag(newLoc, e);
+    }
+    override endDrag(e: PointerEvent | KeyboardEvent | undefined, disposition: Parameters<BlocklyT.IDragStrategy["endDrag"]>[1]): void {
+      if (!frozen.has(this)) super.endDrag(e, disposition);
+    }
+    override revertDrag(): void {
+      if (!frozen.has(this)) super.revertDrag();
+    }
+  }
+  TickDrag = Drag;
+  return TickDrag;
+}
+
+/** Round 26: a step block (and, from the editor's paint, any block inside hunt_tick()) gets the
+ * tick's drag (tickDragOf), and a locked step says it cannot be deleted (isDeletable): the
+ * context menu, the Delete key, the trashcan and Cut all ask it. */
+export function tickLock(B: typeof BlocklyT, b: BlocklyT.Block): void {
+  const tagged = b as BlocklyT.Block & { plTickLock?: boolean };
+  if (!tagged.plTickLock) {
+    tagged.plTickLock = true;
+    const base = b.isDeletable.bind(b);
+    b.isDeletable = () => base() && !lockedStep(b);
+  }
+  const svg = b as BlocklyT.BlockSvg;
+  const Drag = tickDragOf(B);
+  if (Drag && typeof svg.setDragStrategy === "function" && !(svg.getDragStrategy?.() instanceof Drag)) svg.setDragStrategy(new Drag(svg));
 }
 
 /** PURE of the page (Blockly only; round 22): a pl_expr's text WRAPPED onto rows (pickers.ts

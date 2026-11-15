@@ -37,6 +37,15 @@ export function countsFor(lint: Pick<LintDoc, "by_owner" | "by_node"> | null | u
 }
 
 /** A finding's statement path INSIDE its tab ("main.2", "heal.0"), from "<node>/<tab>/<site>". */
+/** PURE (round 26, the reviewer's 5c review: find_target's ⚠ bubble said "info: find_target is
+ * unsupported here: L2 binding ...", twice): the lines of a block's warning -- its problems (error)
+ * and its lint findings, an INFO never (Blockly draws every warning as a triangle: an info is the
+ * Lint pane's), each line once; null: no warning. */
+export function warningText(problems: readonly { text: string }[], findings: readonly Pick<Finding, "severity" | "text">[]): string | null {
+  const lines = [...new Set([...problems.map((it) => `error: ${it.text}`), ...findings.filter((f) => f.severity !== "info").map((f) => `${f.severity}: ${f.text}`)])];
+  return lines.length ? lines.join("\n") : null;
+}
+
 export function sitePath(f: Pick<Finding, "path" | "node" | "tab">): string {
   const pre = f.node && f.tab ? `${f.node}/${f.tab}/` : "";
   return pre && f.path.startsWith(pre) ? f.path.slice(pre.length) : f.path;

@@ -11,7 +11,7 @@
 // outcome_to, note; an event's limits) travels in its extraState, and a statement MW2 has no block
 // for is a read-only `pl_raw` block carrying its JSON. Statement block ids are MW1's node paths
 // (`n:town.3`), so lint findings and simulate results land on the right block.
-import { CREDENTIALS, DEF_BY_TYPE, DEFAULT_FAILS, DEFAULT_MAX_10, HOTKEYS, HUNT_LOOP_BLOCKS, ROLE_OF_TYPE, roleOfVar, roleType, RUNNER_ROLES, SENTENCE, SENTENCE_BY_TYPE } from "./blockdefs.ts";
+import { CREDENTIALS, DEF_BY_TYPE, DEFAULT_FAILS, defAbout, DEFAULT_MAX_10, HOTKEYS, HUNT_LOOP_BLOCKS, ROLE_OF_TYPE, roleOfVar, roleType, RUNNER_ROLES, SENTENCE, SENTENCE_BY_TYPE } from "./blockdefs.ts";
 import { argsText, callArgsText, ExprError, exprText, hasDo, parseArgs, parseCallArgs, parseExpr, parseParams } from "./expr.ts";
 import { fieldOf, HUNT_TYPE, type HuntRules, omitted, paramOf, params as huntParams } from "./hunt.ts";
 import { blockHeight, blockWidth, layoutKey, rowsOf, shelf, type ShelfItem, SHELF_LEFT, STACK_GAP, WIDEST_BADGE } from "./layout.ts";
@@ -1262,8 +1262,10 @@ export function shelfItems(blocks: readonly WsBlock[], tab: Tab | undefined): Sh
   return blocks.map((b) => {
     const k = layoutKey(b.type, b.fields);
     const setting = settingOfType(b.type); // its rows (a safety switch's warning while off)
-    const h = setting ? settingHeight(b.type, b.fields) - SETTING_GAP_Y : blockHeight(b, PLACED_LABELS, placedHidden);
-    return { id: b.id ?? "", w: blockWidth(b, { BADGE: WIDEST_BADGE }), h, at: k ? (tab?.layout?.[k] ?? null) : null, alone: b.type === "pl_main" };
+    // (round 26: the hunt core's two functions draw their ABOUT rows: blockdefs.ts defAbout)
+    const about = b.type === "pl_def" ? defAbout(String(b.fields?.NAME ?? "")) : {};
+    const h = setting ? settingHeight(b.type, b.fields) - SETTING_GAP_Y : blockHeight(b, { ...PLACED_LABELS, ...about }, placedHidden);
+    return { id: b.id ?? "", w: blockWidth(b, { BADGE: WIDEST_BADGE, ...about }), h, at: k ? (tab?.layout?.[k] ?? null) : null, alone: b.type === "pl_main" };
   });
 }
 
