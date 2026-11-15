@@ -21,7 +21,7 @@ import { registerSearch } from "@/components/flows/blockly-search";
 import type { CatalogueDoc, Finding, LintDoc, Trace } from "@/lib/flow/api";
 import { BADGE_TEXT, sitePath, warningText } from "@/lib/flow/api";
 import { boxReplaced } from "@/lib/flow/box";
-import { argsRowShown, SENTENCE_BY_TYPE, titleLines, type Toolbox, toolbox, type ToolboxScope } from "@/lib/flow/blockdefs";
+import { argsRowShown, defTooltip, SENTENCE_BY_TYPE, titleLines, type Toolbox, toolbox, toolboxCatalogue, type ToolboxScope, varTooltip } from "@/lib/flow/blockdefs";
 import { type Defaults, placedIds, shelfItems, TAB_TOP_Y, type TabScope, tabFromWorkspace, tabToWorkspace, type Workspace } from "@/lib/flow/blocks";
 import { defaultFields, HUNT_TYPE, huntTooltip, omitted } from "@/lib/flow/hunt";
 import { canonical } from "@/lib/flow/ir";
@@ -284,16 +284,8 @@ export default function BlockEditor(p: BlockEditorProps) {
   );
 }
 
-/** The core blocks a person places (no input of their own): the save point, and stage 4a's trained
- * data and its two waits (live-blocks.md 3.4). */
-const CORE_OFFERED = ["assert_save_point", "use_model", "wait_steal", "wait_kill"];
-
 function toolboxOf(catalogue: CatalogueDoc | null, scope: ToolboxScope): Toolbox {
-  const cat = Object.fromEntries(
-    Object.entries(catalogue?.blocks ?? {})
-      .filter(([, b]) => b.spec.kind !== "core" || CORE_OFFERED.includes(b.name))
-      .map(([n, b]) => [n, { concept: b.spec.concept, timeout_s: b.spec.timeout_s, badge: b.badge }]),
-  );
+  const cat = toolboxCatalogue(catalogue); // round 27: blockdefs.ts (the tick's steps offered)
   const rules = catalogue?.hunt_rules ?? null;
   const models = catalogue?.models ?? null;
   const first = firstDetector(models);
@@ -472,6 +464,10 @@ function paint(B: typeof BlocklyT, w: BlocklyT.WorkspaceSvg, catalogue: Catalogu
     if (b.type === "pl_expr" && !b.isInFlyout && syncExprWrap(B, b)) grew.push(b);
     // round 26: a block inside hunt_tick() is dragged out alone, a locked step not at all (tickLock)
     if (!b.isInFlyout && inTick(b)) tickLock(B, b);
+    // round 27: a function's and a variable's tooltip names Global only in a project that has one;
+    // hunt_tick's and hunt_loop's carry their ABOUT words
+    if (b.type === "pl_def") b.setTooltip(defTooltip(String(b.getFieldValue("NAME") ?? "").trim(), hasGlobal));
+    if (b.type === "pl_vardecl") b.setTooltip(varTooltip(hasGlobal));
     // round 26 (the reviewer: find_target's empty "( )" opened a picker saying "This block takes no
     // inputs"): a hunt loop block whose catalogue entry takes no inputs hides its inputs' row while
     // it holds none
