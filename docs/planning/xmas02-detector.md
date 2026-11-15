@@ -4592,3 +4592,137 @@ xmas02gb. GPU_WEIGHTS keeps the entry (served only, like the failed fi rounds).
   `q1-score-sk3a.json` `9408e860...`, `q1-score-gw3.json` `7fb8fc8b...`, `q1-score-test.json`
   `6705236b...`, `d1-xmas02sk.json` `6d477bd6...`, `d1-xmas02gb.json` `721e6487...`.
 
+
+### Amendment S5 (2026-11-15 13:22 ICT from `date`, written BEFORE any new data: sk4a is not recorded): the Goblin class scored by the CROWD rule on a FRESH held-out
+
+**Batt (2026-11-15 ~13:0x, live-blocks.md 14.12 decision 4, Thai, translated): "Allowed"** -- a fresh
+held-out recording with staged knights, the rule change pre-registered first, as S4.10's "what a
+deployment step would need" proposed. S4.10's verdict (FAIL) stands and is never re-scored; this
+amendment scores the same frozen model on NEW data under a rule fixed before that data exists.
+
+#### S5.1 The rule change, and why (code: `eval_q1.py` Q1crowd / units / party; `map_labels.frame_units`; tests)
+
+- **What failed in S4.10, by its own geometry:** 26 of the 31 Goblin boxes charged against precision
+  overlapped a KEPT Goblin label of the same frame that was not one of the pack's 60 crops; 3 more lay
+  on excluded Goblins. Q1's precision charges every unmatched class-s box whose centre lies in ANY
+  evaluated box. That rule was written for sparse fields; in the knight's heap (6 Goblins deep) it
+  calls a correct box on a neighbouring Goblin false.
+- **What the alarm needs** (live-blocks.md 11.1 / 11.2): "a Goblin box means a Goblin is there". A box
+  on ANY Goblin is a correct alarm; a box on a Garm Baby, the knight or nothing is not a Goblin.
+- **Q1crowd (the bar's precision; `eval_q1.py score --units`):** the same matches, the same recall
+  and the same scope as Q1s (the UNMATCHED g_gobline_xmas boxes whose centre lies inside an
+  evaluated box). Such a box is **FALSE only when it lies on NO Goblin unit of its frame by the
+  PACKETS**: its IoU with a KEPT Goblin label's fitted box is below 0.5, AND its centre is inside no
+  Goblin unit's region. A unit's region is the sprite envelope at the labeller's anchor
+  (`map_labels.frame_units`, S4's `label_regions`, grown by the fit radius 6 px). Every visible
+  Goblin of the frame's Timeline world counts: kept, excluded, or under the UI.
+  - Species-strict, as Q1s: a Goblin box on a Garm Baby or on the knight stays FALSE
+    (`false_on_other_species`), and so does one on no unit.
+  - Q1 and Q1c are computed beside it unchanged; an old score file keeps its keys (tested on gef10
+    R2's archived score).
+- **The positive case on real data** (TRAIN data, no held-out): S1's T2 pack of sk1a / sk2a (key
+  `d9c5a2b4...`, answers G / H), the DEPLOYED xmas02gb's archived GPU predictions on those frames (S4.2,
+  `pred-gb-sk12.json`), units from the S1 label files (192 frames, 1,615 units; units `463def69...`,
+  score `5d5210da...`). Garm Baby: Q1 precision 30 / (30 + 24) = 0.556. Q1crowd **absolves 13** (boxes
+  on other real dogs) and keeps **11 false, every one on a unit of another species**: the deployed
+  model's Goblin-as-garm_baby boxes that live-blocks.md 11.1 found. The rule frees what is true and
+  still charges what is not.
+- **Reported beside the bar, deciding nothing:**
+  - Q1crowd `frame_wide`: every unmatched Goblin box of the evaluated frames, judged the same way;
+  - **the alarm's view** (`eval_q1.py party`, over EVERY candidate frame of sk4a, conf >= 0.25 /
+    0.5 / 0.7):
+    - the frame recall: frames with a Goblin on screen (packets) that hold a Goblin box;
+    - the false-alarm frames: no party unit (Goblin or knight) on screen, yet a Goblin box;
+    - where each Goblin box lies: on a Goblin, on the knight, on another unit, on nothing;
+    - per VISIT (a run of party frames; a gap > 5 s ends it), the delay from the first Goblin on
+      screen to the first Goblin box;
+  - **the Goblin false alarms on Goblin-free held-out frames:** S4.10's existing predictions on
+    pooled TEST (231 frames) and gw3 (261), through `party` with their own units. Nothing of these is
+    looked at before the score step.
+
+#### S5.2 The model, and the bars
+
+- **The model: the FROZEN S4 model, `xmas02sk` last.pt `0b43ebbf...` (ONNX `76316fb4...`), NOT
+  retrained.** Its recall already passed (0.807) and the failure was the rule. Retraining would
+  change two things at once and spend a held-out on a new model. It is read from the NAS archive
+  (`archive/train/xmas02-sk-20261114`); main's GPU_WEIGHTS stays without it (c26d96c0): predict_dir
+  needs no registration.
+- **The bars** (S2's, unchanged):
+  1. **Christmas Goblin on sk4a, Q1crowd** (`Q1crowd.per_species.g_gobline_xmas`): >= 50
+     evaluated crops; **recall >= 0.80 AND precision >= 0.80** (the integer rule).
+  2. **Garm Baby (Q1s on gw3) and the four species (Q1c on pooled TEST): S4.10's PASS stands.** The
+     same frozen model on the same held-outs scores the same; they are NOT re-scored. sk4a's own
+     numbers for them are reported.
+  3. **D1: S4.10's PASS stands** (the same ONNX; server forward p95 17.96 ms <= 35 ms). The live D1
+     belongs to the deployment pilot.
+  4. The knight on sk4a: Q1s recall reported, no bar.
+- **The verdict:** PASS only if bar 1 passes (2 and 3 already have). Either way, deployment stays a
+  step of its own (MAP_MODELS, the alarm's Goblin rule, a live flee proof), decided by the parent and
+  Batt.
+
+#### S5.3 The fresh held-out sk4a: the recording protocol (LIVE; the parent runs it, between A/B series)
+
+- **Why fresh, and why these stands:** the rule was chosen after seeing sk3a, so sk3a cannot judge it.
+  sk4a uses 3a's TEST stands MINUS sk3a's 16: `lattice-test-sk4.json` (72 stands, sha256
+  `cf450d9c32127928383e7e5d2dcbf77154f4b1e1e8f69bf850ed5038a7695a5c`, written in
+  `/dev/shm/poring-lab-tmp/goblin-s5/`). Seed **2611124**, 16 stands, none shared with sk3a:
+  (214, 248), (38, 82), (60, 159), (125, 205), (247, 206), (29, 225), (93, 104), (39, 90), (104, 59),
+  (192, 27), (203, 159), (49, 93), (115, 203), (50, 223), (194, 170), (239, 205). Nothing of
+  lattice-train.json (TRAIN) is used.
+- **The name:** `<stamp>-rdp-xmas02-sk4a`. It is refused by NAME like TEST before it records:
+  labels without `--eval-test`, T2's pool and the cache all refuse it (`map_labels.XMAS02_SK4A`, in
+  test_suffixes and eval_suffixes; this amendment's code commit).
+- **The steps, in order** (the Rogue `Thief8fce`, Base 99, standing on xmas_dun02; ASSIST; the
+  interlock green; no runner, A/B series or chain running):
+  1. **Immunity ON, judged** (memory rogue-immunity-toggle): `.venv/bin/python scripts/crusader.py
+     --char thief gm --job rogue '@monsterignore'`. Read the answer over the character: "You are now
+     immune to attacks." = ON. "Returned to normal state." means it WAS on and is now off: type it
+     once more and judge again. Save the crop.
+  2. **The aura OFF** (memory aura-off-client-commands): a screenshot of the Rogue. Re-type `/aura` /
+     `/aura2` (ro_agent.chat_line, as 11-12 07:04) only if the disc or the sparkles are back, and
+     read their Chat-tab answers ("Simplified Aura [ON]", "Aura effect is OFF").
+  3. **Windows quiet:** no notification toast on the client (sk1a's OneDrive toast, ADR-0019
+     2026-11-12; the settings applied then).
+  4. **The watch + its recorder** (the 11-12 `sk_watch.sh`, only its scratch dir moved; staged at
+     `/dev/shm/poring-lab-tmp/goblin-s5/sk_watch.sh`, sha256 `486c50de...`):
+
+         bash /dev/shm/poring-lab-tmp/goblin-s5/sk_watch.sh sk4a /dev/shm/poring-lab-tmp/goblin-s5/lattice-test-sk4.json 2611124
+
+     It runs, in order:
+     - `record_session.py --backend rdp --label xmas02-sk4a --seconds 1500 --fps 1 --format png
+       --max-bytes 4G` (PNG, 1 fps; ~1.9 GB to `~/poring-lab-rec`, above bot-server's 30 GB floor);
+     - `stage_items.py --char thief watch --map xmas_dun02 --lattice ... --seed 2611124 --spawn 1251
+       --spawn-n 1 --dwell-s 40 --max-cells 16 --max-minutes 22 --immune-confirmed --label sk4a`.
+       At each stand: `@warp`, `@monster 1251 1` (the knight; its 2 Garm Babies and its summoned
+       Goblins come with it), a 40-s dwell, `@killmonster2`. Typed GM lines only, no world click;
+     - the recorder stopped by its own PID, `dataset_ship.py ship` to the NAS.
+     About 15 min (sk3a: 07:42:21-07:57:27) + ~2 min to ship.
+  5. **Immunity OFF, read back** (memory pilots-run-not-immune): `@monsterignore` again; read
+     "Returned to normal state." (if "You are now immune to attacks.", it was off: type again). Save
+     the crop. Every A/B series after it needs her NOT immune.
+  - **Client time: ~22 min** (steps 1-5). A step that fails stops the chain: nothing is retried
+    blind. A watch that stops early keeps its recording; an amendment decides on it before any label.
+
+#### S5.4 After the recording (OFFLINE except one GPU step; scored ONCE)
+
+1. **The recording checked:** its `checksums.sha256` on the NAS; 3c's path (rdp, png, recorder v7,
+   [80, 77, 1280, 720], lab-rathena); 16 stands, 16 spawns, 16 `@killmonster2` in the watch events.
+   S1's toast check (every frame's game-region x 984-1276, y 478-716 against sk1a frame 30's toast
+   panel; S1 measured 0.00-0.08 on the toast, >= 22.8 elsewhere): a measured overlay becomes
+   `MapSpec.screen_overlays[sk4a]`, committed BEFORE the labels.
+2. **sk4a's labels:** `map_labels.py labels --map xmas_dun02 --eval-test <NAS>/<sk4a> --params
+   xmas-det/fit/params.json (FROZEN d4cc0a5d) --classes classes-none.json`.
+3. **The pack:** `pack --eval-test --per-species 60 --seed 53 --min-fit 0.536`, the instructions
+   `dc48fb15...`; **two NEW blind labellers, Y and Z** (A-X are spent), M9's brief with the paths
+   changed.
+4. **The units:** `eval_q1.py units KEY --params ... --labels-dir ...` (the pack's frames) and
+   `--all-frames` (every candidate frame, for `party`). Units for pooled TEST and gw3 from their keys
+   (11-07 `fc9facb1...`, M9 `99f2acc7...`) and their archived label files.
+5. **The predictions (ONE GPU STEP, the worker free, no Run):** `predict_dir` with
+   `/datasets/archive/train/xmas02-sk-20261114/weights/last.pt` (imgsz 1280, conf 0.25) on sk4a's
+   pack frames (`eval_q1.py refs`) and on every candidate frame (a refs file from the label file).
+   Two guarded `execdev:vision` steps, ~1 min each.
+6. **The score, once:** `eval_q1.py score KEY Y.json Z.json PRED --cache-manifest
+   <the S4 cache's 9d7a9b38...> --units UNITS --out ...` -> bar 1 = `Q1crowd.per_species.g_gobline_xmas`;
+   then `eval_q1.py party` on sk4a (all frames), pooled TEST and gw3 (reported).
+7. The result here and in live-blocks.md 11.4; the scratch to the NAS the same day.
