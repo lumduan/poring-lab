@@ -223,3 +223,36 @@ def test_the_browsers_tick_table_is_the_engines() -> None:
     assert roles and req
     assert tuple(re.findall(r'"(\w+)"', roles.group(1))) == huntloop.HUNT_ROLES
     assert tuple(re.findall(r'"(\w+)"', req.group(1))) == huntloop.REQUIRED_ROLES
+
+
+# --- round 26 (live-blocks.md 12.10, the reviewer's 5c review): the lint's words -----------------
+def _lint(path: Path) -> list[dict[str, Any]]:
+    from poring_flow.lint import default_resolver
+
+    p = P.from_json(path.read_text())
+    res = default_resolver(p.target, l3_root=Path("/nonexistent-l3"))  # no L3: the L2 bindings only
+    return list(P.lint_doc(p, world=None, resolver=res)["findings"])
+
+
+def test_round26_answered_bindings_in_a_learners_words_and_hunt_loop_named() -> None:
+    """An answered binding: an info in a learner's words; the functions shape names hunt_loop()."""
+    found = _lint(FUN)
+    answered = [f for f in found if f.get("answered")]
+    assert answered and all(f["severity"] == "info" for f in answered)
+    for f in answered:
+        for jargon in ("L2", "binding", "unsupported", "params {}", "not bound"):
+            assert jargon not in f["text"] and jargon not in f["message"], f["text"]
+        assert f["text"].endswith(
+            "is played by the runner's own code: nothing to set up for it here"
+        )
+        assert f["message"] == f"{f['path']}: {f['text']}"
+    by_path = {f["path"]: f["text"] for f in answered}
+    assert by_path["xmas_dun02/hunt/hunt_loop.0.body.0"].startswith("find_target ")
+    assert by_path["xmas_dun02/main/main.2"].startswith(f"{huntloop.HUNT_CALL}() ")
+    # no block of the functions box shows the runner block: its words never name it
+    assert not [f for f in found if "dungeon_hunt" in f["text"] or "dungeon_hunt" in f["message"]]
+    # each finding once
+    assert len({(f["path"], f["text"]) for f in found}) == len(found)
+    # the old one-block shape shows the runner block: its words keep its name
+    old = {f["path"]: f["text"] for f in _lint(XMAS) if f.get("answered")}
+    assert old["xmas_dun02/main/main.2"].startswith("dungeon_hunt ")

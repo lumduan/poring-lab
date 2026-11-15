@@ -24,7 +24,7 @@ import { groupOf, SETTING_BLOCKS, SETTING_GEOMETRY, SETTING_NOTE_ROWS, SETTING_R
 import { MAX_RANK } from "./ir.ts";
 import type { PickSpec, RefKind } from "./pickers.ts";
 import { BLOCK_STYLE } from "./theme.ts";
-import { CLASS_WORDS, HUNT_CALL, ROLE_PREFIX, STEP_BY_BLOCK, stepBlock, stepType, TICK_FN, TICK_STEPS, TICK_TAB, type TickStep } from "./tick.ts";
+import { CLASS_WORDS, HUNT_CALL, isLockedClass, PADLOCK, ROLE_PREFIX, STEP_BY_BLOCK, STEP_STYLE, stepBlock, stepType, TICK_FN, TICK_STEPS, TICK_TAB, type TickStep } from "./tick.ts";
 
 export type ArgDef =
   | { type: FieldKind; name: string; text?: string; value?: number; min?: number; max?: number; precision?: number; options?: [string, string][]; class?: string; pick?: PickSpec }
@@ -461,12 +461,28 @@ export const BLOCK_DEFS: BlockDef[] = [
     // round 21: "function", its name and its inputs on three rows (attack_cookie_xmas ( t,
     // priority=1 ) was past the controls at 390). A function's NAME and its inputs are names it DEFINES: free text (on the
     // monsters tab the name suggests attack_<class> for each monster of the node's model)
-    message0: "function %1 %2 %3 ( %4 ) %5",
-    args0: [endRow("ROW_WORD"), { type: PICK_TEXT, name: "NAME", text: "my_function", pick: { kind: "name", title: "the function's name (on the monsters tab: a monster's recipe)" } }, endRow("ROW_NAME"), text("PARAMS", ""), endRow("ROW_PARAMS")],
+    // round 26 (the reviewer's 5c review): the hunt core's two functions say what they are on rows
+    // of their own (ABOUT, ABOUT2: DEF_ABOUT; hidden for any other function) -- nobody calls
+    // hunt_tick() from a block, and hunt_loop's t is not an input to pass
+    message0: "function %1 %2 %3 ( %4 ) %5 %6 %7 %8 %9 %10 %11",
+    args0: [
+      endRow("ROW_WORD"),
+      { type: PICK_TEXT, name: "NAME", text: "my_function", pick: { kind: "name", title: "the function's name (on the monsters tab: a monster's recipe)" } },
+      endRow("ROW_NAME"),
+      text("PARAMS", ""),
+      endRow("ROW_PARAMS"),
+      { type: "field_label", name: "ABOUT", text: "", class: "pl-setting-var" },
+      endRow("ROW_ABOUT"),
+      { type: "field_label", name: "ABOUT2", text: "", class: "pl-setting-var" },
+      endRow("ROW_ABOUT2"),
+      { type: "field_label", name: "ABOUT3", text: "", class: "pl-setting-var" },
+      endRow("ROW_ABOUT3"),
+    ],
     message1: "%1",
     args1: [{ type: "input_statement", name: "DO" }],
     style: st("pl_def"),
     mutator: STATE,
+    extensions: ["pl_label_rows", "pl_def_about"],
     inputsInline: true,
     tooltip: "A FUNCTION: any tab of this node (and, in Global, every node) can call it by its name. Its inputs as in Python: key, times=1, *args, **kwargs. The same name on a map replaces Global's there",
   },
@@ -540,7 +556,31 @@ export const BLOCK_DEFS: BlockDef[] = [
 /** Round 21 (the re-measure of round 20): the input names of the rows the editor hides while their
  * label is empty (blockly-register.ts pl_label_rows: the badge before the catalogue loads, the run
  * line until a simulate run). */
-export const LABEL_ROWS: Record<string, string> = { ROW_BADGE: "BADGE", ROW_RUN: "RUN" };
+export const LABEL_ROWS: Record<string, string> = { ROW_BADGE: "BADGE", ROW_RUN: "RUN", ROW_ABOUT: "ABOUT", ROW_ABOUT2: "ABOUT2", ROW_ABOUT3: "ABOUT3" };
+
+/** PURE (round 26, the reviewer: find_target's empty "( )" opened a picker saying "This block takes
+ * no inputs"): does a hunt loop block show its inputs' row? Not when its catalogue entry takes no
+ * inputs and it holds none (a typed one stays, so it can be read and taken out); while the
+ * catalogue is not here, yes. */
+export function argsRowShown(params: readonly unknown[] | null | undefined, args: string): boolean {
+  return params === null || params === undefined || params.length > 0 || args.trim() !== "";
+}
+
+/** Round 26 (the reviewer's 5c review: "hunt_tick() is never called by a visible block"; "hunt_loop
+ * (t=False) shows t as an input"): what the hunt core's two functions are, on the def's own rows. */
+export const DEF_ABOUT_WORDS: Record<string, string> = {
+  hunt_tick: "played by find_target and fight_target, every tick (about 200 ms)",
+  hunt_loop: "t: the target (it starts empty); main calls hunt_loop() with no inputs",
+};
+/** The fields of a function's ABOUT rows (at most three lines, each inside the 300-unit budget). */
+export const ABOUT_FIELDS = ["ABOUT", "ABOUT2", "ABOUT3"] as const;
+/** PURE: a function's ABOUT rows by its name (wrapped to the 300-unit budget; {} for any other). */
+export function defAbout(name: string): Record<string, string> {
+  const words = DEF_ABOUT_WORDS[name];
+  if (!words) return {};
+  const lines = wrapUnits(words, SETTING_ROW_BUDGET - SETTING_GEOMETRY.side - 4);
+  return Object.fromEntries(ABOUT_FIELDS.map((f, i) => [f, i < ABOUT_FIELDS.length - 1 ? (lines[i] ?? "") : lines.slice(i).join(" ")]));
+}
 
 /** Round 21 (the re-measure of round 20: "use_model ( model="xmas02" ) ● plays live" ran to x 402
  * at 390): a statement block's verification badge and its last-run line each on a row of its own
@@ -713,20 +753,23 @@ function roleDef(r: RunnerRole): BlockDef {
  * hunt_tick()'s body, one statement input in (layout.ts INDENT 20, taken at 24). */
 function stepDef(t: TickStep): BlockDef {
   const width = SETTING_ROW_BUDGET - SETTING_GEOMETRY.side - 24;
-  const lines = [`${stepBlock(t)}()`, ...wrapUnits(`${CLASS_WORDS[t.klass]} · ${t.words}`, width), ...(t.owner ? wrapUnits(`played while ${t.owner} plays`, width) : [])];
+  // round 26: a locked class's head row shows the padlock (tick.ts LOCKED_CLASSES)
+  const head = isLockedClass(t.klass) ? `${PADLOCK} ${stepBlock(t)}()` : `${stepBlock(t)}()`;
+  const lines = [head, ...wrapUnits(`${CLASS_WORDS[t.klass]} · ${t.words}`, width), ...(t.owner ? wrapUnits(`played while ${t.owner} plays`, width) : [])];
   const rule =
     t.klass === "optional"
-      ? "OPTIONAL: it may be left out of hunt_tick() (the runner then never plays it); it cannot be moved"
-      : `${CLASS_WORDS[t.klass]}: it cannot be left out or moved (the lint refuses it, and the runner too)`;
+      ? "OPTIONAL: it may be left out of hunt_tick() -- drag it out (it comes alone, the steps under it close up) or delete it; the runner then never plays it; it cannot be moved"
+      : `${CLASS_WORDS[t.klass]}, LOCKED: it cannot be deleted or dragged out of hunt_tick() (the lint refuses a tick without it, and the runner too)`;
   return {
     ...stmt({
       type: stepType(t),
       message0: lines.map((l, i) => `${l} %${i + 1}`).join(" "),
       args0: lines.map((_, i) => endRow(i ? `ROW_LINE${i}` : "ROW_HEAD")),
       inputsInline: true,
-      tooltip: `${stepBlock(t)}(): a step of the hunt core's tick -- ${t.words}. ${t.owner ? `A mode step: it plays while ${t.owner} plays. ` : "Every tick, whichever block of the hunt loop plays. "}${rule}. The steps play in run()'s order (scripts/dungeon_hunt.py).`,
+      tooltip: `${stepBlock(t)}(): a step of the hunt core's tick -- ${t.words}. ${t.owner ? `A mode step: it plays while ${t.owner} plays. ` : "Every tick, whichever block of the hunt loop plays. "}${rule}. The steps play in run()'s order (the runner's own).`,
     }),
-    style: "mp_movement_blocks",
+    style: STEP_STYLE[t.klass],
+    extensions: ["pl_tick_lock"],
   };
 }
 BLOCK_DEFS.push(...RUNNER_ROLES.map(roleDef), ...TICK_STEPS.map(stepDef));
@@ -897,9 +940,9 @@ export function toolbox(
   if (onMap && scope.main && blocks.dungeon_hunt && blocks.find_target) {
     movement.push(lbl("The hunt core (xmas_dun02): it starts here and plays the tab hunt's loop with its role blocks, the tab tick's steps:"), { kind: "block", type: "pl_call", fields: { PROC: HUNT_CALL, ARGS: "" } });
   }
-  if (onMap && blocks.dungeon_hunt) {
-    movement.push(lbl("The Rogue's runner (a map with a runner: xmas_dun02):"), { kind: "block", type: "pl_dungeon_hunt", extraState: rest(blocks.dungeon_hunt) });
-  }
+  // round 26 (15.10 Q2's safe default until Batt answers): the old one-block runner stays for old
+  // projects, in Advanced, so a learner starting fresh meets hunt_loop() first in main's toolbox
+  const oldRunner: ToolboxItem[] = onMap && blocks.dungeon_hunt ? [lbl("the old one-block runner (old projects; a new box calls hunt_loop() in its main):"), { kind: "block", type: "pl_dungeon_hunt", extraState: rest(blocks.dungeon_hunt) }] : [];
   if (onMap && blocks.assert_save_point) movement.push({ kind: "block", type: "pl_save_point", fields: { MAP: "geffen", X: 119, Y: 40 }, extraState: rest(blocks.assert_save_point) });
   if (onMap && scope.main && blocks.use_model) {
     movement.push(lbl("The trained data (before the runner: its monsters are the recipes' names):"), { kind: "block", type: "pl_action", fields: { BLOCK: "use_model", ARGS: `model=${JSON.stringify(monsters?.model ?? "xmas02")}` }, extraState: rest(blocks.use_model) });
@@ -930,7 +973,7 @@ export function toolbox(
   if (scope.tab === HUNT_LOOP_TAB && onMap && blocks.find_target) {
     const own = (type: string, block: string, f: Record<string, unknown>) => (blocks[block] ? [{ kind: "block" as const, type, fields: { BLOCK: block, ...f }, extraState: rest(blocks[block]) }] : []);
     huntLoop.push(
-      lbl(`The hunt core plays this loop (the node's main calls ${HUNT_CALL}(), or runs dungeon_hunt; t: none until find_target finds one):`),
+      lbl(`The hunt core plays this loop (the node's main calls ${HUNT_CALL}(); t: the target, empty until find_target finds one):`),
       { kind: "block", type: "pl_def", fields: { NAME: HUNT_LOOP_FN, PARAMS: "t=False" } },
       { kind: "block", type: "pl_while", inputs: { COND: exprBlock("True") } },
       lbl("Each turn: find a target, then fight it (the monsters tab's recipe for its species):"),
@@ -1041,7 +1084,7 @@ export function toolbox(
     .filter((n) => !(n in PALETTE_TYPES) && !(n in SENTENCE) && !(n === "hunt" && huntFields) && !(n in OWN_BLOCK) && !RECIPE_ONLY.has(n) && !STEP_BY_BLOCK.has(n))
     .sort()
     .map((n) => ({ kind: "block" as const, type: "pl_action", fields: { BLOCK: n, ARGS: "" }, extraState: rest(blocks[n]) }));
-  const advanced: ToolboxCategory[] = [cat("More skills", "mp_other_category", others)];
+  const advanced: ToolboxCategory[] = [cat("More skills", "mp_other_category", others), ...(oldRunner.length ? [cat("Old projects", "mp_movement_category", oldRunner)] : [])];
   // (the project model: a map replaces Global's event by writing its own of the same name; no extend /
   // disable blocks any more)
   return {

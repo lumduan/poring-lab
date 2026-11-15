@@ -65,6 +65,14 @@ export const STEP_BY_BLOCK: ReadonlyMap<string, TickStep> = new Map(TICK_STEPS.m
 export const OPTIONAL_STEPS: readonly string[] = TICK_STEPS.filter((t) => t.klass === "optional").map((t) => t.name);
 /** A class as a block shows it. */
 export const CLASS_WORDS: Record<StepClass, string> = { safety: "SAFETY", required: "REQUIRED", optional: "optional" };
+/** Round 26 (the reviewer's 5c review; until Batt answers 15.10 Q1 the editor matches the built
+ * default): a SAFETY or REQUIRED step in hunt_tick() is LOCKED -- it cannot be deleted or dragged
+ * out (blockly-register.ts tickLock); its head row shows a padlock, and each class has a colour of
+ * its own (theme.ts). An optional step may be dragged out, alone (the steps under it close up). */
+export const LOCKED_CLASSES: readonly StepClass[] = ["safety", "required"];
+export const isLockedClass = (k: StepClass): boolean => LOCKED_CLASSES.includes(k);
+export const STEP_STYLE: Record<StepClass, string> = { safety: "pl_step_safety_blocks", required: "pl_step_required_blocks", optional: "pl_step_optional_blocks" };
+export const PADLOCK = "🔒";
 /** The block type of a step block (one per step: its words are its own). */
 export const stepType = (t: TickStep): string => `pl_${STEP_PREFIX}${t.name}`;
 export const STEP_OF_TYPE: ReadonlyMap<string, TickStep> = new Map(TICK_STEPS.map((t) => [stepType(t), t]));

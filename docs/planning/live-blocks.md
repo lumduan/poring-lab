@@ -1926,6 +1926,67 @@ four functions side by side):
     not re-shelve at another width;
   - within a row the gaps vary 24-77 units: the shelf aligns column slots.
 
+### 12.10 Round 26: the 5c review (the reviewer, read only, on main 569d03b0 at 1440 and 390; written 2026-11-15 16:47 ICT from `date`; branch fix/round26 from 5f24285f; offline only; s5c-ab was RUNNING, so nothing the runner imports at run time changed its behaviour)
+
+**PASS on 5c:** layout and widths (16 tabs, 0 overlaps, hunt shelved 4/4/1, main ends x 333 / 291),
+the role blocks' wording, the step blocks' legibility, the lint words for a left-out or moved step.
+The findings, each with the parent's decision and what was done:
+
+| # | Finding | Decision | Done how |
+|---|---|---|---|
+| 1 | SAFETY and REQUIRED steps were not locked in the editor: Delete removed step_survive, and only the lint refused the run | until Batt answers 15.10 Q1 the editor matches the built default: SAFETY and REQUIRED step blocks cannot be deleted or dragged out of hunt_tick (on load and on creation), with a visible lock and a colour per class; the lint stays the backstop | FIXED. The extension `pl_tick_lock` runs on every step block at init (load and creation). Inside `hunt_tick()` a SAFETY or REQUIRED step: `isDeletable()` is false (the context menu, the Delete key, the trashcan and Cut all ask it), and its drag is a no-op (the tick's drag strategy, a `BlockDragStrategy`: no disconnect, no move, no drop). Out of the tick (a step from the toolbox) it is a normal block, so it can be put in. NOT Blockly's `setMovable(false)`: Blockly's heal keeps an unmovable block under the one deleted ATTACHED, so deleting `loot` would have deleted `after` with it (a test proves it). Visible: a 🔒 on the head row of each locked step; the classes' colours SAFETY red `#b91c1c`, REQUIRED blue `#1e40af`, optional green `#15803d` (theme.ts; white words 4.5:1 or more). The lint rules (tick_step, tick_place) and the runner's own refusal are unchanged |
+| 2 | Dragging the OPTIONAL step_loot out took every step under it (9) and gave 6 errors about others | a step's drag moves that ONE step and heals the stack, as Delete does; test with real Blockly | FIXED: the tick's drag strategy (`tickDragOf`, on every step block and, from the editor's paint, every block inside `hunt_tick()`) takes the block out ALONE first (`takeOutAlone`: the blocks under it go up to where it was, whatever they are), then Blockly drags it; one undo step (the Dragger's event group). Tests in real Blockly 13: takeOutAlone leaves the tick whole but loot; Blockly's own pointer drag would take the stack (its `shouldHealStack` is false without Ctrl / Meta); a locked step's drag leaves the tick as it was |
+| 3 | The role pickers offered hunt_loop and hunt_tick (the loop itself) | leave out hunt_loop, hunt_tick, any def using hunt primitives, and events; main's plain call picker may list everything | FIXED: a function is the hunt core's own when it is `hunt_loop` / `hunt_tick` or its body (anywhere in it) plays a hunt loop block, a recipe step, a tick step or the old runner block (pickers.ts `playsHunt`); the role pickers (and escalate's) leave those out, events and recipes as before; main's call lists every function |
+| 4a | `hunt_tick()` is never called by a visible block | a line on the tick def | FIXED: a function's own ABOUT rows (blockdefs.ts `DEF_ABOUT_WORDS`, on rows of its own inside the budget, hidden for any other function, in the flyout too): hunt_tick "played by find_target and fight_target, every tick (about 200 ms)" |
+| 4b | find_target / fight_target showed ⚠ with "info: find_target is unsupported here: L2 binding L2.input.attack_click (not bound for kro-20211103-prere/lab-rathena (params {}))", twice | an INFO shows no warning triangle; learner words or drop it; once | FIXED: the editor never puts an info into Blockly's warning (always a triangle; the Lint pane lists infos), and each line of a block's warning shows once (api.ts `warningText`). The lint's words for a binding the runner answers: "find_target is played by the runner's own code: nothing to set up for it here" (project.py `lint_doc`; the text and the message alike) |
+| 4c | The lint said "xmas_dun02/main/main.2: dungeon_hunt is unsupported here …"; the Hunt category header said "… or runs dungeon_hunt" | in the functions shape name hunt_loop(), never dungeon_hunt where no block shows it | FIXED: on a node whose main calls `hunt_loop()` (the lowered nodes) a finding's words name `hunt_loop()` (project.py `_call_words`; "dungeon_hunt.py" kept); the old one-block shape, whose block shows the runner, keeps its name. The Hunt header: "(the node's main calls hunt_loop(); t: the target, empty until find_target finds one)" |
+| 4d | find_target's empty "( )" opened a picker saying "This block takes no inputs" | hide the args row for a block whose catalogue entry takes no inputs | FIXED: a hunt loop block whose catalogue entry takes no inputs hides its inputs' row while it holds none (blockdefs.ts `argsRowShown`; a typed one stays, to be read and taken out) |
+| 4e | find_target's "t ▾" picker listed t and every SETTING (fly_rate = 150, ...) | the function's inputs and plain variables only, never settings | FIXED: the variable picker (pickers.ts `variablesOn`) offers the function's inputs and plain variables; a setting or a role block is left out (a loaded one stays, marked ⚠) |
+| 4f | `hunt_loop(t=False)` showed t as an input | say "t: the target (starts empty)" or similar | FIXED: hunt_loop's ABOUT rows (4a): "t: the target (it starts empty); main calls hunt_loop() with no inputs"; its inputs stay `t=False` (the IR and the Python view unchanged) |
+| 4g | "at most 120 s" / "at most 300 s" had no counterpart in the Python (they are defaults) | show the default as a comment, or another way that keeps the round trip byte-identical; my call, and why | A COMMENT: a hunt loop block at its default time box ends its line with `# at most 120 s` (pyview.py `HUNT_BOX_BLOCKS`). Why: a comment is never read back (the parser reads the code), so `parse_files(print_files(p)) == p` and printing again gives the same text, byte for byte; printing `timeout_s=120` would have been code a learner thinks they must write, and every other block prints only a time box that is not its default. A non-default one is still `timeout_s=N` |
+| 5 | Batt's Q2, the safe default until he answers | keep the old runner block for old projects, in Advanced, labelled "the old one-block runner (old projects)", so a learner starting fresh sees hunt_loop() first in main's toolbox | DONE: Advanced > "Old projects" holds it under "the old one-block runner (old projects; a new box calls hunt_loop() in its main):"; Movement in a map's main offers `hunt_loop()` and no longer the runner block. A project holding the block loads and runs as before |
+
+**Tests:**
+- tick_lock.test.ts (8 new, REAL Blockly 13 where it needs it):
+  - a locked step is not deletable in the tick, an optional one is, and any is out of it;
+  - deleting `loot` heals the tick and keeps `after`. The positive case: with `setMovable(false)`
+    Blockly would have deleted `after` with it;
+  - takeOutAlone; a locked drag is a no-op; Blockly's default pointer drag takes the stack;
+  - the padlock and the three colours;
+  - the ABOUT rows (both functions, renamed: gone; inside the budget);
+  - the role pickers leave out hunt_loop, hunt_tick, a function playing find_target and the
+    events, while main's call lists them;
+  - argsRowShown and warningText;
+  - the old runner in Advanced > Old projects, and no "dungeon_hunt" in the Hunt header.
+- pickers.test.ts: the variable picker offers no setting and does offer a plain variable; pl_def's
+  fields (its ABOUT labels).
+- packages/poring_flow/tests/test_runner_functions.py (1 new), with the L2 resolver:
+  - every answered binding is an info in learner words (no "L2", "binding", "unsupported");
+  - the functions box names `hunt_loop()` and never "dungeon_hunt";
+  - each finding once;
+  - the old shape keeps "dungeon_hunt".
+- test_hunt_loop.py: the hunt tab's Python view carries the time-box comments, the round trip is
+  byte-identical, and pyview's names are huntloop.NEW_BLOCKS.
+
+**Deploy:** project.py (lint_doc's words) and pyview.py (the comments) are imported by the runner's
+process; this round changes no runner behaviour (prepare, the IR, the hash, the argv untouched), but
+merge after s5c-ab as the parent said.
+
+**Not measured here (no browser): the re-measure list.**
+1. Tab tick: Delete / Backspace / the context menu / the trashcan / Cut on a SAFETY or REQUIRED
+   step: refused. Dragging one: it does not move. The 🔒 on each, and the three colours.
+2. Drag step_loot out: it comes ALONE, the steps under it close up, and the lint shows no error
+   about the others. Ctrl+Z puts it back.
+3. A step block from the toolbox can be dropped into the tick, and is locked there.
+4. Tab hunt: no role picker lists hunt_loop, hunt_tick or an event. main's call picker lists every
+   function.
+5. The ABOUT rows on hunt_tick and hunt_loop, at 390 and 1440.
+6. find_target / fight_target: no ⚠. The Lint pane says "find_target is played by the runner's own
+   code: nothing to set up for it here", once. main.2 names hunt_loop().
+7. find_target shows no "( )" row. Its "t ▾" lists t and no setting.
+8. The Python view's `# at most 120 s` / `# at most 300 s`.
+9. main's toolbox: hunt_loop() in Movement, and the old runner only in Advanced > Old projects.
+
 ## 13. Stage 5b-1: HuntState and the loop as steps (design written 2026-11-14 18:3x ICT from `date`, before any 5b code; offline only)
 
 **Batt's words:** "break the runner into blocks" (2026-11-13); "there should be no runner [page]
@@ -2992,7 +3053,7 @@ line is a strict "<" against an arm that may read 0.
 
 ### 15.9 Limits (what 5c does not do)
 
-- The tick's SAFETY and REQUIRED steps are visible, not editable (15.3; Batt's open question).
+- The tick's SAFETY and REQUIRED steps are visible, not editable (15.3; Batt's open question). ➡️ Round 26 (12.10): the editor now LOCKS them too (no delete, no drag out), until Batt answers.
 - What a step DOES inside stays the runner's code: a step block names a step of run(), it does not
   open its body (its words and tooltip say what it does).
 - A lint finding on a role (one press_key, distinct keys, a body's caps) points at the
@@ -3004,6 +3065,13 @@ line is a strict "<" against an arm that may read 0.
 1. May a person leave out (or move) a SAFETY step of the tick, e.g. the UI watch's weight home? The
    built default: no (an error naming what it protects); the runner refuses it too.
 2. Should the old runner block leave the toolbox (it stays offered for old projects today)?
+
+➡️ **The reviewer's view on Q1 and Q2 was given (the 5c review, 2026-11-15; 12.10): Batt decides.**
+Until he answers, the editor matches the built defaults (the parent's decision): Q1 -- a SAFETY or
+REQUIRED step is LOCKED in the editor (cannot be deleted or dragged out of hunt_tick(); a padlock
+and a colour per class), the lint and the runner still refuse it; Q2 -- the old runner block stays
+for old projects, in Advanced > Old projects ("the old one-block runner (old projects)"), so a fresh
+box meets hunt_loop() first.
 
 ### 15.11 ➡️ BUILT (2026-11-15 13:2x-13:5x ICT from `date` and the commits; feat/runner-blocks, from main 09d5e6fb; offline only, NOT run live)
 

@@ -634,6 +634,15 @@ Amendment B); a not-adopted model is never offered.
     tab's four recipes in one row at 1440), one column on a phone. A block that grows pushes
     only the blocks under it or right of it; a block dropped onto another stays where it was
     dropped. /maps' nodes already kept their dragged places.
+  - **Round 26** ([planning/live-blocks.md](planning/live-blocks.md) 12.10, the 5c review): on the
+    tick tab a SAFETY or REQUIRED step is LOCKED (🔒; it cannot be deleted or dragged out of
+    hunt_tick(), until Batt decides 15.10), each class has its colour (SAFETY red, REQUIRED blue,
+    optional green), and dragging an optional step takes that ONE step (the others close up). The
+    role pickers never offer hunt_loop, hunt_tick or a function that plays the hunt's blocks.
+    hunt_tick and hunt_loop say what they are on their own rows; find_target shows no empty "( )"
+    and its target picker lists no settings; an info never shows a ⚠ (the Lint pane lists it, in
+    plain words); the Python view notes a hunt block's time box (`# at most 120 s`); the old
+    one-block runner is in Advanced > Old projects.
 - **No live run (the block editor):** nothing in the block editor reaches the executor, the mux or an input path (➡️ Run, above, is the one live path: the Run helper's player, never the editor). The backend's
   `/flows/*` routes only compute (public listener, LAN viewer, Origin; POSTs need the CSRF token,
   20 a minute; the Python view 120 a minute on its own budget since 2026-11-09). See [planning/mw2-block-editor.md](planning/mw2-block-editor.md) and
