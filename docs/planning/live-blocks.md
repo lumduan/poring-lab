@@ -3302,3 +3302,56 @@ as data of this series):
   recipe path stage 4a built.
 - **Not built:** 14.8's next step (no loot(t) for the Christmas Cookie: a new shape in
   recipes.SHAPES).
+
+
+### 16.8 Result of s6ab (run 2026-11-15 ~14:00-16:10 ICT, scored 16:10): PASS on every line -- and the no-swap box is NOT recommended
+
+`stage6_ab.py score --label s6ab`: 3 pairs, all 6 runs valid (19.8-19.9 min, each ended by its time
+box), 0 invalid, 0 deaths. B = the one box (the swap on every monster); C = the cookie no-swap box.
+
+    run       arm  kills/h loot/h  cookie locks (Knife / plain)  steals  others' Knife/h  tick median
+    r01B      B    174.9   190.0   14 (14 / 0)                   9       111.6            201.7
+    r02C      C    120.9   136.0    9 (0 / 9)                    0        96.7            202.3
+    r03C      C    135.9   166.2   17 (0 / 17)                   0        87.6            201.6
+    r04B      B    138.8   178.1   17 (17 / 0)                   7        93.6            201.7
+    r05B      B    142.0   166.2   11 (11 / 0)                   3       117.8            201.3
+    r06C      C    139.0   172.3   14 (0 / 14)                   0        99.7            201.8
+
+The bar (16.5):
+- **plays:**
+  - C: 40 cookie / cookie_xmas locks, 0 Knife tries, 40 played plain;
+  - B: 42 locks, 42 Knife strikes;
+  - mismatches 0 / 0;
+  -> PASS (Batt's "make it work": the no-swap recipes play live, as written).
+- deaths B 0, C 0 -> PASS;
+- kills/h: paired -54.0, -2.9, -3.0; mean -20.0, SE 17.0 -> PASS (>= -2 SE);
+- other monsters' Knife strikes/h: B 107.7, C 94.7 (within +-25 %) -> PASS;
+- pace: median B 201.6, C 201.9 ms -> PASS; p95 reported only (1051.3 / 1022.7);
+- errors: none -> PASS.
+**VERDICT: PASS**, a non-inferiority bar.
+
+**What it buys, and what it costs** (report only, deciding nothing):
+- **Time per cookie kill falls**, lock to kill (median):
+  - Cookie 7.95 s (B, n 11) -> 5.99 s (C, n 13);
+  - Christmas Cookie 9.52 s (n 18) -> 6.95 s (n 14).
+  - About 2-2.6 s a cookie kill.
+- **No more kills:** C made 132.0 kills/h against B's 151.9 (paired -20.0 +- 17.0). The point estimate
+  is negative, and the time saved (about 2.5 s x ~30 cookie kills/h, about 75 s an hour) is too small
+  to show.
+- **The steals given up:** B stole cookie 3.0/h and cookie_xmas 16.1/h, about 1,832 + 5,658 = **7,490
+  z/h** at the lab's values (Cookie 610.6 z and Christmas Cookie 351.4 z a steal; data/econ). C steals
+  none there.
+- **Other lines:**
+  - loot steps/h: B 178.1, C 158.2;
+  - all steals/h: B 94.6, C 71.5;
+  - Fly Wings/h: B 5.0, C 10.1;
+  - potions/h: 3.0 both;
+  - lowest HP: 48 % both.
+- **The premise did not hold.** The cookies' steals ARE worth the swap's time: 16.6 predicted it
+  from the 12 earlier runs.
+
+**Recommendation (the parent, for Batt):**
+- Do NOT make the no-swap box the default: same kills within noise, about 7,500 z/h less.
+- Keep it as a loadable example (xmas_dun02_cookie_noswap). It shows that a recipe edit plays live.
+- The next block experiment should target time without giving up steals, e.g. no loot(t) for a
+  species whose drops are trimmed anyway (needs recipes.SHAPES widened, 14.8).
