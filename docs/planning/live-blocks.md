@@ -1934,7 +1934,7 @@ The findings, each with the parent's decision and what was done:
 
 | # | Finding | Decision | Done how |
 |---|---|---|---|
-| 1 | SAFETY and REQUIRED steps were not locked in the editor: Delete removed step_survive, and only the lint refused the run | until Batt answers 15.10 Q1 the editor matches the built default: SAFETY and REQUIRED step blocks cannot be deleted or dragged out of hunt_tick (on load and on creation), with a visible lock and a colour per class; the lint stays the backstop | FIXED. The extension `pl_tick_lock` runs on every step block at init (load and creation). Inside `hunt_tick()` a SAFETY or REQUIRED step: `isDeletable()` is false (the context menu, the Delete key, the trashcan and Cut all ask it), and its drag is a no-op (the tick's drag strategy, a `BlockDragStrategy`: no disconnect, no move, no drop). Out of the tick (a step from the toolbox) it is a normal block, so it can be put in. NOT Blockly's `setMovable(false)`: Blockly's heal keeps an unmovable block under the one deleted ATTACHED, so deleting `loot` would have deleted `after` with it (a test proves it). Visible: a 🔒 on the head row of each locked step; the classes' colours SAFETY red `#b91c1c`, REQUIRED blue `#1e40af`, optional green `#15803d` (theme.ts; white words 4.5:1 or more). The lint rules (tick_step, tick_place) and the runner's own refusal are unchanged |
+| 1 | SAFETY and REQUIRED steps were not locked in the editor: Delete removed step_survive, and only the lint refused the run (➡️ round 28, 12.12: only the copy IN ITS PLACE is locked; an extra or a misplaced copy stays deletable and says why) | until Batt answers 15.10 Q1 the editor matches the built default: SAFETY and REQUIRED step blocks cannot be deleted or dragged out of hunt_tick (on load and on creation), with a visible lock and a colour per class; the lint stays the backstop | FIXED. The extension `pl_tick_lock` runs on every step block at init (load and creation). Inside `hunt_tick()` a SAFETY or REQUIRED step: `isDeletable()` is false (the context menu, the Delete key, the trashcan and Cut all ask it), and its drag is a no-op (the tick's drag strategy, a `BlockDragStrategy`: no disconnect, no move, no drop). Out of the tick (a step from the toolbox) it is a normal block, so it can be put in. NOT Blockly's `setMovable(false)`: Blockly's heal keeps an unmovable block under the one deleted ATTACHED, so deleting `loot` would have deleted `after` with it (a test proves it). Visible: a 🔒 on the head row of each locked step; the classes' colours SAFETY red `#b91c1c`, REQUIRED blue `#1e40af`, optional green `#15803d` (theme.ts; white words 4.5:1 or more). The lint rules (tick_step, tick_place) and the runner's own refusal are unchanged |
 | 2 | Dragging the OPTIONAL step_loot out took every step under it (9) and gave 6 errors about others | a step's drag moves that ONE step and heals the stack, as Delete does; test with real Blockly | FIXED: the tick's drag strategy (`tickDragOf`, on every step block and, from the editor's paint, every block inside `hunt_tick()`) takes the block out ALONE first (`takeOutAlone`: the blocks under it go up to where it was, whatever they are), then Blockly drags it; one undo step (the Dragger's event group). Tests in real Blockly 13: takeOutAlone leaves the tick whole but loot; Blockly's own pointer drag would take the stack (its `shouldHealStack` is false without Ctrl / Meta); a locked step's drag leaves the tick as it was |
 | 3 | The role pickers offered hunt_loop and hunt_tick (the loop itself) | leave out hunt_loop, hunt_tick, any def using hunt primitives, and events; main's plain call picker may list everything | FIXED: a function is the hunt core's own when it is `hunt_loop` / `hunt_tick` or its body (anywhere in it) plays a hunt loop block, a recipe step, a tick step or the old runner block (pickers.ts `playsHunt`); the role pickers (and escalate's) leave those out, events and recipes as before; main's call lists every function |
 | 4a | `hunt_tick()` is never called by a visible block | a line on the tick def | ➡️ Round 27 (12.11): the rows did NOT show on the page (filled at init, before a load sets the name); now they follow the name's value. FIXED: a function's own ABOUT rows (blockdefs.ts `DEF_ABOUT_WORDS`, on rows of its own inside the budget, hidden for any other function, in the flyout too): hunt_tick "played by find_target and fight_target, every tick (about 200 ms)" |
@@ -2068,6 +2068,69 @@ Start over.
    hunt_loop "t: the target (it starts empty); main calls hunt_loop() with no inputs", at 390 and
    1440. Their tooltips carry those words.
 3. A function's tooltip in a project without Global names no Global.
+
+### 12.12 Round 28: a locked extra copy, and "run()" (the reviewer, live on main 5c229faf; written 2026-11-15 18:56 ICT from `date`; branch fix/round28 from 5c229faf; offline only)
+
+**PASS: all 3 of 12.11's re-measure.** Tick steps lists and searches; loot goes back with a clean
+lint; the misplaced-step words say where it goes; the ABOUT rows and tooltips show; no Global.
+
+**1. The trap: a SECOND copy of a SAFETY step became LOCKED inside the tick.** step_survive was
+dropped from the toolbox after step_pace. The lint said "step_survive() twice in hunt_tick(): each
+step plays once a tick", but the learner could not delete the copy; only Ctrl+Z worked.
+- **The cause:** round 26 locked EVERY SAFETY or REQUIRED step inside hunt_tick(), whatever its
+  place.
+- **The decision:** lock only the copy that stands in its right place in the runner's order (the
+  one the lint accepts). An extra copy, or a misplaced copy, stays deletable and draggable, and
+  its rows say why. The editor and the lint must never disagree.
+- **The fix: one rule, written twice and pinned by the same cases.** It is `poring_flow.tick
+  places` for the lint and `lib/flow/tick.ts tickPlaces` for the editor.
+  - The accepted copies are the longest run of steps already in the runner's order, with at most
+    one copy of a step. Where two copies would do, the earlier one is accepted.
+  - Any other copy of an accepted step is an EXTRA copy. Lint: "step_survive() twice in
+    hunt_tick(): an extra copy: delete it (each step plays once a tick)".
+  - A step with no copy in its place is OUT OF ITS PLACE (its first copy; any other copies are
+    extra). Lint: "... it goes after X() and before Y()".
+  - Round 27's lint called the FIRST copy the real one, so a copy dropped at the top made the
+    original the "twice". Now the copy in its place is the real one wherever the others are.
+- **In the editor:**
+  - `lockedStep` locks only an accepted SAFETY or REQUIRED step. Its place is read fresh from the
+    tick's statements on every ask (`stepPlace`), so a drop, a delete or an undo is followed at
+    once.
+  - On an extra or a misplaced copy (`syncStepPlace`, from the paint):
+    - the padlock is a label of its own (`LOCK`), emptied on a copy the editor does not lock;
+    - its new WHY rows (hidden while empty) say "an extra copy: delete it (each step plays once a
+      tick)" or "out of its place: it goes after X() and before Y()".
+
+**2. Wording: "run()" is a name no block shows.** It now says "the runner's order" in:
+- the lint's tick words (holds / stands only / out of its place);
+- the hunt_tick tooltip;
+- the Tick steps label;
+- the step blocks' tooltip.
+
+The tests check that the misplaced words no longer say "run()".
+
+**Tests:**
+- tick_lock.test.ts (3 new, real Blockly on the page's load path: a tab loaded with events off):
+  - the shared cases (`PLACE_CASES`) through `tickPlaces`, and the words;
+  - a second step_survive dropped after step_pace, made from the toolbox item: deletable, with no
+    padlock and its WHY row; the original stays locked; deleting the copy gives the 20 steps
+    again, every place "ok";
+  - a misplaced only copy: not locked, says where it goes; moved back, it locks.
+  - Round 26's padlock test now reads the LOCK label.
+- test_runner_functions.py (the same 9 cases through `places`, and 1 new test): the extra copy's
+  words; a tick without it gives no tick_step finding; the misplaced words name the runner's order
+  and never run().
+
+**Not measured here (no browser): the re-measure list.**
+1. Tab tick: drop a second step_survive after step_pace.
+   - It shows no 🔒, and its rows say "an extra copy: delete it".
+   - It is deletable (Delete, the trashcan) and draggable.
+   - The original keeps its 🔒 and stays locked.
+   - Delete the copy: the lint is clean.
+2. Drag the only step_survive below step_pace: no 🔒, and "out of its place: it goes after
+   step_battle_log() and before step_engage()". Move it back: it locks.
+3. The words read "the runner's order", never "run()": the lint, the hunt_tick tooltip, the Tick
+   steps label.
 
 ## 13. Stage 5b-1: HuntState and the loop as steps (design written 2026-11-14 18:3x ICT from `date`, before any 5b code; offline only)
 

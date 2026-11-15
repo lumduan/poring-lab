@@ -559,7 +559,14 @@ export const BLOCK_DEFS: BlockDef[] = [
 /** The tab tick's category of the toolbox: hunt_tick() and the 20 step blocks (round 27's name). */
 export const TICK_CATEGORY = "Tick steps";
 
-export const LABEL_ROWS: Record<string, string> = { ROW_BADGE: "BADGE", ROW_RUN: "RUN", ROW_ABOUT: "ABOUT", ROW_ABOUT2: "ABOUT2", ROW_ABOUT3: "ABOUT3" };
+export const LABEL_ROWS: Record<string, string> = { ROW_BADGE: "BADGE", ROW_RUN: "RUN", ROW_ABOUT: "ABOUT", ROW_ABOUT2: "ABOUT2", ROW_ABOUT3: "ABOUT3", ROW_WHY: "WHY", ROW_WHY2: "WHY2", ROW_WHY3: "WHY3" };
+/** Round 28: a step block's WHY rows (an extra or a misplaced copy says why: tick.ts placeWords). */
+export const WHY_FIELDS = ["WHY", "WHY2", "WHY3"] as const;
+/** PURE: a step block's WHY rows for a place's words (wrapped inside hunt_tick()'s budget). */
+export function whyRows(words: string): Record<string, string> {
+  const lines = words ? wrapUnits(words, SETTING_ROW_BUDGET - SETTING_GEOMETRY.side - 24) : [];
+  return Object.fromEntries(WHY_FIELDS.map((f, i) => [f, i < WHY_FIELDS.length - 1 ? (lines[i] ?? "") : lines.slice(i).join(" ")]));
+}
 
 /** PURE (round 26, the reviewer: find_target's empty "( )" opened a picker saying "This block takes
  * no inputs"): does a hunt loop block show its inputs' row? Not when its catalogue entry takes no
@@ -580,7 +587,7 @@ export const DEF_ABOUT_WORDS: Record<string, string> = {
  * where the project has a Global node. */
 export function defTooltip(name: string, global: boolean): string {
   const g = global ? " In Global, every node can call it; the same name on a map replaces Global's there." : "";
-  if (name === TICK_FN) return `hunt_tick(): the hunt core's tick -- ${DEF_ABOUT_WORDS.hunt_tick}. Its step blocks play in run()'s order; a SAFETY or REQUIRED step is locked, an optional one may be left out. No block calls it.${g}`;
+  if (name === TICK_FN) return `hunt_tick(): the hunt core's tick -- ${DEF_ABOUT_WORDS.hunt_tick}. Its step blocks play in the runner's order; a SAFETY or REQUIRED step in its place is locked, an optional one may be left out, an extra copy is deleted. No block calls it.${g}`;
   if (name === HUNT_CALL) return `hunt_loop(): the hunt core's loop -- ${DEF_ABOUT_WORDS.hunt_loop}. Each turn finds a target and fights it.${g}`;
   return `A FUNCTION: any tab of this node can call it by its name. Its inputs as in Python: key, times=1, *args, **kwargs.${g}`;
 }
@@ -770,9 +777,15 @@ function roleDef(r: RunnerRole): BlockDef {
  * hunt_tick()'s body, one statement input in (layout.ts INDENT 20, taken at 24). */
 function stepDef(t: TickStep): BlockDef {
   const width = SETTING_ROW_BUDGET - SETTING_GEOMETRY.side - 24;
-  // round 26: a locked class's head row shows the padlock (tick.ts LOCKED_CLASSES)
-  const head = isLockedClass(t.klass) ? `${PADLOCK} ${stepBlock(t)}()` : `${stepBlock(t)}()`;
-  const lines = [head, ...wrapUnits(`${CLASS_WORDS[t.klass]} · ${t.words}`, width), ...(t.owner ? wrapUnits(`played while ${t.owner} plays`, width) : [])];
+  // round 26: a locked class's head row shows the padlock (tick.ts LOCKED_CLASSES); ➡️ round 28: as
+  // a label of its own (LOCK), which the editor empties on a copy it does not lock (an extra or a
+  // misplaced one), whose WHY rows say why (tick.ts placeWords; hidden while empty)
+  const lines = [...wrapUnits(`${CLASS_WORDS[t.klass]} · ${t.words}`, width), ...(t.owner ? wrapUnits(`played while ${t.owner} plays`, width) : [])];
+  const args: ArgDef[] = [];
+  const at = (a: ArgDef) => `%${args.push(a)}`;
+  const head = `${isLockedClass(t.klass) ? `${at({ type: "field_label", name: "LOCK", text: PADLOCK })} ` : ""}${stepBlock(t)}() ${at(endRow("ROW_HEAD"))}`;
+  const body = lines.map((l, i) => `${l} ${at(endRow(`ROW_LINE${i + 1}`))}`);
+  const why = WHY_FIELDS.map((f, i) => `${at({ type: "field_label", name: f, text: "", class: "pl-setting-var" })} ${at(endRow(i ? `ROW_${f}` : "ROW_WHY"))}`);
   const rule =
     t.klass === "optional"
       ? "OPTIONAL: it may be left out of hunt_tick() -- drag it out (it comes alone, the steps under it close up) or delete it; the runner then never plays it; it cannot be moved"
@@ -780,13 +793,13 @@ function stepDef(t: TickStep): BlockDef {
   return {
     ...stmt({
       type: stepType(t),
-      message0: lines.map((l, i) => `${l} %${i + 1}`).join(" "),
-      args0: lines.map((_, i) => endRow(i ? `ROW_LINE${i}` : "ROW_HEAD")),
+      message0: [head, ...body, ...why].join(" "),
+      args0: args,
       inputsInline: true,
-      tooltip: `${stepBlock(t)}(): a step of the hunt core's tick -- ${t.words}. ${t.owner ? `A mode step: it plays while ${t.owner} plays. ` : "Every tick, whichever block of the hunt loop plays. "}${rule}. The steps play in run()'s order (the runner's own).`,
+      tooltip: `${stepBlock(t)}(): a step of the hunt core's tick -- ${t.words}. ${t.owner ? `A mode step: it plays while ${t.owner} plays. ` : "Every tick, whichever block of the hunt loop plays. "}${rule}. The steps play in the runner's order; only the copy in its place counts (another copy is an extra one: delete it).`,
     }),
     style: STEP_STYLE[t.klass],
-    extensions: ["pl_tick_lock"],
+    extensions: ["pl_label_rows", "pl_tick_lock"],
   };
 }
 BLOCK_DEFS.push(...RUNNER_ROLES.map(roleDef), ...TICK_STEPS.map(stepDef));
@@ -1033,7 +1046,7 @@ export function toolbox(
   }
   const tick: ToolboxItem[] = [];
   if (scope.tab === TICK_TAB && onMap && TICK_STEPS.every((t) => blocks[stepBlock(t)])) {
-    tick.push(lbl(`The hunt core's tick: ${TICK_FN}() lists run()'s steps in their order (no ${TICK_FN}(): every step plays):`), { kind: "block", type: "pl_def", fields: { NAME: TICK_FN, PARAMS: "" } });
+    tick.push(lbl(`The hunt core's tick: ${TICK_FN}() lists the runner's steps in their order (no ${TICK_FN}(): every step plays):`), { kind: "block", type: "pl_def", fields: { NAME: TICK_FN, PARAMS: "" } });
     tick.push(lbl("Every tick (SAFETY: never left out or moved):"));
     for (const t of TICK_STEPS.slice(0, 9)) tick.push({ kind: "block", type: stepType(t), extraState: rest(blocks[stepBlock(t)]) });
     tick.push(lbl("The mode steps, played while the hunt loop's blocks play (only an optional one may be left out):"));

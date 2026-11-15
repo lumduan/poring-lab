@@ -648,6 +648,11 @@ Amendment B); a not-adopted model is never offered.
     what they do, e.g. "survive", "loot"), so a deleted optional step can be put back; dropped in
     the wrong place, the lint says where it goes. hunt_tick and hunt_loop now show their own rows
     and tooltips on the page; a function's tooltip names Global only where the project has one.
+  - **Round 28** ([planning/live-blocks.md](planning/live-blocks.md) 12.12): only the copy of a
+    SAFETY or REQUIRED step that stands in its place is locked; an extra copy (a second
+    step_survive) or one out of its place shows no 🔒, can be deleted or moved, and its rows say
+    why ("an extra copy: delete it" / "out of its place: it goes after ..."), as the lint does. The
+    words say "the runner's order", never "run()".
 - **No live run (the block editor):** nothing in the block editor reaches the executor, the mux or an input path (➡️ Run, above, is the one live path: the Run helper's player, never the editor). The backend's
   `/flows/*` routes only compute (public listener, LAN viewer, Origin; POSTs need the CSRF token,
   20 a minute; the Python view 120 a minute on its own budget since 2026-11-09). See [planning/mw2-block-editor.md](planning/mw2-block-editor.md) and

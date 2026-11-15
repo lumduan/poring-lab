@@ -11,16 +11,16 @@ import { fileURLToPath } from "node:url";
 
 import type * as BlocklyT from "blockly/core";
 
-import { inTick, lockedStep, register, syncDefAbout, takeOutAlone, tickDragOf } from "../../components/flows/blockly-register.ts";
+import { inTick, lockedStep, register, syncDefAbout, syncStepPlace, takeOutAlone, tickDragOf } from "../../components/flows/blockly-register.ts";
 import { warningText } from "./api.ts";
-import { ABOUT_FIELDS, argsRowShown, categoryOf, DEF_ABOUT_WORDS, defAbout, defTooltip, DEF_BY_TYPE, TICK_CATEGORY, toolbox, toolboxBlocks, toolboxCatalogue, varTooltip } from "./blockdefs.ts";
+import { ABOUT_FIELDS, argsRowShown, categoryOf, DEF_ABOUT_WORDS, defAbout, defTooltip, DEF_BY_TYPE, TICK_CATEGORY, toolbox, toolboxBlocks, toolboxCatalogue, varTooltip, WHY_FIELDS } from "./blockdefs.ts";
 import { tabToWorkspace } from "./blocks.ts";
 import { rowsOf } from "./layout.ts";
 import { playsHunt, refChoices, type PickerData, type PickSpec } from "./pickers.ts";
 import { HUNT_TAB, nodeById, tabOf, xmasFunctionsProject } from "./project.ts";
 import { SETTING_ROW_BUDGET } from "./settings.ts";
 import { BLOCK_STYLES, contrast } from "./theme.ts";
-import { HUNT_CALL, isLockedClass, PADLOCK, STEP_BLOCKS, STEP_STYLE, stepBlock, stepType, TICK_FN, TICK_STEPS, TICK_TAB } from "./tick.ts";
+import { HUNT_CALL, isLockedClass, PADLOCK, placeWords, STEP_BLOCKS, STEP_STYLE, stepBlock, stepType, TICK_FN, TICK_STEPS, TICK_TAB, tickPlaces } from "./tick.ts";
 
 const require = createRequire(import.meta.url);
 const lib = (p: string) => fileURLToPath(new URL(`../../../node_modules/blockly/${p}`, import.meta.url));
@@ -117,7 +117,9 @@ test("round 26: each class its padlock and colour -- SAFETY red, REQUIRED blue (
     const d = DEF_BY_TYPE[stepType(t)];
     assert.equal(d.style, STEP_STYLE[t.klass]);
     const head = rowsOf({ type: stepType(t), id: "x" }, {}, 20)[0].what;
-    assert.equal(head.includes(PADLOCK), isLockedClass(t.klass), `${t.name}: ${head}`);
+    // (round 28: the padlock is the head row's own label, LOCK, emptied on a copy not locked)
+    const lock = (d.args0 ?? []).find((a) => "name" in a && a.name === "LOCK") as { text?: string } | undefined;
+    assert.equal(lock?.text === PADLOCK, isLockedClass(t.klass), `${t.name}: ${head}`);
     assert.ok(head.endsWith(`${stepBlock(t)}()`));
     for (const r of rowsOf({ type: stepType(t), id: "x" }, {}, 20)) assert.ok(r.w <= SETTING_ROW_BUDGET, `${t.name}: ${r.what}`);
   }
@@ -278,4 +280,77 @@ test("round 27: a function's and a variable's tooltip names Global only where th
   assert.match(varTooltip(true), /Global/);
   assert.doesNotMatch(String(DEF_BY_TYPE.pl_def.tooltip), /Global/); // the static one (the flyout)
   for (const n of [TICK_FN, HUNT_CALL]) assert.ok(defTooltip(n, false).includes(DEF_ABOUT_WORDS[n]) && !/Global/.test(defTooltip(n, false)), n);
+});
+
+// --- round 28 (live-blocks.md 12.12, the reviewer's round-27 re-measure) ---------------------------
+/** The cases the engine's rule is pinned by too (test_runner_functions.py PLACE_CASES): a tick's
+ * step blocks -> the places that are not "ok" ([index, kind, where]). */
+const A = [...STEP_BLOCKS];
+const without = (b: string) => A.filter((x) => x !== b);
+const PLACE_CASES: [string, (string | null)[], [number, string, string][]][] = [
+  ["in order", A, []],
+  ["a second survive after pace", [...A, "step_survive"], [[20, "extra", ""]]],
+  ["a second survive at the top", ["step_survive", ...A], [[0, "extra", ""]]],
+  ["a second survive beside it", [...A.slice(0, 6), "step_survive", ...A.slice(6)], [[6, "extra", ""]]],
+  ["loot put back at the end", [...without("step_loot"), "step_loot"], [[19, "misplaced", "it goes after step_hold() and before step_after()"]]],
+  ["sense before begin", [A[1], A[0], ...A.slice(2)], [[0, "misplaced", "it goes after step_begin() and before step_hook()"]]],
+  ["survive only at the end", [...without("step_survive"), "step_survive"], [[19, "misplaced", "it goes after step_battle_log() and before step_engage()"]]],
+  ["two loots, none in place", [...without("step_loot"), "step_loot", "step_loot"], [[19, "misplaced", "it goes after step_hold() and before step_after()"], [20, "extra", ""]]],
+  ["a call in the tick", [...A.slice(0, 3), null, ...A.slice(3)], [[3, "other", ""]]],
+];
+
+test("round 28: which copy the tick accepts -- the lint's rule (the same cases pin the engine's)", () => {
+  for (const [why, blocks, want] of PLACE_CASES) {
+    const got = tickPlaces(blocks).flatMap((p, i): [number, string, string][] => (p.kind === "ok" ? [] : [[i, p.kind, p.where]]));
+    assert.deepEqual(got, want, why);
+  }
+  assert.equal(placeWords({ kind: "extra", where: "" }), "an extra copy: delete it (each step plays once a tick)");
+  assert.equal(placeWords({ kind: "misplaced", where: "it goes after step_hold() and before step_after()" }), "out of its place: it goes after step_hold() and before step_after()");
+  assert.equal(placeWords({ kind: "ok", where: "" }), "");
+});
+
+test("round 28: a SECOND step_survive dropped after step_pace is deletable and says why; the original stays locked; deleting the copy leaves a tick the lint takes", () => {
+  const { ws, step, steps } = tickTab(); // the page's path: a tab LOADED with events off
+  const original = step("survive");
+  // a person drops step_survive from the toolbox after step_pace (Blockly makes it from the item)
+  const item = toolboxBlocks(toolbox(toolboxCatalogue(ENGINE_CAT), { node: "map", main: false, tab: TICK_TAB })).find((x) => x.item.type === stepType(TICK_STEPS.find((t) => t.name === "survive")!))!.item;
+  const { kind: _k, ...state } = item;
+  void _k;
+  const copy = B.serialization.blocks.append(state as unknown as BlocklyT.serialization.blocks.State, ws);
+  step("pace").nextConnection!.connect(copy.previousConnection!);
+  assert.equal(steps().length, 21);
+  assert.ok(inTick(copy));
+  assert.ok(!lockedStep(copy) && copy.isDeletable(), "the copy: deletable");
+  assert.ok(lockedStep(original) && !original.isDeletable(), "the original: locked");
+  // its rows say why, and it shows no padlock (the editor's paint: syncStepPlace)
+  syncStepPlace(B, copy);
+  syncStepPlace(B, original);
+  assert.equal(WHY_FIELDS.map((f) => copy.getFieldValue(f)).filter(Boolean).join(" "), "an extra copy: delete it (each step plays once a tick)");
+  assert.ok(copy.getInput("ROW_WHY")!.isVisible());
+  assert.equal(copy.getFieldValue("LOCK"), "");
+  assert.equal(original.getFieldValue("LOCK"), PADLOCK);
+  assert.ok(!original.getInput("ROW_WHY")!.isVisible());
+  // delete the copy: the tick is the 20 steps in order again, every place "ok", the original locked
+  copy.dispose(true);
+  assert.deepEqual(steps(), TICK_STEPS.map(stepType));
+  const names = steps().map((t) => stepBlock(TICK_STEPS.find((s) => stepType(s) === t)!));
+  assert.ok(tickPlaces(names).every((p) => p.kind === "ok"));
+  assert.ok(lockedStep(original));
+  ws.dispose();
+});
+
+test("round 28: a misplaced copy of a SAFETY step is not locked and says where it goes; moved back, it locks", () => {
+  const { ws, step } = tickTab();
+  const survive = step("survive");
+  takeOutAlone(survive);
+  step("pace").nextConnection!.connect(survive.previousConnection!); // survive, the only copy, last
+  assert.ok(!lockedStep(survive) && survive.isDeletable());
+  syncStepPlace(B, survive);
+  assert.equal(WHY_FIELDS.map((f) => survive.getFieldValue(f)).filter(Boolean).join(" "), "out of its place: it goes after step_battle_log() and before step_engage()");
+  takeOutAlone(survive);
+  step("battle_log").nextConnection!.connect(survive.previousConnection!); // back in its place
+  assert.ok(lockedStep(survive) && !survive.isDeletable());
+  syncStepPlace(B, survive);
+  assert.ok(!survive.getInput("ROW_WHY")!.isVisible());
+  ws.dispose();
 });
