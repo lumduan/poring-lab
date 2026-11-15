@@ -643,6 +643,11 @@ Amendment B); a not-adopted model is never offered.
     and its target picker lists no settings; an info never shows a ⚠ (the Lint pane lists it, in
     plain words); the Python view notes a hunt block's time box (`# at most 120 s`); the old
     one-block runner is in Advanced > Old projects.
+  - **Round 27** ([planning/live-blocks.md](planning/live-blocks.md) 12.11): the tick tab's toolbox
+    has **Tick steps** (hunt_tick() and the 20 step blocks; the search finds them by name and by
+    what they do, e.g. "survive", "loot"), so a deleted optional step can be put back; dropped in
+    the wrong place, the lint says where it goes. hunt_tick and hunt_loop now show their own rows
+    and tooltips on the page; a function's tooltip names Global only where the project has one.
 - **No live run (the block editor):** nothing in the block editor reaches the executor, the mux or an input path (➡️ Run, above, is the one live path: the Run helper's player, never the editor). The backend's
   `/flows/*` routes only compute (public listener, LAN viewer, Origin; POSTs need the CSRF token,
   20 a minute; the Python view 120 a minute on its own budget since 2026-11-09). See [planning/mw2-block-editor.md](planning/mw2-block-editor.md) and

@@ -130,6 +130,13 @@ def test_an_optional_step_may_be_left_out_and_the_plan_says_so() -> None:
     ("a REQUIRED step left out", [b for b in ALL if b != "step_pace"],
      "leaves out step_pace(), a REQUIRED step"),
     ("a step moved", ["step_sense", "step_begin", *ALL[2:]], "step_sense() is out of its place"),
+    # round 27: a step put back at the wrong place -- the words say where it goes
+    ("a step dropped at the end", [*[b for b in ALL if b != "step_loot"], "step_loot"],
+     "step_loot() is out of its place in hunt_tick(): it goes after step_hold() and before "
+     "step_after()"),
+    ("a step dropped first", ["step_survive", *[b for b in ALL if b != "step_survive"]],
+     "step_survive() is out of its place in hunt_tick(): it goes after step_battle_log() and "
+     "before step_engage()"),
     ("a step twice", [*ALL, "step_pace"], "step_pace() twice in hunt_tick()"),
 ])  # fmt: skip
 def test_the_tick_refuses_each_unsafe_edit_in_words(why: str, body: list[str], words: str) -> None:

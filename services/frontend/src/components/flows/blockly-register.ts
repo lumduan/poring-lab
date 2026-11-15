@@ -5,7 +5,7 @@
 import type * as BlocklyT from "blockly/core";
 
 import { registerPickers, wrapLineField } from "./blockly-pickers.ts";
-import { ABOUT_FIELDS, BLOCK_DEFS, defAbout, LABEL_ROWS } from "../../lib/flow/blockdefs.ts";
+import { ABOUT_FIELDS, BLOCK_DEFS, defAbout, defTooltip, LABEL_ROWS } from "../../lib/flow/blockdefs.ts";
 import { huntDef, type HuntRules } from "../../lib/flow/hunt.ts";
 import { wrapExpr } from "../../lib/flow/pickers.ts";
 import { noteLines, SETTING_NOTE_ROWS, settingOfType, unitOf } from "../../lib/flow/settings.ts";
@@ -111,11 +111,12 @@ export function register(B: typeof BlocklyT): void {
   });
   // round 26: the hunt core's two functions say what they are (blockdefs.ts DEF_ABOUT_WORDS), by
   // their name, in the flyout too
+  // round 27 (the reviewer: the rows never showed on the page): the rows follow the NAME field's
+  // VALUE through its validator, which Blockly calls whenever the value is set -- also while a
+  // workspace or the flyout LOADS a block (with events off: an onchange never fired then, and at
+  // init the name is still the default "my_function")
   B.Extensions.register("pl_def_about", function (this: BlocklyT.Block) {
-    syncDefAbout(B, this);
-    this.setOnChange(function (this: BlocklyT.Block, e: BlocklyT.Events.Abstract) {
-      if (e.type === B.Events.BLOCK_CHANGE && (e as BlocklyT.Events.BlockChange).blockId === this.id) syncDefAbout(B, this);
-    });
+    watchDefAbout(B, this);
   });
   // round 26 (the reviewer's 5c review): a SAFETY or REQUIRED step in hunt_tick() cannot be
   // deleted or dragged out; any step is dragged out ALONE (tickLock)
@@ -193,8 +194,12 @@ export function syncLabelRows(B: typeof BlocklyT, b: BlocklyT.Block): boolean {
 /** PURE of the page (Blockly only; round 26): a function's ABOUT rows by its name (hunt_tick: who
  * plays it; hunt_loop: its t is not an input to pass); empty and hidden for any other. True: the
  * rows changed. */
-export function syncDefAbout(B: typeof BlocklyT, b: BlocklyT.Block): boolean {
-  const about = defAbout(String(b.getFieldValue("NAME") ?? "").trim());
+export function syncDefAbout(B: typeof BlocklyT, b: BlocklyT.Block, name?: string): boolean {
+  const fn = String(name ?? b.getFieldValue("NAME") ?? "").trim();
+  const about = defAbout(fn);
+  // (the hunt core's two functions: their own tooltip, in the flyout too; the editor's paint sets
+  // every function's, naming Global only where the project has one)
+  if (Object.keys(about).length || b.workspace.isFlyout) b.setTooltip(defTooltip(fn, false));
   const was = B.Events.isEnabled();
   if (was) B.Events.disable();
   try {
@@ -206,6 +211,16 @@ export function syncDefAbout(B: typeof BlocklyT, b: BlocklyT.Block): boolean {
     if (was) B.Events.enable();
   }
   return syncLabelRows(B, b);
+}
+
+/** Round 27: a function's ABOUT rows follow its NAME field's value (its validator: called on every
+ * set of the value, a workspace's or the flyout's load included). */
+function watchDefAbout(B: typeof BlocklyT, block: BlocklyT.Block): void {
+  block.getField("NAME")?.setValidator((v: unknown) => {
+    syncDefAbout(B, block, String(v ?? ""));
+    return undefined; // the value as it is
+  });
+  syncDefAbout(B, block);
 }
 
 /** Round 26: is the block inside hunt_tick()'s body (the tick of the hunt core)? */

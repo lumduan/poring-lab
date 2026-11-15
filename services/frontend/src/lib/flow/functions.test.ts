@@ -8,7 +8,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { test } from "node:test";
 
-import { categoryOf, DEF_BY_TYPE, HUNT_LOOP_TAB, namesOf, ROLE_OF_TYPE, roleType, RUNNER_ROLES, toolbox, toolboxBlocks } from "./blockdefs.ts";
+import { categoryOf, DEF_BY_TYPE, HUNT_LOOP_TAB, namesOf, ROLE_OF_TYPE, roleType, RUNNER_ROLES, TICK_CATEGORY, toolbox, toolboxBlocks } from "./blockdefs.ts";
 import { shelfItems, tabFromWorkspace, tabToWorkspace, type Workspace } from "./blocks.ts";
 import { canonical } from "./ir.ts";
 import { layoutKey, overlaps, rowsOf, shelfWidth, STACK_GAP } from "./layout.ts";
@@ -202,12 +202,12 @@ test("the toolbox: hunt_loop() in a map's main, the Roles on the tab hunt, the T
   const loopDef = toolboxBlocks(hunt).find((x) => x.category === "Hunt" && x.item.type === "pl_def");
   assert.equal((loopDef?.item.fields as Record<string, unknown>).PARAMS, "t=False"); // main may call it
   const tb = toolbox(CAT, { node: "map", main: false, tab: TICK_TAB });
-  const tick = toolboxBlocks(tb).filter((x) => x.category === "Tick").map((x) => x.item);
+  const tick = toolboxBlocks(tb).filter((x) => x.category === TICK_CATEGORY).map((x) => x.item);
   assert.deepEqual([tick[0].type, (tick[0].fields as Record<string, unknown>).NAME], ["pl_def", TICK_FN]);
   assert.deepEqual(tick.slice(1).map((i) => i.type), TICK_STEPS.map(stepType));
   for (const i of tick.slice(1)) assert.deepEqual((i.extraState as { rest: unknown }).rest, { concept: "core.tick_step", timeout_s: 1, on_fail: "stop", outcome_to: null, note: null });
-  for (const scope of [{ tab: "keys" }, { tab: HUNT_TAB }, { tab: "main", main: true }]) assert.equal(categoryOf(toolbox(CAT, { node: "map", main: false, ...scope }), "Tick"), undefined);
-  assert.equal(categoryOf(toolbox(CAT, { node: "global", main: false, tab: TICK_TAB }), "Tick"), undefined);
+  for (const scope of [{ tab: "keys" }, { tab: HUNT_TAB }, { tab: "main", main: true }]) assert.equal(categoryOf(toolbox(CAT, { node: "map", main: false, ...scope }), TICK_CATEGORY), undefined);
+  assert.equal(categoryOf(toolbox(CAT, { node: "global", main: false, tab: TICK_TAB }), TICK_CATEGORY), undefined);
   assert.equal(categoryOf(toolbox(CAT, { node: "map", main: false, tab: "keys" }), "Roles"), undefined);
   const more = toolboxBlocks(tb).filter((x) => x.category === "More skills").map((x) => (x.item.fields as Record<string, unknown>)?.BLOCK);
   for (const b of STEP_BLOCKS) assert.ok(!more.includes(b), b);

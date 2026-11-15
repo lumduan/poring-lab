@@ -484,7 +484,7 @@ export const BLOCK_DEFS: BlockDef[] = [
     mutator: STATE,
     extensions: ["pl_label_rows", "pl_def_about"],
     inputsInline: true,
-    tooltip: "A FUNCTION: any tab of this node (and, in Global, every node) can call it by its name. Its inputs as in Python: key, times=1, *args, **kwargs. The same name on a map replaces Global's there",
+    tooltip: defTooltip("", false),
   },
   {
     type: "pl_vardecl",
@@ -492,7 +492,7 @@ export const BLOCK_DEFS: BlockDef[] = [
     args0: [text("NAME", "x"), { type: "input_value", name: "VALUE" }],
     style: st("pl_vardecl"),
     mutator: STATE,
-    tooltip: "A variable of this tab (in Global: shared by every node); its first value. A map's variable of the same name replaces Global's there",
+    tooltip: varTooltip(false),
   },
   {
     // matpilot round 17 N4: EVERY trigger field the Python view writes (@on(..., cooldown_s=0.7,
@@ -556,6 +556,9 @@ export const BLOCK_DEFS: BlockDef[] = [
 /** Round 21 (the re-measure of round 20): the input names of the rows the editor hides while their
  * label is empty (blockly-register.ts pl_label_rows: the badge before the catalogue loads, the run
  * line until a simulate run). */
+/** The tab tick's category of the toolbox: hunt_tick() and the 20 step blocks (round 27's name). */
+export const TICK_CATEGORY = "Tick steps";
+
 export const LABEL_ROWS: Record<string, string> = { ROW_BADGE: "BADGE", ROW_RUN: "RUN", ROW_ABOUT: "ABOUT", ROW_ABOUT2: "ABOUT2", ROW_ABOUT3: "ABOUT3" };
 
 /** PURE (round 26, the reviewer: find_target's empty "( )" opened a picker saying "This block takes
@@ -572,6 +575,20 @@ export const DEF_ABOUT_WORDS: Record<string, string> = {
   hunt_tick: "played by find_target and fight_target, every tick (about 200 ms)",
   hunt_loop: "t: the target (it starts empty); main calls hunt_loop() with no inputs",
 };
+/** PURE (round 27, the reviewer: the def's tooltip named Global in a project with none): a
+ * function's tooltip -- hunt_tick's and hunt_loop's carry their ABOUT words; Global is named only
+ * where the project has a Global node. */
+export function defTooltip(name: string, global: boolean): string {
+  const g = global ? " In Global, every node can call it; the same name on a map replaces Global's there." : "";
+  if (name === TICK_FN) return `hunt_tick(): the hunt core's tick -- ${DEF_ABOUT_WORDS.hunt_tick}. Its step blocks play in run()'s order; a SAFETY or REQUIRED step is locked, an optional one may be left out. No block calls it.${g}`;
+  if (name === HUNT_CALL) return `hunt_loop(): the hunt core's loop -- ${DEF_ABOUT_WORDS.hunt_loop}. Each turn finds a target and fights it.${g}`;
+  return `A FUNCTION: any tab of this node can call it by its name. Its inputs as in Python: key, times=1, *args, **kwargs.${g}`;
+}
+/** PURE (round 27): a variable's tooltip; Global is named only where the project has one. */
+export function varTooltip(global: boolean): string {
+  return `A variable of this tab; its first value.${global ? " In Global: shared by every node; a map's variable of the same name replaces Global's there." : ""}`;
+}
+
 /** The fields of a function's ABOUT rows (at most three lines, each inside the 300-unit budget). */
 export const ABOUT_FIELDS = ["ABOUT", "ABOUT2", "ABOUT3"] as const;
 /** PURE: a function's ABOUT rows by its name (wrapped to the 300-unit budget; {} for any other). */
@@ -839,6 +856,21 @@ export function namesOf(type: string, def?: BlockDef): { fields: Set<string>; sa
 // Conditions, Sensors, Operators, Variables, Functions, then Advanced (folding open, as MakeCode's)
 // with every other catalogue block and the map-event blocks. Each category is styled as MatPilot's.
 export type CatBlock = { concept: string; timeout_s: number; badge?: string; kind?: string };
+
+/** The core blocks a person places (no input of their own): the save point, stage 4a's trained
+ * data and its two waits (live-blocks.md 3.4), and (round 27) the tick's 20 step blocks -- the
+ * catalogue marks them core (core.tick_step), so round 26's editor dropped them all and the tab
+ * tick had no Tick category: a deleted optional step came back only by Undo. */
+export const CORE_OFFERED: readonly string[] = ["assert_save_point", "use_model", "wait_steal", "wait_kill", ...STEP_BY_BLOCK.keys()];
+/** PURE (round 27): the catalogue's blocks as the toolbox offers them (BlockEditor's toolbox): every
+ * action, and of the core blocks only CORE_OFFERED. */
+export function toolboxCatalogue(catalogue: { blocks?: Record<string, { name: string; spec: { kind: string; concept: string; timeout_s: number }; badge?: string }> } | null): Record<string, CatBlock> {
+  return Object.fromEntries(
+    Object.entries(catalogue?.blocks ?? {})
+      .filter(([, b]) => b.spec.kind !== "core" || CORE_OFFERED.includes(b.name))
+      .map(([n, b]) => [n, { concept: b.spec.concept, timeout_s: b.spec.timeout_s, badge: b.badge }]),
+  );
+}
 export type ToolboxItem =
   | { kind: "block"; type: string; fields?: Record<string, unknown>; extraState?: unknown; inputs?: unknown }
   | { kind: "label"; text: string };
@@ -1095,7 +1127,7 @@ export function toolbox(
       ...(recipes.length ? [cat("Monsters", "mp_sensor_category", recipes)] : []),
       ...(huntLoop.length ? [cat("Hunt", "mp_movement_category", huntLoop)] : []),
       ...(roles.length ? [cat("Roles", "mp_setup_category", roles)] : []), // 5c
-      ...(tick.length ? [cat("Tick", "mp_movement_category", tick)] : []), // 5c
+      ...(tick.length ? [cat(TICK_CATEGORY, "mp_movement_category", tick)] : []), // 5c
       cat("Actions", "mp_output_category", actions),
       cat("Control", "loop_category", control),
       cat("Conditions", "loop_category", conditions),

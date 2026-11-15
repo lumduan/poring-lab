@@ -186,16 +186,47 @@ def _body(flow: ir.Flow, name: str, owner: str | None, add: Callable[..., None])
         seen.append(st.block)
     order = [b for b in STEP_BLOCKS if b in seen]
     if seen != order:
-        moved = next(b for b, want in zip(seen, order, strict=True) if b != want)
-        add(name, moved, "tick_step", f"{moved}() is out of its place in {TICK}(): the steps play "
-            f"in run()'s order ({', '.join(b + '()' for b in STEP_BLOCKS)}); the hunt core's "
-            "hand-backs and guards rely on it", owner)  # fmt: skip
+        # round 27 (the reviewer: a step put back from the toolbox goes in its own place only): the
+        # words say WHERE it goes, between the steps that stay in run()'s order around it
+        for moved in _out_of_place(seen):
+            add(name, moved, "tick_step", f"{moved}() is out of its place in {TICK}(): "
+                f"{_where(moved, seen)} (the steps play in run()'s order; the hunt core's "
+                "hand-backs and guards rely on it)", owner)  # fmt: skip
     for s in STEPS:
         if s.klass != "optional" and s.block not in seen:
             kind = "a SAFETY step" if s.klass == "safety" else "a REQUIRED step"
             add(name, s.block, "tick_step", f"{TICK}() leaves out {s.block}(), {kind} ({s.words}): "
                 f"without it {s.why}. Only {', '.join(PREFIX + o + '()' for o in OPTIONAL)} may "
                 "be left out", owner)  # fmt: skip
+
+
+def _out_of_place(seen: list[str]) -> list[str]:
+    """The steps out of run()'s order: those outside a longest run of steps already in order (a
+    step dropped at the wrong place, not every step after it)."""
+    rank = [STEP_BLOCKS.index(b) for b in seen]
+    best: list[list[int]] = []  # best[i]: the longest in-order chain of indices ending at i
+    for i, r in enumerate(rank):
+        # (of chains as long, the one ending at the earlier step: room for the rest)
+        before = [best[j] for j in range(i) if rank[j] < r]
+        chain = max(before, key=lambda c: (len(c), -rank[c[-1]])) if before else []
+        best.append([*chain, i])
+    longest: list[int] = max(best, key=len) if best else []
+    keep = set(longest)
+    return [b for i, b in enumerate(seen) if i not in keep]
+
+
+def _where(moved: str, seen: list[str]) -> str:
+    """Where a step goes: after the step before it in run()'s order, before the one after it (of
+    the steps the tick holds)."""
+    at = STEP_BLOCKS.index(moved)
+    have = [b for b in STEP_BLOCKS if b in seen and b != moved]
+    before = next((b for b in reversed(have) if STEP_BLOCKS.index(b) < at), None)
+    after = next((b for b in have if STEP_BLOCKS.index(b) > at), None)
+    if before and after:
+        return f"it goes after {before}() and before {after}()"
+    if after:
+        return f"it goes first, before {after}()"
+    return f"it goes last, after {before}()" if before else "it goes in its own place"
 
 
 def is_step(a: ir.ActionStmt) -> bool:

@@ -13,7 +13,7 @@ import type * as BlocklyT from "blockly/core";
 
 import { inTick, lockedStep, register, syncDefAbout, takeOutAlone, tickDragOf } from "../../components/flows/blockly-register.ts";
 import { warningText } from "./api.ts";
-import { ABOUT_FIELDS, argsRowShown, categoryOf, DEF_ABOUT_WORDS, defAbout, DEF_BY_TYPE, toolbox, toolboxBlocks } from "./blockdefs.ts";
+import { ABOUT_FIELDS, argsRowShown, categoryOf, DEF_ABOUT_WORDS, defAbout, defTooltip, DEF_BY_TYPE, TICK_CATEGORY, toolbox, toolboxBlocks, toolboxCatalogue, varTooltip } from "./blockdefs.ts";
 import { tabToWorkspace } from "./blocks.ts";
 import { rowsOf } from "./layout.ts";
 import { playsHunt, refChoices, type PickerData, type PickSpec } from "./pickers.ts";
@@ -193,4 +193,89 @@ test("round 26: the old one-block runner is in Advanced (Old projects), so main'
   assert.ok(labels(tb).some((l) => l.includes("the old one-block runner (old projects")));
   const hunt = toolbox(CAT, { node: "map", main: false, tab: HUNT_TAB });
   assert.ok(!labels(hunt).some((l) => /dungeon_hunt/.test(l)), labels(hunt).join(" "));
+});
+
+// --- round 27 (live-blocks.md 12.11, the reviewer's round-26 re-measure) ---------------------------
+/** A catalogue as GET /flows/catalogue serves it, its kinds the engine's (the step blocks are CORE:
+ * core.tick_step; the hunt loop's are actions). */
+const ENGINE_CAT = {
+  blocks: Object.fromEntries([
+    ...STEP_BLOCKS.map((n) => [n, { name: n, spec: { kind: "core", concept: "core.tick_step", timeout_s: 1 }, badge: "core" }]),
+    ...["find_target", "fight_target", "dungeon_hunt"].map((n) => [n, { name: n, spec: { kind: "action", concept: "combat.hunt", timeout_s: n === "fight_target" ? 300 : 120 }, badge: "unverified" }]),
+    ["use_model", { name: "use_model", spec: { kind: "core", concept: "core.use_model", timeout_s: 1 }, badge: "core" }],
+    ["some_core", { name: "some_core", spec: { kind: "core", concept: "core.x", timeout_s: 1 }, badge: "core" }],
+  ]),
+};
+
+test("round 27: the tab tick offers its 20 step blocks in a 'Tick steps' category -- through the page's own catalogue filter (it dropped every core block)", () => {
+  const cat = toolboxCatalogue(ENGINE_CAT); // what BlockEditor's toolboxOf hands toolbox()
+  for (const b of STEP_BLOCKS) assert.ok(cat[b], `${b} offered`);
+  assert.ok(!cat.some_core && cat.use_model); // other core blocks as before
+  const tb = toolbox(cat, { node: "map", main: false, tab: TICK_TAB });
+  const tick = toolboxBlocks(tb).filter((x) => x.category === TICK_CATEGORY).map((x) => x.item);
+  assert.deepEqual([tick[0].type, (tick[0].fields as Record<string, unknown>).NAME], ["pl_def", TICK_FN]);
+  assert.deepEqual(tick.slice(1).map((i) => i.type), TICK_STEPS.map(stepType));
+  // the positive case: round 26's filter (core blocks but the four) left the tab no category at all
+  const old = Object.fromEntries(Object.entries(cat).filter(([n]) => ["assert_save_point", "use_model", "wait_steal", "wait_kill"].includes(n) || ENGINE_CAT.blocks[n as keyof typeof ENGINE_CAT.blocks]?.spec.kind !== "core"));
+  assert.equal(categoryOf(toolbox(old, { node: "map", main: false, tab: TICK_TAB }), TICK_CATEGORY), undefined);
+  // only the tab tick of a map node has it
+  assert.equal(categoryOf(toolbox(cat, { node: "map", main: false, tab: "keys" }), TICK_CATEGORY), undefined);
+  assert.equal(categoryOf(toolbox(cat, { node: "global", main: false, tab: TICK_TAB }), TICK_CATEGORY), undefined);
+});
+
+test("round 27: the flyout's step blocks are the real ones -- each found by its name and its words; locked only once inside hunt_tick()", () => {
+  const tb = toolbox(toolboxCatalogue(ENGINE_CAT), { node: "map", main: false, tab: TICK_TAB });
+  const ws = new B.Workspace();
+  const words = new Map<string, string>();
+  for (const { item } of toolboxBlocks(tb).filter((x) => x.category === TICK_CATEGORY && x.item.type !== "pl_def")) {
+    const { kind: _k, ...state } = item;
+    void _k;
+    const b = B.serialization.blocks.append(state as unknown as BlocklyT.serialization.blocks.State, ws); // as the flyout and the search make them
+    words.set(b.type, b.toString());
+    assert.ok(!lockedStep(b) && b.isDeletable(), `${b.type}: free in the flyout / out of the tick`);
+  }
+  assert.equal(words.size, 20);
+  const find = (q: string) => [...words].filter(([, w]) => w.toLowerCase().includes(q)).map(([t]) => t);
+  assert.deepEqual(find("survive"), ["pl_step_survive"]); // the search's words (blockly-search.ts: toString)
+  assert.ok(find("loot").includes("pl_step_loot"));
+  assert.ok(find("potion").includes("pl_step_survive")); // by what it does
+  ws.dispose();
+});
+
+test("round 27: hunt_tick's and hunt_loop's ABOUT rows show on the page's path -- a workspace LOADED with events off, and a toolbox item", () => {
+  for (const [tab, name] of [[TICK_TAB, TICK_FN], [HUNT_TAB, HUNT_CALL]] as const) {
+    const ws = new B.Workspace();
+    B.Events.disable();
+    try {
+      B.serialization.workspaces.load(tabToWorkspace(xmasFunctionsProject(), { node: NODE, tab }) as unknown as object, ws); // as BlockEditor loads a tab
+    } finally {
+      B.Events.enable();
+    }
+    const def = ws.getTopBlocks(false).find((b) => b.type === "pl_def" && b.getFieldValue("NAME") === name)!;
+    const shown = ABOUT_FIELDS.map((f) => def.getFieldValue(f)).filter(Boolean).join(" ");
+    assert.equal(shown, DEF_ABOUT_WORDS[name], `${name} on load`);
+    assert.ok(def.getInput("ROW_ABOUT")!.isVisible());
+    assert.match(String(def.getTooltip()), new RegExp(DEF_ABOUT_WORDS[name].slice(0, 20).replace(/[()]/g, "\\$&")));
+    // a function renamed by typing loses the rows (the validator follows the value)
+    def.getField("NAME")!.setValue("my_function");
+    assert.ok(!def.getInput("ROW_ABOUT")!.isVisible());
+    ws.dispose();
+  }
+  // the flyout's hunt_tick def (the toolbox item, fields from JSON)
+  const ws = new B.Workspace();
+  const item = toolboxBlocks(toolbox(toolboxCatalogue(ENGINE_CAT), { node: "map", main: false, tab: TICK_TAB })).find((x) => x.item.type === "pl_def")!.item;
+  const { kind: _k, ...state } = item;
+  void _k;
+  const def = B.serialization.blocks.append(state as unknown as BlocklyT.serialization.blocks.State, ws);
+  assert.equal(ABOUT_FIELDS.map((f) => def.getFieldValue(f)).filter(Boolean).join(" "), DEF_ABOUT_WORDS[TICK_FN]);
+  ws.dispose();
+});
+
+test("round 27: a function's and a variable's tooltip names Global only where the project has one", () => {
+  assert.doesNotMatch(defTooltip("heal", false), /Global/);
+  assert.match(defTooltip("heal", true), /replaces Global's there/);
+  assert.doesNotMatch(varTooltip(false), /Global/);
+  assert.match(varTooltip(true), /Global/);
+  assert.doesNotMatch(String(DEF_BY_TYPE.pl_def.tooltip), /Global/); // the static one (the flyout)
+  for (const n of [TICK_FN, HUNT_CALL]) assert.ok(defTooltip(n, false).includes(DEF_ABOUT_WORDS[n]) && !/Global/.test(defTooltip(n, false)), n);
 });
