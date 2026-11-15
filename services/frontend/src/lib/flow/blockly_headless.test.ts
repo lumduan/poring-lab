@@ -17,7 +17,7 @@ import { BLOCK_DEFS, toolbox, toolboxBlocks } from "./blockdefs.ts";
 import { fromWorkspace, type Scope, tabFromWorkspace, tabToWorkspace, toWorkspace, type Workspace } from "./blocks.ts";
 import { canonical, clone, type Flow } from "./ir.ts";
 import type { Models } from "./models.ts";
-import { nodeById, sampleProject, xmasHuntProject, xmasProject } from "./project.ts";
+import { nodeById, sampleProject, xmasFunctionsProject, xmasHuntProject, xmasProject } from "./project.ts";
 import { noteLines, SETTING_BLOCKS, SETTING_BY_NAME, settingType, withSettingTabs } from "./settings.ts";
 import { FIXTURES, fixture, sessionProject } from "./testkit.ts";
 
@@ -92,7 +92,7 @@ test("IR -> the real Blockly -> IR is exact: the fixtures, the starter and the m
 test("PROJECT tabs -> the real Blockly -> the project is exact: every node's every tab of the ready-made projects", () => {
   // the one box (its runner block with the fifth role), the sample, and the login-start project
   // (a runner block with four roles: the empty home field stays no home role)
-  for (const p of [xmasProject(), xmasHuntProject(), sampleProject(), sessionProject()]) {
+  for (const p of [xmasProject(), xmasHuntProject(), xmasFunctionsProject(), sampleProject(), sessionProject()]) {
     for (const n of p.nodes) {
       for (const t of n.tabs) {
         const scope = { node: n.id, tab: t.name };

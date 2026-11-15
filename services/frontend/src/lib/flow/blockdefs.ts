@@ -24,6 +24,7 @@ import { groupOf, SETTING_BLOCKS, SETTING_GEOMETRY, SETTING_NOTE_ROWS, SETTING_R
 import { MAX_RANK } from "./ir.ts";
 import type { PickSpec, RefKind } from "./pickers.ts";
 import { BLOCK_STYLE } from "./theme.ts";
+import { CLASS_WORDS, HUNT_CALL, ROLE_PREFIX, STEP_BY_BLOCK, stepBlock, stepType, TICK_FN, TICK_STEPS, TICK_TAB, type TickStep } from "./tick.ts";
 
 export type ArgDef =
   | { type: FieldKind; name: string; text?: string; value?: number; min?: number; max?: number; precision?: number; options?: [string, string][]; class?: string; pick?: PickSpec }
@@ -682,6 +683,54 @@ BLOCK_DEFS.push(
   ].map(ownLabelRows),
 );
 
+// --- live blocks 5c (live-blocks.md 15; Batt 2026-11-15 ~13:0x: "dungeon_hunt.py should be blocks
+// the user sees and can edit himself"): the runner block's parts as blocks of their own. A ROLE
+// BLOCK is the tab variable role_<param> = "<function>" (the runner block's row of that role, with
+// its role picker); a STEP BLOCK is one of run()'s 20 steps in hunt_tick() (tab tick), its class
+// shown (tick.ts; the engine's poring_flow.tick). Each laid out on rows inside the 300-unit budget.
+/** A role block's type: pl_role_<the runner block's param>. */
+export const roleType = (param: string): string => `pl_role_${param}`;
+export type RunnerRole = (typeof RUNNER_ROLES)[number];
+export const ROLE_OF_TYPE: ReadonlyMap<string, RunnerRole> = new Map(RUNNER_ROLES.map((r) => [roleType(r.param), r]));
+/** The role a tab variable holds (role_<param>), else undefined. */
+export const roleOfVar = (name: string): RunnerRole | undefined => (name.startsWith(ROLE_PREFIX) ? RUNNER_ROLES.find((r) => `${ROLE_PREFIX}${r.param}` === name) : undefined);
+function roleDef(r: RunnerRole): BlockDef {
+  return {
+    type: roleType(r.param),
+    message0: `${ROLE_WORDS[r.field]} %1 %2 %3 %4`,
+    args0: [
+      ref("FN", "role", `the function for ${r.words}`, r.fn, r.optional ? { role: r.param, optional: "none" } : { role: r.param }),
+      endRow("ROW_FN"),
+      { type: "field_label", name: "VAR", text: `· ${ROLE_PREFIX}${r.param}`, class: "pl-setting-var" }, // the variable, as a setting block's
+      endRow("ROW_VAR"),
+    ],
+    style: "mp_setup_blocks",
+    inputsInline: true,
+    tooltip: `A role of the hunt core (the node's main calls ${HUNT_CALL}()): the function the runner calls for ${r.words}${r.optional ? " (optional: delete the block for none, as an empty field of the old runner block)" : ""}. A function of one key press is the key the runner presses; the Knife swap and the way home may be presses and waits. The variable ${ROLE_PREFIX}${r.param} in the Python view.`,
+  };
+}
+/** A step block's rows: its name; its class and words, wrapped to the budget; its owner. It stands in
+ * hunt_tick()'s body, one statement input in (layout.ts INDENT 20, taken at 24). */
+function stepDef(t: TickStep): BlockDef {
+  const width = SETTING_ROW_BUDGET - SETTING_GEOMETRY.side - 24;
+  const lines = [`${stepBlock(t)}()`, ...wrapUnits(`${CLASS_WORDS[t.klass]} · ${t.words}`, width), ...(t.owner ? wrapUnits(`played while ${t.owner} plays`, width) : [])];
+  const rule =
+    t.klass === "optional"
+      ? "OPTIONAL: it may be left out of hunt_tick() (the runner then never plays it); it cannot be moved"
+      : `${CLASS_WORDS[t.klass]}: it cannot be left out or moved (the lint refuses it, and the runner too)`;
+  return {
+    ...stmt({
+      type: stepType(t),
+      message0: lines.map((l, i) => `${l} %${i + 1}`).join(" "),
+      args0: lines.map((_, i) => endRow(i ? `ROW_LINE${i}` : "ROW_HEAD")),
+      inputsInline: true,
+      tooltip: `${stepBlock(t)}(): a step of the hunt core's tick -- ${t.words}. ${t.owner ? `A mode step: it plays while ${t.owner} plays. ` : "Every tick, whichever block of the hunt loop plays. "}${rule}. The steps play in run()'s order (scripts/dungeon_hunt.py).`,
+    }),
+    style: "mp_movement_blocks",
+  };
+}
+BLOCK_DEFS.push(...RUNNER_ROLES.map(roleDef), ...TICK_STEPS.map(stepDef));
+
 export const DEF_BY_TYPE: Record<string, BlockDef> = Object.fromEntries(BLOCK_DEFS.map((d) => [d.type, d]));
 
 /** The toolbox's Settings category (matpilot round 20 #5): ONE SUB-CATEGORY PER GROUP, named as its
@@ -843,6 +892,11 @@ export function toolbox(
       : [];
   const onMap = scope.node === "map";
   const movement: ToolboxItem[] = onMap ? [...palette("walk_to"), ...hunt] : [];
+  // live blocks 5c (live-blocks.md 15.6): the hunt core as functions in tabs -- the main calls
+  // hunt_loop() (the tab hunt: its role blocks and its loop; the tab tick: its steps)
+  if (onMap && scope.main && blocks.dungeon_hunt && blocks.find_target) {
+    movement.push(lbl("The hunt core (xmas_dun02): it starts here and plays the tab hunt's loop with its role blocks, the tab tick's steps:"), { kind: "block", type: "pl_call", fields: { PROC: HUNT_CALL, ARGS: "" } });
+  }
   if (onMap && blocks.dungeon_hunt) {
     movement.push(lbl("The Rogue's runner (a map with a runner: xmas_dun02):"), { kind: "block", type: "pl_dungeon_hunt", extraState: rest(blocks.dungeon_hunt) });
   }
@@ -876,8 +930,8 @@ export function toolbox(
   if (scope.tab === HUNT_LOOP_TAB && onMap && blocks.find_target) {
     const own = (type: string, block: string, f: Record<string, unknown>) => (blocks[block] ? [{ kind: "block" as const, type, fields: { BLOCK: block, ...f }, extraState: rest(blocks[block]) }] : []);
     huntLoop.push(
-      lbl("The hunt core plays this loop instead of its own (the node's main runs dungeon_hunt):"),
-      { kind: "block", type: "pl_def", fields: { NAME: HUNT_LOOP_FN, PARAMS: "t" } },
+      lbl(`The hunt core plays this loop (the node's main calls ${HUNT_CALL}(), or runs dungeon_hunt; t: none until find_target finds one):`),
+      { kind: "block", type: "pl_def", fields: { NAME: HUNT_LOOP_FN, PARAMS: "t=False" } },
       { kind: "block", type: "pl_while", inputs: { COND: exprBlock("True") } },
       lbl("Each turn: find a target, then fight it (the monsters tab's recipe for its species):"),
       ...own("pl_hunt_take", "find_target", { VAR: "t", ARGS: "", TIMEOUT: blocks.find_target.timeout_s }),
@@ -894,6 +948,21 @@ export function toolbox(
       lbl("Is there a target (none at find_target's time box)?"),
       { kind: "block", type: "pl_if", inputs: { COND: exprBlock("known(value=t)") } },
     );
+  }
+  // live blocks 5c (live-blocks.md 15.1): the hunt core's ROLES on the tab hunt, one block each (the
+  // old runner block's rows), and the TICK on the tab tick: hunt_tick() and run()'s 20 steps
+  const roles: ToolboxItem[] = [];
+  if (scope.tab === HUNT_LOOP_TAB && onMap && blocks.dungeon_hunt) {
+    roles.push(lbl(`The hunt core's roles (the node's main calls ${HUNT_CALL}()): each names a function of this node or Global; the optional ones may be deleted:`));
+    for (const r of RUNNER_ROLES) roles.push({ kind: "block", type: roleType(r.param), fields: { FN: r.fn } });
+  }
+  const tick: ToolboxItem[] = [];
+  if (scope.tab === TICK_TAB && onMap && TICK_STEPS.every((t) => blocks[stepBlock(t)])) {
+    tick.push(lbl(`The hunt core's tick: ${TICK_FN}() lists run()'s steps in their order (no ${TICK_FN}(): every step plays):`), { kind: "block", type: "pl_def", fields: { NAME: TICK_FN, PARAMS: "" } });
+    tick.push(lbl("Every tick (SAFETY: never left out or moved):"));
+    for (const t of TICK_STEPS.slice(0, 9)) tick.push({ kind: "block", type: stepType(t), extraState: rest(blocks[stepBlock(t)]) });
+    tick.push(lbl("The mode steps, played while the hunt loop's blocks play (only an optional one may be left out):"));
+    for (const t of TICK_STEPS.slice(9)) tick.push({ kind: "block", type: stepType(t), extraState: rest(blocks[stepBlock(t)]) });
   }
   if (onMap) {
     movement.push(
@@ -969,7 +1038,7 @@ export function toolbox(
     ...(blocks.press_key ? [{ kind: "block" as const, type: "pl_press_key_v", inputs: { KEY: exprBlock("key") }, extraState: rest(blocks.press_key) }] : []),
   ];
   const others: ToolboxItem[] = Object.keys(blocks)
-    .filter((n) => !(n in PALETTE_TYPES) && !(n in SENTENCE) && !(n === "hunt" && huntFields) && !(n in OWN_BLOCK) && !RECIPE_ONLY.has(n))
+    .filter((n) => !(n in PALETTE_TYPES) && !(n in SENTENCE) && !(n === "hunt" && huntFields) && !(n in OWN_BLOCK) && !RECIPE_ONLY.has(n) && !STEP_BY_BLOCK.has(n))
     .sort()
     .map((n) => ({ kind: "block" as const, type: "pl_action", fields: { BLOCK: n, ARGS: "" }, extraState: rest(blocks[n]) }));
   const advanced: ToolboxCategory[] = [cat("More skills", "mp_other_category", others)];
@@ -982,6 +1051,8 @@ export function toolbox(
       cat("Movement", "mp_movement_category", movement),
       ...(recipes.length ? [cat("Monsters", "mp_sensor_category", recipes)] : []),
       ...(huntLoop.length ? [cat("Hunt", "mp_movement_category", huntLoop)] : []),
+      ...(roles.length ? [cat("Roles", "mp_setup_category", roles)] : []), // 5c
+      ...(tick.length ? [cat("Tick", "mp_movement_category", tick)] : []), // 5c
       cat("Actions", "mp_output_category", actions),
       cat("Control", "loop_category", control),
       cat("Conditions", "loop_category", conditions),

@@ -41,7 +41,8 @@ share one definition. Refused before any input (the backend's not_live says the 
 - ``hunt_primitive``: a hunt block outside the hunt loop (strike / wait_steal / wait_kill / loot(t)
   also stand in a recipe: 4a's rule);
 - ``hunt_loop_place`` / ``hunt_loop_input``: a hunt loop with no hunt core on its node, or not
-  ``def hunt_loop(t)`` (one input, the target, none at the start);
+  ``def hunt_loop(t)`` / ``def hunt_loop(t=False)`` (one input, the target, none at the start; 5c:
+  the default lets a map node's main call it);
 - ``hunt_statement``: a statement the loop cannot play while the runner waits for it (a wait, a
   press_key, a call, a stop, an exit: the loop's blocks are the runner's, nothing else plays there);
 - ``hunt_sensor``: a sensor in its conditions (the loop reads the hunt through its blocks' values;
@@ -53,8 +54,9 @@ share one definition. Refused before any input (the backend's not_live says the 
   time);
 - ``hunt_skill``: use_skill without a declared role key.
 A recipe's order the cursor cannot play is 4a's (recipes.SHAPES), widened only with a trace test per
-new shape; a common step cannot be left out (it has no block); a driving hook without the others is
-the runner's own refusal (dungeon_hunt.drive_refused).
+new shape; a common step cannot be left out (5c: the tick's step blocks, poring_flow.tick, may
+leave out only an OPTIONAL step); a driving hook without the others is the runner's own refusal
+(dungeon_hunt.drive_refused).
 """
 
 from __future__ import annotations

@@ -46,6 +46,7 @@ import {
   GLOBAL_ID,
   globalOf,
   homeFunctionOn,
+  huntCoreCallOn,
   MAIN_TAB,
   mainOf,
   mapNodes,
@@ -63,6 +64,7 @@ import {
   startMap,
   type Tab,
   tabNameProblem,
+  xmasFunctionsProject,
   xmasHuntProject,
   xmasProject,
 } from "@/lib/flow/project";
@@ -100,7 +102,10 @@ const NO_EDITOR: EditorState = { ready: false, failed: false, issues: [], loose:
 
 /** The READY-MADE projects, by name, with the static data each is linted and simulated on. */
 const READY: Record<string, () => { project: Project; world: WorldSource }> = {
-  xmas_dun02: () => ({ project: xmasProject(), world: "local" }),
+  // live blocks 5c (live-blocks.md 15.6): the ready-made box is the hunt core as functions in tabs;
+  // the old one-box shape (the runner block) stays loadable as xmas_dun02_runner
+  xmas_dun02: () => ({ project: xmasFunctionsProject(), world: "local" }),
+  xmas_dun02_runner: () => ({ project: xmasProject(), world: "local" }),
   xmas_dun02_hunt: () => ({ project: xmasHuntProject(), world: "local" }), // live blocks 5b-2
   my_first_project: () => ({ project: sampleProject(), world: "sample" }),
 };
@@ -700,7 +705,12 @@ export default function ProjectStudio({ backendUrl, initialNode = null }: { back
                 {/* Batt 2026-11-13: a PROJECT is the save of /maps; /flows loads and saves the same one */}
                 <button type="button" role="menuitem" className="studio-menu-item studio-menu-item-map" onClick={() => openReady("xmas_dun02")} data-testid="load-xmas">
                   xmas_dun02
-                  <small>the ready-made ONE BOX: START → xmas_dun02, where you put her (hunt with the runner; it flies home on the Butterfly Wing itself); every key a function in its keys tab (Undo brings yours back)</small>
+                  <small>the ready-made ONE BOX: START → xmas_dun02, where you put her; its hunt core is blocks in tabs (main calls hunt_loop(); the tab hunt: its roles and loop; the tab tick: its steps); every key a function in its keys tab (Undo brings yours back)</small>
+                </button>
+                {/* live blocks 5c (live-blocks.md 15.6): the old one-box shape stays loadable */}
+                <button type="button" role="menuitem" className="studio-menu-item studio-menu-item-map" onClick={() => openReady("xmas_dun02_runner")} data-testid="load-xmas-runner">
+                  xmas_dun02_runner
+                  <small>the same one box in its old shape: one block &ldquo;hunt with the runner&rdquo; holds the hunt core (it flies home on the Butterfly Wing itself)</small>
                 </button>
                 <button type="button" role="menuitem" className="studio-menu-item" onClick={() => openReady("my_first_project")} data-testid="load-sample-project">
                   my_first_project
@@ -1121,7 +1131,7 @@ function nodeStrip(p: Project, n: PNode, overrides: string[]): StripPart[] {
     const exits: string[] = [];
     for (const t of n.tabs) for (const s of [...(t.main ?? []), ...t.defs.flatMap((d) => d.body)]) if (s.kind === "take_exit") exits.push(`→ ${s.exit.to_block} (${s.exit.kind === "item_warp" ? (s.exit.proc ? `${s.exit.proc}()` : "an item") : s.exit.kind.replace("_", " ")})`);
     if (exits.length) out.push({ head: "EXITS", text: exits.join(" · ") });
-    if (home && runnerBlockOn(n)) out.push({ head: "RUN", text: "hunt with the runner: Run (amber, at the top) plays it in the game" });
+    if (home && runnerBlockOn(n)) out.push({ head: "RUN", text: `${huntCoreCallOn(n) ? "the hunt core (hunt_loop())" : "hunt with the runner"}: Run (amber, at the top) plays it in the game` }); // 5c
   }
   // round 21 (the re-measure of round 20): Global only where the project has a Global node
   const own = n.tabs.filter((t) => t.name !== MAIN_TAB).map((t) => t.name);

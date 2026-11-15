@@ -196,3 +196,30 @@ def test_the_hunt_loop_may_take_a_default_now() -> None:
     d2 = box(lambda d: tab(d, "hunt")["defs"][0].update(params=[]))
     assert any("def hunt_loop(t=False) when the node's main calls it" in t
                for t in texts(d2, "hunt_loop_input"))  # fmt: skip
+
+
+# --- the browser's twin (services/frontend/src/lib/flow/tick.ts) ----------------------------------
+TICK_TS = Path(__file__).resolve().parents[3] / "services/frontend/src/lib/flow/tick.ts"
+
+
+def test_the_browsers_tick_table_is_the_engines() -> None:
+    import re
+
+    ts = TICK_TS.read_text(encoding="utf-8")
+    rows = re.findall(r'^  s\("(\w+)", "(\w+)", "([^"]*)"(?:, "(\w+)")?\),$', ts, re.M)
+    assert [(n, k, w, o) for n, k, w, o in rows] == [(s.name, s.klass, s.words, s.owner)
+                                                     for s in tk.STEPS]  # fmt: skip
+
+    def const(name: str) -> str:
+        m = re.search(rf'^export const {name} = "([^"]*)";$', ts, re.M)
+        assert m, name
+        return m.group(1)
+
+    assert const("HUNT_CALL") == huntloop.HUNT_CALL and const("ROLE_PREFIX") == huntloop.ROLE_PREFIX
+    assert const("TICK_FN") == tk.TICK and const("TICK_TAB") == tk.TICK_TAB
+    assert const("STEP_PREFIX") == tk.PREFIX and const("LOWERED_NOTE") == huntloop.LOWERED_NOTE
+    roles = re.search(r"^export const HUNT_ROLES: readonly string\[\] = \[(.*)\];$", ts, re.M)
+    req = re.search(r"^export const REQUIRED_ROLES: readonly string\[\] = \[(.*)\];$", ts, re.M)
+    assert roles and req
+    assert tuple(re.findall(r'"(\w+)"', roles.group(1))) == huntloop.HUNT_ROLES
+    assert tuple(re.findall(r'"(\w+)"', req.group(1))) == huntloop.REQUIRED_ROLES

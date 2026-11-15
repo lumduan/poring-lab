@@ -47,7 +47,7 @@ import { browserStorage, hasOldFlow, KEYS, readChoice, readProjectText, readText
 import { ACTIVE, busyWhy, liveLabel, liveLine, PROJECT_FLOW } from "@/lib/flow/liverun";
 import { mapsReadyText } from "@/lib/flow/words";
 import { liveReady } from "@/lib/flow/liveready";
-import { mapNodes, nodeById, type Project, runnerBlockOn, runnerKeysOn, sampleProject, sessionPath, startMap as mapStartOf, xmasHuntProject, xmasProject } from "@/lib/flow/project";
+import { mapNodes, nodeById, type Project, runnerBlockOn, runnerKeysOn, sampleProject, sessionPath, startMap as mapStartOf, xmasFunctionsProject, xmasHuntProject, xmasProject } from "@/lib/flow/project";
 import { RUNNER_MAPS } from "@/lib/flow/settings";
 import { exportProject, importProject } from "@/lib/flow/projectfile";
 import { type FileMeta, newFileMeta, readFileMeta, writeFileMeta } from "@/lib/flow/file";
@@ -97,16 +97,18 @@ type Selection = { kind: "node"; id: string } | { kind: "rules" } | { kind: "lin
 
 /** The ready-made projects (project.ts; docs/planning/project-model.md section 7). */
 const READY: { id: string; make: () => Project; world: WorldSource; title: string; words: string }[] = [
-  { id: "xmas", make: xmasProject, world: "local", title: "xmas_dun02", words: "the Rogue, ONE box: START → xmas_dun02, where you put her (hunt with the runner; it flies home on the Butterfly Wing itself); every key a function in its keys tab" },
+  // live blocks 5c (live-blocks.md 15.6): the ready-made box is the hunt core as functions in tabs
+  { id: "xmas", make: xmasFunctionsProject, world: "local", title: "xmas_dun02", words: "the Rogue, ONE box: START → xmas_dun02, where you put her; its hunt core is blocks in tabs (main calls hunt_loop(); the tab hunt: its roles and loop; the tab tick: its steps); every key a function in its keys tab" },
+  { id: "xmas_runner", make: xmasProject, world: "local", title: "xmas_dun02_runner", words: "the same one box in its old shape: one block \"hunt with the runner\" holds the hunt core (it flies home on the Butterfly Wing itself)" },
   { id: "xmas_hunt", make: xmasHuntProject, world: "local", title: "xmas_dun02_hunt", words: "the same one box plus its tab hunt: hunt_loop(t) plays the runner's own steps as blocks (t = find_target(), then fight_target(t): the monsters tab's recipe)" },
   { id: "sample", make: sampleProject, world: "sample", title: "my_first_project", words: "two SYNTHETIC maps on the sample sheets: a town (save point, NPC warp) and a field (attack 5 times, a wing back)" },
 ];
 
 function initialProject(store: ReturnType<typeof browserStorage>): { project: Project; restored: boolean; broken: boolean } {
   const text = readProjectText(store);
-  if (!text) return { project: xmasProject(), restored: false, broken: false };
+  if (!text) return { project: xmasFunctionsProject(), restored: false, broken: false }; // 5c: the ready-made box
   const r = importProject(text);
-  return r.ok ? { project: r.project, restored: true, broken: false } : { project: xmasProject(), restored: false, broken: true };
+  return r.ok ? { project: r.project, restored: true, broken: false } : { project: xmasFunctionsProject(), restored: false, broken: true };
 }
 
 function readRun(store: ReturnType<typeof browserStorage>): RunForm {

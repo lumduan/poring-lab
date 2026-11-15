@@ -11,12 +11,13 @@
 // outcome_to, note; an event's limits) travels in its extraState, and a statement MW2 has no block
 // for is a read-only `pl_raw` block carrying its JSON. Statement block ids are MW1's node paths
 // (`n:town.3`), so lint findings and simulate results land on the right block.
-import { CREDENTIALS, DEF_BY_TYPE, DEFAULT_FAILS, DEFAULT_MAX_10, HOTKEYS, HUNT_LOOP_BLOCKS, RUNNER_ROLES, SENTENCE, SENTENCE_BY_TYPE } from "./blockdefs.ts";
+import { CREDENTIALS, DEF_BY_TYPE, DEFAULT_FAILS, DEFAULT_MAX_10, HOTKEYS, HUNT_LOOP_BLOCKS, ROLE_OF_TYPE, roleOfVar, roleType, RUNNER_ROLES, SENTENCE, SENTENCE_BY_TYPE } from "./blockdefs.ts";
 import { argsText, callArgsText, ExprError, exprText, hasDo, parseArgs, parseCallArgs, parseExpr, parseParams } from "./expr.ts";
 import { fieldOf, HUNT_TYPE, type HuntRules, omitted, paramOf, params as huntParams } from "./hunt.ts";
 import { blockHeight, rowsOf, STACK_GAP } from "./layout.ts";
 import { CLASS_KEY, DETECT_SENSOR, MODEL_KEY, SENSOR_BLOCK } from "./models.ts";
 import { SETTING_BY_VAR, settingFields, settingFromFields, settingLit, settingOfType, settingProblem, settingRows, settingType } from "./settings.ts";
+import { ROLE_PREFIX, STEP_BY_BLOCK, STEP_OF_TYPE, stepBlock, stepType } from "./tick.ts";
 import { blockWords, type Issue, type Loose, stackSize } from "./words.ts";
 import {
   type ActionStmt,
@@ -257,6 +258,9 @@ function stmtBlock(s: Stmt, path: string, ids: Ids): WsBlock {
           const f = huntFields(s, ids.hunt);
           if (f) return { type: HUNT_TYPE, fields: f, extraState: huntState(actionRest(s), ids.hunt) };
         }
+        // live blocks 5c: a step of the tick (hunt_tick()) is its own block (it takes no inputs)
+        const step = STEP_BY_BLOCK.get(s.block);
+        if (step && !Object.keys(s.params).length) return { type: stepType(step), extraState: actionRest(s) };
         // live blocks 5b-2: the hunt loop's own blocks show their time box and their value's variable
         if ((HUNT_LOOP_BLOCKS as readonly string[]).includes(s.block) && paramsPlain(s)) {
           const f = { BLOCK: s.block, ARGS: argsText(s.params), TIMEOUT: s.timeout_s };
@@ -811,6 +815,11 @@ class Reader {
       }
       return { kind: "action", block: pal, params: { [PALETTE[pal].param]: v }, ...r };
     }
+    const step = STEP_OF_TYPE.get(b.type); // live blocks 5c: a step of the tick
+    if (step) {
+      const block = stepBlock(step);
+      return { kind: "action", block, params: {}, ...this.rest(b, block, where) };
+    }
     switch (b.type) {
       case "pl_action":
         return this.generic(b, where);
@@ -1054,7 +1063,7 @@ function hats(ws: Workspace, r: Reader): { main: WsBlock[]; events: Hat[]; defs:
   for (const b of ws.blocks?.blocks ?? []) {
     if (b.type === "pl_main") main.push(b);
     else if (b.type === "pl_def") defs.push(b);
-    else if (b.type === "pl_vardecl" || settingOfType(b.type)) vars.push(b); // a setting is a variable
+    else if (b.type === "pl_vardecl" || settingOfType(b.type) || ROLE_OF_TYPE.has(b.type)) vars.push(b); // a setting, a role (5c) is a variable
     else if (HATS.has(b.type)) {
       const order = Number((b.extraState as { order?: number } | undefined)?.order);
       events.push({ b, order: Number.isFinite(order) ? order : Infinity, y: b.y ?? 0 });
@@ -1229,11 +1238,16 @@ export function tabToWorkspace(p: Project, scope: TabScope, opts: ConvertOptions
   // range, the wrong kind) stays a plain variable block, so it round-trips exactly and the lint says why
   const rank = (k: string) => [...SETTING_BY_VAR.keys()].indexOf(k);
   const entries = Object.entries(t.vars);
-  const plain = entries.filter(([k]) => !SETTING_BY_VAR.get(k)?.block);
+  // (live blocks 5c: the role blocks first, in the runner block's order of its rows)
+  const roleRank = (k: string) => RUNNER_ROLES.findIndex((r) => r === roleOfVar(k));
+  const roles = entries.filter(([k]) => roleOfVar(k)).sort(([a], [b]) => roleRank(a) - roleRank(b));
+  const plain = entries.filter(([k]) => !SETTING_BY_VAR.get(k)?.block && !roleOfVar(k));
   const settings = entries.filter(([k]) => SETTING_BY_VAR.get(k)?.block).sort(([a], [b]) => rank(a) - rank(b));
-  for (const [name, v] of [...plain, ...settings]) {
+  for (const [name, v] of [...roles, ...plain, ...settings]) {
     const f = SETTING_BY_VAR.get(name);
-    if (f?.block && settingProblem(f, v.value) === null) place({ type: settingType(f), id: ids.take(`h:var:${name}`), fields: settingFields(f, v.value as string | number | boolean) });
+    const role = roleOfVar(name); // live blocks 5c: a role of the hunt core (a function's name)
+    if (role && typeof v.value === "string" && NAME.test(v.value)) place({ type: roleType(role.param), id: ids.take(`h:var:${name}`), fields: { FN: v.value } });
+    else if (f?.block && settingProblem(f, v.value) === null) place({ type: settingType(f), id: ids.take(`h:var:${name}`), fields: settingFields(f, v.value as string | number | boolean) });
     else place({ type: "pl_vardecl", id: ids.take(`h:var:${name}`), fields: { NAME: name }, inputs: { VALUE: { block: exprBlock(v, name, ids) } }, extraState: {} });
   }
   return { blocks: { languageVersion: 0, blocks: top } };
@@ -1295,6 +1309,22 @@ export function tabFromWorkspace(p: Project, scope: TabScope, ws: Workspace, def
   t.defs = out_defs;
   const vs: Record<string, Lit> = {};
   for (const b of vars) {
+    const role = ROLE_OF_TYPE.get(b.type);
+    if (role) {
+      // live blocks 5c (live-blocks.md 15.1): a ROLE BLOCK is the variable role_<param>, its value the
+      // function's name; an optional one left empty is no role (as the runner block's empty field)
+      const v = `${ROLE_PREFIX}${role.param}`;
+      r.under(b, v, () => {
+        const fn = r.field(b, "FN").trim();
+        const other = node.tabs.find((x) => x.name !== t.name && v in x.vars);
+        if (v in vs || seen.has(v)) r.err(`role ${role.words}`, `the role block ${role.words} is on this tab twice (one block each)`);
+        else if (other) r.err(`role ${role.words}`, `the role block ${role.words} is on this tab (${t.name}) and on the tab ${other.name} of ${node.id}: one block per role on a node (delete one of the two)`);
+        else if (fn === "" && role.optional) return;
+        else if (!NAME.test(fn)) r.err(`role ${role.words}`, `the role block ${role.words} names the function the runner calls for it: a function's name (letters, digits and _, a letter first)`);
+        else vs[v] = { kind: "lit", value: fn };
+      });
+      continue;
+    }
     const f = settingOfType(b.type);
     if (f) {
       // a SETTING block (live-blocks.md 12): its fields are its value; its node path is its name

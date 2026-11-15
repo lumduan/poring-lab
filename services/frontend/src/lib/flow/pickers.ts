@@ -40,7 +40,7 @@ import { HOTKEYS, RECIPE_TAB, RUNNER_ROLES } from "./blockdefs.ts";
 import { argsText, callArgsText, ExprError, exprText, parseArgs, parseCallArgs, parseExpr, parseParams } from "./expr.ts";
 import { type CmpOp, type Expr, type Lit, KEY, MAP_ID, NAME, type Stmt } from "./ir.ts";
 import { type Models, monstersOf } from "./models.ts";
-import { type Def, globalOf, mapNodes, nodeById, type PNode, type Project, roleKeyOf } from "./project.ts";
+import { type Def, globalOf, mapNodes, nodeById, type PNode, type Project, roleKeyOf, runnerBlockOn } from "./project.ts";
 import { normalise } from "./search.ts";
 import { SETTINGS, textUnits, tidy } from "./settings.ts";
 import { contrast } from "./theme.ts";
@@ -809,8 +809,9 @@ export function argsWith(text: string, name: string, valueText: string | null): 
 export function skillKeysOn(data: PickerData): string[] {
   const p = data.project;
   const n = p && data.node ? nodeById(p, data.node) : undefined;
-  const hunt = n?.tabs.find((t) => t.main)?.main?.find((x) => x.kind === "action" && x.block === "dungeon_hunt");
-  const heal = hunt?.kind === "action" ? hunt.params.heal : undefined;
+  // (5c: the runner block a main's hunt_loop() stands for, built from its role blocks, alike)
+  const hunt = runnerBlockOn(n);
+  const heal = hunt?.params.heal;
   if (!p || !n || heal?.kind !== "lit" || typeof heal.value !== "string") return [];
   const got = roleKeyOf(p, n.id, heal.value, "heal");
   return "key" in got ? [got.key] : [];

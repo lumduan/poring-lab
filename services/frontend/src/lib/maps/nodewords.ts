@@ -7,7 +7,7 @@ import type { Finding, LintDoc, Severity } from "../flow/api.ts";
 import { countsFor, sitePath } from "../flow/api.ts";
 import { exprText } from "../flow/expr.ts";
 import type { Lit } from "../flow/ir.ts";
-import { type Def, globalOf, keyOfCall, MAIN_TAB, type MapNode, modelOn, namesOf, overriddenBy, paramsText, type PNode, type Project, runnerBlockOn, type Trigger } from "../flow/project.ts";
+import { type Def, globalOf, huntCoreCallOn, keyOfCall, MAIN_TAB, type MapNode, modelOn, namesOf, overriddenBy, paramsText, type PNode, type Project, runnerBlockOn, type Trigger } from "../flow/project.ts";
 import { SETTING_BY_VAR, settingProblem, type SettingValue, settingValueText } from "../flow/settings.ts";
 
 export const KIND_TITLE: Record<PNode["kind"], string> = { login: "Login", character: "Choose character", map: "Map", global: "Global" };
@@ -208,7 +208,8 @@ export function runnerSpecies(n: MapNode, lint: LintDoc | null): { words: string
   // matpilot round 18 #2: "every monster ${by} boxes as one it strikes" was hard to parse
   const by = model ? `the model named in main (use_model("${model}"))` : "the map's own detector (main names no use_model)";
   const its = model ? "the model's" : "the detector's";
-  const words = `This node runs the runner (hunt with the runner): in the game it strikes every monster that ${by} boxes as a target, whatever these two lists say. A monster's function (attack_<monster>, the monsters tab) chooses HOW that monster is attacked, never WHETHER; ${its} other classes and the monsters it has no class for (the map's boss) are never struck: the runner's own rules. The lists are the simulator's.${lint ? " The lint names each spawn:" : ""}`;
+  // (live blocks 5c: the new shape's hunt core starts at its main's hunt_loop())
+  const words = `This node runs the runner (${huntCoreCallOn(n) ? "its main's hunt_loop()" : "hunt with the runner"}): in the game it strikes every monster that ${by} boxes as a target, whatever these two lists say. A monster's function (attack_<monster>, the monsters tab) chooses HOW that monster is attacked, never WHETHER; ${its} other classes and the monsters it has no class for (the map's boss) are never struck: the runner's own rules. The lists are the simulator's.${lint ? " The lint names each spawn:" : ""}`;
   const lines = lint ? nodeLint(lint, n.id).findings.filter((f) => f.rule === "species_lists").map((f) => f.text || f.message) : [];
   return { words, lines };
 }
