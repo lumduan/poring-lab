@@ -10,10 +10,12 @@
 //
 // Pure functions over the workspace JSON and the block definitions (layout.test.ts): every block
 // of the ready-made projects' tabs, nested as it is, must end before Blockly's controls at 390.
-import { type ArgDef, type BlockDef, DEF_BY_TYPE, type FieldKind } from "./blockdefs.ts";
+import { type ArgDef, type BlockDef, DEF_BY_TYPE, type FieldKind, ROLE_OF_TYPE } from "./blockdefs.ts";
 import type { WsBlock } from "./blocks.ts";
+import { NAME } from "./ir.ts";
 import { closedText, wrapExpr } from "./pickers.ts";
-import { rowUnits, SETTING_GEOMETRY as G, textUnits } from "./settings.ts";
+import { rowUnits, SETTING_GEOMETRY as G, settingOfType, textUnits } from "./settings.ts";
+import { ROLE_PREFIX } from "./tick.ts";
 
 /** A statement input's left side, workspace units (zelos draws ~16; taken at 20: the model then errs wide by 8-15 % on the reviewer's three re-measured rows of main, layout.test.ts). */
 export const INDENT = 20;
@@ -262,3 +264,135 @@ export function stackTops(boxes: readonly TopBox[], mode: "pack" | "push", gap: 
 
 /** PURE: do two boxes intersect (the no-overlap test)? */
 export const overlaps = (a: TopBox, b: TopBox): boolean => a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h && b.y < a.y + a.h;
+
+// --- round 25: remembered positions, left to right ---------------------------------------------------
+/** Where the first column starts (workspace units; blocks.ts placed every block at x 20). */
+export const SHELF_LEFT = 20;
+/** What of the canvas's width the shelf leaves to Blockly's zoom buttons and trashcan (px). */
+export const SHELF_RIGHT_PX = 72;
+
+/** PURE (round 25): the key a tab's top block is remembered by in `Tab.layout` (project.ts Layout):
+ * "main" for the main tab's start block; "def:<name>" for a function or an event (one namespace per
+ * node: the name is the definition, and an event's name is its key); "var:<name>" for a variable or
+ * a SETTING block (its variable's name). Names, not Blockly's block ids: an id lives only as long
+ * as the workspace, a name is what the project, its file and the Python view say. A block with no
+ * valid name yet (a function still called "?"), and any other top block -- a loose block, which
+ * the converter does not keep -- has none (null): its place cannot be remembered. */
+export function layoutKey(type: string, fields: Record<string, unknown> | undefined): string | null {
+  if (type === "pl_main") return "main";
+  const f = settingOfType(type);
+  if (f) return `var:${f.var}`;
+  const role = ROLE_OF_TYPE.get(type); // live blocks 5c: a role block is its variable role_<param>
+  if (role) return `var:${ROLE_PREFIX}${role.param}`;
+  const name = String(fields?.NAME ?? "").trim();
+  if (!NAME.test(name)) return null;
+  if (type === "pl_vardecl") return `var:${name}`;
+  if (type === "pl_def" || type === "pl_event") return `def:${name}`;
+  return null;
+}
+
+/** PURE (round 25): the top block a PERSON moved, from a Blockly event (its type "move", Blockly's
+ * BLOCK_MOVE): a drag -- mouse, touch or the keyboard's move mode, all Blockly's "drag" -- or
+ * "Clean up Blocks" ("cleanup"), onto the canvas (no new parent). Blockly's own moves -- a bump, a
+ * snap, a connection, a block created -- and the editor's (settle moves with events off) are not a
+ * person's. null: not one. */
+export function personMoved(e: { type: string; blockId?: string; newParentId?: string; reason?: string[] }): string | null {
+  if (e.type !== "move" || e.newParentId || !e.blockId) return null;
+  return (e.reason ?? []).some((r) => r === "drag" || r === "cleanup") ? e.blockId : null;
+}
+
+/** PURE (round 25): how wide the shelf may be (workspace units) for a canvas `viewPx` wide at
+ * `scale`: the visible width less Blockly's controls and the left margin. */
+export const shelfWidth = (viewPx: number, scale: number): number => Math.max(0, (viewPx - SHELF_RIGHT_PX) / (scale > 0 ? scale : 1) - SHELF_LEFT);
+
+/** A top block to place: its box, where a person put it (`at`; null: nowhere yet), and `alone`: it
+ * takes a row of its own (the main tab's start block: its title row is filled in by the editor). */
+export type ShelfItem = { id: string; w: number; h: number; at?: readonly [number, number] | null; alone?: boolean };
+
+/** The widest badge a block shows (api.ts BADGE_TEXT, "●" and the words; layout.test.ts pins it):
+ * the shelf leaves room for it, so a badge that arrives with the lint widens no block into the
+ * next column. */
+export const WIDEST_BADGE = "● verified RDP + S2";
+
+/** PURE (round 25, Batt 2026-11-15: "lay the functions out LEFT TO RIGHT, as in the monsters tab,
+ * so I see which functions the tab has without scrolling"): the tab's top blocks with no
+ * remembered place go LEFT TO RIGHT, in their order, while they fit `width` (shelfWidth), then on
+ * a new row under the tallest of the row; `gap` apart both ways. A remembered block stays where the
+ * person put it, and a block that would land on one goes down its column under it. A phone's
+ * canvas holds one block a row, so it stays one column. `width` 0: one column (round 23's list). */
+export function shelf(items: readonly ShelfItem[], width: number, gap: number = STACK_GAP, top = 90, left = SHELF_LEFT): Map<string, [number, number]> {
+  const out = new Map<string, [number, number]>();
+  const taken: TopBox[] = [];
+  for (const it of items) {
+    if (!it.at) continue;
+    out.set(it.id, [it.at[0], it.at[1]]);
+    taken.push({ id: it.id, x: it.at[0], y: it.at[1], w: it.w, h: it.h });
+  }
+  let x = left;
+  let rowTop = top;
+  let rowBottom = top;
+  let alone = false; // the row holds a block that wants it alone
+  for (const it of items) {
+    if (it.at) continue;
+    if (x > left && (alone || it.alone || x + it.w > left + width)) {
+      x = left;
+      rowTop = rowBottom + gap;
+      rowBottom = rowTop;
+    }
+    alone = !!it.alone;
+    let y = rowTop;
+    for (let moved = true; moved; ) {
+      moved = false;
+      for (const p of taken) {
+        // (half a unit short of the gap: the row's own neighbour, exactly `gap` to the left, is not
+        // "in the column" by a floating-point hair)
+        if (p.x < x + it.w + gap - 0.5 && x < p.x + p.w + gap - 0.5 && p.y < y + it.h + gap - 0.5 && y < p.y + p.h + gap - 0.5) {
+          y = p.y + p.h + gap; // down its column, under the one already there
+          moved = true;
+        }
+      }
+    }
+    out.set(it.id, [x, y]);
+    taken.push({ id: it.id, x, y, w: it.w, h: it.h });
+    rowBottom = Math.max(rowBottom, y + it.h);
+    x += it.w + gap;
+  }
+  return out;
+}
+
+/** PURE (round 25: remembered places WIN): after some blocks grew (taller or wider than `prev`), the
+ * blocks the growth now REACHES go out of its way, `gap` from it: under a taller block, down its
+ * column; beside a wider one, to the right along its row -- and a block moved so moves the ones it
+ * now reaches in turn. A block the grown one did not reach before (it was not under its old bottom,
+ * or not right of its old right edge: beside it, above it, or dropped ONTO it by a person, so it
+ * overlapped already) stays exactly where it was. Returns each moved block's new [x, y]. */
+export function pushGrown(boxes: readonly TopBox[], prev: ReadonlyMap<string, { w: number; h: number }>, gap: number = STACK_GAP): Map<string, [number, number]> {
+  const at = new Map(boxes.map((b) => [b.id, { ...b }]));
+  const out = new Map<string, [number, number]>();
+  type Grew = { id: string; oldBottom: number; oldRight: number };
+  const queue: Grew[] = [];
+  for (const b of boxes) {
+    const was = prev.get(b.id);
+    if (was && (b.h > was.h + 0.5 || b.w > was.w + 0.5)) queue.push({ id: b.id, oldBottom: b.y + was.h, oldRight: b.x + was.w });
+  }
+  for (let guard = 0; queue.length && guard < 10_000; guard++) {
+    const { id, oldBottom, oldRight } = queue.shift()!;
+    const g = at.get(id)!;
+    const bottom = g.y + g.h;
+    const right = g.x + g.w;
+    for (const b of at.values()) {
+      if (b.id === id) continue;
+      const column = b.x < right && g.x < b.x + b.w;
+      const row = b.y < bottom && g.y < b.y + b.h;
+      const was = { bottom: b.y + b.h, right: b.x + b.w };
+      if (column && b.y >= oldBottom - 0.5 && b.y < bottom + gap - 0.5) {
+        b.y = bottom + gap; // it was under the old bottom: it stays under, the gap kept
+      } else if (row && b.x >= oldRight - 0.5 && b.x < right + gap - 0.5) {
+        b.x = right + gap; // it was right of the old edge: it stays right of it
+      } else continue;
+      out.set(b.id, [b.x, b.y]);
+      queue.push({ id: b.id, oldBottom: was.bottom, oldRight: was.right });
+    }
+  }
+  return out;
+}

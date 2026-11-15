@@ -22,13 +22,13 @@ import type { CatalogueDoc, Finding, LintDoc, Trace } from "@/lib/flow/api";
 import { BADGE_TEXT, sitePath } from "@/lib/flow/api";
 import { boxReplaced } from "@/lib/flow/box";
 import { SENTENCE_BY_TYPE, titleLines, type Toolbox, toolbox, type ToolboxScope } from "@/lib/flow/blockdefs";
-import { type Defaults, TAB_TOP_Y, type TabScope, tabFromWorkspace, tabToWorkspace, type Workspace } from "@/lib/flow/blocks";
+import { type Defaults, placedIds, shelfItems, TAB_TOP_Y, type TabScope, tabFromWorkspace, tabToWorkspace, type Workspace } from "@/lib/flow/blocks";
 import { defaultFields, HUNT_TYPE, huntTooltip, omitted } from "@/lib/flow/hunt";
 import { canonical } from "@/lib/flow/ir";
-import { STACK_GAP, stackTops, type TopBox } from "@/lib/flow/layout";
+import { personMoved, pushGrown, shelf, SHELF_LEFT, shelfWidth, STACK_GAP, type TopBox } from "@/lib/flow/layout";
 import { firstDetector, monstersOf, notAdopted } from "@/lib/flow/models";
 import type { MapsDoc, PickerData } from "@/lib/flow/pickers";
-import type { Project } from "@/lib/flow/project";
+import { nodeById, type Project, type Tab, tabOf } from "@/lib/flow/project";
 import { noteLines, SETTING_NOTE_ROWS, settingFallback, type SettingNote, settingOfType, settingTooltip } from "@/lib/flow/settings";
 import { runLine } from "@/lib/flow/status";
 import { injectFor } from "@/lib/flow/theme";
@@ -119,7 +119,8 @@ export default function BlockEditor(p: BlockEditorProps) {
       if (!B || !w) return;
       const json = B.serialization.workspaces.save(w) as unknown as Workspace;
       const project = latest.current.getProject();
-      const r = tabFromWorkspace(project, latest.current.scope, json, defaults());
+      // round 25: the places of the blocks a person put (dragged, or the tab's layout placed) are saved
+      const r = tabFromWorkspace(project, latest.current.scope, json, defaults(), placedOf.get(w));
       issues.current = r.ok ? [] : r.issues;
       if (r.ok) {
         paths.current = r.paths;
@@ -195,7 +196,13 @@ export default function BlockEditor(p: BlockEditorProps) {
         ws.current = w;
         B.Events.disable();
         try {
-          B.serialization.workspaces.load(tabToWorkspace(latest.current.getProject(), scope, { hunt }) as unknown as object, w);
+          // round 25: a remembered block where the person put it, the others left to right while
+          // they fit this canvas at its scale (a phone: one column)
+          const opened = latest.current.getProject();
+          const json = tabToWorkspace(opened, scope, { hunt, width: canvasWidth(w) });
+          placedOf.set(w, placedIds(json, tabAt(opened, scope)));
+          modelWidths.set(w, new Map(shelfItems(json.blocks.blocks, tabAt(opened, scope)).map((i) => [i.id, i.w])));
+          B.serialization.workspaces.load(json as unknown as object, w);
           for (const b of w.getBlocksByType("pl_main", false)) {
             const [one, two] = titleLines(latest.current.title);
             b.getField("TITLE")?.setValue(one);
@@ -210,6 +217,7 @@ export default function BlockEditor(p: BlockEditorProps) {
         w.addChangeListener(followModel(B, w, () => latest.current.catalogue?.models ?? null));
         w.addChangeListener((e: BlocklyT.Events.Abstract) => {
           if (e.isUiEvent) return;
+          remember(B, w, e); // round 25: a block a person put somewhere keeps its place
           settle(B, w); // round 23: a block whose height changed pushes the ones under it down
           if (timer) clearTimeout(timer);
           timer = setTimeout(() => {
@@ -318,21 +326,57 @@ function decorate(B: typeof BlocklyT, w: BlocklyT.WorkspaceSvg, catalogue: Catal
   settle(B, w);
 }
 
-/** Each workspace's top blocks' heights at its last settle (none yet: the tab just opened). */
-const settledHeights = new WeakMap<BlocklyT.WorkspaceSvg, Map<string, number>>();
+/** Each workspace's top blocks' sizes at its last settle (none yet: the tab just opened). */
+const settledSizes = new WeakMap<BlocklyT.WorkspaceSvg, Map<string, { w: number; h: number }>>();
 /** A settle waiting for Blockly's renders (true: asked again meanwhile, so it runs once more). */
 const settling = new WeakMap<BlocklyT.WorkspaceSvg, boolean>();
+/** Round 25: each workspace's top blocks a PERSON placed (their ids): the ones the tab's layout put
+ * where they were, and every block dragged since (or arranged by Blockly's "Clean up Blocks", a
+ * person's own choice). Their places are saved with the project (tabFromWorkspace `placed`). */
+const placedOf = new WeakMap<BlocklyT.WorkspaceSvg, Set<string>>();
+/** Round 25: each workspace's top blocks' widths as the shelf placed them when the tab opened (the
+ * model's, with room for the widest badge): the first settle keeps those columns. */
+const modelWidths = new WeakMap<BlocklyT.WorkspaceSvg, Map<string, number>>();
 
-/** Round 23 (the reviewer: the survival tab's event blocks overlapped -- drink / fly_away 78 px at
- * 390 and 97 at 1440, fly_away / bag_full 131 / 164, bag_full / eat_cane 78 / 96 -- and hid 8
- * fields; supersedes round 20's restack, which moved only the blocks under a SETTING that grew):
- * once Blockly has drawn the tab, its TOP blocks are stacked again with the heights Blockly
- * MEASURED (getHeightWidth), STACK_GAP apart, in their order and at their x (layout.ts stackTops).
- * The first time (the tab just opened) they are packed from the tab's top; afterwards, whenever a
- * block's height changed (a picker's value, a note, a warning row, a wrapped condition, a block
- * plugged in or taken out), a block only ever moves DOWN, as far as the ones above it need. A move,
- * never an edit: no event, no undo step, nothing saved (a project keeps no block positions); not
- * while a person drags. */
+/** The tab of a scope (round 25: its layout). */
+function tabAt(p: Project, scope: TabScope): Tab | undefined {
+  const n = nodeById(p, scope.node);
+  return n ? tabOf(n, scope.tab) : undefined;
+}
+
+/** The shelf's width for this canvas (layout.ts shelfWidth: its visible width at its scale). */
+function canvasWidth(w: BlocklyT.WorkspaceSvg): number {
+  try {
+    return shelfWidth(w.getMetricsManager().getViewMetrics(false).width, w.scale);
+  } catch {
+    return 0; // not measurable (hidden): one column
+  }
+}
+
+/** Round 25: a top block a person moved -- a drag (mouse, touch or the keyboard's move mode: all
+ * Blockly's "drag"), or "Clean up Blocks" -- keeps its place from now on. Blockly's own moves (a
+ * bump, a snap, a connection) and the editor's (settle: events off) are not a person's. Undo moves
+ * the block back and the place saved follows (the conversion after it). */
+function remember(B: typeof BlocklyT, w: BlocklyT.WorkspaceSvg, e: BlocklyT.Events.Abstract): void {
+  if (e.type !== B.Events.BLOCK_MOVE) return;
+  const id = personMoved(e as BlocklyT.Events.BlockMove);
+  if (!id) return;
+  let set = placedOf.get(w);
+  if (!set) placedOf.set(w, (set = new Set()));
+  set.add(id);
+}
+
+/** Round 23 (the survival tab's event blocks overlapped and hid 8 fields), ➡️ round 25 (Batt
+ * 2026-11-15: the places a person chose WIN): once Blockly has drawn the tab, its top blocks are
+ * placed with the sizes Blockly MEASURED (getHeightWidth).
+ * - The first time (the tab just opened): the blocks no person placed go left to right while they
+ *   fit the canvas (layout.ts shelf, STACK_GAP apart), around the placed ones, which stay.
+ * - Afterwards, whenever a block's height changed (a picker's value, a note, a warning row, a
+ *   wrapped condition, a block plugged in or taken out): only the blocks the growth now REACHES in
+ *   its column go down (layout.ts pushGrown), placed or not; a block a person dropped onto another
+ *   stays where it was dropped (it overlapped before).
+ * A move, never an edit: no event, no undo step; not while a person drags. The places saved are
+ * the placed blocks' (tabFromWorkspace), so a block pushed down keeps the place it was pushed to. */
 function settle(B: typeof BlocklyT, w: BlocklyT.WorkspaceSvg): void {
   if (settling.has(w)) {
     settling.set(w, true);
@@ -366,18 +410,31 @@ function settleNow(B: typeof BlocklyT, w: BlocklyT.WorkspaceSvg): void {
     const hw = b.getHeightWidth();
     return { id: b.id, x: at.x, y: at.y, w: hw.width, h: hw.height };
   });
-  const last = settledHeights.get(w);
-  const grown = !last || boxes.some((b) => Math.abs((last.get(b.id) ?? b.h) - b.h) > 0.5);
-  settledHeights.set(w, new Map(boxes.map((b) => [b.id, b.h])));
-  if (!grown) return;
-  const ys = stackTops(boxes, last ? "push" : "pack", STACK_GAP, TAB_TOP_Y);
-  if (!ys.size) return;
+  const last = settledSizes.get(w);
+  settledSizes.set(w, new Map(boxes.map((b) => [b.id, { w: b.w, h: b.h }])));
+  let moves: Map<string, [number, number]>;
+  if (!last) {
+    // the tab just opened: the shelf again, with the measured sizes, in the tab's order
+    const placed = placedOf.get(w) ?? new Set<string>();
+    const model = modelWidths.get(w);
+    moves = shelf(
+      boxes.map((b, i) => ({ id: b.id, w: Math.max(b.w, model?.get(b.id) ?? 0), h: b.h, at: placed.has(b.id) ? ([b.x, b.y] as const) : null, alone: tops[i].type === "pl_main" })),
+      canvasWidth(w),
+      STACK_GAP,
+      TAB_TOP_Y,
+      SHELF_LEFT,
+    );
+  } else {
+    moves = pushGrown(boxes, last, STACK_GAP);
+  }
   const was = B.Events.isEnabled();
   if (was) B.Events.disable();
   try {
     for (const b of tops) {
-      const y = ys.get(b.id);
-      if (y !== undefined) b.moveBy(0, y - b.getRelativeToSurfaceXY().y);
+      const to = moves.get(b.id);
+      if (!to) continue;
+      const at = b.getRelativeToSurfaceXY();
+      if (Math.abs(to[0] - at.x) > 0.5 || Math.abs(to[1] - at.y) > 0.5) b.moveBy(to[0] - at.x, to[1] - at.y);
     }
   } finally {
     if (was) B.Events.enable();

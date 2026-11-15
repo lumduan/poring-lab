@@ -1,14 +1,14 @@
 ---
 doc_type: design
 hypothesis: null
-status: "DECIDED 2026-11-13 ~21:4x (Batt): build the live block player first; one box; break the runner into blocks. Stage 1 PASSED live (6); stages 2-4a A/Bs INCONCLUSIVE (7-9; the Knight). 2026-11-14: Batt's answers built (10, 11); s5ab-1114 FAIL by its bar on line 2 only, deaths 0/6 (10.2). Stage 5a (settings as blocks, the runner page gone) MERGED 17:2x (12), then rounds 20-24 of matpilot's browser review (12.4-12.8, all re-measured PASS): wrapped setting blocks, pickers for every value that is not a name (Batt 19:4x), no overlaps, exact Escape/Undo. Stage 5b-1 (HuntState, the loop as 20 steps; AST-proven the same program) MERGED 19:2x; its live A/B s5b1-ab FAIL by the pace p95 line only (noise), every outcome line passed (13.7; the parent's decision: keep it, go on). Stage 5b-2 (the steps as live blocks: a hunt tab, find_target / fight_target) MERGED 2026-11-15 03:0x; its live A/B s5b2-ab PASS on every line (14.11). The Christmas Goblin class round FAILED its precision bar (xmas02-detector S4.10), not deployed. Stage 5c (Batt 14.12: the runner block dissolved into functions in tabs -- hunt_loop() in main, role blocks, hunt_tick()'s step blocks) BUILT 2026-11-15 13:5x on feat/runner-blocks, offline-proven, not merged; its live A/B s5c-ab pre-registered (15.8), not run (15.11)."
+status: "DECIDED 2026-11-13 ~21:4x (Batt): build the live block player first; one box; break the runner into blocks. Stage 1 PASSED live (6); stages 2-4a A/Bs INCONCLUSIVE (7-9; the Knight). 2026-11-14: Batt's answers built (10, 11); s5ab-1114 FAIL by its bar on line 2 only, deaths 0/6 (10.2). Stage 5a (settings as blocks, the runner page gone) MERGED 17:2x (12), then rounds 20-24 of matpilot's browser review (12.4-12.8, all re-measured PASS): wrapped setting blocks, pickers for every value that is not a name (Batt 19:4x), no overlaps, exact Escape/Undo. Stage 5b-1 (HuntState, the loop as 20 steps; AST-proven the same program) MERGED 19:2x; its live A/B s5b1-ab FAIL by the pace p95 line only (noise), every outcome line passed (13.7; the parent's decision: keep it, go on). Stage 5b-2 (the steps as live blocks: a hunt tab, find_target / fight_target) MERGED 2026-11-15 03:0x; its live A/B s5b2-ab PASS on every line (14.11). The Christmas Goblin class round FAILED its precision bar (xmas02-detector S4.10), not deployed. 2026-11-15 (Batt's answers, 14.12): no hunt tab in the ready-made box (the runner block dissolves into function tabs: 5c); the first real block experiment, no Knife swap on the Christmas Cookie and the Cookie, BUILT offline and its A/B pre-registered 13:32 ICT (16), NOT run. Stage 5c (Batt 14.12: the runner block dissolved into functions in tabs -- hunt_loop() in main, role blocks, hunt_tick()'s step blocks) BUILT 2026-11-15 13:5x on feat/runner-blocks, offline-proven, merged with main 95583b9f there, not yet into main; its live A/B s5c-ab pre-registered (15.8), not run (15.11)."
 
 role: null
 verdict_date: null
 verdict_ticket: null
 supersedes: null
 related: [project-model.md, player-mode.md, ADR-0020, ../../scripts/dungeon_hunt.py, ../../scripts/runner_flow_export.py, ../../packages/poring_flow/src/poring_flow/runtime.py]
-next_action: "5c: run s5c-ab (15.8: stage5c_ab.py plan / run / score) before feat/runner-blocks merges; Batt: 15.10's two open questions. ➡️ (1) below is SUPERSEDED by 14.12 (no hunt tab: stage 5c). For Batt: (1) the ready-made xmas_dun02 box gets the hunt tab (14.11 unlocks it); (2) the first real block experiment, 14.8 (no Knife swap on the Christmas Cookie and the Cookie), with its own pre-registered A/B against B5b-2; (3) whether 5b-1 needs a strict re-run (s5b1-ab2 with 14.7a's pace line, 13.7); (4) the Goblin class: a new precision rule and a fresh held-out need his word for staged knights (xmas02-detector S4.10). The drink stays at 50 % until a long series measures it with income (10.2)."
+next_action: "The parent: run 16's A/B (stage6_ab.py plan / run / score --label s6ab; running from main 2026-11-15 until ~16:15 ICT) and score it. 5c (15): BUILT on feat/runner-blocks and merged with main 95583b9f there (15.11); merge it into main, then run s5c-ab FROM MAIN (15.8: stage5c_ab.py plan / run / score; a worktree lacks the runner's gitignored start data), never beside another live series; Batt: 15.10's two open questions. Round 25 (the layout asks) MERGED (67f6469c). Then the Goblin class's pre-registered rule change and a fresh held-out with staged knights (allowed). Answered by Batt 14.12: no hunt tab in the ready-made box; 5b-1 accepted, no re-run. The drink stays at 50 % until a long series measures it with income (10.2)."
 
 title: "Live blocks: the player that plays a project's blocks in the game, and the runner broken into blocks"
 date: 2026-11-13
@@ -1636,7 +1636,7 @@ with the parent's decision and what was done:
 
 | # | Finding (the reviewer's measure) | Decision | Done how |
 |---|---|---|---|
-| A | The survival tab's event blocks OVERLAPPED: drink / fly_away by 78 px at 390 and 97 at 1440, fly_away / bag_full 131 / 164, bag_full / eat_cane 78 / 96; 8 fields hidden under the next block | after a tab's blocks are drawn, stack its TOP blocks again from their MEASURED heights, a fixed gap apart, in their order and at their x; again whenever a block's height changes; never change the fixtures' saved positions; save positions only when a person moves a block; a test that no two top blocks' boxes intersect -- headless real Blockly if it can give heights, else the width / height model held to the measured heights (say which) | FIXED; the test is the MODEL (node cannot draw Blockly: no SVG layout, so `getHeightWidth` has nothing to measure). The page: `BlockEditor settle` -- once Blockly has drawn the tab (`finishQueuedRenders`), its top blocks' boxes from `getRelativeToSurfaceXY` + `getHeightWidth`, stacked by `layout.ts stackTops`: the tab just opened, PACKED from its top (90 units), `STACK_GAP` 24 apart; afterwards, whenever a top block's measured height changed (a picker's value, a note, a warning row, a wrapped condition, a block plugged in or taken out: every non-UI event and every decoration settles), a block only ever moves DOWN, as far as the ones above it need. Moves are made with events off: no undo step, no conversion, nothing saved (a project keeps no block positions; the frozen fixtures are untouched); not during a drag (it waits for the gesture's end). Round 20's `restack` (only the blocks under a SETTING that grew) is gone. The first placement (`blocks.ts tabToWorkspace`) now uses `layout.ts blockHeight` (rows, statement inputs with what they hold, wrapped conditions) + 24 instead of the fixed `EVENT_ROWS_Y` (11 x 48 = 528 units, which made drink 710 units apart while it is 840 tall). The model against the reviewer (f3898e8b's placements + the overlaps at scale 0.6 / 0.75 give the heights): drink 858 vs 840 (+2.1 %), fly_away 962 vs 928 (+3.7 %), bag_full 810 vs 793 (+2.1 %); layout.test.ts holds it in [measured, measured x 1.06], proves its own positive case (f3898e8b's steps with the measured heights overlap by the reviewer's pixels, within 1 px at 390 and 1.5 at 1440; this round's are >= 24 units apart), and finds no intersection on any tab of the ready-made projects and the FROZEN ones (project_xmas_dun02.json, stage 2-4, sample, session), the blocks in their order |
+| A | The survival tab's event blocks OVERLAPPED: drink / fly_away by 78 px at 390 and 97 at 1440, fly_away / bag_full 131 / 164, bag_full / eat_cane 78 / 96; 8 fields hidden under the next block | after a tab's blocks are drawn, stack its TOP blocks again from their MEASURED heights, a fixed gap apart, in their order and at their x; again whenever a block's height changes; never change the fixtures' saved positions; save positions only when a person moves a block; a test that no two top blocks' boxes intersect -- headless real Blockly if it can give heights, else the width / height model held to the measured heights (say which) | FIXED; the test is the MODEL (node cannot draw Blockly: no SVG layout, so `getHeightWidth` has nothing to measure). ➡️ Round 25 (12.9): the places a person chose are saved with the project and WIN; on open only the unplaced blocks are laid out (left to right), and afterwards only a growth pushes what it reaches. The page: `BlockEditor settle` -- once Blockly has drawn the tab (`finishQueuedRenders`), its top blocks' boxes from `getRelativeToSurfaceXY` + `getHeightWidth`, stacked by `layout.ts stackTops`: the tab just opened, PACKED from its top (90 units), `STACK_GAP` 24 apart; afterwards, whenever a top block's measured height changed (a picker's value, a note, a warning row, a wrapped condition, a block plugged in or taken out: every non-UI event and every decoration settles), a block only ever moves DOWN, as far as the ones above it need. Moves are made with events off: no undo step, no conversion, nothing saved (a project keeps no block positions; the frozen fixtures are untouched); not during a drag (it waits for the gesture's end). Round 20's `restack` (only the blocks under a SETTING that grew) is gone. The first placement (`blocks.ts tabToWorkspace`) now uses `layout.ts blockHeight` (rows, statement inputs with what they hold, wrapped conditions) + 24 instead of the fixed `EVENT_ROWS_Y` (11 x 48 = 528 units, which made drink 710 units apart while it is 840 tall). The model against the reviewer (f3898e8b's placements + the overlaps at scale 0.6 / 0.75 give the heights): drink 858 vs 840 (+2.1 %), fly_away 962 vs 928 (+3.7 %), bag_full 810 vs 793 (+2.1 %); layout.test.ts holds it in [measured, measured x 1.06], proves its own positive case (f3898e8b's steps with the measured heights overlap by the reviewer's pixels, within 1 px at 390 and 1.5 at 1440; this round's are >= 24 units apart), and finds no intersection on any tab of the ready-made projects and the FROZEN ones (project_xmas_dun02.json, stage 2-4, sample, session), the blocks in their order |
 | B | The point picker's drag, right at 390, was wrong at 1440: respawn_at's picker opened COMPACT (176 x 99 picture at (702, 505)); a press at 50 % read y 360, moving to 55 % read 719 and stuck (mouse and touch); the focused x box showed 645 while the readout and the block said 128 | fix the mapping in compact mode; keep focused boxes in sync; test both layouts | FIXED in the code, the cause NOT reproduced here (no browser; ➡️ round 24, 12.8: the first drag at 1440 still read 719 -- the cause was the canvas rising under the picker after the press, when the strip lost its IN A RUN lines; the drag is now read against the picture as pressed). Two faults found by reading: (1) the compact CSS set only `max-width: 176px` on a picture whose box kept its 144-px height attribute, and (2) the drag's scroll lock held `.blocklyDropDownContent`, while the compact (capped) picker scrolls in its OWN root -- a drag could scroll that root under the pointer, the picture rising and the reading running to 719 (the likeliest cause). Now the picture's box is 176 x 99 (width and height), a drag holds the nearest scrolling picker root, the svg pieces are not text-selectable, and every place is mapped from the DRAWN picture's own screen box (`getBoundingClientRect` of its background rect, at each move) onto its extent (`pickers.ts toArea`), whatever size, letterboxing or scroll; the lever the same on its bar. A stepper's box follows the value unless the person is TYPING in it (first key to Enter, change or leaving; focus alone no longer freezes it). pickers.test.ts: full 255 x 143 and compact 175 x 98 read the same places (50 / 55 / 90 % -> 360 / 396 / 646; past the edge 719), the lever's middle |
 | C | Undo after a cancel was enabled, and Ctrl+Z RE-APPLIED the cancelled value (stepper 3.5 -> 4, percent 50 -> 51, cell 119 -> 120, a condition "< 50" -> "<= 50") | a cancelled session leaves the undo stack exactly as before the picker opened (Undo greyed on a fresh page); a kept session stays ONE undo step; test every kind, Ctrl+Z included | FIXED. The cause: Blockly fires its events on the next animation frame (`requestAnimationFrame` then a timeout), so round 22's clean-up timeout ran BEFORE the session's events reached the undo stack. Now `session.run` (the live preview) records NO undo step (Blockly's `recordUndo` off); `cancel` puts every field back the same way; `commit` (the picker closes any way but Escape / Cancel: Done, Enter, a tap outside, a pick from a list) sets the fields back to their values from before, unrecorded, then forward to the kept values, RECORDED, in a group of its own -- its own because Blockly merges a queued change into the one before it of the same group, block and field and keeps the first one's undo flag (in one group, "back" and "forward" became one unrecorded no-op). blockly_pickers.test.ts, with a browser's frames given to node (16-ms `requestAnimationFrame`): for stepper, percent, cell, point, condition, optnum and reference -- the preview leaves no step, Cancel leaves the stack empty and Ctrl+Z (`ws.undo(false)`) re-applies nothing; a kept session is one group, Ctrl+Z gives back the value from before and redo the kept one, also when everything happens in one frame. Both halves proved by their positive case: a recorded preview fails the first test, a commit in the preview's group the second |
 | D1 | A wrapped condition's second row was plain text: tapping it opened nothing | every wrapped row opens the same picker | FIXED: a further line is a `WrapLine` label (`blockly-pickers.ts wrapLineField`) whose editor is the block's TEXT field's (its picker); not saved; cursor pointer. blockly_pickers.test.ts: each row clickable and opening the TEXT field's editor, the saved fields still the text alone |
@@ -1753,6 +1753,148 @@ box. Both fixes stay, but they were not this cause.
 - **The arc, rounds 20-24, all re-measured in a browser:** every setting block fits at 390, no
   overlaps, every value field a picker, and Escape/Undo exact. Nothing is left open from the
   reviews.
+
+### 12.9 Round 25: remembered positions, left to right (Batt 2026-11-15 ~13:0x ICT; written 2026-11-15 13:32 ICT from `date`; branch fix/round25 from 09d5e6fb; offline only)
+
+Batt's two asks (Thai, translated by the parent, with a screenshot of the monsters tab showing its
+four functions side by side):
+- (a) "When a tab holds several functions and there is room to the right, lay them out LEFT TO
+  RIGHT, as in the monsters tab, so I don't have to scroll and can see which functions the tab
+  has."
+- (b) "Most important: /flows and /maps must REMEMBER where the user placed blocks. Today they
+  don't: after I rearrange and refresh the page, the last positions I dragged to are forgotten."
+
+**(b) Remembered positions (the main item).**
+- **Storage:** a tab's optional `layout`, `{key: [x, y]}` in workspace units. The contract is in
+  [project-model.md](project-model.md) 2.6.
+- **The key: what the project says, never a Blockly id** (an id lives only as long as one
+  workspace).
+  - `main` is the main tab's start block.
+  - `def:<name>` is a function or an event: one namespace per node, and an event's name is its
+    key.
+  - `var:<name>` is a variable or a setting block (a setting is a variable of the tab).
+  - Other top blocks have no key: a loose block is not kept by the project, so there is nothing
+    to put its place on.
+  - Code: `layout.ts layoutKey`; the engine's pattern is `project.py LAYOUT_KEY`.
+  - A rename keeps the place. The editor tracks the PLACED blocks by their workspace ids and
+    writes their current names at each conversion.
+- **Which blocks have a place: only the ones a PERSON placed.**
+  - That is a drag (mouse, touch or the keyboard's move mode, all Blockly's "drag") or "Clean
+    up Blocks" (`layout.ts personMoved`), plus the blocks the tab's layout placed when it opened
+    (`blocks.ts placedIds`).
+  - Blockly's own moves (a bump, a snap, a connection, a new block) and the editor's (settle,
+    events off) are not a person's.
+  - Undo moves a block back, and the place saved follows at the next conversion. It is undoable
+    like the drag itself because it IS the drag's position.
+- **Where it is kept: the studio's working copy.** That is this browser's localStorage project
+  (`prefs.ts writeProjectText`, written `SAVE_DEBOUNCE_MS` after every change and as the page
+  goes; shared by /flows and /maps). So it survives a refresh. It also survives Save, Load and
+  GitHub (`exportProject` / `importProject` keep it) and the engine's JSON round trip (`from_json`
+  / `to_json`).
+- **Outside the run:**
+  - The browser sends every project to the engine without it (`project.ts forEngine`): lint,
+    simulate, the Python view, Run (`projectRunBody`), the check (`checkBody`). An engine older
+    than the field reads them too.
+  - The studio's "is this the engine's answer for this project" key is the engine form's
+    (`engineKey`). A drag is no new lint, Python view or simulation, and it spends none of the
+    20-a-minute lint budget.
+  - In the engine, `project_hash` is taken WITHOUT the layouts. `compile_project`, the lint and
+    the Python view never read them.
+  - The editor's ORDER no longer follows the canvas (`tabFromWorkspace`). Definitions keep the
+    project's order (each hat's `order`, the index it was loaded at) and variables the tab's
+    order; a block new since then comes after them, in reading order.
+    - Before this round a tab's definitions were in top-to-bottom order. Side-by-side columns
+      would have reordered the project (and its hash) just by being drawn.
+    - This drops the old "move a function up to move it in the Python view". Nothing relied on
+      it: no test did.
+- **Python → project:** `project.keep_layout(new, old)` keeps the old layout of every block the
+  new project still has. `pyproject.parse_files` never sees one. There is no Python → project
+  path in the browser today.
+- **settle() (round 23) now lets saved places WIN.**
+  - When the tab opens, only the blocks no person placed are laid out again with the measured
+    sizes (the shelf below), around the placed ones.
+  - Afterwards only a GROWTH pushes (`layout.ts pushGrown`). A block that grew taller pushes the
+    blocks under its old bottom down its column; one that grew wider (a badge arriving) pushes
+    the blocks right of its old edge along its row. Each keeps the gap.
+  - A person's own overlapping drop stays where it was dropped, as the reviewer saw on the timing
+    tab: it overlapped before, so the growth did not "reach" it.
+  - ➡️ This supersedes 12.7 A's "packed from its top on open; afterwards any overlap pushed down".
+- **/maps: nothing was lost.** Its map nodes' positions are `Node.pos`, set on every drag stop
+  (`MapsCanvas onNodeDragStop` → `moveNodes`) and kept in the same working copy. START is derived
+  and not draggable.
+  - `pos` stays in the hash as it always was. Taking it out would change every frozen sha256.
+  - /maps' change key now leaves out the tabs' layouts too.
+
+**(a) Left to right, for the blocks with no saved place.** This is `layout.ts shelf`, used by
+`blocks.ts tabToWorkspace` and the first settle.
+- The blocks go left to right, in the tab's order, while they fit the canvas's visible width at
+  its scale (`shelfWidth`: the view less Blockly's controls, 72 px). Then they wrap to a new row
+  under the row's tallest block, `STACK_GAP` (24) apart both ways.
+- A block that would land on a placed one goes down its column under it.
+- The start block takes a row of its own (the editor fills in its title).
+- Widths leave room for the widest badge (`WIDEST_BADGE`), so a badge arriving with the lint
+  widens no block into the next column.
+- Every tab: functions, events, setting blocks.
+- At 390 px the canvas holds about 313 units, so one 300-unit block a row: a phone stays one
+  column. With no width given (headless callers), it is round 23's single list, unchanged.
+- The model at 1440 (the canvas beside the Python pane, ~1,028 units):
+  - the monsters tab's four recipes (228-235 units each) in ONE row;
+  - survival three a row;
+  - keys four a row;
+  - setting tabs three or four a row.
+  - With the Python pane closed (~1,604 units): five or more a row.
+
+**Tests:**
+- layout.test.ts (7 new):
+  - every key the shelf makes on every tab is one the engine accepts, and the widest badge is
+    the widest;
+  - the monsters tab: 3+ in its first row at 1440 (4 with the Python pane closed), one column
+    at 390;
+  - no two top blocks closer than 24 and none past the edge, on every tab of every ready-made
+    and FROZEN project, at widths 313 / 600 / 1028 / 1604 / 2400;
+  - a remembered place wins, and the others go around it;
+  - random positions and any top-block order leave the ENGINE's project unchanged on every tab,
+    and with nothing placed there is no layout and the JSON is as before;
+  - a rename keeps the place, a later conversion without `placed` keeps the layout's blocks, the
+    file round trip keeps it, and Run's and the check's bodies carry none;
+  - `pushGrown`: down its column, a cascade, a person's overlapping drop stays, beside stays, a
+    shrink moves nothing, a wider block pushes its row.
+- blockly_headless.test.ts (1 new, REAL Blockly): a `drag` move is saved and a `bump` is not;
+  undo moves the block back and the saved place follows; only drag and cleanup of Blockly's eight
+  move reasons count.
+- packages/poring_flow/tests/test_project_layout.py (15 new):
+  - every fixture with a layout on every tab gives the same `project_hash`, compiled IR, lint
+    findings, lint document and Python view;
+  - the canonical JSON and the round trip keep the layout;
+  - `keep_layout` after a Python round trip, including a function gone;
+  - six hostile layouts are refused;
+  - `{}` is no layout.
+- services/backend/tests/test_settings_blocks.py (4 new): the three frozen arms and the one box,
+  with every top block of every tab placed, give TODAY's 97-argument runner argv and the same
+  `project_hash` (the fixture files stay byte-identical).
+
+**Deploy note (for the parent).**
+- The browser never sends a layout to the engine, so an engine on older code keeps working with
+  the new frontend.
+- A saved FILE with a layout, read by a Python tool (`flow_play.py`, an A/B plan, the Run helper
+  reading its project file), needs poring_flow at this commit: older code refuses the field
+  (`extra="forbid"`).
+
+**Not measured here (no browser): the re-measure list.**
+1. Drag a function, an event and a setting block. Refresh: each is where it was dropped. Then on
+   /maps and back: the same.
+2. Drag, then Ctrl+Z: the block goes back, and after a refresh it is where the undo left it.
+3. Rename a dragged function: it keeps its place after a refresh.
+4. The monsters tab at 1440, with no saved places: its four recipes in one row (the Python pane
+   closed or open). keys / survival / a setting tab in rows. At 390: one column.
+5. A block that grows (a wrapped condition, a note row, a badge arriving) pushes only the blocks
+   under or right of it. A block dropped ONTO another stays where it was dropped (the timing
+   tab).
+6. A drag is no new lint: the Lint pane and the strip do not say "checking…" after a drag.
+7. Save to a file, start over, Load the file: the places come back. The Python view shows no
+   layout.
+8. Run and Check still start (their project carries no layout; the hash is the same before and
+   after a drag).
 
 ## 13. Stage 5b-1: HuntState and the loop as steps (design written 2026-11-14 18:3x ICT from `date`, before any 5b code; offline only)
 
@@ -2477,7 +2619,7 @@ against an arm that may read 0 (10.2's lesson); deaths count over every run that
   s5b1-ab).
 - **Every other line of 14.7 is unchanged.** `stage5b_ab`'s own BAR (5b-1's, scored) is untouched.
 
-### 14.8 The first real block experiment after it (NOT built)
+### 14.8 The first real block experiment after it (➡️ BUILT 2026-11-15 and pre-registered: section 16; not run yet)
 
 Only once 14.7 holds. **First: no Knife swap on the Christmas Cookie and the Cookie** -- B5b-2 vs
 B5b-2' where `attack_cookie` and `attack_cookie_xmas` are `strike(t); wait_kill(t); loot(t)` (4a's
@@ -2896,3 +3038,237 @@ The proofs (offline, all green):
 
 **The A/B is pre-registered (15.8) and built, not run** (the parent runs it; the commands in 15.8).
 Open for Batt: 15.10 (a SAFETY step left out; the old runner block in the toolbox).
+
+➡️ **Merged with main 95583b9f (2026-11-15 14:0x-14:3x ICT; round 25's layout and 16's cookie box).**
+s5c-ab runs FROM MAIN after 5c merges there: the runner's start check reads gitignored data
+(data/hotbar/digits.npz and the like) a worktree lacks. 15.8 is unchanged. What the merge joined:
+- Round 25's layout: a role block's key is `var:role_<param>`, hunt_tick's `def:hunt_tick`
+  (layout.ts layoutKey); the shelf places the new blocks like any other; a tab's variables keep the
+  project's order (round 25), and the role blocks show first in the runner block's order of rows.
+  The functions box: no two top blocks of any tab overlap at 313 to 2400 units (layout.test.ts over
+  every ready-made and frozen project, and functions.test.ts); a person's places never change the
+  engine's project, its lowering or its hash (functions.test.ts; test_project_layout.py over every
+  fixture, this one too).
+- The READY lists keep every entry: xmas_dun02 (the functions box, the default), xmas_dun02_runner,
+  xmas_dun02_hunt, xmas_dun02_cookie_noswap, my_first_project.
+- The checks on the merged tree: huntstate_check drive and check rc 0; hunt_trace check --seeds 50,
+  146 scenarios, all the same as the driver's; the full Python suite 5,972 passed, 94 skipped, 3
+  failed (the worktree's same three); ruff check, mypy clean; ruff format clean but main's same two
+  files; the frontend's 532 tests 531 passed, 0 failed (1 skipped), tsc and eslint clean; stage5c_ab's
+  plan passes in process (no input); stage6_ab's and the cookie box's tests pass.
+
+## 16. The first real experiment in blocks: no Knife swap on the Christmas Cookie and the Cookie (➡️ BUILT 2026-11-15, feat/cookie-noswap; offline only, NOT run live; its A/B pre-registered 2026-11-15 13:32 ICT from `date`, BEFORE any run)
+
+Batt's words (14.12 #2, 2026-11-15 ~13:0x): "Test it, and make it work too." The experiment is 14.8's
+first one. The Christmas Cookie and the Cookie are fought WITHOUT the Knife swap, because they carry
+no steal worth the swap's time (2b). On every other monster the Rogue keeps Batt's technique: the
+Knife opener steals, then the dagger (Damascus) strikes.
+
+### 16.1 The box (arm C) and how it differs
+
+- **The fixture:** `services/frontend/src/lib/flow/fixtures/project_xmas_dun02_cookie_noswap.json`
+  (name `xmas_dun02_cookie_noswap`). It is the one box (`project_xmas_dun02.json`) with
+  `attack_cookie` and `attack_cookie_xmas` cut to `strike(t); wait_kill(t); loot(t)` (4a's plain
+  shape). The three statements are the one box's own, byte for byte, and `priority=1` is kept.
+  Everything else is the one box but the name and the description. `stage6_ab.box_difference`
+  checks this.
+- **Its TS twin** is `xmasCookieNoSwapProject()` (project.ts); `project.test.ts` checks it byte for
+  byte against the fixture, as it checks the other ready-made boxes.
+- **Loading it:** the /maps Load list offers it ("xmas_dun02_cookie_noswap"). /flows has it in its
+  ready-made table, like the hunt box, but no menu item of its own. A person loads it on /maps,
+  where Run is, and Runs it from START.
+- **Checked offline** (test_cookie_noswap.py):
+  - the lint finds 0 errors and the one box's four warnings;
+  - `live.problems` is empty: the backend's `not_live` check passes;
+  - the Run keys are the one box's five;
+  - `flow_play.prepare` gives the same runner argv and the same run() arguments as the one box,
+    except `box_recipes`: cookie / cookie_xmas `[strike, wait_kill, loot]` knife false, mystcase /
+    cruiser the Knife swap, every priority 1;
+  - the runner's own start check (`dungeon_hunt.box_plays_refused` / `recipes_refused`) accepts
+    both boxes with the Run config (`knife_swap`, `bare_ready`, `value_target` on).
+- **What the Run route checks that this does not cover:** the zones file and the run-start
+  verdict on the lab's static data. Those read the map node's zones and the KB, which the two
+  recipe bodies do not touch, so they are the one box's.
+
+### 16.2 The recipes PLAY as written (offline proof)
+
+The proof uses the runner's own `BareCtl` on test_dungeon_hunt's simulated client with the Run
+config's Knife: the opener on F4 through the box's knife_on, the dagger on F5 through knife_back,
+--bare-ready and the popup cue. The REAL player's hook, prepared from the fixture, answers at the
+lock. The wiring is run()'s: test_box_recipes checks it by AST, and test_cookie_noswap checks run()'s
+`recipe` record against its source.
+
+| At a lock on | With the Knife on (--bare-ready, the Run config) | With the dagger on (armed) |
+|---|---|---|
+| cookie / cookie_xmas (C) | the dagger FIRST (`box knife_back (recipe)`), its aim read again, then nothing: no opener, no swap back on the steal's popup, none at the Knife's 8 s time box. The next idle moment puts the Knife on again (`box knife_on (ready)`) | no press at all |
+| mystcase / cruiser (C) | struck bare at once (no press), the dagger back on the steal's popup: a steal, as today | the opener AT the strike, then the dagger on the popup |
+| cookie (B, the one box) | struck bare at once, the dagger back on the popup: the counter's positive case | - |
+
+- **A negative control:** a hook answer that is not C's plan makes the runner play its own recipe,
+  the swap. The reader then names that lock a Knife try, which fails C's plays line.
+- **Three things to know about the no-swap play** (the runner's code, unchanged):
+  - **The swaps per cookie lock stay two.**
+    - C: the dagger first, then the Knife at the next idle.
+    - B: the dagger on the steal's cue or the 8 s time box, then the Knife at the next idle.
+    - What C removes is the BARE PHASE: B fights a cookie with the Knife first. In s5b1-ab and
+      s5b2-ab's 12 runs that phase lasted a median 5.7 s on a Cookie (n 37) and 4.8 s on a
+      Christmas Cookie (n 50); it ended on the popup 22 / 38 times and on the time box 12 / 8 times.
+    - C instead waits for the dagger's read-back first (a median 342 ms over 506 swaps) and the aim
+      read again.
+  - **A re-lock costs C the swap again.** A cookie unlocked without a kill ("no hits") and locked
+    again gets the dagger first again, because the Knife went back on at the idle moment between.
+    B stays bare between those locks.
+  - **Strikes that know no species keep the swap in both arms.** The ring scan and a walk or loot
+    SWORD strike play the runner's own recipe (3.4's known limit). They were 29 % of the locks in
+    those 12 runs (60.4 of 205.6 an hour). So C's cookies still get the Knife when such a strike
+    finds them first, and the effect is diluted.
+
+### 16.3 The records the score counts, by the species at the lock
+
+A LOCK is one `recipe` record (run()'s `recipe_knife`): the species of the box it struck ("?" when
+the strike knew none), the answer (`knife`) and `mismatch`. The runner's records up to the next lock
+belong to it:
+- **a Knife strike:** `bare` `begin` ok (--bare-ready: already bare, the phase begins there), or
+  `bare` `opener` / `unequip` AT the strike. The idle swap (`by` "ready") is nobody's: with
+  --bare-ready the opener goes on before any species is known;
+- **a Knife TRY:** the same, a failed opener included;
+- **the no-knife play:** `bare` `recipe` with `knife` false, the runner's own record
+  (`BareCtl._no_knife`). `swap` true means the dagger went on first;
+- **a steal:** `bare` `equip` ok on the steal's cue (`popup` / `cyan`);
+- **the kills** after the lock, and the seconds from the lock to the first of them.
+
+**The reader's positive case on REAL sessions:** the 12 runs of s5b1-ab and s5b2-ab (3.98 h, the
+Knife swap on every lock; archived on the NAS, scratch-archive/2026-11-15/5b-series):
+- every lock of every species read as a Knife strike: 148 cookie / cookie_xmas locks, 148 Knife
+  strikes, 0 no-knife plays;
+- the steals attributed to a lock: 353 of 353; the kills: 555 of 555;
+- mismatches: 0.
+
+C has no real session yet. Its positive case is the offline BareCtl run of 16.2, read by the same
+reader.
+
+### 16.4 The tool
+
+`scripts/stage6_ab.py` follows stage5_ab's pattern, with stage2_ab's setup, detect server and run,
+and stage5b_ab's score lines. Run by the parent; NOT run yet:
+
+    cd /home/bot/docker/poring-lab
+    .venv/bin/python scripts/stage6_ab.py plan  --label s6ab --pairs 3 --minutes 20
+    .venv/bin/python scripts/stage6_ab.py run   --label s6ab --pairs 3 --minutes 20
+    .venv/bin/python scripts/stage6_ab.py score --label s6ab
+
+- **The series:** 3 pairs of 20 min, order B C, C B, B C. stage2_ab's setup runs before every run.
+  A STOP file in /dev/shm/poring-lab-tmp/stage6-ab/<label>/ ends the series before its next run.
+- **Before it:** merged and deployed (the backend, the Run helper); ASSIST; the Rogue in the game;
+  the Run helper idle; no chain.
+- **The arms:**
+  - B = the one box (`project_xmas_dun02.json`);
+  - C = the no-swap box.
+  - Both play the checkout's runner on run()'s own driver. 14.8 named B5b-2 (the hunt box) as the
+    base; Batt's 14.12 #1 keeps the hunt tab out of the ready-made box, and 14.11 showed the hunt
+    loop plays as the driver does. So the base is the box a person loads.
+- **`plan` refuses before any input** unless:
+  - the two boxes differ only in the two recipes' bodies;
+  - they take the same settings and keys, and the fast alarm is on;
+  - neither has a hunt loop;
+  - they give the same runner argv and the same run() arguments but box_recipes;
+  - B's four recipes are the Knife swap, C's two cookies the plain shape and its other two B's own,
+    every priority 1;
+  - the runner's `recipes_refused` accepts both with this Run config.
+
+### 16.5 THE PRE-REGISTERED BAR (`stage6_ab.BAR`, 2026-11-15 13:32 ICT, BEFORE any live data)
+
+C must hold, against B:
+
+| Line | C must hold |
+|---|---|
+| plays | over EVERY run that played: C TRIED the Knife on no cookie / cookie_xmas lock (0), and played its no-swap recipe (the runner's own record) on at least 5 of them; B struck at least 1 with the Knife (the counter sees one); no lock's answer was not its arm's plan (recipe_mismatch 0, both arms) |
+| deaths | C's deaths <= B's, over EVERY run that played (>= 1 min, or a death) |
+| kills per hour | the mean paired (C - B) >= -2 x its standard error, over at least 3 valid pairs (non-inferiority: the swap's time saved must not cost kills) |
+| the other monsters | C's Knife strikes per hour at mystcase + cruiser locks within +-25 % of B's (valid runs pooled) |
+| the tick pace | C's MEDIAN gap between hp_read records <= B's + 5 ms (valid runs pooled; 14.7a's rule; the p95 is reported) |
+| no runner error | no C run ends by an exception of the runner (a traceback in its log, or hunt_end `error` that is not a refusal); B's are reported |
+| a valid run | at least 80 % of M minutes on the runner's own clock, or a weight-home end; a pair counts when both runs are valid |
+
+- **The verdict:** FAIL when a judged line fails. INCONCLUSIVE when a line cannot be judged: fewer
+  than 3 valid pairs for kills, no valid run in an arm, or an arm that never played for plays.
+  PASS otherwise.
+- **Adjusted from the brief, each with its reason:**
+  1. **"Knife openers on cookie locks" is counted as Knife TRIES.** A failed opener counts too,
+     which is stricter. With --bare-ready the opener key goes on while idle, before a species is
+     known, so the per-species Knife is the lock's Knife STRIKE (16.3).
+  2. **"C fought at least 5 cookie locks" counts the runner's own no-knife record**, not only the
+     recipe asked: that record is what shows the recipe PLAYED.
+  3. **recipe_mismatch 0 is part of the plays line.** A mismatch plays the runner's own swap; in C
+     the Knife try would show it, in B nothing would.
+  4. **The errors line judges C** (the changed arm) and reports B's, as 13.5's line judged its new
+     arm.
+- **The +-25 % on the other monsters, derived from s5b1-ab / s5b2-ab's 12 runs** (the same technique
+  on every run):
+  - Knife strikes at mystcase + cruiser locks: a mean 107.9 an hour per run, SD 17.9;
+  - the per-run CV is 16.6 % overall and 15.1 % within a series (Poisson for ~36 counts a run:
+    16.7 %);
+  - the relative SE of the ratio of two 3-run pooled arms is sqrt(2) x CV / sqrt(3) = 12.3 %, so
+    2 SE = 24.7 %;
+  - the two equal-program series' arm ratios read 1.04 and 1.18.
+  - C may legitimately see a few % more locks of the other species (less time on cookies), well
+    inside the band.
+- **No line is a strict "<" against an arm that can read 0** (10.2's lesson): deaths are "<=", and
+  B's positive case is ">= 1". The pace tolerance comes from the measured noise of the same
+  statistic (13.7's lesson).
+
+### 16.6 Report only, and what the 12 runs say before the series
+
+The score reports, valid runs pooled, per hour and per arm:
+- steals by species, and the zeny of the steals lost on the cookies;
+- the seconds from a lock to its kill, by species;
+- loot steps (and their paired difference);
+- kills by species;
+- locks, Knife strikes, no-knife plays and dagger-first swaps by species;
+- every opener (stage 5's count, the idle ones included);
+- potions, Fly Wings, the lowest HP, the end reasons and B's runner errors.
+
+**The zeny:** the score reads data/econ/maps.json at run time (value_target's file: built locally
+from the lab server's tables, never committed). One stolen item is valued as drawn in proportion to
+its drop rate (cards cannot be stolen): sum(p x sell_oc) / sum(p). Without the file it reports the
+counts only.
+
+The 12 runs' reference (B's technique on every lock; the reader's numbers, valid as a baseline, not
+as data of this series):
+
+| Species | Locks / h | Steals / h | Steals a lock | Lock -> kill, median s (n) | Value a steal (z, OC) |
+|---|---|---|---|---|---|
+| cookie | 18.4 | 5.5 | 0.30 | 7.9 (47) | 611 |
+| cookie_xmas | 18.9 | 9.6 | 0.51 | 8.7 (55) | 351 |
+| mystcase | 64.4 | 27.4 | 0.43 | 11.9 (176) | 928 |
+| cruiser | 43.5 | 26.4 | 0.61 | 9.9 (141) | 170 |
+| ? (no species) | 60.4 | 19.9 | 0.33 | 7.7 (136) | - |
+
+- **What C gives up:** at those values (every item, the rare ones included) B's cookie steals are
+  worth about 6,700 z an hour (5.5 x 611 + 9.6 x 351). Batt's own run, the bar, made 135,737 common-item z / h (rogue-xmas02.md).
+- **What C saves:** at most a few seconds of the bare phase on ~37 cookie locks an hour, i.e. 1-3
+  minutes an hour. That is a few kills an hour, inside the pairs' noise (s5b2-ab: SE 14.5 kills / h).
+  So the kills line tests that the change costs nothing; it cannot show a gain of this size.
+- **For Batt to weigh (not judged):** by the lab's own values a Cookie steal (611 z) is worth more
+  than a Cruiser's (170 z), because its first drop sells well. The premise "no steal worth the
+  swap's time" is what the zeny line measures against the time saved.
+
+### 16.7 Commits, tests, and what stays
+
+- **The commits** (feat/cookie-noswap):
+  - 6fbf3f9d: the fixture, its TS twin, the /maps Load entry and /flows' ready-made table,
+    project.test.ts;
+  - fce18c98: scripts/stage6_ab.py, test_stage6_ab.py (19 cases), test_cookie_noswap.py (10);
+  - then this section and docs/console.md.
+- **The tests** (2026-11-15, the full suite ended ~13:4x ICT):
+  - the full Python suite: 5,914 passed, 94 skipped, 3 failed. The three are exactly the
+    worktree-only ones of 14.9 (test_mapcache_paths, test_dungeon_hunt's dagger-worn start check,
+    test_patrol_sim's gef_fild10 laps: client data a /dev/shm worktree lacks);
+  - ruff check and mypy clean; ruff format --check clean but main's two old files;
+  - the frontend's test (513: 512 passed, 1 skipped), typecheck and lint clean;
+  - `stage6_ab.py plan --label s6ab --pairs 3 --minutes 20` rc 0, in-process and as a process
+    (pure: no input, no folder written).
+- **Unchanged:** scripts/dungeon_hunt.py and scripts/flow_play.py. The no-swap recipe plays on the
+  recipe path stage 4a built.
+- **Not built:** 14.8's next step (no loot(t) for the Christmas Cookie: a new shape in
+  recipes.SHAPES).

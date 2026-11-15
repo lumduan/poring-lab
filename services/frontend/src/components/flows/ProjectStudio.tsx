@@ -37,12 +37,12 @@ import { ApiError, type CatalogueDoc, type Finding, FlowsApi, type LintDoc, type
 import type { ToolboxScope } from "@/lib/flow/blockdefs";
 import { boxStripPart } from "@/lib/flow/box";
 import { type FileMeta, newFileMeta, readFileMeta, writeFileMeta } from "@/lib/flow/file";
-import { canonical } from "@/lib/flow/ir";
 import { ACTIVE, busyWhy, PROJECT_FLOW } from "@/lib/flow/liverun";
 import { liveReady } from "@/lib/flow/liveready";
 import type { MapsDoc } from "@/lib/flow/pickers";
 import { browserStorage, hasOldFlow, KEYS, pythonDefault, readChoice, readProjectText, writeChoice, writeProjectText } from "@/lib/flow/prefs";
 import {
+  engineKey,
   GLOBAL_ID,
   globalOf,
   homeFunctionOn,
@@ -64,6 +64,7 @@ import {
   startMap,
   type Tab,
   tabNameProblem,
+  xmasCookieNoSwapProject,
   xmasFunctionsProject,
   xmasHuntProject,
   xmasProject,
@@ -107,6 +108,7 @@ const READY: Record<string, () => { project: Project; world: WorldSource }> = {
   xmas_dun02: () => ({ project: xmasFunctionsProject(), world: "local" }),
   xmas_dun02_runner: () => ({ project: xmasProject(), world: "local" }),
   xmas_dun02_hunt: () => ({ project: xmasHuntProject(), world: "local" }), // live blocks 5b-2
+  xmas_dun02_cookie_noswap: () => ({ project: xmasCookieNoSwapProject(), world: "local" }), // live blocks 16
   my_first_project: () => ({ project: sampleProject(), world: "sample" }),
 };
 
@@ -188,7 +190,9 @@ export default function ProjectStudio({ backendUrl, initialNode = null }: { back
   );
   const menuRef = useRef<HTMLDivElement | null>(null);
   const codeRef = useRef<HTMLPreElement | null>(null);
-  const key = useMemo(() => canonical(project), [project]);
+  // round 25: the ENGINE's key -- a tab's layout (where a person put the blocks) is no new lint,
+  // Python view or simulation
+  const key = useMemo(() => engineKey(project), [project]);
 
   const node: PNode = nodeById(project, nodeId) ?? project.nodes[0];
   const tabs: Tab[] = node.kind === "global" ? node.tabs : [...node.tabs.filter((t) => t.name === MAIN_TAB), ...node.tabs.filter((t) => t.name !== MAIN_TAB)];
@@ -349,7 +353,7 @@ export default function ProjectStudio({ backendUrl, initialNode = null }: { back
     async (p: Project, w: WorldSource) => {
       try {
         const doc = await api.lint(p, w);
-        setLint({ doc, for: canonical(p) });
+        setLint({ doc, for: engineKey(p) });
       } catch (e) {
         if (e instanceof ApiError && (e.reason === "invalid_flow" || e.reason === "invalid_project")) setNotice({ text: `The flow engine refuses this project: ${e.errors.join(" · ")}`, tone: "error", undo: null });
         else if (!(e instanceof ApiError && e.reason === "rate_limited")) setNotice({ text: `Lint failed: ${e instanceof ApiError ? e.message : String(e)}`, tone: "error", undo: null });
@@ -358,9 +362,9 @@ export default function ProjectStudio({ backendUrl, initialNode = null }: { back
     [api],
   );
   useEffect(() => {
-    const t = setTimeout(() => void runLint(project, world), LINT_DEBOUNCE_MS);
+    const t = setTimeout(() => void runLint(projectRef.current, world), LINT_DEBOUNCE_MS);
     return () => clearTimeout(t);
-  }, [project, world, runLint]);
+  }, [key, world, runLint]); // round 25: the engine's key, not the layout
 
   const py = useRef<{ busy: boolean; want: Project | null; until: number; timer: ReturnType<typeof setTimeout> | null }>({ busy: false, want: null, until: 0, timer: null });
   const pyPump = useRef<(() => void) | null>(null);
@@ -381,7 +385,7 @@ export default function ProjectStudio({ backendUrl, initialNode = null }: { back
       s.busy = true;
       try {
         const doc = await api.python(p);
-        setPython({ doc, for: canonical(p) });
+        setPython({ doc, for: engineKey(p) });
         setPythonErr(null);
       } catch (e) {
         if (e instanceof ApiError && e.reason === "rate_limited") {
@@ -431,7 +435,7 @@ export default function ProjectStudio({ backendUrl, initialNode = null }: { back
     replace(o.project, { undo: true, file: o.meta, notice: `${o.notice} The flow engine checks it at the next lint.` });
   };
   const pythonText = useCallback((d: PythonFiles) => d.files.map((f) => `# --- ${f.path}\n${f.text}`).join("\n"), []);
-  const pythonCached = useCallback((p: Project) => (python && python.for === canonical(p) ? pythonText(python.doc) : null), [python, pythonText]);
+  const pythonCached = useCallback((p: Project) => (python && python.for === engineKey(p) ? pythonText(python.doc) : null), [python, pythonText]);
   const pythonFor = useCallback(
     (p: Project): Promise<string> => {
       const have = pythonCached(p);
@@ -465,8 +469,8 @@ export default function ProjectStudio({ backendUrl, initialNode = null }: { back
     const p = projectRef.current;
     try {
       const doc = await api.simulate(p, world, scenarioOf(form));
-      setSim({ doc, for: canonical(p) });
-      setLint({ doc: doc.lint, for: canonical(p) });
+      setSim({ doc, for: engineKey(p) });
+      setLint({ doc: doc.lint, for: engineKey(p) });
     } catch (e) {
       setNotice({ text: `Simulate failed: ${e instanceof ApiError ? e.message : String(e)}`, tone: "error", undo: null });
     } finally {

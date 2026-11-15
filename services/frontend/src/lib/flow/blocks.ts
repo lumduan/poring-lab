@@ -14,7 +14,7 @@
 import { CREDENTIALS, DEF_BY_TYPE, DEFAULT_FAILS, DEFAULT_MAX_10, HOTKEYS, HUNT_LOOP_BLOCKS, ROLE_OF_TYPE, roleOfVar, roleType, RUNNER_ROLES, SENTENCE, SENTENCE_BY_TYPE } from "./blockdefs.ts";
 import { argsText, callArgsText, ExprError, exprText, hasDo, parseArgs, parseCallArgs, parseExpr, parseParams } from "./expr.ts";
 import { fieldOf, HUNT_TYPE, type HuntRules, omitted, paramOf, params as huntParams } from "./hunt.ts";
-import { blockHeight, rowsOf, STACK_GAP } from "./layout.ts";
+import { blockHeight, blockWidth, layoutKey, rowsOf, shelf, type ShelfItem, SHELF_LEFT, STACK_GAP, WIDEST_BADGE } from "./layout.ts";
 import { CLASS_KEY, DETECT_SENSOR, MODEL_KEY, SENSOR_BLOCK } from "./models.ts";
 import { SETTING_BY_VAR, settingFields, settingFromFields, settingLit, settingOfType, settingProblem, settingRows, settingType } from "./settings.ts";
 import { ROLE_PREFIX, STEP_BY_BLOCK, STEP_OF_TYPE, stepBlock, stepType } from "./tick.ts";
@@ -40,7 +40,7 @@ import {
   MAX_RANK,
   NAME,
 } from "./ir.ts";
-import { type Def, globalOf, MAIN_TAB, namesOf, nodeById, paramsText, type PNode, type Project, tabOf } from "./project.ts";
+import { type Def, globalOf, type Layout, MAIN_TAB, namesOf, nodeById, paramsText, type PNode, type Project, type Tab, tabOf } from "./project.ts";
 
 export type Scope = { kind: "block"; name: string } | { kind: "global" } | { kind: "main" } | { kind: "functions" };
 export type WsBlock = {
@@ -65,7 +65,12 @@ export type Defaults = Record<string, { concept: string; timeout_s: number }>;
 /** `hunt`: the hunt block's rule versions (GET /flows/catalogue `hunt_rules`); with them a hunt
  * whose every parameter is one of its choices shows as the pl_hunt block (hunt.ts), else as a
  * generic block (lossless either way). */
-export type ConvertOptions = { hunt?: HuntRules | null };
+export type ConvertOptions = {
+  hunt?: HuntRules | null;
+  /** Round 25: the shelf's width (layout.ts shelfWidth: the canvas at its scale, workspace units);
+   * the blocks with no remembered place go left to right while they fit. Absent or 0: one column. */
+  width?: number;
+};
 
 type ActionRest = Pick<ActionStmt, "concept" | "timeout_s" | "on_fail" | "outcome_to" | "note">;
 type HandlerRest = Pick<
@@ -1219,18 +1224,7 @@ export function tabToWorkspace(p: Project, scope: TabScope, opts: ConvertOptions
   if (!node || !t) throw new Error(`no tab ${scope.node}/${scope.tab}`);
   const ids = new Ids(opts.hunt ?? null);
   const top: WsBlock[] = [];
-  let y = TAB_TOP_Y;
-  const place = (b: WsBlock) => {
-    b.x = 20;
-    b.y = y;
-    const setting = settingOfType(b.type); // its rows (a safety switch's warning while off)
-    // round 23 (the reviewer: the survival tab's events overlapped, 78-164 px at 390 and 1440, 8
-    // fields hidden): a block is as tall as its rows (layout.ts blockHeight: the reviewer's measured
-    // heights or a little more), the next one STACK_GAP under it; the editor then stacks them again
-    // with the heights Blockly measured (BlockEditor settle)
-    y += setting ? settingHeight(b.type, b.fields) : blockHeight(b, PLACED_LABELS, placedHidden) + STACK_GAP;
-    top.push(b);
-  };
+  const place = (b: WsBlock) => void top.push(b);
   if (t.main) place({ type: "pl_main", id: ids.take("h:main"), inputs: chainInput("DO", t.main, "main", ids), extraState: {} });
   t.defs.forEach((d, i) => place(defHat(p, node, d, i, ids)));
   // the variables: the ordinary ones in their order, then the SETTINGS in the registry's (the page's
@@ -1250,11 +1244,49 @@ export function tabToWorkspace(p: Project, scope: TabScope, opts: ConvertOptions
     else if (f?.block && settingProblem(f, v.value) === null) place({ type: settingType(f), id: ids.take(`h:var:${name}`), fields: settingFields(f, v.value as string | number | boolean) });
     else place({ type: "pl_vardecl", id: ids.take(`h:var:${name}`), fields: { NAME: name }, inputs: { VALUE: { block: exprBlock(v, name, ids) } }, extraState: {} });
   }
+  // where each goes (round 25): a block a person put somewhere stays there (Tab.layout); the others
+  // go left to right while they fit the canvas (layout.ts shelf), each as tall as its rows
+  // (round 23: layout.ts blockHeight, the reviewer's measured heights or a little more) and wide
+  // as its widest row, STACK_GAP apart; the editor then places them again with the sizes Blockly
+  // measured (BlockEditor settle)
+  const at = shelf(shelfItems(top, t), opts.width ?? 0, STACK_GAP, TAB_TOP_Y, SHELF_LEFT);
+  for (const b of top) [b.x, b.y] = at.get(b.id ?? "") ?? [SHELF_LEFT, TAB_TOP_Y];
   return { blocks: { languageVersion: 0, blocks: top } };
 }
 
-/** The project with one tab replaced by its blocks (or the errors, nothing applied). */
-export function tabFromWorkspace(p: Project, scope: TabScope, ws: Workspace, defaults: Defaults = {}): TabResult {
+/** Round 25: a tab's top blocks as the shelf places them (layout.ts shelf): each as tall as its
+ * rows (round 23: blockHeight, the reviewer's measured heights or a little more; a setting block by
+ * its own rows), as wide as its widest row with the widest badge (the lint's, which arrives later),
+ * where the tab's layout puts it, and the start block alone on its row. */
+export function shelfItems(blocks: readonly WsBlock[], tab: Tab | undefined): ShelfItem[] {
+  return blocks.map((b) => {
+    const k = layoutKey(b.type, b.fields);
+    const setting = settingOfType(b.type); // its rows (a safety switch's warning while off)
+    const h = setting ? settingHeight(b.type, b.fields) - SETTING_GAP_Y : blockHeight(b, PLACED_LABELS, placedHidden);
+    return { id: b.id ?? "", w: blockWidth(b, { BADGE: WIDEST_BADGE }), h, at: k ? (tab?.layout?.[k] ?? null) : null, alone: b.type === "pl_main" };
+  });
+}
+
+/** Round 25: the ids of the top blocks a tab's layout places (the editor remembers them as placed
+ * by a person, so a rename keeps the place). */
+export function placedIds(ws: Workspace, tab: Tab | undefined): Set<string> {
+  const out = new Set<string>();
+  for (const b of ws.blocks?.blocks ?? []) {
+    const k = layoutKey(b.type, b.fields);
+    if (k && b.id && tab?.layout?.[k]) out.add(b.id);
+  }
+  return out;
+}
+
+/** The project with one tab replaced by its blocks (or the errors, nothing applied).
+ * Round 25: the tab's ORDER no longer follows the canvas -- its definitions keep the order the
+ * project has (each hat's `order`, the index it was loaded at), its variables the order of the
+ * tab's vars; a block new since then comes after them, in reading order (top, then left). So
+ * where a person puts the blocks (left to right, anywhere) never changes the project the engine
+ * gets. The tab's LAYOUT: the places of the blocks `placed` names (block ids: the ones a person
+ * dragged, or that the layout placed when the tab opened); without `placed`, the blocks the layout
+ * already had keep theirs, at where they are now. */
+export function tabFromWorkspace(p: Project, scope: TabScope, ws: Workspace, defaults: Defaults = {}, placed?: ReadonlySet<string>): TabResult {
   const r = new Reader(defaults);
   r.fns = callableOn(p, scope.node);
   const out = clone(p);
@@ -1276,7 +1308,7 @@ export function tabFromWorkspace(p: Project, scope: TabScope, ws: Workspace, def
   }
   const out_defs: Def[] = [];
   const seen = new Set<string>();
-  const order = [...defs.map((b) => ({ b, ev: false })), ...events.map((h) => ({ b: h.b, ev: true }))].sort((a, c) => (a.b.y ?? 0) - (c.b.y ?? 0));
+  const order = [...defs.map((b) => ({ b, ev: false })), ...events.map((h) => ({ b: h.b, ev: true }))].sort((a, c) => loadedAt(a.b) - loadedAt(c.b) || reading(a.b, c.b));
   for (const { b, ev } of order) {
     if (b.type === "pl_extend" || b.type === "pl_disable") {
       r.under(b, null, () => r.err(String(b.fields?.KEY ?? "event"), "a map replaces Global's event by writing its own event of the same name (extend / disable are gone)"));
@@ -1308,7 +1340,13 @@ export function tabFromWorkspace(p: Project, scope: TabScope, ws: Workspace, def
   }
   t.defs = out_defs;
   const vs: Record<string, Lit> = {};
-  for (const b of vars) {
+  const was = Object.keys(t.vars);
+  const varAt = (b: WsBlock) => {
+    const k = layoutKey(b.type, b.fields)?.slice(4) ?? "";
+    const i = was.indexOf(k);
+    return i < 0 ? Infinity : i;
+  };
+  for (const b of [...vars].sort((a, c) => varAt(a) - varAt(c) || reading(a, c))) {
     const role = ROLE_OF_TYPE.get(b.type);
     if (role) {
       // live blocks 5c (live-blocks.md 15.1): a ROLE BLOCK is the variable role_<param>, its value the
@@ -1353,7 +1391,28 @@ export function tabFromWorkspace(p: Project, scope: TabScope, ws: Workspace, def
     });
   }
   t.vars = vs;
+  // round 25: where a person put the blocks (cosmetic: outside the IR, the lint and the hash)
+  const layout: Layout = {};
+  const before = t.layout ?? {};
+  for (const b of ws.blocks?.blocks ?? []) {
+    const k = layoutKey(b.type, b.fields);
+    if (!k || typeof b.x !== "number" || typeof b.y !== "number" || !Number.isFinite(b.x) || !Number.isFinite(b.y)) continue;
+    if (placed ? b.id !== undefined && placed.has(b.id) : k in before) layout[k] = [Math.round(b.x), Math.round(b.y)];
+  }
+  if (Object.keys(layout).length) t.layout = layout;
+  else delete t.layout;
   if (r.errors.length) return { ok: false, errors: r.errors, issues: r.issues, loose };
   return { ok: true, project: out, warnings: r.warnings, paths: r.paths, loose };
+}
+
+/** A hat's index in the tab when it was loaded (blocks.ts defHat `order`); a new one: after all. */
+function loadedAt(b: WsBlock): number {
+  const o = Number((b.extraState as { order?: number } | undefined)?.order);
+  return Number.isFinite(o) ? o : Infinity;
+}
+
+/** Reading order on the canvas: top to bottom, then left to right (round 25: for new blocks only). */
+function reading(a: WsBlock, c: WsBlock): number {
+  return (a.y ?? 0) - (c.y ?? 0) || (a.x ?? 0) - (c.x ?? 0);
 }
 

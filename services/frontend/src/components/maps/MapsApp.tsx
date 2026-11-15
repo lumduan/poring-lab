@@ -47,7 +47,7 @@ import { browserStorage, hasOldFlow, KEYS, readChoice, readProjectText, readText
 import { ACTIVE, busyWhy, liveLabel, liveLine, PROJECT_FLOW } from "@/lib/flow/liverun";
 import { mapsReadyText } from "@/lib/flow/words";
 import { liveReady } from "@/lib/flow/liveready";
-import { mapNodes, nodeById, type Project, runnerBlockOn, runnerKeysOn, sampleProject, sessionPath, startMap as mapStartOf, xmasFunctionsProject, xmasHuntProject, xmasProject } from "@/lib/flow/project";
+import { forEngine, mapNodes, nodeById, type Project, runnerBlockOn, runnerKeysOn, sampleProject, sessionPath, startMap as mapStartOf, xmasCookieNoSwapProject, xmasFunctionsProject, xmasHuntProject, xmasProject } from "@/lib/flow/project";
 import { RUNNER_MAPS } from "@/lib/flow/settings";
 import { exportProject, importProject } from "@/lib/flow/projectfile";
 import { type FileMeta, newFileMeta, readFileMeta, writeFileMeta } from "@/lib/flow/file";
@@ -101,6 +101,7 @@ const READY: { id: string; make: () => Project; world: WorldSource; title: strin
   { id: "xmas", make: xmasFunctionsProject, world: "local", title: "xmas_dun02", words: "the Rogue, ONE box: START → xmas_dun02, where you put her; its hunt core is blocks in tabs (main calls hunt_loop(); the tab hunt: its roles and loop; the tab tick: its steps); every key a function in its keys tab" },
   { id: "xmas_runner", make: xmasProject, world: "local", title: "xmas_dun02_runner", words: "the same one box in its old shape: one block \"hunt with the runner\" holds the hunt core (it flies home on the Butterfly Wing itself)" },
   { id: "xmas_hunt", make: xmasHuntProject, world: "local", title: "xmas_dun02_hunt", words: "the same one box plus its tab hunt: hunt_loop(t) plays the runner's own steps as blocks (t = find_target(), then fight_target(t): the monsters tab's recipe)" },
+  { id: "xmas_noswap", make: xmasCookieNoSwapProject, world: "local", title: "xmas_dun02_cookie_noswap", words: "the same one box with NO Knife swap on the Christmas Cookie and the Cookie (attack_cookie, attack_cookie_xmas: strike, wait_kill, loot; live-blocks 16); the other monsters keep it" },
   { id: "sample", make: sampleProject, world: "sample", title: "my_first_project", words: "two SYNTHETIC maps on the sample sheets: a town (save point, NPC warp) and a field (attack 5 times, a wing back)" },
 ];
 
@@ -128,9 +129,10 @@ const num = (s: string, d: number, lo: number, hi: number) => {
 };
 
 /** The project without its nodes' positions: moving a node is no new run, lint or Python (n8n
- * saves positions in the file; they change nothing the engine checks or plays). */
+ * saves positions in the file; they change nothing the engine checks or plays). Round 25: nor its
+ * tabs' layouts (where a person put the blocks on /flows: project.ts forEngine). */
 function contentKey(p: Project): string {
-  return canonical({ ...p, nodes: p.nodes.map((n) => ({ ...n, pos: null })) });
+  return canonical({ ...forEngine(p), nodes: forEngine(p).nodes.map((n) => ({ ...n, pos: null })) });
 }
 
 

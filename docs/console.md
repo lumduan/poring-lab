@@ -435,6 +435,9 @@ Amendment B); a not-adopted model is never offered.
   **Tick** category on the tab tick. Run plays it exactly as the hunt box. The old shape (the runner
   block) is **xmas_dun02_runner** in the Load lists; a saved project with the runner block loads and
   runs as before.
+  The /maps Load list also offers **xmas_dun02_cookie_noswap** (live-blocks 16: the one box with
+  no Knife swap on the Christmas Cookie and the Cookie, `attack_cookie` / `attack_cookie_xmas` =
+  strike, wait_kill, loot; the other monsters keep the swap): load it there and Run it from START.
   - **/maps:** a small **START** pill left of the start map, joined to its entry; drag that
     connection onto another map and the run starts there (or "Start here" in a node's inspector).
     **Run** (amber, beside Simulate; press, then press again within 4 s) plays the project in the
@@ -622,6 +625,15 @@ Amendment B); a not-adopted model is never offered.
     picture is read against the picture as it was pressed, so the first drag reads like the second
     on a wide screen too; while the lint checks an edit, the strip's IN A RUN words stay (faded)
     instead of going, so the canvas under the strip never jumps.
+  - **Round 25** ([planning/live-blocks.md](planning/live-blocks.md) 12.9,
+    [planning/project-model.md](planning/project-model.md) 2.6): the block editor REMEMBERS
+    where a person puts blocks -- every block dragged (or arranged by "Clean up Blocks") keeps
+    its place through a refresh, a trip to /maps, Save and Load (saved in the project's tab as
+    `layout`, by the function's, event's or variable's name; outside the engine: no new lint,
+    hash or Run). Blocks nobody placed go LEFT TO RIGHT while they fit the canvas (the monsters
+    tab's four recipes in one row at 1440), one column on a phone. A block that grows pushes
+    only the blocks under it or right of it; a block dropped onto another stays where it was
+    dropped. /maps' nodes already kept their dragged places.
 - **No live run (the block editor):** nothing in the block editor reaches the executor, the mux or an input path (➡️ Run, above, is the one live path: the Run helper's player, never the editor). The backend's
   `/flows/*` routes only compute (public listener, LAN viewer, Origin; POSTs need the CSRF token,
   20 a minute; the Python view 120 a minute on its own budget since 2026-11-09). See [planning/mw2-block-editor.md](planning/mw2-block-editor.md) and

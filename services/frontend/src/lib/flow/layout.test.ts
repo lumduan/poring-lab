@@ -6,11 +6,15 @@ import { readFileSync } from "node:fs";
 import { test } from "node:test";
 
 import { DEF_BY_TYPE, titleLines } from "./blockdefs.ts";
-import { SETTING_GAP_Y, settingHeight, tabToWorkspace } from "./blocks.ts";
-import { BOX, blockHeight, blockRows, blockWidth, INDENT, overlaps, ROUND, rowsOf, STACK_GAP, stackTops, type TopBox } from "./layout.ts";
+import { BADGE_TEXT } from "./api.ts";
+import { placedIds, SETTING_GAP_Y, settingHeight, shelfItems, TAB_TOP_Y, tabFromWorkspace, tabToWorkspace, type Workspace } from "./blocks.ts";
+import { canonical } from "./ir.ts";
+import { BOX, blockHeight, blockRows, blockWidth, INDENT, layoutKey, overlaps, pushGrown, ROUND, rowsOf, SHELF_LEFT, shelfWidth, STACK_GAP, stackTops, type TopBox, WIDEST_BADGE } from "./layout.ts";
+import { checkBody, projectRunBody } from "./liverun.ts";
 import { EXPR_SHOW_UNITS, WRAP_UNITS, wrapExpr } from "./pickers.ts";
-import { type Project, sampleProject, xmasFunctionsProject, xmasHuntProject, xmasProject } from "./project.ts";
-import { rowUnits, SETTING_GEOMETRY as G, SETTING_ROW_BUDGET, settingOfType, textUnits } from "./settings.ts";
+import { engineKey, forEngine, nodeById, type Project, sampleProject, tabOf, xmasFunctionsProject, xmasHuntProject, xmasProject } from "./project.ts";
+import { exportProject, importProject } from "./projectfile.ts";
+import { rowUnits, SETTING_BY_NAME, SETTING_GEOMETRY as G, SETTING_ROW_BUDGET, settingOfType, settingType, textUnits } from "./settings.ts";
 import { sessionProject } from "./testkit.ts";
 
 const fixture = (name: string): Project => JSON.parse(readFileSync(new URL(`./fixtures/${name}`, import.meta.url), "utf8")) as Project;
@@ -209,4 +213,159 @@ test("round 23: stackTops packs a tab from its top, pushes only down, keeps the 
   const cols = stackTops([box("a", 90, 500, 20, 300), box("b", 200, 100, 400, 200), box("c", 300, 100, 20, 300)], "push", STACK_GAP, 90);
   assert.equal(cols.get("b"), undefined);
   assert.equal(cols.get("c"), 614);
+});
+
+// --- round 25 (live-blocks.md 12.9): remembered positions, left to right ---------------------------
+// The shelf's widths: at 390 the canvas holds 313 units beside the toolbox and before Blockly's
+// controls (settings.ts SETTING_ROW_BUDGET's measure); at 1440 the canvas beside the Python pane
+// (studio.css .studio-side: 30vw = 432 px) and the toolbox (~150 px) is ~858 px at scale 0.75.
+const W390 = 313;
+const W1440 = shelfWidth(1440 - 432 - 150, 0.75);
+const WIDTHS = [W390, 600, W1440, shelfWidth(1440 - 150, 0.75), 2400];
+
+/** The top blocks of a tab as the shelf placed them, each with the box the shelf reserved. */
+function shelfBoxes(p: Project, node: string, tab: string, width: number): TopBox[] {
+  const ws = tabToWorkspace(p, { node, tab }, { width });
+  const items = shelfItems(ws.blocks.blocks, tabOf(nodeById(p, node)!, tab));
+  return ws.blocks.blocks.map((b, i) => ({ id: b.id ?? `#${i}`, x: b.x ?? 0, y: b.y ?? 0, w: items[i].w, h: items[i].h }));
+}
+
+test("round 25: a top block's key -- main, def:<name> (functions and events), var:<name> (variables and settings); none for a nameless or loose block", () => {
+  assert.equal(layoutKey("pl_main", {}), "main");
+  assert.equal(layoutKey("pl_def", { NAME: "heal" }), "def:heal");
+  assert.equal(layoutKey("pl_event", { NAME: "drink" }), "def:drink");
+  assert.equal(layoutKey("pl_vardecl", { NAME: "minutes" }), "var:minutes");
+  assert.equal(layoutKey(settingType(SETTING_BY_NAME.get("END_HOT_S")!), { VALUE: 3.5 }), "var:END_HOT_S");
+  assert.equal(layoutKey("pl_def", { NAME: "?" }), null);
+  assert.equal(layoutKey("pl_press_key", { KEY: "F1" }), null);
+  // every key the shelf can make is one the engine's model accepts (project.py LAYOUT_KEY)
+  const engine = /^(main|(def|var):[A-Za-z][A-Za-z0-9_]{0,47})$/;
+  for (const p of ALL) for (const n of p.nodes) for (const t of n.tabs) for (const b of tabToWorkspace(p, { node: n.id, tab: t.name }).blocks.blocks) {
+    const k = layoutKey(b.type, b.fields);
+    assert.ok(k && engine.test(k), `${p.name} ${n.id}/${t.name}: ${b.type} -> ${k}`);
+  }
+  // the shelf leaves room for the widest badge there is
+  const widest = Math.max(...Object.values(BADGE_TEXT).map((t) => textUnits(`● ${t}`)));
+  assert.equal(textUnits(WIDEST_BADGE), widest);
+});
+
+test("round 25: LEFT TO RIGHT while the blocks fit -- the monsters tab's four recipes in one row at 1440, one column at 390", () => {
+  const p = xmasProject();
+  const at1440 = shelfBoxes(p, "xmas_dun02", "monsters", W1440);
+  const firstRow = at1440.filter((b) => b.y === TAB_TOP_Y);
+  assert.ok(firstRow.length >= 3, `${at1440.map((b) => `${b.x},${b.y}`).join(" ")}`);
+  assert.deepEqual(firstRow.map((b) => b.x), [...firstRow.map((b) => b.x)].sort((a, c) => a - c)); // in their order
+  const wide = shelfBoxes(p, "xmas_dun02", "monsters", shelfWidth(1440 - 150, 0.75)); // the Python pane closed
+  assert.equal(wide.filter((b) => b.y === TAB_TOP_Y).length, 4);
+  const at390 = shelfBoxes(p, "xmas_dun02", "monsters", W390);
+  assert.ok(at390.every((b) => b.x === SHELF_LEFT), "a phone stays one column");
+  // no width: round 23's list, one column, the same places as before
+  assert.deepEqual(shelfBoxes(p, "xmas_dun02", "survival", 0).map((b) => b.x), shelfBoxes(p, "xmas_dun02", "survival", W390).map((b) => b.x));
+});
+
+test("round 25: no two top blocks overlap and none passes the canvas's edge -- every tab of the ready-made and the FROZEN projects, 390 to 2400", () => {
+  let tabs = 0;
+  for (const width of WIDTHS) {
+    for (const p of ALL) {
+      for (const n of p.nodes) {
+        for (const t of n.tabs) {
+          const boxes = shelfBoxes(p, n.id, t.name, width);
+          for (let i = 0; i < boxes.length; i++) {
+            const a = boxes[i];
+            assert.ok(a.x === SHELF_LEFT || a.x + a.w <= SHELF_LEFT + width, `${width}: ${p.name} ${n.id}/${t.name}: ${a.id} past the edge`);
+            for (let j = i + 1; j < boxes.length; j++) {
+              const c = boxes[j];
+              const apart = { ...c, x: c.x - STACK_GAP + 1, y: c.y - STACK_GAP + 1, w: c.w + 2 * STACK_GAP - 2, h: c.h + 2 * STACK_GAP - 2 };
+              assert.ok(!overlaps(a, apart), `${width}: ${p.name} ${n.id}/${t.name}: ${a.id} and ${c.id} closer than ${STACK_GAP}`);
+            }
+          }
+          tabs++;
+        }
+      }
+    }
+  }
+  assert.ok(tabs > 150, String(tabs));
+});
+
+test("round 25: a REMEMBERED place wins -- the block where the person put it, the others left to right around it", () => {
+  const p = xmasProject();
+  const n = nodeById(p, "xmas_dun02")!;
+  const t = tabOf(n, "monsters")!;
+  t.layout = { "def:attack_cookie": [700, 900] };
+  const boxes = shelfBoxes(p, "xmas_dun02", "monsters", W1440);
+  const ws = tabToWorkspace(p, { node: "xmas_dun02", tab: "monsters" }, { width: W1440 });
+  const i = ws.blocks.blocks.findIndex((b) => b.fields?.NAME === "attack_cookie");
+  assert.deepEqual([boxes[i].x, boxes[i].y], [700, 900]);
+  for (const [j, b] of boxes.entries()) if (j !== i) assert.ok(!overlaps(b, boxes[i]), b.id);
+  assert.deepEqual([...placedIds(ws, t)], [ws.blocks.blocks[i].id]);
+});
+
+test("round 25: where the blocks are never changes the ENGINE's project -- every tab, every position, any order; the layout keeps only the placed blocks", () => {
+  let seed = 7;
+  const rnd = () => ((seed = (seed * 1103515245 + 12345) % 2 ** 31) / 2 ** 31) * 3000;
+  for (const p of ALL) {
+    for (const n of p.nodes) {
+      for (const t of n.tabs) {
+        const scope = { node: n.id, tab: t.name };
+        const ws = JSON.parse(JSON.stringify(tabToWorkspace(p, scope, { width: W1440 }))) as Workspace;
+        for (const b of ws.blocks.blocks) [b.x, b.y] = [Math.round(rnd()), Math.round(rnd())];
+        ws.blocks.blocks.reverse(); // Blockly's own order of top blocks, whatever it is
+        const all = new Set(ws.blocks.blocks.map((b) => b.id ?? ""));
+        const back = tabFromWorkspace(p, scope, ws, {}, all);
+        assert.ok(back.ok, `${p.name} ${n.id}/${t.name}: ${back.ok ? "" : back.errors.join(" | ")}`);
+        assert.equal(engineKey(back.project), engineKey(p), `${p.name} ${n.id}/${t.name}: the engine's project changed`);
+        const lay = tabOf(nodeById(back.project, n.id)!, t.name)!.layout ?? {};
+        assert.equal(Object.keys(lay).length, ws.blocks.blocks.length);
+        // nothing placed: no layout at all (the JSON as before)
+        const none = tabFromWorkspace(p, scope, ws, {}, new Set());
+        assert.ok(none.ok && tabOf(nodeById(none.project, n.id)!, t.name)!.layout === undefined);
+        assert.equal(canonical(none.ok ? none.project : null), canonical(p), `${p.name} ${n.id}/${t.name}`);
+      }
+    }
+  }
+});
+
+test("round 25: the layout follows a rename, and without `placed` the blocks the layout had keep theirs (at where they are now)", () => {
+  const p = xmasProject();
+  const scope = { node: "xmas_dun02", tab: "keys" };
+  const ws = JSON.parse(JSON.stringify(tabToWorkspace(p, scope))) as Workspace;
+  const heal = ws.blocks.blocks.find((b) => b.fields?.NAME === "heal")!;
+  [heal.x, heal.y] = [640.4, 120.6];
+  heal.fields = { ...heal.fields, NAME: "drink_potion" };
+  const r = tabFromWorkspace(p, scope, ws, {}, new Set([heal.id!]));
+  assert.ok(r.ok);
+  const q = r.project;
+  assert.deepEqual(tabOf(nodeById(q, "xmas_dun02")!, "keys")!.layout, { "def:drink_potion": [640, 121] });
+  // the next conversion, from the project that has the layout, with no `placed` (another caller)
+  const ws2 = JSON.parse(JSON.stringify(tabToWorkspace(q, scope))) as Workspace;
+  const moved = ws2.blocks.blocks.find((b) => b.fields?.NAME === "drink_potion")!;
+  assert.deepEqual([moved.x, moved.y], [640, 121]); // where it was put
+  moved.y = 300;
+  const r2 = tabFromWorkspace(q, scope, ws2);
+  assert.ok(r2.ok);
+  assert.deepEqual(tabOf(nodeById(r2.project, "xmas_dun02")!, "keys")!.layout, { "def:drink_potion": [640, 300] });
+  // the file keeps it; the engine never gets it
+  const back = importProject(exportProject(r2.project));
+  assert.ok(back.ok && canonical(back.project) === canonical(r2.project));
+  assert.equal(JSON.stringify(forEngine(r2.project)).includes('"layout"'), false);
+  assert.equal(projectRunBody(r2.project, "xmas_dun02").project.nodes.some((n) => n.tabs.some((t) => "layout" in t)), false);
+  assert.equal(checkBody(r2.project, "xmas_dun02").project.nodes.some((n) => n.tabs.some((t) => "layout" in t)), false);
+  assert.equal(engineKey(r2.project), engineKey(q)); // moving it again is no new engine project
+});
+
+test("round 25: a block that GROWS pushes only what it now reaches; a person's own overlapping drop and a block beside it stay", () => {
+  const box = (id: string, x: number, y: number, w: number, h: number): TopBox => ({ id, x, y, w, h });
+  const prev = (bs: TopBox[], grow: Record<string, { w: number; h: number }>) => new Map(bs.map((b) => [b.id, grow[b.id] ?? { w: b.w, h: b.h }]));
+  // a grew from 300 to 500 tall: b (under it, 24 apart) goes down and pushes c; d beside a stays
+  const bs = [box("a", 20, 90, 300, 500), box("b", 20, 414, 300, 200), box("c", 20, 638, 300, 100), box("d", 344, 90, 300, 900)];
+  const m = pushGrown(bs, prev(bs, { a: { w: 300, h: 300 } }), STACK_GAP);
+  assert.deepEqual(Object.fromEntries(m), { b: [20, 614], c: [20, 838] });
+  // e was dropped ONTO a by a person (it overlapped before): it stays where it was dropped
+  const drop = [box("a", 20, 90, 300, 500), box("e", 60, 200, 300, 200)];
+  assert.equal(pushGrown(drop, prev(drop, { a: { w: 300, h: 300 } }), STACK_GAP).size, 0);
+  // nothing grew (a shrink, a move): nothing moves
+  assert.equal(pushGrown(bs, prev(bs, { a: { w: 300, h: 700 } }), STACK_GAP).size, 0);
+  // a grew WIDER (a badge arrived): the block right of it in its row moves right, the gap kept
+  const row = [box("a", 20, 90, 360, 300), box("b", 344, 90, 300, 300), box("c", 668, 90, 300, 300)];
+  assert.deepEqual(Object.fromEntries(pushGrown(row, prev(row, { a: { w: 300, h: 300 } }), STACK_GAP)), { b: [404, 90], c: [728, 90] });
 });

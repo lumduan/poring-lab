@@ -9,12 +9,12 @@ import { readFileSync } from "node:fs";
 import { test } from "node:test";
 
 import { categoryOf, DEF_BY_TYPE, HUNT_LOOP_TAB, namesOf, ROLE_OF_TYPE, roleType, RUNNER_ROLES, toolbox, toolboxBlocks } from "./blockdefs.ts";
-import { tabFromWorkspace, tabToWorkspace, type Workspace } from "./blocks.ts";
+import { shelfItems, tabFromWorkspace, tabToWorkspace, type Workspace } from "./blocks.ts";
 import { canonical } from "./ir.ts";
-import { rowsOf } from "./layout.ts";
+import { layoutKey, overlaps, rowsOf, shelfWidth, STACK_GAP } from "./layout.ts";
 import { reachable } from "./liveready.ts";
 import { skillKeysOn } from "./pickers.ts";
-import { HUNT_TAB, homeFunctionOn, huntCoreCallOn, mainOf, mapNodes, MONSTERS_TAB, rolesOn, runnerBlockOn, runnerKeysOn, tickDef, xmasFunctionsProject, xmasHuntProject, xmasProject } from "./project.ts";
+import { engineKey, HUNT_TAB, homeFunctionOn, huntCoreCallOn, mainOf, mapNodes, MONSTERS_TAB, nodeById, rolesOn, runnerBlockOn, runnerKeysOn, tabOf, tickDef, xmasFunctionsProject, xmasHuntProject, xmasProject } from "./project.ts";
 import { SETTING_ROW_BUDGET } from "./settings.ts";
 import { sessionProject } from "./testkit.ts";
 import { HUNT_CALL, HUNT_ROLES, LOWERED_NOTE, OPTIONAL_STEPS, REQUIRED_ROLES, ROLE_PREFIX, STEP_BLOCKS, STEP_OF_TYPE, stepBlock, stepType, TICK_FN, TICK_STEPS, TICK_TAB } from "./tick.ts";
@@ -229,5 +229,38 @@ test("the role and step blocks: their types are defined, each row inside the 300
     assert.deepEqual([...namesOf(type).saved].filter((n) => !n.startsWith("ROW_")), ["FN"]); // (its end rows are inputs)
     // its usual function (the ready-made box's own: layout.test.ts), as the runner block's rows
     for (const row of rowsOf({ type, id: "x", fields: { FN: r.fn } })) assert.ok(row.w <= SETTING_ROW_BUDGET, `${type}: ${Math.round(row.w)}: ${row.what}`);
+  }
+});
+
+// round 25 (merged 2026-11-15): the shelf lays the new blocks out too, a person's places are kept
+// by their names (var:role_<param>, def:hunt_tick), and the engine never sees them
+test("round 25's layout: the role blocks and hunt_tick have their keys; the functions box's tabs never overlap; a place never changes the engine's project", () => {
+  const p = xmasFunctionsProject();
+  const hunt = tabToWorkspace(p, { node: NODE, tab: HUNT_TAB }).blocks.blocks;
+  assert.deepEqual(hunt.map((b) => layoutKey(b.type, b.fields)), ["def:hunt_loop", ...RUNNER_ROLES.map((r) => `var:${ROLE_PREFIX}${r.param}`)]);
+  assert.deepEqual(tabToWorkspace(p, { node: NODE, tab: TICK_TAB }).blocks.blocks.map((b) => layoutKey(b.type, b.fields)), [`def:${TICK_FN}`]);
+  for (const width of [313, 600, shelfWidth(1440 - 432 - 150, 0.75), 2400]) {
+    for (const t of mapNodes(p)[0].tabs) {
+      const ws = tabToWorkspace(p, { node: NODE, tab: t.name }, { width });
+      const items = shelfItems(ws.blocks.blocks, t);
+      const boxes = ws.blocks.blocks.map((b, i) => ({ id: b.id ?? `#${i}`, x: b.x ?? 0, y: b.y ?? 0, w: items[i].w, h: items[i].h }));
+      for (let i = 0; i < boxes.length; i++) for (let j = i + 1; j < boxes.length; j++) {
+        const c = boxes[j];
+        assert.ok(!overlaps(boxes[i], { ...c, x: c.x - STACK_GAP + 1, y: c.y - STACK_GAP + 1, w: c.w + 2 * STACK_GAP - 2, h: c.h + 2 * STACK_GAP - 2 }), `${width} ${t.name}: ${boxes[i].id} and ${c.id}`);
+      }
+    }
+  }
+  // a person moves every role block and hunt_tick: the layout keeps them by name, the engine's
+  // project (and so the lowering, the keys, the hash) is unchanged
+  for (const tab of [HUNT_TAB, TICK_TAB]) {
+    const ws = clone(tabToWorkspace(p, { node: NODE, tab }));
+    ws.blocks.blocks.forEach((b, i) => ([b.x, b.y] = [900 - 37 * i, 40 + 211 * i]));
+    const back = tabFromWorkspace(p, { node: NODE, tab }, ws, {}, new Set(ws.blocks.blocks.map((b) => b.id ?? "")));
+    assert.ok(back.ok, tab);
+    if (!back.ok) continue;
+    const lay = tabOf(nodeById(back.project, NODE)!, tab)!.layout ?? {};
+    assert.deepEqual(Object.keys(lay).sort(), ws.blocks.blocks.map((b) => layoutKey(b.type, b.fields)!).sort());
+    assert.equal(engineKey(back.project), engineKey(p), tab);
+    assert.equal(canonical(runnerBlockOn(mapNodes(back.project)[0])), canonical(runnerBlockOn(mapNodes(p)[0])));
   }
 });
