@@ -351,6 +351,10 @@ XMAS02_FIT = ("-rdp-hunt-xmas02-fiH1", "-rdp-hunt-xmas02-fiH2", "-rdp-xmas02-fsH
 # pool, the cache); not in eval_suffixes (its scoring is the amendment after the model is frozen)
 # ➡️ S4 (2026-11-14): in eval_suffixes, like gw3 since M7 (the Goblin round scores on it once)
 XMAS02_SK3A = "-rdp-xmas02-sk3a"
+# Amendment S5 (2026-11-15): the FRESH knight-party held-out sk4a (3a's TEST stands minus sk3a's,
+# `--label xmas02-sk4a`), refused by NAME like TEST before it records; read only by --eval-test,
+# once, with the frozen S4 model (it is never TRAIN for that model)
+XMAS02_SK4A = "-rdp-xmas02-sk4a"
 # Amendment S (2026-11-12): sk1a's first stand had a OneDrive toast over the client's bottom-right
 # (game region x >= 980, y >= 470): frames 22-46, the first and last frame showing it (a pixel test
 # against frame 30's panel: mean abs difference 0.00-0.08 on those 25 frames, >= 26.16 on every
@@ -384,7 +388,7 @@ XMAS02 = MapSpec(
     # held out until the model is frozen (refused by labels / pack / the cache like xw5);
     # Amendment S (2026-11-12): + sk3a, the Stormy Knight watch on 3a's TEST stands, the same way
     test_suffixes=("-rdp-xmas02-xw5", "-rdp-xmas02-xp1", XMAS02_X2, XMAS02_GW3, *XMAS02_FIT,
-                   XMAS02_SK3A),
+                   XMAS02_SK3A, XMAS02_SK4A),
     # D3: in T2's tier only with >= 30 kept labels; Amendment M: Garm Baby (1515) IN the tier;
     # Amendment S: Stormy Knight (1251) IN the tier (not conditional); the Goblin unchanged
     conditional=(1607,),
@@ -403,7 +407,8 @@ XMAS02 = MapSpec(
     # after the model is frozen (its last.pt sha256 recorded first); Amendment S4 (2026-11-14):
     # sk3a, the held-out knight-party watch, the same way (read once, after the Goblin round's
     # last.pt sha256 is recorded)
-    eval_suffixes=("-rdp-xmas02-xw5", "-rdp-xmas02-xp1", XMAS02_X2, XMAS02_GW3, XMAS02_SK3A),
+    eval_suffixes=("-rdp-xmas02-xw5", "-rdp-xmas02-xp1", XMAS02_X2, XMAS02_GW3, XMAS02_SK3A,
+                   XMAS02_SK4A),
     t2_seed=51,
     eval_seed=53,
     eval_per_species=60,
@@ -647,7 +652,7 @@ def envelope(sheet: Any, pred: Any, group: int) -> Any:
 REGION_GROUPS = (MonsterAction.IDLE, MonsterAction.WALK)
 
 
-def label_regions(lab: Any, params: dict[str, Any], t: int, gids: Iterable[int]
+def label_regions(lab: Any, params: dict[str, Any], t: int, gids: Iterable[int] | None
                   ) -> dict[int, Box | None]:  # fmt: skip
     """xmas02-detector.md Amendment S4 (the masked cache; packets + sprites, NO pixel): for each
     monster ``gid`` of the recorded frame at ``t``, the screen box its sprite can cover at the
@@ -656,12 +661,14 @@ def label_regions(lab: Any, params: dict[str, Any], t: int, gids: Iterable[int]
     the unit's state's group of EVERY frame of the group (``envelope``: the phase is not trusted).
     None: no such visible monster in that world, or its sprite draws nothing there. Not grown and
     not clipped (the cache does both). The label rule itself is untouched: nothing here decides
-    whether a label is kept."""
+    whether a label is kept. ``gids=None`` (S5's units): every visible monster of that world."""
     from poring_dataset.render import Actor, predict_sprite
 
-    out: dict[int, Box | None] = dict.fromkeys(int(g) for g in gids)
     tw = int(t) - int(float(params["offset_ms"]) * 1e6)
     _replay, world, all_states, _rules = lab.timeline.at_world(tw)
+    if gids is None:
+        gids = [e.gid for e in world.entities if e.objtype == 5 and not e.hidden]
+    out: dict[int, Box | None] = dict.fromkeys(int(g) for g in gids)
     if world.self_pos is None or not world.map:
         return out
     scene = occ.scene_for(lab, world.map, world.self_pos)
@@ -687,6 +694,29 @@ def label_regions(lab: Any, params: dict[str, Any], t: int, gids: Iterable[int]
                 p = envelope(sheet, base, g)
                 boxes.append(None if p is None else p.box)
         out[e.gid] = union(boxes)
+    return out
+
+
+def frame_units(lab: Any, params: dict[str, Any], t: int, size: tuple[int, int],
+                grow: float) -> list[dict[str, Any]]:  # fmt: skip
+    """xmas02-detector.md Amendment S5 (the crowd truth; packets + sprites, no pixel): every visible
+    monster of the recorded frame at ``t`` whose region (label_regions, grown by ``grow`` px and
+    clipped to ``size``) lies on screen: {gid, mob, region}, sorted by gid. A unit the label rule
+    kept, excluded or never listed (hidden under the UI) is here alike: the packets say it is
+    there."""
+    tw = int(t) - int(float(params["offset_ms"]) * 1e6)
+    _replay, world, _states, _rules = lab.timeline.at_world(tw)
+    jobs = {e.gid: int(e.job) for e in world.entities if e.objtype == 5 and not e.hidden}
+    w, h = size
+    out = []
+    for gid, box in sorted(label_regions(lab, params, t, list(jobs)).items()):
+        if box is None:
+            continue
+        x0, y0 = max(0.0, box[0] - grow), max(0.0, box[1] - grow)
+        x1, y1 = min(float(w), box[2] + grow), min(float(h), box[3] + grow)
+        if x1 > x0 and y1 > y0:
+            region = [round(x0, 1), round(y0, 1), round(x1, 1), round(y1, 1)]
+            out.append({"gid": int(gid), "mob": jobs[gid], "region": region})
     return out
 
 

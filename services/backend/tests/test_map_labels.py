@@ -1446,6 +1446,20 @@ def test_m_gw3_is_refused_by_name_and_gw1_gw2_are_train(
 SK1A = ml.XMAS02_SK1A  # Amendment S's watches: `--label xmas02-sk<n>a`
 SK2A = "20261112T072541-rdp-xmas02-sk2a"
 SK3A = "20261112T080000-rdp-xmas02-sk3a"
+SK4A = "20261115T150000-rdp-xmas02-sk4a"  # S5's fresh held-out (a made-up stamp)
+
+
+def test_s5_sk4a_is_refused_by_name_before_it_records(tmp_path: Path) -> None:
+    """Amendment S5 (2026-11-15): sk4a is TEST by NAME (labels without --eval-test, T2's pool and
+    the cache refuse it); only --eval-test reads it."""
+    spec = ml.XMAS02
+    assert spec.is_test(SK4A, None) and not spec.is_fit(SK4A, None)
+    assert not spec.is_test("20261115T150000-rdp-xmas02-sk4ab", None)
+    with pytest.raises(SystemExit, match=r"shares frames with TEST \(3b\)"):
+        ml.cmd_labels(_xlabels_args(tmp_path, f"/nonexistent/{SK4A}"))
+    with pytest.raises(SystemExit, match="TEST is not in T2's pool"):
+        ml.pack_pool([_xdoc(tmp_path, SK1A, [1607]), _xdoc(tmp_path, SK4A, [1607])], spec, "/nas")
+    assert ml.eval_part_refusal(spec, SK4A, None, "eval_test") is None
 
 
 def test_s_sk3a_is_refused_by_name_and_sk1a_sk2a_are_train(
@@ -1818,6 +1832,7 @@ def test_t9_eval_flags_are_per_map() -> None:
     assert set(x.test_suffixes) - set(ml.XMAS02_FIT) == set(x.eval_suffixes)
     assert ml.XMAS02_GW3 in x.eval_suffixes  # M7
     assert ml.XMAS02_SK3A in x.test_suffixes and ml.XMAS02_SK3A in x.eval_suffixes  # S4
+    assert ml.XMAS02_SK4A in x.test_suffixes and ml.XMAS02_SK4A in x.eval_suffixes  # S5
     assert not set(ml.XMAS02_FIT) & set(x.eval_suffixes)
     assert ml.GEF10.eval_suffixes == ml.GEF10.test2_suffixes
     with pytest.raises(SystemExit, match="one evaluation flag at a time"):
