@@ -2426,7 +2426,9 @@ same studio as my_first_workflow, not a separate view." This amendment ADDS to s
   waits the hunt core calls at its moment, its key the first press; two optional respawn roles). It
   runs only on a map that has a runner (`functions.RUNNER_MAPS`, today xmas_dun02: flow_run.py
   FLOWS, drift-tested). The flow engine only SIMULATES it, as `hunt`; the game is still played by
-  the runner through the Run button (the note at the top).
+  the runner through the Run button (the note at the top). ➡️ **2026-11-15 (Amendment M):** the
+  ready-made box no longer holds this block: its hunt core is `hunt_loop()` in main, the role
+  blocks and the tick's step blocks; the block stays valid (old projects) and is lowered to.
 - **The fixture** `services/frontend/src/lib/flow/fixtures/xmas_dun02_flow.json`: the xmas_dun02
   flow as two map blocks (xmas_dun02 -> geffen), every key a function
   (`packages/poring_flow/tests/test_flow_functions.py`).
@@ -2788,3 +2790,38 @@ section 14 (built offline; its live A/B pre-registered there, not run).
 - The canonical loop `t = find_target(); fight_target(t)` calls the runner's own step sequence tick for
   tick (scripts/hunt_trace.py, on scripted mode changes).
 
+## Amendment M (2026-11-15 ~13:0x, Batt decided; 5c): the runner block dissolves into functions in tabs
+
+**Batt (live-blocks.md 14.12, translated):** "Not dungeon_hunt.py like this: make it functions in
+separate tabs. dungeon_hunt.py should be blocks the user sees and can edit himself." This amendment
+ADDS to Amendments C and L; nothing above is rewritten (Amendment C's block carries a pointer). The
+design, its proofs and its pre-registered live A/B: [live-blocks.md](../planning/live-blocks.md)
+section 15 (built offline, 15.11; the A/B not run).
+
+- **A map node's main calls `hunt_loop()`** (once, at its top level, no inputs) where the runner
+  block stood: its hunt core starts there and plays the hunt loop (Amendment L; `def hunt_loop(t)`
+  may take a default, `t=False`, so main can call it). The COMPILER LOWERS that call to the runner
+  block's action (`poring_flow.project.lower_hunt_core`, the first step of `compile_project`), so the
+  IR every reader sees -- the player, the live set, the keys, the settings, the lint, the backend's
+  not_live -- is the one the runner block compiled to; the project and its Python view keep the
+  call. A node that holds the runner block is never lowered: old projects play as before.
+- **ROLE BLOCKS:** each of the runner block's parameters is a tab variable `role_<param>` naming a
+  function (`role_heal = "heal"`, ... `role_eat = "eat"`), shown as a block with the role picker;
+  an optional role (home, respawn, respawn_confirm, eat) is absent when deleted. Every rule of
+  Amendments C, G and I on a role applies through the lowered action.
+- **THE TICK:** the node's function `hunt_tick()` (tab `tick`) lists run()'s 20 steps as STEP BLOCKS
+  `step_<name>()` (blocks.yaml, `live: true`, live only there), in run()'s order, each with its class
+  (`poring_flow.tick`): SAFETY and REQUIRED steps can be neither left out nor moved; an OPTIONAL step
+  (loot, ready, plant) may be left out, and the runner then never plays it
+  (`HuntCursor.leave_out`, which itself refuses any other step). Without `hunt_tick()` every step
+  plays. What a step does stays the runner's code.
+- **Refused before any input** (the lint's errors; not_live alike): hunt_core_call (any other call
+  of hunt_loop()), hunt_roles (a required role block missing), tick_step (a step left out that may
+  not be, moved, twice; another statement in hunt_tick(); a step block elsewhere), tick_place
+  (a hunt_tick() where no hunt loop drives; a call of hunt_tick()); role_block warns on role blocks
+  with no hunt core.
+- **The ready-made box** /flows and /maps open first is this shape
+  (`fixtures/project_xmas_dun02_functions.json` = `xmasFunctionsProject()`); the runner block's shape
+  stays loadable (`project_xmas_dun02.json`, the pinned argv) and the hunt box (Amendment L).
+- **Open (live-blocks.md 15.10, Batt's):** whether a person may leave out a SAFETY step (built: no),
+  and whether the runner block leaves the toolbox (built: it stays, for old projects).

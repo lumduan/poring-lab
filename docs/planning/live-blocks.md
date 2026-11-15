@@ -1,14 +1,14 @@
 ---
 doc_type: design
 hypothesis: null
-status: "DECIDED 2026-11-13 ~21:4x (Batt): build the live block player first; one box; break the runner into blocks. Stage 1 PASSED live (6); stages 2-4a A/Bs INCONCLUSIVE (7-9; the Knight). 2026-11-14: Batt's answers built (10, 11); s5ab-1114 FAIL by its bar on line 2 only, deaths 0/6 (10.2). Stage 5a (settings as blocks, the runner page gone) MERGED 17:2x (12), then rounds 20-24 of matpilot's browser review (12.4-12.8, all re-measured PASS): wrapped setting blocks, pickers for every value that is not a name (Batt 19:4x), no overlaps, exact Escape/Undo. Stage 5b-1 (HuntState, the loop as 20 steps; AST-proven the same program) MERGED 19:2x; its live A/B s5b1-ab FAIL by the pace p95 line only (noise), every outcome line passed (13.7; the parent's decision: keep it, go on). Stage 5b-2 (the steps as live blocks: a hunt tab, find_target / fight_target) MERGED 2026-11-15 03:0x; its live A/B s5b2-ab PASS on every line (14.11). The Christmas Goblin class round FAILED its precision bar (xmas02-detector S4.10), not deployed."
+status: "DECIDED 2026-11-13 ~21:4x (Batt): build the live block player first; one box; break the runner into blocks. Stage 1 PASSED live (6); stages 2-4a A/Bs INCONCLUSIVE (7-9; the Knight). 2026-11-14: Batt's answers built (10, 11); s5ab-1114 FAIL by its bar on line 2 only, deaths 0/6 (10.2). Stage 5a (settings as blocks, the runner page gone) MERGED 17:2x (12), then rounds 20-24 of matpilot's browser review (12.4-12.8, all re-measured PASS): wrapped setting blocks, pickers for every value that is not a name (Batt 19:4x), no overlaps, exact Escape/Undo. Stage 5b-1 (HuntState, the loop as 20 steps; AST-proven the same program) MERGED 19:2x; its live A/B s5b1-ab FAIL by the pace p95 line only (noise), every outcome line passed (13.7; the parent's decision: keep it, go on). Stage 5b-2 (the steps as live blocks: a hunt tab, find_target / fight_target) MERGED 2026-11-15 03:0x; its live A/B s5b2-ab PASS on every line (14.11). The Christmas Goblin class round FAILED its precision bar (xmas02-detector S4.10), not deployed. Stage 5c (Batt 14.12: the runner block dissolved into functions in tabs -- hunt_loop() in main, role blocks, hunt_tick()'s step blocks) BUILT 2026-11-15 13:5x on feat/runner-blocks, offline-proven, not merged; its live A/B s5c-ab pre-registered (15.8), not run (15.11)."
 
 role: null
 verdict_date: null
 verdict_ticket: null
 supersedes: null
 related: [project-model.md, player-mode.md, ADR-0020, ../../scripts/dungeon_hunt.py, ../../scripts/runner_flow_export.py, ../../packages/poring_flow/src/poring_flow/runtime.py]
-next_action: "For Batt: (1) the ready-made xmas_dun02 box gets the hunt tab (14.11 unlocks it); (2) the first real block experiment, 14.8 (no Knife swap on the Christmas Cookie and the Cookie), with its own pre-registered A/B against B5b-2; (3) whether 5b-1 needs a strict re-run (s5b1-ab2 with 14.7a's pace line, 13.7); (4) the Goblin class: a new precision rule and a fresh held-out need his word for staged knights (xmas02-detector S4.10). The drink stays at 50 % until a long series measures it with income (10.2)."
+next_action: "5c: run s5c-ab (15.8: stage5c_ab.py plan / run / score) before feat/runner-blocks merges; Batt: 15.10's two open questions. ➡️ (1) below is SUPERSEDED by 14.12 (no hunt tab: stage 5c). For Batt: (1) the ready-made xmas_dun02 box gets the hunt tab (14.11 unlocks it); (2) the first real block experiment, 14.8 (no Knife swap on the Christmas Cookie and the Cookie), with its own pre-registered A/B against B5b-2; (3) whether 5b-1 needs a strict re-run (s5b1-ab2 with 14.7a's pace line, 13.7); (4) the Goblin class: a new precision rule and a fresh held-out need his word for staged knights (xmas02-detector S4.10). The drink stays at 50 % until a long series measures it with income (10.2)."
 
 title: "Live blocks: the player that plays a project's blocks in the game, and the runner broken into blocks"
 date: 2026-11-13
@@ -2623,7 +2623,7 @@ against B5b-2. Not started: the next step, and the ready-made box's change, are 
    - (b) "most important": /flows and /maps must REMEMBER where a person placed blocks and nodes. Today a refresh forgets the last drag.
    - Both are round 25 (12.9).
 
-## 15. Stage 5c: the runner block dissolves into functions in tabs (design written 2026-11-15 13:17 ICT from `date`, BEFORE any 5c code; offline only)
+## 15. Stage 5c: the runner block dissolves into functions in tabs (design written 2026-11-15 13:17 ICT from `date`, BEFORE any 5c code; offline only; ➡️ BUILT 13:2x-13:5x ICT, feat/runner-blocks, NOT run live: 15.11)
 
 **Batt (2026-11-15 ~13:0x, 14.12 item 1):** "Not dungeon_hunt.py like this: make it functions in
 separate tabs. dungeon_hunt.py should be blocks the user sees and can edit himself." So the opaque
@@ -2656,6 +2656,7 @@ live in 14.11), so its live A/B (15.8) is an equivalence check again.
             fight_target(t)
 
     # tab tick: every tick of the hunt core, in run()'s order -- each a block, its class shown
+    # (➡️ BUILT as def hunt_tick(): a tab cannot share a function's name -- 15.11)
     def tick():
         step_begin(); step_sense(); step_hook(); step_vitals(); step_battle_log(); step_survive()
         step_engage(); step_ui(); step_upkeep()                       # SAFETY: every tick
@@ -2704,7 +2705,8 @@ are the call's (its main's statement); 15.9 says so as a limit.
 
 ### 15.3 The tick made visible
 
-Today the cursor runs the 20 steps implicitly. In 5c the node's function `tick()` (tab `tick`)
+Today the cursor runs the 20 steps implicitly. In 5c the node's function `tick()` (➡️ built as
+`hunt_tick()`, 15.11; tab `tick`)
 LISTS them, one block each, in run()'s order, each with its words and its CLASS:
 
 | Class | Steps | The rule |
@@ -2830,3 +2832,67 @@ line is a strict "<" against an arm that may read 0.
 1. May a person leave out (or move) a SAFETY step of the tick, e.g. the UI watch's weight home? The
    built default: no (an error naming what it protects); the runner refuses it too.
 2. Should the old runner block leave the toolbox (it stays offered for old projects today)?
+
+### 15.11 ➡️ BUILT (2026-11-15 13:2x-13:5x ICT from `date` and the commits; feat/runner-blocks, from main 09d5e6fb; offline only, NOT run live)
+
+What changed from the design, each for a reason the build found:
+- **The tick's function is `hunt_tick()`**, not `tick()` (15.1, 15.3 carry pointers): its tab is
+  `tick`, and a tab cannot share a function's name (the project's names rule refused the box).
+- **Role blocks are shown in the old runner block's order of rows** (heal ... eat), whatever order
+  the file holds them in (a saved file sorts its keys): the Python view prints them as variables.
+- **The ready-made box /flows and /maps open first is the new shape** (xmasFunctionsProject(); the
+  menu's "xmas_dun02"); the old one-box shape is the menu's "xmas_dun02_runner" (xmasProject(), the
+  runner block), the hunt box stays "xmas_dun02_hunt". A browser's saved project loads as before.
+- **The hunt loop's def is offered as `def hunt_loop(t=False)`** in the toolbox: it serves both
+  shapes (the runner block's hunt core takes a default too; hunt_loop_input allows it).
+
+What was built:
+- The engine (3d438b51): `poring_flow.tick` (the table: run()'s 20 steps, their class, words, why,
+  owner); `lint/tick.py` (tick_step, tick_place); `huntloop` (HUNT_CALL, the role blocks,
+  hunt_core_call, hunt_roles, role_block; hunt_loop_input takes a default); `project.lower_hunt_core`
+  (compile_project lowers first; lowered_nodes, role_values); live.problems and the HuntPlan carry
+  the tick (tick_left_out); 20 step blocks in blocks.yaml (core.tick_step, live: true).
+- The runner and the player (3d438b51): RUNNER_BLOCKS_VERSION 9.56; DRIVE_OPTIONAL_STEPS;
+  `HuntCursor.leave_out` (only those; a left-out step is never played, traced `left_out`, counted
+  in its drive end); flow_play hands the plan's left-out steps to the cursor and refuses the drive
+  in words when the runner does not take them; flow_run sees the new shape's hunt core.
+- The browser (ec742096): lib/flow/tick.ts (the table; pinned to the engine by
+  test_runner_functions.py); the role blocks pl_role_<param> (a role picker each, round 21) and the
+  step blocks pl_step_<name> (their class and words on rows inside the 300-unit budget); their
+  converters; the toolbox (hunt_loop() in a map's main, Roles on the tab hunt, Tick on the tab tick;
+  never under More skills); runnerBlockOn BUILDS the runner block a main's hunt_loop() stands for
+  (the keys, use_skill's keys, the home function, Run's readiness, the pages); the fixture's TS
+  twin.
+- The A/B tool (3d438b51): scripts/stage5c_ab.py, 15.8's bar exactly (stage5c_ab.BAR).
+
+What a person sees and may change (and what the lint refuses, the backend's not_live alike):
+
+| Where | They see | They may change | Refused (rule) |
+|---|---|---|---|
+| main | `hunt_loop()` where the runner block stood | where it stands among main's statements | a second call, a call with inputs, a call outside a map's main's top level, beside a runner block (hunt_core_call) |
+| tab hunt | a role block per role (heal ... eat), each a picker of the node's and Global's functions; the loop | any role's function; delete an optional role (home, died, confirm, eat); the loop as 5b-2 | a required role missing (hunt_roles: "needs its role blocks: heal (role_heal) ..."); a role twice / on two tabs (the editor); role blocks with no hunt core (role_block, a warning) |
+| tab tick | `hunt_tick()` and 20 step blocks, each with its class and words, in run()'s order | leave out loot, ready or plant (the runner then never plays it); delete the tab (every step plays) | a SAFETY or REQUIRED step left out (its words: what it protects), a step moved, twice, any other statement, a step block elsewhere, a call of hunt_tick(), a tick where no hunt loop drives (tick_step, tick_place); the runner's cursor refuses a non-optional left-out step too |
+
+The proofs (offline, all green):
+- The functions box = the hunt box's hunt core: `prepare` gives the same runner argv, keys, settings
+  and run() arguments (test_runner_blocks.py; for the one box too: the pinned argv); its compiled
+  flow's hunt plan equals the hunt box's (test_runner_functions.py).
+- The canonical form = the driver's steps: hunt_trace.py check runs both boxes (hand scenarios +
+  random ones: SAME every one); loot left out differs at the first loot step, named
+  ('loot', 'left_out').
+- No drive = 5b-1: huntstate_check.py drive (the additions are DRIVE_ADDED, with
+  RUNNER_BLOCKS_VERSION and DRIVE_OPTIONAL_STEPS) and check, both rc 0.
+- The refusals: one test per rule of 15.2 / 15.3, the lint and live.problems alike
+  (test_runner_functions.py); the cursor's own refusal (test_runner_blocks.py); the browser's
+  (functions.test.ts).
+- The checks (2026-11-15 13:5x-14:2x): hunt_trace.py check --seeds 200, 446 scenarios over both
+  boxes, the driver's trace == the hunt loop's in every one; huntstate_check.py drive and check rc 0;
+  the full Python suite 5,922 passed, 94 skipped, 3 failed -- the worktree's known three, each a
+  gitignored data file a worktree lacks (data/hotbar/digits.npz; the generated map cache, twice);
+  ruff check and mypy clean; ruff format clean on every file 5c touches (two files of main's are not:
+  docs/setup/new-lab-host.md, services/backend/tests/test_fight_time.py); the frontend's 521 tests
+  520 passed, 0 failed (1 skipped), tsc and eslint (the whole tree) clean; stage5c_ab's plan passes
+  its refusals in process (no input).
+
+**The A/B is pre-registered (15.8) and built, not run** (the parent runs it; the commands in 15.8).
+Open for Batt: 15.10 (a SAFETY step left out; the old runner block in the toolbox).

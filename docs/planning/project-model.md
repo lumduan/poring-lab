@@ -219,6 +219,12 @@ Run belongs to a map node whose main holds "hunt with the runner" (dungeon_hunt)
 runner. Its five keys are read from the functions the block names (and the item warp's function),
 resolved on THAT node (its override first, then Global), through calls with literal arguments, to
 exactly one press_key each; the request carries them (POST /flows/run keys), as today.
+➡️ **2026-11-15 (live-blocks.md 15, ADR-0020 Amendment M):** or whose main calls `hunt_loop()` (once,
+at its top level): its hunt core is then the node's ROLE BLOCKS (tab variables `role_<param>`, each
+naming the function the runner block's role named) and its tick `hunt_tick()` (tab `tick`). The
+engine LOWERS that call to the runner block's action before anything reads the flow
+(`project.lower_hunt_core`; the browser's `runnerBlockOn` builds the same), so the keys are read
+exactly as above, from the functions the role blocks name.
 
 ➡️ **2026-11-14 ~15:2x (Batt: "there should be no runner [page] ... make them ALL blocks";
 [live-blocks.md](live-blocks.md) section 12; ADR-0020 Amendment J):** the runner's SETTINGS are the
@@ -308,6 +314,16 @@ moment we get it"):** `keys` adds `eat(key)` (presses its input: dungeon_hunt's 
 (until 51 %) and two events eat each item while `hotbar_count(<its key>) > 0` (until 0, paced
 1.5 s, at any HP); main's `dungeon_hunt(..., eat=eat)`. Still 0 lint errors. The stage-4a box is
 kept as `project_xmas_dun02_stage4.json` (its tests, stage 4a's A/B).
+➡️ **2026-11-15 (live-blocks.md 15, stage 5c; Batt: "dungeon_hunt.py should be blocks the user sees
+and can edit himself"):** the ready-made box /flows and /maps open first is
+`project_xmas_dun02_functions.json` (`xmasFunctionsProject()`): the hunt box
+(`project_xmas_dun02_hunt.json`, live-blocks 14) with main's `dungeon_hunt(...)` replaced, at its
+place, by `hunt_loop()`; the tab `hunt` holds the role blocks (`role_heal = "heal"`, `role_fly =
+"fly_wing"`, `role_knife_on`, `role_knife_back`, `role_home = "fly_home"`, `role_respawn`,
+`role_respawn_confirm`, `role_eat`) and `def hunt_loop(t=False)`; a new tab `tick` after it holds
+`hunt_tick()`, run()'s 20 step blocks in their order. Its runner argv, keys, settings and run()
+arguments are the hunt box's exactly. `project_xmas_dun02.json` (`xmasProject()`, the runner block)
+stays the old one-box shape: loadable, its argv pinned.
 
 ## 8. Not converted (Batt's answer 6)
 
