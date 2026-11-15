@@ -2132,6 +2132,20 @@ The tests check that the misplaced words no longer say "run()".
 3. The words read "the runner's order", never "run()": the lint, the hunt_tick tooltip, the Tick
    steps label.
 
+**➡️ Re-measured 2026-11-15 19:02-19:12 ICT (matpilot, read only, main bd9329ca, 1440):**
+- **Item 1 PASS:**
+  - an extra step_survive shows no 🔒 and reads "an extra copy: delete it";
+  - it can be dragged out and deleted, and the lint is back to 0 errors;
+  - the original keeps its 🔒.
+- **Item 3 PASS:** "the runner's order" in the lint, the tooltip and the Tick steps label; no "run()".
+- **Item 2 cannot be reached in the editor.** Every in-place SAFETY / REQUIRED step is locked, so the
+  only survive cannot be moved out of its place. The same "out of its place: it goes after ... and
+  before ..." words were checked on an OPTIONAL step (step_loot dropped before step_sense).
+- **OPEN, small (not fixed):** a step copy dragged LOOSE onto the workspace, outside hunt_tick, shows
+  its 🔒 again while it still reads "an extra copy: delete it". Delete still removes it, so the
+  padlock only misleads there. The next frontend round takes it: a step outside hunt_tick shows no
+  padlock.
+
 ## 13. Stage 5b-1: HuntState and the loop as steps (design written 2026-11-14 18:3x ICT from `date`, before any 5b code; offline only)
 
 **Batt's words:** "break the runner into blocks" (2026-11-13); "there should be no runner [page]
