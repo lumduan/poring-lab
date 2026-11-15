@@ -35,6 +35,7 @@ import {
   startMap,
   tab,
   tabNameProblem,
+  xmasCookieNoSwapProject,
   xmasHuntProject,
   xmasProject,
 } from "./project.ts";
@@ -296,8 +297,28 @@ test("the one box names xmas02 and writes today's technique for each monster", (
   assert.deepEqual(recipeDef("cookie", false, null).params, [{ name: "t", default: null }]);
 });
 
+// live-blocks 16 (Batt 2026-11-15 ~13:0x: "Test it, and make it work too"): the no-swap box
+test("the no-swap box is the one box but its two cookies' recipes, which swap no Knife", () => {
+  const steps = (p: Project) => Object.fromEntries(mapNodes(p)[0].tabs.find((t) => t.name === MONSTERS_TAB)!.defs.map((d) => [d.name, d.body.map((s) => (s.kind === "call" ? `${s.proc}()` : s.kind === "action" ? s.block : s.kind))]));
+  const knife = ["knife_on()", "strike", "wait_steal", "knife_back()", "wait_kill", "loot"];
+  const plain = ["strike", "wait_kill", "loot"];
+  const c = xmasCookieNoSwapProject();
+  assert.deepEqual(steps(c), { attack_mystcase: knife, attack_cruiser: knife, attack_cookie: plain, attack_cookie_xmas: plain });
+  assert.deepEqual(steps(xmasProject()), { attack_mystcase: knife, attack_cruiser: knife, attack_cookie: knife, attack_cookie_xmas: knife });
+  const mon = mapNodes(c)[0].tabs.find((t) => t.name === MONSTERS_TAB)!;
+  assert.deepEqual(mon.defs[2], recipeDef("cookie", false)); // its priority=1 kept: today's order
+  // everything else is the one box's, byte for byte (the A/B changes one thing)
+  const rest = (p: Project) => {
+    const q = JSON.parse(canonical(p)) as Project;
+    for (const t of mapNodes(q)[0].tabs) if (t.name === MONSTERS_TAB) t.defs = t.defs.filter((d) => !["attack_cookie", "attack_cookie_xmas"].includes(d.name));
+    return canonical({ ...q, name: "", description: "" });
+  };
+  assert.equal(rest(c), rest(xmasProject()));
+  assert.equal(c.name, "xmas_dun02_cookie_noswap");
+});
+
 // the flow engine's fixtures (its branch writes them): the browser's ready-made projects ARE them
-for (const [name, make] of [["project_xmas_dun02", xmasProject], ["project_xmas_dun02_hunt", xmasHuntProject], ["project_sample", sampleProject]] as const) {
+for (const [name, make] of [["project_xmas_dun02", xmasProject], ["project_xmas_dun02_hunt", xmasHuntProject], ["project_xmas_dun02_cookie_noswap", xmasCookieNoSwapProject], ["project_sample", sampleProject]] as const) {
   const url = new URL(`./fixtures/${name}.json`, import.meta.url);
   test(`the ready-made project is the engine's fixture ${name}.json`, { skip: !existsSync(url) }, () => {
     assert.equal(canonical(make()), canonical(JSON.parse(readFileSync(url, "utf8"))));
