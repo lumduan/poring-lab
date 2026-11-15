@@ -2607,3 +2607,18 @@ sessions, report-only; the bar is one-sided and already passes):
 ready-made box's (the description blocks of the outline now play). The first real experiment in blocks
 is 14.8's (no Knife swap on the Christmas Cookie and the Cookie), with its own pre-registered A/B
 against B5b-2. Not started: the next step, and the ready-made box's change, are recorded for Batt.
+
+
+### 14.12 Batt's decisions on the night report (2026-11-15 ~13:0x ICT, Thai, translated, with two screenshots: main's "hunt with the runner (dungeon_hunt.py)" block and the monsters tab)
+
+1. **No hunt tab in the ready-made box. The runner block goes:** "Not dungeon_hunt.py like this: make it functions in separate tabs. dungeon_hunt.py should be blocks the user sees and can edit himself." So:
+   - the opaque "hunt with the runner (dungeon_hunt.py)" block in main is dissolved into FUNCTIONS in tabs, blocks a person sees and edits;
+   - this is stage 5c (section 15). It is designed first, then built, proven offline, and A/B'd live against B5b-2.
+2. **14.8's experiment:** "Test it, and make it work too." No Knife swap on the Christmas Cookie and the Cookie, as a pre-registered live A/B (section 16). The no-swap recipes must be shown to play.
+3. **5b-1:** "I accept your decision" (13.7). No re-run.
+4. **The Goblin class:** "Allowed." A fresh held-out recording with staged knights is allowed, with the rule change pre-registered first (xmas02-detector S5).
+5. **The rm of the archived RAM copies:** "Delegated to you." Done 13:0x after re-checking each copy on the NAS: 24 + 31 session folders and the 5b series folders; /dev/shm 890 -> 679 MB.
+6. **The block layout** (two new asks):
+   - (a) when a tab holds several functions and there is room to the right, lay them out LEFT TO RIGHT, as the monsters tab does, so a person sees every function without scrolling;
+   - (b) "most important": /flows and /maps must REMEMBER where a person placed blocks and nodes. Today a refresh forgets the last drag.
+   - Both are round 25 (12.9).
