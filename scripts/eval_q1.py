@@ -54,6 +54,31 @@ crops (nearest centre first). Per stratum and species s:
     against both) and ``pooled`` (all species' matches over the same unmatched detections);
   * the bar as Q1's (>= 50 evaluated crops: recall >= 0.80 AND precision >= 0.80).
 
+Q1crowd (docs/planning/xmas02-detector.md Amendment S5, 2026-11-15: the knight's party stands in a
+heap, so a correct box on a unit that is not one of the pack's crops was charged as false),
+``score ... --units UNITS.json``, beside Q1 (unchanged): the same matches and Q1's scope (the
+UNMATCHED class-s detections whose centre lies inside an evaluated box), but such a detection is
+FALSE only when it lies on NO unit of species s in its frame by the PACKETS (``units``: its IoU with
+a kept s label's fitted box >= 0.5, or its centre inside an s unit's region); the rest are
+``absolved``. The false ones are split into "on a unit of another species" and "on no unit".
+REPORTED beside it: ``frame_wide`` (every unmatched class-s detection of the evaluated frames,
+inside an evaluated box or not, judged the same way). The bar as Q1's.
+
+    eval_q1.py units KEY.json --params PARAMS(FROZEN) --out UNITS.json [--all-frames]
+                     [--labels-dir DIR] [--session-root /mnt/poring-lab-datasets]
+    eval_q1.py party UNITS.json PRED.json --cache-manifest MANIFEST.json --out PARTY.json
+
+units: per frame of the key's crops (``--all-frames``: every candidate frame of its source label
+files), every visible monster of the frame's Timeline world (map_labels.frame_units: the sprite
+envelope at the labeller's anchor, grown by the map's fit radius, clipped), each marked with its
+label in the source file (``kept`` + its fitted box, the exclusion reason, or ``unlisted``).
+Client- and packet-derived: /dev/shm or data/ only, never committed.
+party (S5, REPORTED, deciding nothing; the alarm's view): per frame of UNITS x PRED, whether a
+Goblin / a party unit is on screen (packets) and whether a Goblin-class box is (conf >= 0.25 /
+0.5 / 0.7): the frame recall, the false-alarm frames (no party unit on screen), where every
+Goblin-class box lies, and per VISIT (a run of party frames, a gap > 5 s ends it) the delay from
+the first Goblin on screen to the first Goblin-class box.
+
 The species <-> class map is EXPLICIT: ``--cache-manifest``, the manifest of the cache the model
 trained on (its ``names`` = the model's class names, its ``classes`` = the committed list's mob ids
 in id order; build_frame_cache.py SpeciesClasses). A detection class the manifest does not name
@@ -527,6 +552,247 @@ def score(key: Mapping[str, Any], crops: Sequence[str],
     return out
 
 
+# --- Q1crowd and the party view (xmas02-detector.md Amendment S5) ----------------------------
+
+CROWD_IOU = 0.5  # a detection lies on a kept label when their IoU reaches this
+PARTY_THRESHOLDS = (0.25, 0.5, 0.7)  # predict_dir's conf; 0.5; the live alarm's --alarm-solo
+VISIT_GAP_S = 5.0  # party frames this far apart are two visits
+GOBLIN, PARTY = 1607, (1607, 1251)  # the Christmas Goblin; the knight's party (Goblin + knight)
+
+
+def iou(a: Sequence[float], b: Sequence[float]) -> float:
+    ix = max(0.0, min(a[2], b[2]) - max(a[0], b[0]))
+    iy = max(0.0, min(a[3], b[3]) - max(a[1], b[1]))
+    union_ = (a[2] - a[0]) * (a[3] - a[1]) + (b[2] - b[0]) * (b[3] - b[1]) - ix * iy
+    return ix * iy / union_ if union_ > 0 else 0.0
+
+
+def det_box(d: Mapping[str, Any]) -> tuple[float, float, float, float]:
+    return float(d["x1"]), float(d["y1"]), float(d["x2"]), float(d["y2"])
+
+
+def lies_on(box: Sequence[float], units: Sequence[Mapping[str, Any]]) -> set[int]:
+    """PURE: the species of the units a detection box lies on: IoU >= CROWD_IOU with a kept unit's
+    fitted box, or its centre inside a unit's region."""
+    cx, cy = (box[0] + box[2]) / 2.0, (box[1] + box[3]) / 2.0
+    out: set[int] = set()
+    for u in units:
+        kb, r = u.get("kept_box"), u.get("region")
+        if (kb is not None and iou(box, kb) >= CROWD_IOU) or (
+                r is not None and r[0] <= cx <= r[2] and r[1] <= cy <= r[3]):  # fmt: skip
+            out.add(int(u["mob"]))
+    return out
+
+
+def unmatched_dets(key: Mapping[str, Any], crops: Sequence[str],
+                   frames: Mapping[str, Sequence[Mapping[str, Any]]], species_cls: Mapping[int, str]
+                   ) -> list[dict[str, Any]]:  # fmt: skip
+    """PURE: every detection of an evaluated frame that Q1's class-aware match leaves unmatched:
+    {fk, cls, box, inside (the evaluated crops whose box holds its centre)}; match_frames' pairs."""
+    by_frame: dict[str, list[str]] = defaultdict(list)
+    for c in crops:
+        k = key["crops"][c]
+        by_frame[frame_key(k["session"], k["frame_id"])].append(c)
+    out: list[dict[str, Any]] = []
+    for fk in sorted(by_frame):
+        cs = by_frame[fk]
+        truth = boxes({"cls": species_cls.get(int(key["crops"][c]["mob"]),
+                                              f"unlisted:{key['crops'][c]['mob']}"),
+                       **dict(zip(("x1", "y1", "x2", "y2"), key["crops"][c]["box"], strict=True))}
+                      for c in cs)  # fmt: skip
+        pred = boxes(frames[fk])
+        matched = {j for _d, _i, j in label_iou.position_pairs(truth, pred)}
+        for j, p in enumerate(pred):
+            if j in matched:
+                continue
+            inside = frozenset(cs[i] for i, t in enumerate(truth) if label_iou.centre_inside(p, t))
+            out.append({"fk": fk, "cls": p[0], "box": det_box(frames[fk][j]), "inside": inside})
+    return out
+
+
+def crowd_score(key: Mapping[str, Any], crops: Sequence[str],
+                frames: Mapping[str, Sequence[Mapping[str, Any]]], species_cls: Mapping[int, str],
+                units: Mapping[str, Mapping[str, Any]]) -> dict[str, Any]:  # fmt: skip
+    """PURE (S5): Q1crowd per stratum and species (the module doc); fails closed when an evaluated
+    frame has no units."""
+    need = {frame_key(key["crops"][c]["session"], key["crops"][c]["frame_id"]) for c in crops}
+    lacking = sorted(need - set(units))
+    if lacking:
+        raise SystemExit(f"--units lacks {len(lacking)} evaluated frames: {lacking[:5]}")
+    rec, _loose, _overlap = match_frames(key, crops, frames, species_cls)
+    dets = unmatched_dets(key, crops, frames, species_cls)
+    on = [lies_on(d["box"], units[d["fk"]]["units"]) for d in dets]
+    out: dict[str, Any] = {}
+    for st, name in STRATUM_SCORE.items():
+        group = [c for c in crops if stratum_of(key["crops"][c]) == st]
+        gset = set(group)
+        rows: dict[str, dict[str, Any]] = {}
+        for m in species_order(key, group):
+            cls = species_cls.get(m)
+            if cls is None:
+                continue
+            mine = [c for c in group if int(key["crops"][c]["mob"]) == m]
+            n, tp = len(mine), sum(bool(rec[c]["matched"]) for c in mine)
+            frames_g = {frame_key(key["crops"][c]["session"], key["crops"][c]["frame_id"])
+                        for c in group}  # fmt: skip
+
+            def judged(scope: list[int], m: int = m) -> dict[str, int]:
+                false = [i for i in scope if m not in on[i]]
+                return {"unmatched": len(scope), "absolved": len(scope) - len(false),
+                        "false": len(false),
+                        "false_on_other_species": sum(1 for i in false if on[i]),
+                        "false_on_no_unit": sum(1 for i in false if not on[i])}  # fmt: skip
+
+            mine_cls = [i for i, d in enumerate(dets) if d["cls"] == cls and d["fk"] in frames_g]
+            inbox = judged([i for i in mine_cls if dets[i]["inside"] & gset])
+            wide = judged(mine_cls)
+            fp = inbox["false"]
+            has_bar = n >= BAR_MIN_CROPS
+            rows[cls] = {
+                "mob": m, "class": cls, "evaluated": n, "matched": tp,
+                "recall": round(tp / n, 4) if n else None,
+                "in_boxes": inbox, "precision": round(tp / (tp + fp), 4) if tp + fp else None,
+                "bar": has_bar,
+                # recall >= 0.80 <=> 5 tp >= 4 n; precision >= 0.80 <=> tp >= 4 fp (and tp > 0)
+                "pass": (5 * tp >= 4 * n and tp > 0 and tp >= 4 * fp) if has_bar else None,
+                "frame_wide": {**wide, "precision": round(tp / (tp + wide["false"]), 4)
+                               if tp + wide["false"] else None},
+            }  # fmt: skip
+        barred = {k: v["pass"] for k, v in rows.items() if v["bar"]}
+        out[name.replace("Q1", "Q1crowd").replace("E1", "E1crowd")] = {
+            "stratum": st, "evaluated_crops": len(group), "per_species": rows,
+            "species_with_bar": sorted(barred),
+            "all_bars_pass": all(barred.values()) if barred else None,
+            "iou": CROWD_IOU,
+        }  # fmt: skip
+    return out
+
+
+def party_view(units: Mapping[str, Mapping[str, Any]],
+               frames: Mapping[str, Sequence[Mapping[str, Any]]], goblin_cls: str,
+               party: Sequence[int] = PARTY, goblin: int = GOBLIN) -> dict[str, Any]:  # fmt: skip
+    """PURE (S5, REPORTED): the alarm's view of a session, frame by frame (the module doc)."""
+    lacking = sorted(set(units) - set(frames))
+    if lacking:
+        raise SystemExit(f"PRED.json lacks {len(lacking)} units frames: {lacking[:5]}")
+    order = sorted(units, key=lambda fk: int(units[fk]["t"]))
+    rec: dict[str, Counter[str]] = {str(th): Counter() for th in PARTY_THRESHOLDS}
+    where: Counter[str] = Counter()
+    visits: list[list[str]] = []
+    last_t: int | None = None
+    for fk in order:
+        us, t = units[fk]["units"], int(units[fk]["t"])
+        mobs = {int(u["mob"]) for u in us}
+        g_on, p_on = goblin in mobs, bool(mobs & set(party))
+        gb = [d for d in frames[fk] if d["cls"] == goblin_cls]
+        for th in PARTY_THRESHOLDS:
+            hit = any(float(d["conf"]) >= th for d in gb)
+            c = rec[str(th)]
+            c["frames"] += 1
+            c["goblin_frames"] += g_on
+            c["goblin_frames_boxed"] += g_on and hit
+            c["no_party_frames"] += not p_on
+            c["no_party_frames_boxed"] += (not p_on) and hit
+        for d in gb:
+            lie = lies_on(det_box(d), us)
+            where["on_goblin" if goblin in lie else "on_other_party" if lie & set(party)
+                  else "on_other_unit" if lie else "on_no_unit"] += 1  # fmt: skip
+        if p_on:
+            if last_t is None or (t - last_t) / 1e9 > VISIT_GAP_S or not visits:
+                visits.append([])
+            visits[-1].append(fk)
+            last_t = t
+    delays: list[float | None] = []
+    for v in visits:
+        g = [fk for fk in v if goblin in {int(u["mob"]) for u in units[fk]["units"]}]
+        if not g:
+            continue
+        t0 = int(units[g[0]]["t"])
+        boxed = [fk for fk in v if int(units[fk]["t"]) >= t0
+                 and any(d["cls"] == goblin_cls for d in frames[fk])]  # fmt: skip
+        delays.append(round((int(units[boxed[0]]["t"]) - t0) / 1e9, 2) if boxed else None)
+    known = sorted(d for d in delays if d is not None)
+
+    def rate(n: int, d: int) -> float | None:
+        return round(n / d, 4) if d else None
+
+    frame_rows_ = {th: {**dict(c),
+                        "frame_recall": rate(c["goblin_frames_boxed"], c["goblin_frames"]),
+                        "false_alarm_rate": rate(c["no_party_frames_boxed"], c["no_party_frames"])}
+                   for th, c in rec.items()}  # fmt: skip
+    return {"thresholds": frame_rows_, "goblin_boxes_lie": dict(where),
+            "visits": len(visits), "visits_with_a_goblin": len(delays),
+            "first_box_delay_s": delays,
+            "first_box_delay_s_p50": known[len(known) // 2] if known else None,
+            "visits_boxed_within_2s": sum(1 for d in known if d <= 2.0),
+            "visits_never_boxed": sum(1 for d in delays if d is None),
+            "visit_gap_s": VISIT_GAP_S}  # fmt: skip
+
+
+def cmd_units(a: argparse.Namespace) -> int:
+    """S5: the crowd truth (module doc); needs the map's label stack (packets + sprites)."""
+    import map_labels as ml
+
+    key = json.loads(a.key.read_text())
+    want = None if a.all_frames else {frame_key(s, f) for s, f in crop_frames(key)}
+    psha = sha256_file(a.params)
+    if psha != key.get("params_sha256"):
+        raise SystemExit(f"{a.params}: sha256 {psha}, the key's params {key.get('params_sha256')}")
+    out_frames: dict[str, Any] = {}
+    sources = []
+    for src in key["sources"]:
+        path = resolve_source(str(src["file"]), a.key, a.labels_dir)
+        if sha256_file(path) != src["sha256"]:
+            raise SystemExit(f"{path}: not the key's label file {src['sha256']}")
+        doc = json.loads(path.read_text())
+        spec = ml.MAPS[str(doc["map"])]
+        params = ml.load_params(a.params, spec)
+        grow = float(spec.fit_px)
+        lab = ml.session_labeler(a.session_root / str(doc["session"]), spec)
+        sources.append({"file": str(path), "sha256": src["sha256"], "session": doc["session"]})
+        for f in doc["frames"]:
+            fk = frame_key(str(doc["session"]), int(f["frame_id"]))
+            if "kept" not in f or (want is not None and fk not in want):
+                continue
+            kept = {int(k["gid"]): k for k in f["kept"]}
+            why = {int(g): str(w) for g, _m, w in f["excluded"]}
+            us = ml.frame_units(lab, params, int(f["t"]), tuple(lab.size), grow)
+            for u in us:
+                k = kept.get(u["gid"])
+                u["label"] = "kept" if k else why.get(u["gid"], "unlisted")
+                u["kept_box"] = [float(v) for v in k["box"]] if k else None
+            out_frames[fk] = {"t": int(f["t"]), "units": us}
+    if want is not None and set(want) - set(out_frames):
+        raise SystemExit(f"units: {len(set(want) - set(out_frames))} crop frames not labelled")
+    doc_out = {"what": "xmas02-detector.md S5: the crowd truth (packets), per frame",
+               "plan": "docs/planning/xmas02-detector.md Amendment S5", "key": str(a.key),
+               "key_sha256": sha256_file(a.key), "params_sha256": psha, "sources": sources,
+               "all_frames": bool(a.all_frames), "iou": CROWD_IOU,
+               "frames": out_frames}  # fmt: skip
+    a.out.parent.mkdir(parents=True, exist_ok=True)
+    a.out.write_text(json.dumps(doc_out) + "\n")
+    print(json.dumps({"out": str(a.out), "frames": len(out_frames),
+                      "units": sum(len(v["units"]) for v in out_frames.values())}))  # fmt: skip
+    return 0
+
+
+def cmd_party(a: argparse.Namespace) -> int:
+    manifest = json.loads(a.cache_manifest.read_text())
+    species_cls = class_map(manifest)
+    if GOBLIN not in species_cls:
+        raise SystemExit(f"{a.cache_manifest}: no class for the Goblin {GOBLIN}")
+    pred = load_pred(a.pred, manifest["names"].values(), a.any_settings)
+    units = json.loads(a.units.read_text())
+    res = party_view(units["frames"], pred["frames"], species_cls[GOBLIN])
+    out = {"what": "xmas02-detector.md S5: the alarm's view (REPORTED, deciding nothing)",
+           "units": [str(a.units), sha256_file(a.units)],
+           "pred": [str(a.pred), sha256_file(a.pred)], **res}  # fmt: skip
+    a.out.parent.mkdir(parents=True, exist_ok=True)
+    a.out.write_text(json.dumps(out, indent=1) + "\n")
+    print(json.dumps({k: v for k, v in out.items() if k != "first_box_delay_s"}, indent=1))
+    return 0
+
+
 def load_pred(path: Path, names: Iterable[str], any_settings: bool) -> dict[str, Any]:
     pred: dict[str, Any] = json.loads(path.read_text())
     bad = {k: pred.get(k) for k, v in SETTINGS.items() if pred.get(k) != v}
@@ -551,6 +817,13 @@ def cmd_score(a: argparse.Namespace) -> int:
         mob = int(k["mob"])
         in_pack[f"{species_cls.get(mob, f'unlisted:{mob}')}:{stratum_of(k)}"] += 1
     res = score(key, crops, pred["frames"], species_cls)
+    units = None
+    if a.units is not None:  # S5: Q1crowd beside Q1 (the units' key must be this key)
+        udoc = json.loads(a.units.read_text())
+        if udoc.get("key_sha256") != sha256_file(a.key):
+            raise SystemExit(f"{a.units}: built from another key ({udoc.get('key_sha256')})")
+        units = {"path": str(a.units), "sha256": sha256_file(a.units)}
+        res.update(crowd_score(key, crops, pred["frames"], species_cls, udoc["frames"]))
     q1 = res["Q1"]
     out = {
         "what": "gef10-eval.md Q1 / E1 (AMENDMENT R2-2): position metric on the evaluated crops",
@@ -570,6 +843,7 @@ def cmd_score(a: argparse.Namespace) -> int:
         "q1_species_with_bar": q1["species_with_bar"], "q1_all_bars_pass": q1["all_bars_pass"],
         "q1c_species_with_bar": res["Q1c"]["species_with_bar"],
         "q1c_all_bars_pass": res["Q1c"]["all_bars_pass"],
+        **({"units": units} if units is not None else {}),
         **res,
     }  # fmt: skip
     a.out.parent.mkdir(parents=True, exist_ok=True)
@@ -585,7 +859,11 @@ def cmd_score(a: argparse.Namespace) -> int:
                               for s, v in res["Q1c"]["per_species"].items()},
                       "Q1c_pooled": res["Q1c"]["pooled"],
                       "q1c_species_with_bar": res["Q1c"]["species_with_bar"],
-                      "q1c_all_bars_pass": res["Q1c"]["all_bars_pass"]}, indent=1))  # fmt: skip
+                      "q1c_all_bars_pass": res["Q1c"]["all_bars_pass"],
+                      **({"Q1crowd": {s: [v["evaluated"], v["recall"], v["precision"], v["pass"]]
+                                      for s, v in res["Q1crowd"]["per_species"].items()}}
+                         if "Q1crowd" in res else {})},
+                     indent=1))  # fmt: skip
     return 0
 
 
@@ -619,8 +897,25 @@ def main(argv: Sequence[str] | None = None) -> int:
         action="store_true",
         help="accept imgsz / conf other than 1280 / 0.25 (not the evaluation)",
     )
+    p.add_argument("--units", type=Path, default=None,
+                   help="S5: the units file of THIS key (eval_q1.py units): + Q1crowd")  # fmt: skip
+    p = sub.add_parser("units", help="S5: the crowd truth (packets) per crop frame")
+    p.add_argument("key", type=Path)
+    p.add_argument("--params", type=Path, required=True, help="the FROZEN params of the labels")
+    p.add_argument("--out", type=Path, required=True)
+    p.add_argument("--all-frames", action="store_true",
+                   help="every candidate frame of the label files")  # fmt: skip
+    p.add_argument("--labels-dir", type=Path, default=None)
+    p.add_argument("--session-root", type=Path, default=HOST_ROOT)
+    p = sub.add_parser("party", help="S5: the alarm's view (reported)")
+    p.add_argument("units", type=Path)
+    p.add_argument("pred", type=Path)
+    p.add_argument("--cache-manifest", type=Path, required=True)
+    p.add_argument("--out", type=Path, required=True)
+    p.add_argument("--any-settings", action="store_true")
     a = ap.parse_args(argv)
-    return cmd_refs(a) if a.cmd == "refs" else cmd_score(a)
+    run = {"refs": cmd_refs, "score": cmd_score, "units": cmd_units, "party": cmd_party}
+    return run[a.cmd](a)
 
 
 if __name__ == "__main__":

@@ -202,6 +202,28 @@ def test_resolve_weak_fit_uses_its_fitted_box(bfc: ModuleType) -> None:
 # --- map_labels.label_regions (the plumbing; the geometry is render's, tested there) ------------
 
 
+def test_frame_units_lists_every_visible_monster_on_screen(
+    ml: ModuleType, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """S5: every visible monster of the world (labelled or not), its region grown and clipped;
+    off screen or drawing nothing: left out."""
+    ent = [SimpleNamespace(gid=g, job=j, objtype=o, hidden=h, x=0.0, y=0.0)
+           for g, j, o, h in ((5, 1607, 5, False), (6, 1251, 5, False), (7, 1607, 5, True),
+                              (8, 1607, 1, False), (9, 1515, 5, False))]  # fmt: skip
+    world = SimpleNamespace(self_pos=(1.0, 1.0), map="xmas_dun02", entities=ent)
+    lab = SimpleNamespace(timeline=SimpleNamespace(at_world=lambda tw: (None, world, [], {})))
+    got: list[Any] = []
+
+    def regions(lab_: Any, params: Any, t: int, gids: Any) -> dict[int, Any]:
+        got.append(sorted(gids))
+        return {5: (-10.0, 700.0, 30.0, 760.0), 6: (2000.0, 0.0, 2100.0, 50.0), 9: None}
+
+    monkeypatch.setattr(ml, "label_regions", regions)
+    out = ml.frame_units(lab, {"offset_ms": 0}, 0, (1280, 720), 6.0)
+    assert got == [[5, 6, 9]]  # visible monsters only (not hidden, not an NPC)
+    assert out == [{"gid": 5, "mob": 1607, "region": [0.0, 694.0, 36.0, 720.0]}]
+
+
 def test_label_regions_unions_headings_and_groups(
     ml: ModuleType, monkeypatch: pytest.MonkeyPatch
 ) -> None:
