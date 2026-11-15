@@ -4726,3 +4726,39 @@ amendment scores the same frozen model on NEW data under a rule fixed before tha
    <the S4 cache's 9d7a9b38...> --units UNITS --out ...` -> bar 1 = `Q1crowd.per_species.g_gobline_xmas`;
    then `eval_q1.py party` on sk4a (all frames), pooled TEST and gw3 (reported).
 7. The result here and in live-blocks.md 11.4; the scratch to the NAS the same day.
+
+#### S5.5 (2026-11-15 13:55 ICT from `date`, BEFORE any labeller sees the pack, and before any score): sk4a recorded; its checks, labels and pack
+
+- **Recorded by the parent, S5.3's steps (a)-(e) as written** (its report):
+  - immunity ON judged 13:27:01 ("You are now immune to attacks.");
+  - the aura off by a full-client shot;
+  - no Windows toast;
+  - `sk_watch.sh` (`486c50de...`), seed 2611124: the recorder started 13:27:41, the watch ended rc 0
+    at 13:42:27, the recorder stopped 13:42:32, shipped 13:43:52;
+  - immunity OFF read back ("Returned to normal state.");
+  - then she was warped to her save point.
+- **The recording `20261115T132742-rdp-xmas02-sk4a`:** 882 frames, 1,942,936,132 bytes, its
+  `checksums.sha256` verified on the NAS (13:46:40-13:46:52). 3c's path: rdp, png, recorder v7,
+  [80, 77, 1280, 720], lab-rathena. The watch `20261115T132750-watch-xmas_dun02-sk4a` (events
+  `4cb6a585...`): 16 spawns of 1251, 16 dwells of 40 s, 16 `@killmonster2`, `run_end: done`, and its
+  16 cells EQUAL S5.3's list.
+- **The toast check** (13:47): no frame matches sk1a frame 30's toast panel; the lowest score is 32.44
+  (the toast 0.00-0.08). No `screen_overlays` entry needed.
+- **The one GPU step** (allowed by the parent; 13:44:35-13:46:23, the worker free, no Run): predict_dir
+  with the frozen last.pt (`/datasets/archive/train/xmas02-sk-20261114/weights/last.pt`, imgsz 1280,
+  conf 0.25) over EVERY recorded frame (882; refs `0f71f9e6...`) -> `pred-sk4a-all.json` `5a0462b5...`.
+  It holds S5.4's two sets (the pack frames and every candidate frame are subsets of it). No
+  prediction is read before the score.
+- **sk4a's labels** (`map_labels.py labels --map xmas_dun02 --eval-test`, the FROZEN params,
+  `classes-none.json`; 13:48:03-13:53:34): sha256
+  **`07a85de39a6f8a334f146053a9f726aa59b7728685abe80423a57576d8f90803`**. 703 candidates (gm_window
+  128, map_change 39, other_map 12), 129 whole. Kept: Myst Case 269, Cruiser 216, Cookie 44,
+  Christmas Cookie 105, Garm Baby 537, **Christmas Goblin 1,500**, **Stormy Knight 369**.
+- **The pack** (`pack --eval-test --per-species 60 --seed 53 --min-fit 0.536`, 13:53:34-13:53:58):
+  **403 crops** (60 a species, Cookie 43: its whole pool), 312 frames, 21 grids. Pools after the
+  floor: 255 / 197 / 43 / 99 / 208 / **1,069** / 173. `reference.png` `2cae63ad...` (byte-identical to
+  S4.9's: the same letters); the instructions `dc48fb15...`; **the key `aa0dc002d03519906b4336ecdb33a26d261af2dbf5f6415c32ede98ec47119fc`**;
+  `pack.json` `b57bc2c3...`; the file list (427 files) `cec508f4...`.
+- **The labellers' copy** `/dev/shm/poring-lab-tmp/blind-sk53-sk4a/pack` (checked), an empty
+  `answers/`. **Two NEW blind labellers, Y and Z**, M9's brief with the paths changed (Y `e700b4c4...`,
+  Z `325b2334...`).
