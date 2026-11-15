@@ -4823,3 +4823,11 @@ Not re-scored. The model is not deployed by this amendment; the decision is the 
   - The pre-registered per-CROP recall (S2's Q1) misses its bar by one crop of 54.
   - Whether a per-visit or per-frame alarm bar should decide a deployment is a new decision, for a
     new amendment and a new held-out, never a re-reading of this one.
+- **Where it lives (14:08, verified):**
+  - the outputs (refs, predictions, units, the score, the party reports) moved by the guarded
+    `archive:` to the NAS **`archive/train/eval/xmas02sk-s5/`**;
+  - the scratch (sk4a's labels, the pack, the key, the labellers' pack and answers, the briefs, the
+    logs, the immunity and aura crops, the watch script and its lattice) to
+    **`scratch-archive/2026-11-15/goblin-s5/`** (885 files, `SHA256SUMS` `ef705586...`), then deleted
+    from /dev/shm;
+  - the recording on the NAS as shipped.
