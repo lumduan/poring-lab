@@ -41,7 +41,8 @@ share one definition. Refused before any input (the backend's not_live says the 
 - ``hunt_primitive``: a hunt block outside the hunt loop (strike / wait_steal / wait_kill / loot(t)
   also stand in a recipe: 4a's rule);
 - ``hunt_loop_place`` / ``hunt_loop_input``: a hunt loop with no hunt core on its node, or not
-  ``def hunt_loop(t)`` (one input, the target, none at the start);
+  ``def hunt_loop(t)`` / ``def hunt_loop(t=False)`` (one input, the target, none at the start; 5c:
+  the default lets a map node's main call it);
 - ``hunt_statement``: a statement the loop cannot play while the runner waits for it (a wait, a
   press_key, a call, a stop, an exit: the loop's blocks are the runner's, nothing else plays there);
 - ``hunt_sensor``: a sensor in its conditions (the loop reads the hunt through its blocks' values;
@@ -53,8 +54,9 @@ share one definition. Refused before any input (the backend's not_live says the 
   time);
 - ``hunt_skill``: use_skill without a declared role key.
 A recipe's order the cursor cannot play is 4a's (recipes.SHAPES), widened only with a trace test per
-new shape; a common step cannot be left out (it has no block); a driving hook without the others is
-the runner's own refusal (dungeon_hunt.drive_refused).
+new shape; a common step cannot be left out (5c: the tick's step blocks, poring_flow.tick, may
+leave out only an OPTIONAL step); a driving hook without the others is the runner's own refusal
+(dungeon_hunt.drive_refused).
 """
 
 from __future__ import annotations
@@ -83,6 +85,18 @@ SENSORS = ("known",)
 SKILL_ROLES = ("heal",)  # dungeon_hunt.DRIVE_SKILL_ROLES' "potion": the heal role's key
 DEFAULT_TIMEOUT = {EXPLORE: 120.0, WALK: 30.0, rc.STRIKE: 60.0, rc.WAIT_STEAL: 10.0,
                    rc.WAIT_KILL: 120.0, rc.LOOT: 30.0, ATTACK: 300.0}  # fmt: skip  # blocks.yaml
+# live blocks 5c (live-blocks.md 15.2): the hunt core as functions in tabs. A map node's main that
+# calls hunt_loop() once, at its top level, has its hunt core there; its roles are the node's ROLE
+# BLOCKS (tab variables role_<dungeon_hunt's role>, a function's name). project.lower_hunt_core
+# replaces the call with the hunt core's action (its note LOWERED_NOTE) before anything compiles it.
+HUNT_CALL = HUNT_LOOP
+ROLE_PREFIX = "role_"
+HUNT_ROLES = ("heal", "fly", "knife_on", "knife_back", "home", "respawn", "respawn_confirm", "eat")
+REQUIRED_ROLES = ("heal", "fly", "knife_on", "knife_back")
+ROLE_NAMES = {"heal": "heal", "fly": "Fly Wing", "knife_on": "Knife on", "knife_back": "Knife off",
+              "home": "home", "respawn": "died", "respawn_confirm": "confirm",
+              "eat": "eat"}  # fmt: skip  # the role blocks' words (the runner block's rows)
+LOWERED_NOTE = "the hunt core of hunt_loop() (live blocks 5c)"
 PRIMITIVE_WORDS = (
     "plays live only in the hunt core's hunt loop (a map node's function hunt_loop(t), its tab "
     "hunt; stage 5b-2)"
@@ -149,7 +163,8 @@ def analyse(flow: ir.Flow) -> tuple[dict[str, LoopPlan], list[rc.Issue]]:
     uses = any(is_hunt_block(a) and a.block not in rc.PRIMITIVES
                for site in ir.sites(flow) for a in ir.actions_in(site.stmt))  # fmt: skip
     if not loops and not uses:
-        return {}, []
+        _core_rules(flow, loops, out)  # (5c: role blocks with no hunt core to read them)
+        return {}, out
     blocks = list(flow.workflow.blocks) if flow.workflow else []
     hunts = [b for b in blocks if rc.has_hunt_core(flow, b)]
     plans: dict[str, LoopPlan] = {}
@@ -167,9 +182,11 @@ def analyse(flow: ir.Flow) -> tuple[dict[str, LoopPlan], list[rc.Issue]]:
                 blk)  # fmt: skip
         sig = flow.signatures.get(name) or ir.Signature()
         ps = list(sig.params)
-        if len(ps) != 1 or ps[0].default is not None or sig.varargs or sig.kwargs:
+        if len(ps) != 1 or sig.varargs or sig.kwargs:  # 5c: a default (t=False) lets main call it
             bad(name, HUNT_LOOP, "hunt_loop_input", f"{HUNT_LOOP} takes one input, the target its "
-                f"blocks work on (none at the start): def {HUNT_LOOP}(t)", blk)  # fmt: skip
+                f"blocks work on (none at the start): def {HUNT_LOOP}(t), or "
+                f"def {HUNT_LOOP}(t=False) "
+                "when the node's main calls it", blk)  # fmt: skip
         skill = mine[0].skill_keys if mine else ()
         _body(flow, name, blk, skill, bad)
     for site in ir.sites(flow):  # the hunt blocks stand only in a hunt loop (and a recipe, 4a's)
@@ -181,7 +198,36 @@ def analyse(flow: ir.Flow) -> tuple[dict[str, LoopPlan], list[rc.Issue]]:
                     rc.recipe_functions(flow)):  # fmt: skip
                 continue  # use_skill in a recipe: 4a's rule (recipe_skill)
             bad(site.path, a.block, "hunt_primitive", f"{a.block} {PRIMITIVE_WORDS}")
+    _core_rules(flow, loops, out)
     return plans, out
+
+
+def _core_rules(flow: ir.Flow, loops: set[str], out: list[rc.Issue]) -> None:
+    """5c (live-blocks.md 15.2): a hunt_loop() call left in the compiled flow was not lowered (it is
+    not the one top-level call of a map node's main without the runner block); a lowered hunt core
+    names its required roles; a role block where no hunt core reads it."""
+    for site in ir.sites(flow):
+        if any(p in loops for p in ir.calls_in(site.stmt)):
+            out.append(rc.Issue(site.path, HUNT_CALL, "hunt_core_call", "error", f"{HUNT_CALL}() "
+                "starts the hunt core: a map node's main calls it once, at its top level, with no "
+                "inputs, on a node without the runner block (one hunt core a node)", True,
+                site.block.name if site.block else None))  # fmt: skip
+    lowered = [(s_, a) for s_ in ir.sites(flow) for a in ir.actions_in(s_.stmt)
+               if a.block == fn.RUNNER_BLOCK and a.note == LOWERED_NOTE]  # fmt: skip
+    for s_, a in lowered:
+        missing = [r for r in REQUIRED_ROLES if r not in a.params]
+        if missing:
+            shown = ", ".join(f"{ROLE_NAMES[r]} ({ROLE_PREFIX}{r})" for r in missing)
+            out.append(rc.Issue(s_.path, HUNT_CALL, "hunt_roles", "error", f"the hunt core of "
+                f"{HUNT_CALL}() needs its role blocks: {shown} -- each names the function the "
+                "runner presses for it (the hunt tab)", True,
+                s_.block.name if s_.block else None))  # fmt: skip
+    roles = sorted(v for v in flow.variables if v.split("__")[-1].startswith(ROLE_PREFIX)
+                   and v.split("__")[-1][len(ROLE_PREFIX):] in HUNT_ROLES)  # fmt: skip
+    if roles and not lowered:
+        out.append(rc.Issue(roles[0], roles[0], "role_block", "warning", f"{', '.join(roles)}: "
+            f"role blocks of a hunt core, but no map node's main starts one ({HUNT_CALL}()): they "
+            "are not read", False, None))  # fmt: skip
 
 
 def _body(flow: ir.Flow, name: str, blk: str | None, skill: tuple[str, ...], bad: Any) -> None:

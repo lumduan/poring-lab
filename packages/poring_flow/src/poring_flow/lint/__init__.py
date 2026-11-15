@@ -43,6 +43,7 @@ from poring_flow.lint import (
     semantics,
     simulate,
     structure,
+    tick,
     where,
     zones,
 )
@@ -120,6 +121,7 @@ def lint(
     functions.check(ctx)  # functions that press hotbar keys; dungeon_hunt (Amendment C, 2026-11-13)
     recipes.check(ctx)  # the box's model and its monsters' recipes (stage 4a, Amendment H)
     huntloop.check(ctx)  # the hunt loop: the hunt core's steps as blocks (5b-2, live-blocks 14)
+    tick.check(ctx)  # the tick's step blocks (5c, live-blocks 15.3)
     return sorted(ctx.findings, key=lambda f: (f.layer, SEVERITY_ORDER[f.severity]))
 
 

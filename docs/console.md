@@ -422,6 +422,19 @@ Amendment B); a not-adopted model is never offered.
   declared one (live-blocks 14.10).
   The Load lists of /flows and /maps offer **xmas_dun02_hunt** (the one box plus that tab); the
   one box itself has no hunt tab. Run's readiness reads the hunt loop too.
+  ➡️ **2026-11-15 (stage 5c, [planning/live-blocks.md](planning/live-blocks.md) 15; Batt: "dungeon_hunt.py
+  should be blocks the user sees and can edit himself"):** the ready-made **xmas_dun02** that /flows
+  and /maps open first has no "hunt with the runner" block. Its main calls `hunt_loop()` there (the
+  toolbox offers it under Movement in a map's main); the tab `hunt` holds a **role block** per role
+  (heal, Fly Wing, Knife on, Knife off, home, died, confirm, eat: each a picker of the node's and
+  Global's functions, the usual one first; delete an optional one for none) and the loop
+  (`def hunt_loop(t=False)`); the tab `tick` holds `hunt_tick()` with run()'s 20 **step blocks** in
+  their order, each showing its class: SAFETY and REQUIRED steps cannot be left out or moved (the lint
+  says what each protects), an optional one (step_loot, step_ready, step_plant) may be dragged out and
+  the runner then never plays it. The toolbox offers a **Roles** category on the tab hunt and a
+  **Tick** category on the tab tick. Run plays it exactly as the hunt box. The old shape (the runner
+  block) is **xmas_dun02_runner** in the Load lists; a saved project with the runner block loads and
+  runs as before.
   The /maps Load list also offers **xmas_dun02_cookie_noswap** (live-blocks 16: the one box with
   no Knife swap on the Christmas Cookie and the Cookie, `attack_cookie` / `attack_cookie_xmas` =
   strike, wait_kill, loot; the other monsters keep the swap): load it there and Run it from START.

@@ -16,6 +16,7 @@
 import type { ActionStmt, CellRef, Entry, Expr, Handler, Lit, MapRef, MobRef, Stmt, Target, ZonesRef } from "./ir.ts";
 import { canonical, NAME, RUNTIME_DEFAULT_S, WHERE_BUDGET_DEFAULT } from "./ir.ts";
 import { withSettingTabs } from "./settings.ts";
+import { HUNT_CALL, HUNT_ROLES, LOWERED_NOTE, ROLE_PREFIX, STEP_BLOCKS, TICK_FN, TICK_TAB } from "./tick.ts";
 
 export const PROJECT_FORMAT = "poring-lab.project";
 export const PROJECT_VERSION = 3;
@@ -216,11 +217,41 @@ export function modelOn(n: PNode | undefined): string | null {
   return null;
 }
 
-/** The node's runner block (dungeon_hunt), else null. */
+/** The node's runner block (dungeon_hunt), else null. Live blocks 5c (live-blocks.md 15.2): a map
+ * node whose main calls hunt_loop() (huntCoreCallOn) has its hunt core there -- the runner block
+ * it stands for is BUILT from its role blocks (the engine's lowering, poring_flow.project
+ * lower_hunt_core: the same action, its note LOWERED_NOTE), so the keys, the readiness and the
+ * pages read either shape alike. */
 export function runnerBlockOn(n: PNode | undefined): ActionStmt | null {
   if (!n) return null;
   for (const s of nodeStmts(n)) if (s.kind === "action" && s.block === "dungeon_hunt") return s;
-  return null;
+  if (!huntCoreCallOn(n)) return null;
+  const roles = rolesOn(n);
+  const params: Record<string, Expr> = {};
+  for (const r of HUNT_ROLES) if (r in roles) params[r] = { kind: "lit", value: roles[r] };
+  return { kind: "action", block: "dungeon_hunt", concept: "combat.hunt", params, timeout_s: 600, on_fail: "stop", outcome_to: null, note: LOWERED_NOTE };
+}
+
+const isHuntCall = (s: Stmt): boolean => s.kind === "call" && s.proc === HUNT_CALL && !s.args.length && !Object.keys(s.kwargs).length;
+/** Live blocks 5c: does this map node's hunt core start at its main's hunt_loop() -- called ONCE at
+ * the main's top level, with no inputs, on a node with no runner block (poring_flow.project
+ * lowered_nodes; any other call stays a call, and the lint names it: hunt_core_call)? */
+export function huntCoreCallOn(n: PNode | undefined): boolean {
+  if (!n || n.kind !== "map") return false;
+  for (const s of nodeStmts(n)) if (s.kind === "action" && s.block === "dungeon_hunt") return false;
+  return (mainOf(n)?.main ?? []).filter(isHuntCall).length === 1;
+}
+/** Live blocks 5c: the node's role blocks -- the runner block's role -> the function its block
+ * names (the tab variables role_<param> holding a text; poring_flow.project role_values). */
+export function rolesOn(n: PNode): Record<string, string> {
+  const out: Record<string, string> = {};
+  for (const t of n.tabs) {
+    for (const [name, v] of Object.entries(t.vars)) {
+      const role = name.startsWith(ROLE_PREFIX) ? name.slice(ROLE_PREFIX.length) : null;
+      if (role && HUNT_ROLES.includes(role) && typeof v.value === "string") out[role] = v.value;
+    }
+  }
+  return out;
 }
 
 /** The first map node holding a runner block. */
@@ -558,6 +589,37 @@ export function xmasHuntProject(): Project {
     ...p,
     name: "xmas_dun02_hunt",
     description: "One box with its hunt loop (live-blocks 5b-2): the one box plus the tab hunt, whose hunt_loop(t) the hunt core plays instead of its own: t = find_target(), then fight_target(t).",
+  };
+}
+
+/** Live blocks 5c (live-blocks.md 15.1; Batt 2026-11-15 ~13:0x: "dungeon_hunt.py should be blocks the
+ * user sees and can edit himself"): the tab tick -- hunt_tick(), run()'s 20 steps as step blocks in
+ * run()'s order (tick.ts; the engine's poring_flow.tick). */
+export const tickDef = (steps: readonly string[] = STEP_BLOCKS): Def => def(TICK_FN, steps.map((block) => ({ kind: "action", block, concept: "core.tick_step", params: {}, timeout_s: 1, ...rest })));
+/** The ready-made box as FUNCTIONS IN TABS (fixtures/project_xmas_dun02_functions.json, 5c's live
+ * A/B arm B5c; what /flows and /maps open first): the hunt box (xmasHuntProject) with its runner
+ * block dissolved -- the main calls hunt_loop() where the runner block stood; the tab hunt holds
+ * the role blocks (role_<param> = the function the runner block named) and the loop, its input
+ * t=False so main can call it; the tab tick after it holds hunt_tick(). The engine lowers it to the
+ * hunt box's hunt core exactly (the same runner argv, keys, settings and run() arguments). The one
+ * box's old shape stays xmasProject() (the runner block), the hunt box xmasHuntProject(). */
+export function xmasFunctionsProject(): Project {
+  const p = xmasHuntProject();
+  const n = p.nodes[0];
+  if (n.kind !== "map") throw new Error("the one box's node is a map node");
+  const main = mainOf(n)!;
+  const at = main.main!.findIndex((s) => s.kind === "action" && s.block === "dungeon_hunt");
+  const runner = main.main![at];
+  if (runner.kind !== "action") throw new Error("the one box's runner block");
+  main.main!.splice(at, 1, call(HUNT_CALL));
+  const hunt = n.tabs.find((t) => t.name === HUNT_TAB)!;
+  hunt.vars = Object.fromEntries(Object.entries(runner.params).map(([k, v]) => [`${ROLE_PREFIX}${k}`, v as Lit]));
+  hunt.defs = [{ ...huntLoopDef(), params: [{ name: "t", default: lit(false) }] }];
+  n.tabs.splice(n.tabs.indexOf(hunt) + 1, 0, tab(TICK_TAB, [tickDef()]));
+  return {
+    ...p,
+    name: "xmas_dun02",
+    description: "One box: a person puts the Rogue on xmas_dun02; its hunt core is functions in tabs -- main calls hunt_loop(); the tab hunt holds its role blocks and loop, the tab tick its steps.",
   };
 }
 

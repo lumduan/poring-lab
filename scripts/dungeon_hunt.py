@@ -6392,6 +6392,9 @@ DRIVE_SKILL_ROLES = ("potion",)  # use_skill's keys: a role key the start's slot
 # a block may press between two steps (the Fly Wing, the Butterfly Wing and the Knife keys have
 # moments of the runner's own: its after-the-fly steps, the way home, the swap's read-backs)
 DRIVE_HOOK = ("tick", "survive", "call", "recipe", "event")  # what a driving hook also plays
+RUNNER_BLOCKS_VERSION = "9.56"  # live-blocks 5c (section 15): the tick made visible -- a box's
+# hunt_tick() may leave out these steps (poring_flow.tick's OPTIONAL class); no feature of its own
+DRIVE_OPTIONAL_STEPS = ("loot", "ready", "plant")  # the cursor's leave_out takes no other step
 
 
 @dataclass(frozen=True)
@@ -6495,11 +6498,22 @@ class HuntCursor:
         self.loot_reached = 0  # the cursor reached the loot step (called or passed)
         self.sensed = False  # a sense step ran (look()'s reads exist)
         self.idle = 0  # block calls in a row that called no step
+        self.left_out: frozenset[str] = frozenset()  # 5c: the box's hunt_tick() leaves them out
+        self.left: Counter[str] = Counter()  # the left-out steps' places the cursor went past
 
     @property
     def at(self) -> str:
         """The next step's name."""
         return STEP_NAMES[self.i]
+
+    def leave_out(self, names: Sequence[str]) -> None:
+        """live-blocks 5c (15.3): the box's tick leaves these steps out -- the cursor never plays
+        them, whoever owns them. Only DRIVE_OPTIONAL_STEPS may be (a ValueError names any other:
+        the drive is then refused, before any step)."""
+        bad = sorted(set(names) - set(DRIVE_OPTIONAL_STEPS))
+        if bad:
+            raise ValueError(f"the tick may leave out only {list(DRIVE_OPTIONAL_STEPS)}, not {bad}")
+        self.left_out = frozenset(names)
 
     def _step(self, owns: tuple[str, ...]) -> None:
         name = STEP_NAMES[self.i]
@@ -6512,8 +6526,13 @@ class HuntCursor:
             self.loot_reached += 1
         guard = STEP_GUARD.get(name)
         sig: str | None
-        if name in COMMON_STEPS or name in owns or (guard is not None
-                                                     and self.view.mode() != guard):  # fmt: skip
+        if name in self.left_out:  # 5c: the box's tick leaves it out (never played)
+            sig = None
+            self.left[name] += 1
+            if self.trace is not None:
+                self.trace.append((self.tick, name, "left_out"))
+        elif name in COMMON_STEPS or name in owns or (guard is not None
+                                                       and self.view.mode() != guard):  # fmt: skip
             sig = self.fns[self.i]()
             self.calls[name] += 1
             if name == "sense":
@@ -6681,7 +6700,9 @@ class HuntCursor:
 
     def doc(self) -> dict[str, Any]:
         return {"ended": self.ended, "ticks": self.tick, "at": self.at, "steps": dict(self.calls),
-                "passed": dict(self.passed), "blocks": dict(self.blocks)}  # fmt: skip
+                "passed": dict(self.passed), "blocks": dict(self.blocks),
+                **({"left_out": sorted(self.left_out), "left": dict(self.left)}
+                   if self.left_out else {})}  # fmt: skip
 
 
 def hook_drives(hook: Any) -> bool:

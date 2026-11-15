@@ -274,7 +274,8 @@ def _action(ctx: Ctx, path: str, a: ir.ActionStmt, types: dict[str, str]) -> Non
                 f"{a.block}'s {k} takes {_article(params[k].type)}, not {_article(t)}",
             )
     for p in spec.params:
-        if p.required and p.name not in a.params:
+        if p.required and p.name not in a.params and a.note != hl.LOWERED_NOTE:
+            # (5c: a lowered hunt core's missing role is huntloop's hunt_roles, in its words)
             ctx.add("block_params", "error", 1, path, f"{a.block} needs {p.name}")
     if a.outcome_to:  # 5b-2: a hunt loop block's value is a monster or a word (any value)
         _set_var(ctx, path, a.outcome_to, "?" if a.block in hl.NEW_BLOCKS else "outcome", types)

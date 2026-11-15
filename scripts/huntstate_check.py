@@ -82,6 +82,7 @@ DRIVE_ADDED = (
     "HUNT_BLOCKS_VERSION", "STEP_NAMES", "COMMON_STEPS", "MODE_STEPS", "HANDBACK_AT",
     "STEP_GUARD", "BLOCK_OWNS", "DRIVE_SPIN_MAX", "DRIVE_SKILL_ROLES", "DRIVE_HOOK", "HuntTarget",
     "HuntView", "HuntCursor", "hook_drives", "drive_refused", "hunt_drive",
+    "RUNNER_BLOCKS_VERSION", "DRIVE_OPTIONAL_STEPS",  # 5c (live-blocks 15.3): the visible tick
 )  # fmt: skip
 # the mode steps the cursor calls whoever plays when their mode is another (STEP_GUARD): each one's
 # body acts only in that mode (the proof: its statements are ifs on that mode, nothing else)

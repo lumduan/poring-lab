@@ -10,11 +10,12 @@
 //
 // Pure functions over the workspace JSON and the block definitions (layout.test.ts): every block
 // of the ready-made projects' tabs, nested as it is, must end before Blockly's controls at 390.
-import { type ArgDef, type BlockDef, DEF_BY_TYPE, type FieldKind } from "./blockdefs.ts";
+import { type ArgDef, type BlockDef, DEF_BY_TYPE, type FieldKind, ROLE_OF_TYPE } from "./blockdefs.ts";
 import type { WsBlock } from "./blocks.ts";
 import { NAME } from "./ir.ts";
 import { closedText, wrapExpr } from "./pickers.ts";
 import { rowUnits, SETTING_GEOMETRY as G, settingOfType, textUnits } from "./settings.ts";
+import { ROLE_PREFIX } from "./tick.ts";
 
 /** A statement input's left side, workspace units (zelos draws ~16; taken at 20: the model then errs wide by 8-15 % on the reviewer's three re-measured rows of main, layout.test.ts). */
 export const INDENT = 20;
@@ -281,6 +282,8 @@ export function layoutKey(type: string, fields: Record<string, unknown> | undefi
   if (type === "pl_main") return "main";
   const f = settingOfType(type);
   if (f) return `var:${f.var}`;
+  const role = ROLE_OF_TYPE.get(type); // live blocks 5c: a role block is its variable role_<param>
+  if (role) return `var:${ROLE_PREFIX}${role.param}`;
   const name = String(fields?.NAME ?? "").trim();
   if (!NAME.test(name)) return null;
   if (type === "pl_vardecl") return `var:${name}`;

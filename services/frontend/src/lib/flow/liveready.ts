@@ -13,7 +13,8 @@
 // only as the item warp by a function (stage 1: "the item warp by a function, its arrival read on
 // the minimap"); a walk exit, an NPC warp and an item warp by an item are not live yet. Pure, tested.
 import type { Exit, Expr, Stmt } from "./ir.ts";
-import { EAT_ROLE, HOME_ROLE, globalOf, mainOf, namesOf, nodeById, type PNode, type Project, RECIPE_PREFIX, RESPAWN_ROLES, resolve, RUNNER_ROLE_KEYS } from "./project.ts";
+import { EAT_ROLE, HOME_ROLE, globalOf, mainOf, namesOf, nodeById, type PNode, type Project, RECIPE_PREFIX, RESPAWN_ROLES, resolve, runnerBlockOn, RUNNER_ROLE_KEYS } from "./project.ts";
+import { HUNT_CALL, LOWERED_NOTE, TICK_FN } from "./tick.ts";
 
 /** GET /flows/catalogue's `blocks`, as far as this reads it. */
 export type LiveCatalogue = Record<string, { spec?: { live?: boolean } } | undefined>;
@@ -104,11 +105,19 @@ export function reachable(p: Project, nodeId: string): Reach {
         case "action":
           action(node, s.block, s.params);
           break;
-        case "call":
+        case "call": {
+          // live blocks 5c (live-blocks.md 15.2): a main's hunt_loop() is the hunt core -- the
+          // runner block it stands for (its role functions, its loop), and the tick's steps
+          const core = s.proc === HUNT_CALL ? runnerBlockOn(nodeById(p, node)) : null;
+          if (core?.note === LOWERED_NOTE) {
+            action(node, core.block, core.params);
+            fn(node, TICK_FN);
+          }
           fn(node, s.proc);
           s.args.forEach((a) => expr(node, a));
           Object.values(s.kwargs).forEach((a) => expr(node, a));
           break;
+        }
         case "if":
           expr(node, s.cond);
           stmts(node, s.then);
