@@ -14,7 +14,7 @@
 // {project, node}: the backend takes the node's keys (its functions) and settings (its setting
 // blocks) from the project, as the Run does.
 
-import type { Project } from "./project.ts";
+import { forEngine, type Project } from "./project.ts";
 
 export type LiveState = "no_helper" | "idle" | "busy" | "starting" | "running" | "stopping" | "ended" | "failed" | "refused";
 
@@ -113,7 +113,7 @@ export function runBody(action: "stop"): Record<string, unknown> {
 /** The body of POST /flows/run/check (2026-11-14): the project and the map node it checks; the
  * backend reads the node's keys and its setting blocks from it (no action, no keys, no values). */
 export function checkBody(project: Project, node: string): { project: Project; node: string } {
-  return { project, node };
+  return { project: forEngine(project), node }; // round 25: never a tab's layout
 }
 
 /** Where a request goes: the read-only check has its OWN route (matpilot 2026-11-13 #16). */
@@ -125,7 +125,7 @@ export const PROJECT_FLOW = "project";
 export type ProjectRun = { project: Project; node: string };
 /** The body of POST /flows/run/project: the whole project, and the map node it plays from. */
 export function projectRunBody(project: Project, node: string): { project: Project; node: string } {
-  return { project, node };
+  return { project: forEngine(project), node }; // round 25: never a tab's layout (outside the run)
 }
 /** Where a project run's start goes (a stop stays POST /flows/run {action: "stop"}). */
 export const projectRunPath = (): string => "/flows/run/project";

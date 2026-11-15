@@ -7,10 +7,12 @@ events too: virtual dispatch).
 
 - `Project` (section 2 of the doc, exactly: `extra="forbid"`, frozen, as ir.py), `from_json` with
   ir.py's hostile-input caps, `canonical_json` / `project_hash` as IR 2's (sorted keys, no
-  whitespace, NFC; a field absent by default -- a map node's `zones`, an edge's `entry` -- stays
-  out). `validate` adds the SHAPE rules the doc states (main tabs, tab names, one namespace per
-  node, parameters, events, return, exits, edges, Global, start) as `ProjectError` problems, each
-  with its node, tab and path.
+  whitespace, NFC; a field absent by default -- a map node's `zones`, an edge's `entry`, a tab's
+  `layout` -- stays out). A tab's `layout` (round 25: where a person put its blocks) is COSMETIC:
+  `project_hash` is taken without it, and nothing compiles, lints or prints it. `validate` adds
+  the SHAPE rules the doc states (main tabs, tab names, one namespace per node, parameters,
+  events, return, exits, edges, Global, start) as `ProjectError` problems, each with its node,
+  tab and path.
 - EXECUTION is IR 2's: `compile_project` turns the project into ONE internal IR flow (the
   engine's execution form; nothing user-facing reads it), so every IR 2 rule of the linter, the
   simulators and their safety semantics hold unchanged (event classes, the safety-critical three,
@@ -60,6 +62,7 @@ from pydantic import (
     Field,
     SerializerFunctionWrapHandler,
     ValidationError,
+    field_validator,
     model_serializer,
     model_validator,
 )
@@ -80,6 +83,14 @@ MAX_NODES = 100
 MAX_TABS = 30
 MAX_DEFS = 200
 MAX_POS = 1_000_000
+# A tab's LAYOUT (round 25, Batt 2026-11-15 ~13:0x ICT: "/flows must remember where I placed the
+# blocks"; docs/planning/project-model.md section 2.6): where a person put the tab's top blocks on
+# the /flows canvas, by a key that survives edits -- "main" (the main tab's start block),
+# "def:<name>" (a function or an event: its name; one namespace per node), "var:<name>" (a
+# variable or a setting block: its variable's name). COSMETIC: not compiled, not linted, not
+# printed in the Python view and NOT in `project_hash` (moving a block is no new run).
+LAYOUT_KEY = rf"^(main|(def|var):{ir.NAME[1:-1]})$"
+MAX_LAYOUT = MAX_DEFS + 201  # every def, every variable (Tab.vars' 200) and main
 # Section 5 (credentials by NAME, never a secret): the lab's two accounts as ro_agent knows them
 # (.env prefixes RATHENA_GM_* / RATHENA_AGENT_*; scripts/ro_agent.py account(which)).
 CREDENTIALS = ("lab_gm", "lab_player")
@@ -185,12 +196,34 @@ class Def(BaseModel):
         return [p.name for p in self.params] + [n for n in (self.varargs, self.kwargs) if n]
 
 
+Coord = Annotated[float, Field(ge=-MAX_POS, le=MAX_POS)]
+
+
 class Tab(BaseModel):
     model_config = CFG
     name: str = Field(pattern=TAB_NAME)
     main: list[ir.Stmt] | None = None  # the main tab's program; None on every other tab
     defs: list[Def] = Field(default=[], max_length=MAX_DEFS)
     vars: dict[Annotated[str, Field(pattern=ir.NAME)], ir.Lit] = Field(default={}, max_length=200)
+    # round 25: where a person put the top blocks (LAYOUT_KEY -> [x, y], workspace units); absent
+    # from the JSON when none; outside the IR, the lint, the Python view and the hash
+    layout: dict[Annotated[str, Field(pattern=LAYOUT_KEY)], tuple[Coord, Coord]] | None = Field(
+        default=None, max_length=MAX_LAYOUT
+    )
+
+    @field_validator("layout")
+    @classmethod
+    def _no_empty_layout(
+        cls, v: dict[str, tuple[float, float]] | None
+    ) -> dict[str, tuple[float, float]] | None:
+        return v or None  # an empty layout is no layout: one JSON for both
+
+    @model_serializer(mode="wrap")
+    def _absent_layout(self, handler: SerializerFunctionWrapHandler) -> Any:
+        data = handler(self)
+        if self.layout is None and isinstance(data, dict):
+            data.pop("layout", None)
+        return data
 
 
 class _Node(BaseModel):
@@ -331,20 +364,57 @@ class ProjectError(ValueError):
 
 
 # --- canonical JSON and the hash (as IR 2's) ------------------------------------------------------
-def dump(project: Project) -> dict[str, Any]:
+def dump(project: Project, *, layout: bool = True) -> dict[str, Any]:
+    """The project's JSON; `layout` False leaves out every tab's layout (round 25: cosmetic)."""
     data = project.model_dump(mode="json", by_alias=True, context=ir.PROJECT_JSON)
+    if not layout:
+        for n in data.get("nodes", []):
+            for t in n.get("tabs", []):
+                t.pop("layout", None)
     return ir._nfc(data)  # type: ignore[no-any-return]
 
 
-def canonical_json(project: Project) -> str:
-    """Sorted keys, no insignificant whitespace, UTF-8 (not ASCII-escaped), NFC strings."""
+def canonical_json(project: Project, *, layout: bool = True) -> str:
+    """Sorted keys, no insignificant whitespace, UTF-8 (not ASCII-escaped), NFC strings. The file's
+    form keeps the tabs' layouts; `layout` False is the form the hash is taken of."""
     return json.dumps(
-        dump(project), sort_keys=True, separators=(",", ":"), ensure_ascii=False, allow_nan=False
+        dump(project, layout=layout),
+        sort_keys=True,
+        separators=(",", ":"),
+        ensure_ascii=False,
+        allow_nan=False,
     )
 
 
 def project_hash(project: Project) -> str:
-    return hashlib.sha256(canonical_json(project).encode("utf-8")).hexdigest()
+    """The sha256 of the canonical JSON WITHOUT the tabs' layouts (round 25): where a person put
+    the blocks changes nothing a Run, an A/B plan or the lint computes, so it is no new hash."""
+    return hashlib.sha256(canonical_json(project, layout=False).encode("utf-8")).hexdigest()
+
+
+def without_layout(project: Project) -> Project:
+    """The project with no tab layout (what the engine plays: compile_project never reads one)."""
+    return validate(dump(project, layout=False))
+
+
+def keep_layout(new: Project, old: Project) -> Project:
+    """Round 25: `new` (a project made again from its Python view: `pyproject.parse_files`, which
+    never sees a layout) with `old`'s layout, for every block of each tab that `new` still has
+    (main, its defs, its variables); a key whose block is gone is dropped."""
+    data = dump(new)
+    for n in data["nodes"]:
+        on = old.node(n["id"])
+        for t in n["tabs"]:
+            ot = on.tab(t["name"]) if on is not None else None
+            if ot is None or not ot.layout:
+                continue
+            keys = {"main"} if t.get("main") is not None else set()
+            keys |= {f"def:{d['name']}" for d in t.get("defs", [])}
+            keys |= {f"var:{v}" for v in t.get("vars", {})}
+            kept = {k: list(v) for k, v in ot.layout.items() if k in keys}
+            if kept:
+                t["layout"] = kept
+    return validate(data)
 
 
 def to_json(project: Project) -> str:

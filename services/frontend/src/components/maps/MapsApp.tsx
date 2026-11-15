@@ -47,7 +47,7 @@ import { browserStorage, hasOldFlow, KEYS, readChoice, readProjectText, readText
 import { ACTIVE, busyWhy, liveLabel, liveLine, PROJECT_FLOW } from "@/lib/flow/liverun";
 import { mapsReadyText } from "@/lib/flow/words";
 import { liveReady } from "@/lib/flow/liveready";
-import { mapNodes, nodeById, type Project, runnerBlockOn, runnerKeysOn, sampleProject, sessionPath, startMap as mapStartOf, xmasHuntProject, xmasProject } from "@/lib/flow/project";
+import { forEngine, mapNodes, nodeById, type Project, runnerBlockOn, runnerKeysOn, sampleProject, sessionPath, startMap as mapStartOf, xmasHuntProject, xmasProject } from "@/lib/flow/project";
 import { RUNNER_MAPS } from "@/lib/flow/settings";
 import { exportProject, importProject } from "@/lib/flow/projectfile";
 import { type FileMeta, newFileMeta, readFileMeta, writeFileMeta } from "@/lib/flow/file";
@@ -126,9 +126,10 @@ const num = (s: string, d: number, lo: number, hi: number) => {
 };
 
 /** The project without its nodes' positions: moving a node is no new run, lint or Python (n8n
- * saves positions in the file; they change nothing the engine checks or plays). */
+ * saves positions in the file; they change nothing the engine checks or plays). Round 25: nor its
+ * tabs' layouts (where a person put the blocks on /flows: project.ts forEngine). */
 function contentKey(p: Project): string {
-  return canonical({ ...p, nodes: p.nodes.map((n) => ({ ...n, pos: null })) });
+  return canonical({ ...forEngine(p), nodes: forEngine(p).nodes.map((n) => ({ ...n, pos: null })) });
 }
 
 

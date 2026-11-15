@@ -194,3 +194,32 @@ def test_an_ab_series_plans_and_refuses_two_boxes_whose_settings_differ(
     monkeypatch.setitem(s5.PROJECTS, "B5", other)
     got = s5.plan_doc("s", 1, 20, "alternate", tmp_path / "s")
     assert isinstance(got, str) and "runner settings differ: knife_hp_min" in got
+
+
+# Round 25 (docs/planning/live-blocks.md 12.9): a tab's LAYOUT (where a person put the blocks on
+# /flows) is cosmetic -- the same frozen arms and the one box, with every top block of every tab
+# placed, give TODAY's argv and the same project hash (the files themselves stay byte-identical).
+def placed_everywhere(d: dict[str, Any]) -> dict[str, Any]:
+    for n in d["nodes"]:
+        for t in n["tabs"]:
+            keys = ["main"] if t.get("main") is not None else []
+            keys += [f"def:{x['name']}" for x in t["defs"]] + [f"var:{v}" for v in t["vars"]]
+            if keys:
+                t["layout"] = {
+                    k: [20 + 320 * (j % 3), 90 + 500 * (j // 3)] for j, k in enumerate(keys)
+                }
+    return d
+
+
+@pytest.mark.parametrize("name", [*sorted(FROZEN), "project_xmas_dun02.json"])
+def test_a_layout_changes_neither_the_argv_nor_the_hash(name: str) -> None:
+    from poring_flow import project as pj
+
+    raw = (FIX / name).read_text()
+    placed = json.dumps(placed_everywhere(json.loads(raw)))
+    assert '"layout"' in placed
+    assert hunt_argv(placed) == TODAY == hunt_argv(raw)
+    assert len(TODAY) == 97
+    assert pj.project_hash(pj.from_json(placed)) == pj.project_hash(pj.from_json(raw))
+    prep = fp.prepare(placed, NODE, 7200)
+    assert not isinstance(prep, str) and prep.project_hash == pj.project_hash(pj.from_json(raw))

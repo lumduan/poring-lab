@@ -14,7 +14,7 @@
 // the run starts where she stands on it (a person put her there), at its first entry; login and
 // character nodes are then optional and `edges` may be empty.
 import type { ActionStmt, CellRef, Entry, Expr, Handler, Lit, MapRef, MobRef, Stmt, Target, ZonesRef } from "./ir.ts";
-import { NAME, RUNTIME_DEFAULT_S, WHERE_BUDGET_DEFAULT } from "./ir.ts";
+import { canonical, NAME, RUNTIME_DEFAULT_S, WHERE_BUDGET_DEFAULT } from "./ir.ts";
 import { withSettingTabs } from "./settings.ts";
 
 export const PROJECT_FORMAT = "poring-lab.project";
@@ -28,7 +28,12 @@ export type Param = { name: string; default: Lit | null };
 export type Trigger = Omit<Handler, "name" | "body">;
 /** A function; with a trigger it is an EVENT (no inputs; its name is the event's key). */
 export type Def = { name: string; params: Param[]; varargs: string | null; kwargs: string | null; body: Stmt[]; on: Trigger | null };
-export type Tab = { name: string; main: Stmt[] | null; defs: Def[]; vars: Record<string, Lit> };
+/** Round 25 (Batt 2026-11-15: "/flows must remember where I placed the blocks"): where a person put
+ * a tab's top blocks, by a key that survives edits (layout.ts layoutKey: "main", "def:<name>",
+ * "var:<name>") -> [x, y] in workspace units. COSMETIC and optional: ABSENT when none; never sent
+ * to the engine (forEngine), so it is outside the IR, the lint, the Python view and the hash. */
+export type Layout = Record<string, [number, number]>;
+export type Tab = { name: string; main: Stmt[] | null; defs: Def[]; vars: Record<string, Lit>; layout?: Layout };
 type NodeBase = { id: string; pos: { x: number; y: number }; tabs: Tab[] };
 export type LoginNode = NodeBase & { kind: "login" };
 export type CharacterNode = NodeBase & { kind: "character" };
@@ -47,6 +52,25 @@ export type PNode = LoginNode | CharacterNode | MapNode | GlobalNode;
 /** The session path: login -> character -> the start map (its entry). Map -> map links are exits.
  * A project that starts on a map node needs none. */
 export type Edge = { from: string; to: string; entry?: string };
+
+/** PURE (round 25): the project as the ENGINE gets it -- every tab's layout left out. Every request
+ * that carries a project (lint, simulate, the Python view, Run, the check) sends this form, and
+ * every "is the engine's answer for this project" key is taken of it (engineKey), so moving a block
+ * is no new lint, Python view or Run (an engine without the field reads it too). */
+export function forEngine(p: Project): Project {
+  const has = (n: PNode) => n.tabs.some((t) => t.layout !== undefined);
+  if (!p.nodes.some(has)) return p;
+  const bare = (t: Tab): Tab => {
+    const { layout: _l, ...rest } = t;
+    void _l;
+    return rest;
+  };
+  return { ...p, nodes: p.nodes.map((n) => (has(n) ? { ...n, tabs: n.tabs.map(bare) } : n)) };
+}
+
+/** The key of what the engine answers for (lint, simulate, the Python view): the canonical JSON of
+ * the engine's form (round 25: a moved block keeps the key). */
+export const engineKey = (p: Project): string => canonical(forEngine(p));
 export type Project = {
   format: typeof PROJECT_FORMAT;
   version: typeof PROJECT_VERSION;

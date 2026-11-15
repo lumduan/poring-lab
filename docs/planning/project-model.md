@@ -58,7 +58,8 @@ stays ro_agent's Python). Their nodes' flows are simulated and shown.
       kind "map":       map: MapRef, entries: [Entry] (>= 1), targets: [MobRef], ignore: [MobRef],
                         zones?: ZonesRef (absent when none), resume_here: bool
       kind "global":    (no more fields; at most ONE global node, id "global")
-    Tab = {name: TabName, main: [Stmt] | null, defs: [Def], vars: {NAME: Lit}}
+    Tab = {name: TabName, main: [Stmt] | null, defs: [Def], vars: {NAME: Lit},
+           layout?: {LayoutKey: [x, y]}}                  # round 25, section 2.6: cosmetic
       - every node but Global has exactly one tab "main", first, whose `main` is a list (its
         program); every other tab has main null. Global has no tab "main".
       - TabName ^[a-z][a-z0-9_]{0,19}$; "main" only as the main tab; not a Python keyword or
@@ -87,6 +88,7 @@ stays ro_agent's Python). Their nodes' flows are simulated and shown.
 
 Canonical JSON and the project's hash: as IR 2 (sorted keys, no whitespace, NFC; the engine's
 floats as it prints them). A field that is absent by default (zones) stays out of the JSON.
+➡️ Round 25 (2.6): the hash is taken of the canonical JSON WITHOUT the tabs' `layout`.
 
 ➡️ **The engine's decisions on section 2 (built 2026-11-13, `poring_flow/project.py`; the JSON
 is unchanged):**
@@ -117,6 +119,54 @@ workflow there; the simulator's trace has `session: null`; the Python view print
 `START = "<map>"`; the lint accepts it and WARNS when login / character nodes or edges are there
 too ("not played"). Any other node kind as `start` stays an error. The ready-made xmas_dun02 is
 now ONE map node (section 7).
+
+### 2.6 A tab's layout: where a person put the blocks (round 25, Batt 2026-11-15 ~13:0x ICT; built on fix/round25)
+
+Batt: "/flows and /maps must REMEMBER where the user placed blocks: after I rearrange and refresh
+the page, the last positions I dragged to are forgotten." A tab may carry `layout`:
+- **The key, by what the project says, never a Blockly id** (an id lives only as long as one
+  workspace):
+  - `"main"`: the main tab's start block;
+  - `"def:<name>"`: a function or an EVENT (one namespace per node; an event's name is its key);
+  - `"var:<name>"`: a variable or a SETTING block (a setting is a variable of the tab).
+  - The pattern is `^(main|(def|var):NAME)$` (`project.py LAYOUT_KEY`).
+  - Every other top block has no key: a loose block is not kept by the project at all.
+- **The value** is `[x, y]` in workspace units, each within ±1,000,000.
+  - At most every def, every variable and main.
+  - Absent when empty: `{}` reads as no layout, so a project without one has exactly the JSON
+    it had before.
+- **Only the blocks a PERSON placed have one.** That means a drag (mouse, touch or the
+  keyboard's move mode), or "Clean up Blocks".
+  - The others are placed by the editor every time a tab opens: left to right while they fit
+    the canvas (live-blocks.md 12.9).
+  - So a phone and a wide screen each lay out what nobody placed.
+- **COSMETIC, outside everything the engine computes:**
+  - `project_hash` is taken without it, so moving a block is no new hash for a Run or an A/B
+    plan.
+  - `compile_project` never reads it: the IR is unchanged.
+  - The lint never reads it.
+  - The Python view never prints it.
+  - The browser sends every project to the engine WITHOUT it (`forEngine`): lint, simulate, the
+    Python view, Run, the check. So an engine older than the field reads the projects too.
+  - The editor's order of a tab's definitions no longer follows the canvas either. The project
+    keeps the order it has; a new block comes after the others.
+- **Kept by:** the project's file (Save, Load, GitHub), this browser's working copy (localStorage,
+  shared by /flows and /maps), and the engine's JSON round trip (`from_json` / `to_json`).
+- **Python → project** (`pyproject.parse_files`, which never sees a layout): `keep_layout(new,
+  old)` keeps the old layout of every block the new project still has.
+- **/maps:** its nodes' positions were already remembered. `Node.pos` is set on every drag stop
+  (`moveNodes`) and kept in the same working copy. The START marker is derived and cannot be
+  dragged.
+  - `pos` stays in the hash, as it always was. Taking it out would change every frozen arm's
+    sha256.
+  - /maps' own change key leaves both `pos` and the layouts out (a moved node or block is no new
+    lint).
+- Tests:
+  - packages/poring_flow/tests/test_project_layout.py: every fixture with a layout on every tab
+    gives the same hash, IR, lint findings, lint document and Python view; the round trip; the
+    hostile-input checks; `keep_layout`.
+  - services/backend/tests/test_settings_blocks.py: the frozen arms and the one box, placed
+    everywhere, give TODAY's 97-argument argv and the same hash.
 
 ## 3. Names: imports and overrides (the semantics)
 
