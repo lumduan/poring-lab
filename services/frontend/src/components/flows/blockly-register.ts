@@ -5,12 +5,12 @@
 import type * as BlocklyT from "blockly/core";
 
 import { registerPickers, wrapLineField } from "./blockly-pickers.ts";
-import { ABOUT_FIELDS, BLOCK_DEFS, defAbout, defTooltip, LABEL_ROWS } from "../../lib/flow/blockdefs.ts";
+import { ABOUT_FIELDS, BLOCK_DEFS, defAbout, defTooltip, LABEL_ROWS, WHY_FIELDS, whyRows } from "../../lib/flow/blockdefs.ts";
 import { huntDef, type HuntRules } from "../../lib/flow/hunt.ts";
 import { wrapExpr } from "../../lib/flow/pickers.ts";
 import { noteLines, SETTING_NOTE_ROWS, settingOfType, unitOf } from "../../lib/flow/settings.ts";
 import { BLOCK_STYLES, CATEGORY_STYLES, COMPONENT_STYLES, FONT_STYLE } from "../../lib/flow/theme.ts";
-import { isLockedClass, STEP_OF_TYPE, TICK_FN } from "../../lib/flow/tick.ts";
+import { isLockedClass, PADLOCK, placeWords, STEP_OF_TYPE, stepBlock, TICK_FN, type TickPlace, tickPlaces } from "../../lib/flow/tick.ts";
 
 let registered = false;
 /** Round 21 (the re-measure of round 20): the words a setting block in the FLYOUT or the search
@@ -234,7 +234,44 @@ export function inTick(b: BlocklyT.Block): boolean {
  * deleted or dragged out (the lint stays the backstop, e.g. for a Python edit). */
 export function lockedStep(b: BlocklyT.Block): boolean {
   const t = STEP_OF_TYPE.get(b.type);
-  return !!t && isLockedClass(t.klass) && inTick(b);
+  // round 28: only the copy the tick ACCEPTS (in its place; tick.ts tickPlaces, the lint's rule): an
+  // extra or a misplaced copy stays deletable and draggable, and says why (syncStepPlace)
+  return !!t && isLockedClass(t.klass) && stepPlace(b)?.kind === "ok";
+}
+
+/** Round 28: a block's place in hunt_tick() (tick.ts tickPlaces over the tick's statements, in
+ * order; null: not inside the tick). Read fresh each time: a drop, a delete, an undo change it. */
+export function stepPlace(b: BlocklyT.Block): TickPlace | null {
+  if (!inTick(b)) return null;
+  const def = b.getRootBlock();
+  const chain: BlocklyT.Block[] = [];
+  for (let cur = def.getInputTargetBlock("DO"); cur; cur = cur.getNextBlock()) chain.push(cur);
+  const i = chain.indexOf(b);
+  if (i < 0) return null; // nested deeper (in another block's input): not a statement of the tick
+  const names = chain.map((x) => {
+    const t = STEP_OF_TYPE.get(x.type);
+    return t ? stepBlock(t) : null;
+  });
+  return tickPlaces(names)[i];
+}
+
+/** Round 28: a step block's padlock and WHY rows as its place says (an extra or a misplaced copy:
+ * no padlock, and why; in its place, or outside the tick: as its class). True: its rows changed. */
+export function syncStepPlace(B: typeof BlocklyT, b: BlocklyT.Block): boolean {
+  const t = STEP_OF_TYPE.get(b.type);
+  if (!t) return false;
+  const place = stepPlace(b);
+  const rows = whyRows(placeWords(place));
+  const lock = isLockedClass(t.klass) && (!place || place.kind === "ok") ? PADLOCK : "";
+  const was = B.Events.isEnabled();
+  if (was) B.Events.disable();
+  try {
+    if (b.getField("LOCK") && b.getFieldValue("LOCK") !== lock) b.getField("LOCK")?.setValue(lock);
+    for (const f of WHY_FIELDS) if (b.getField(f) && b.getFieldValue(f) !== rows[f]) b.getField(f)?.setValue(rows[f]);
+  } finally {
+    if (was) B.Events.enable();
+  }
+  return syncLabelRows(B, b);
 }
 
 /** Round 26: takes a block out of its stack ALONE: the blocks under it go up to where it was,

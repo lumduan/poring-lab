@@ -22,7 +22,7 @@ drives the hunt core, a call of ``hunt_tick()``).
 
 from __future__ import annotations
 
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from typing import Literal
 
@@ -153,7 +153,7 @@ def analyse(flow: ir.Flow) -> tuple[dict[str, TickPlan], list[rc.Issue]]:
             if a.block in BY_BLOCK:
                 words = (
                     f"{a.block}() is a step of the tick: it stands only in the function "
-                    f"{TICK}() (its tab tick), in run()'s order"
+                    f"{TICK}() (its tab tick), in the runner's order"
                 )
                 bad(site.path, a.block, "tick_step", words)
         if any(p in ticks for p in ir.calls_in(site.stmt)):
@@ -168,58 +168,92 @@ def _left_out(flow: ir.Flow, name: str) -> tuple[str, ...]:
 
 
 def _body(flow: ir.Flow, name: str, owner: str | None, add: Callable[..., None]) -> None:
-    """hunt_tick()'s statements: step blocks only, each once, in run()'s order, every SAFETY and
-    REQUIRED step present."""
+    """hunt_tick()'s statements: step blocks only, each once, in the runner's order, every SAFETY
+    and REQUIRED step present (`places`: which copy stands in its place, which is an extra copy,
+    which is out of its place -- the editor's lock reads the same, lib/flow/tick.ts tickPlaces)."""
     body = list(flow.procedures.get(name, []))
-    seen: list[str] = []
-    for i, st in enumerate(body):
+    blocks = [st.block if isinstance(st, ir.ActionStmt) and st.block in BY_BLOCK and not st.params
+              else None for st in body]  # fmt: skip
+    for i, (st, p) in enumerate(zip(body, places(blocks), strict=True)):
         path = f"{name}.{i}"
-        if not (isinstance(st, ir.ActionStmt) and st.block in BY_BLOCK and not st.params):
+        if p.kind == "other":
             what = st.block if isinstance(st, ir.ActionStmt) else f"a {st.kind}"
-            add(path, what, "tick_step", f"{TICK}() holds {what}: it holds the step blocks only "
-                "(step_begin() ... step_pace()), each once, in run()'s order", owner)  # fmt: skip
-            continue
-        if st.block in seen:
-            add(path, st.block, "tick_step", f"{st.block}() twice in {TICK}(): each step plays "
-                "once a tick", owner)  # fmt: skip
-            continue
-        seen.append(st.block)
-    order = [b for b in STEP_BLOCKS if b in seen]
-    if seen != order:
-        # round 27 (the reviewer: a step put back from the toolbox goes in its own place only): the
-        # words say WHERE it goes, between the steps that stay in run()'s order around it
-        for moved in _out_of_place(seen):
-            add(name, moved, "tick_step", f"{moved}() is out of its place in {TICK}(): "
-                f"{_where(moved, seen)} (the steps play in run()'s order; the hunt core's "
-                "hand-backs and guards rely on it)", owner)  # fmt: skip
+            add(path, what, "tick_step", f"{TICK}() holds {what}: it holds the step blocks "
+                "only (step_begin() ... step_pace()), each once, in the runner's order",
+                owner)  # fmt: skip
+        elif p.kind == "extra":
+            add(path, blocks[i], "tick_step", f"{blocks[i]}() twice in {TICK}(): {EXTRA_WORDS} "
+                "(each step plays once a tick)", owner)  # fmt: skip
+        elif p.kind == "misplaced":
+            # round 27: the words say WHERE it goes, between the steps in their place around it
+            add(name, blocks[i], "tick_step", f"{blocks[i]}() is out of its place in {TICK}(): "
+                f"{p.where} (the steps play in the runner's order; the hunt core's hand-backs and "
+                "guards rely on it)", owner)  # fmt: skip
+    present = {b for b in blocks if b}
     for s in STEPS:
-        if s.klass != "optional" and s.block not in seen:
+        if s.klass != "optional" and s.block not in present:
             kind = "a SAFETY step" if s.klass == "safety" else "a REQUIRED step"
             add(name, s.block, "tick_step", f"{TICK}() leaves out {s.block}(), {kind} ({s.words}): "
                 f"without it {s.why}. Only {', '.join(PREFIX + o + '()' for o in OPTIONAL)} may "
                 "be left out", owner)  # fmt: skip
 
 
-def _out_of_place(seen: list[str]) -> list[str]:
-    """The steps out of run()'s order: those outside a longest run of steps already in order (a
-    step dropped at the wrong place, not every step after it)."""
-    rank = [STEP_BLOCKS.index(b) for b in seen]
-    best: list[list[int]] = []  # best[i]: the longest in-order chain of indices ending at i
-    for i, r in enumerate(rank):
-        # (of chains as long, the one ending at the earlier step: room for the rest)
-        before = [best[j] for j in range(i) if rank[j] < r]
+# Round 28 (the reviewer: a SECOND step_survive dropped after step_pace was locked in the editor,
+# and the lint said "twice" -- the learner could not delete it): which copy of a step the tick
+# ACCEPTS. The copies in their place in the runner's order (the longest run of steps already in
+# order, one copy of a step at most, the earlier copy where two would do) are accepted; any other
+# copy of an accepted step is an EXTRA copy; a step with no copy in its place is OUT OF ITS PLACE
+# (its first copy; its other copies extra). The editor locks only an accepted SAFETY or REQUIRED
+# step and says the same words on an extra or a misplaced one (lib/flow/tick.ts tickPlaces: the
+# same rule, pinned by the same cases in test_runner_functions.py and tick_lock.test.ts).
+EXTRA_WORDS = "an extra copy: delete it"
+
+
+@dataclass(frozen=True)
+class Place:
+    """Where one statement of hunt_tick() stands: "ok" (in its place: the one the tick accepts),
+    "extra" (another copy of an accepted step), "misplaced" (`where` it goes), "other" (no step)."""
+
+    kind: Literal["ok", "extra", "misplaced", "other"]
+    where: str = ""
+
+
+def places(blocks: Sequence[str | None]) -> list[Place]:
+    """PURE: each statement's place (`blocks`: its step block's name, None for any other)."""
+    idx = [i for i, b in enumerate(blocks) if b is not None and b in BY_BLOCK]
+    rank = {i: STEP_BLOCKS.index(str(blocks[i])) for i in idx}
+    best: dict[int, list[int]] = {}  # the longest in-order chain ending at each statement
+    for i in idx:
+        # (strictly in order: one copy of a step at most; of chains as long, the one ending at the
+        # earlier step, then the earlier copy)
+        before = [best[j] for j in idx if j < i and rank[j] < rank[i]]
         chain = max(before, key=lambda c: (len(c), -rank[c[-1]])) if before else []
-        best.append([*chain, i])
-    longest: list[int] = max(best, key=len) if best else []
+        best[i] = [*chain, i]
+    chains = list(best.values())
+    longest: list[int] = max(chains, key=len) if chains else []
     keep = set(longest)
-    return [b for i, b in enumerate(seen) if i not in keep]
+    accepted = {blocks[i] for i in keep}
+    present = {b for b in blocks if b is not None and b in BY_BLOCK}
+    out: list[Place] = []
+    misplaced: set[str] = set()
+    for i, b in enumerate(blocks):
+        if b is None or b not in BY_BLOCK:
+            out.append(Place("other"))
+        elif i in keep:
+            out.append(Place("ok"))
+        elif b in accepted or b in misplaced:
+            out.append(Place("extra"))
+        else:
+            misplaced.add(b)
+            out.append(Place("misplaced", _where(b, present)))
+    return out
 
 
-def _where(moved: str, seen: list[str]) -> str:
-    """Where a step goes: after the step before it in run()'s order, before the one after it (of
-    the steps the tick holds)."""
+def _where(moved: str, present: set[str]) -> str:
+    """Where a step goes: after the step before it in the runner's order, before the one after it
+    (of the steps the tick holds)."""
     at = STEP_BLOCKS.index(moved)
-    have = [b for b in STEP_BLOCKS if b in seen and b != moved]
+    have = [b for b in STEP_BLOCKS if b in present and b != moved]
     before = next((b for b in reversed(have) if STEP_BLOCKS.index(b) < at), None)
     after = next((b for b in have if STEP_BLOCKS.index(b) > at), None)
     if before and after:

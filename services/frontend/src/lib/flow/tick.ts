@@ -76,3 +76,64 @@ export const PADLOCK = "🔒";
 /** The block type of a step block (one per step: its words are its own). */
 export const stepType = (t: TickStep): string => `pl_${STEP_PREFIX}${t.name}`;
 export const STEP_OF_TYPE: ReadonlyMap<string, TickStep> = new Map(TICK_STEPS.map((t) => [stepType(t), t]));
+
+/** Round 28 (the reviewer: a SECOND step_survive dropped after step_pace was LOCKED, and the lint
+ * said "twice" -- the learner could not delete it): which copy of a step hunt_tick() ACCEPTS, the
+ * engine's rule exactly (poring_flow.tick places; the same cases pin both,
+ * test_runner_functions.py and tick_lock.test.ts). The copies in their place in the runner's order
+ * (the longest run of steps already in order, one copy of a step at most, the earlier copy where two
+ * would do) are accepted; another copy of an accepted step is an EXTRA copy; a step with no copy in
+ * its place is OUT OF ITS PLACE (its first copy; its other copies extra). The editor locks only an
+ * accepted SAFETY or REQUIRED step and shows the lint's words on the others. */
+export type TickPlace = { kind: "ok" | "extra" | "misplaced" | "other"; where: string };
+export const EXTRA_WORDS = "an extra copy: delete it";
+const STEP_RANK: ReadonlyMap<string, number> = new Map(STEP_BLOCKS.map((b, i) => [b, i]));
+
+/** PURE: each statement's place in hunt_tick() (`blocks`: its step block's name, null for any
+ * other statement). */
+export function tickPlaces(blocks: readonly (string | null)[]): TickPlace[] {
+  const idx = blocks.flatMap((b, i) => (b !== null && STEP_RANK.has(b) ? [i] : []));
+  const rank = (i: number) => STEP_RANK.get(blocks[i]!)!;
+  const best = new Map<number, number[]>(); // the longest in-order chain ending at each statement
+  for (const i of idx) {
+    let chain: number[] = [];
+    for (const j of idx) {
+      if (j >= i || rank(j) >= rank(i)) continue;
+      const c = best.get(j)!;
+      // of chains as long, the one ending at the earlier step, then the earlier copy (the first)
+      if (c.length > chain.length || (c.length === chain.length && chain.length > 0 && rank(c[c.length - 1]) < rank(chain[chain.length - 1]))) chain = c;
+    }
+    best.set(i, [...chain, i]);
+  }
+  let longest: number[] = [];
+  for (const c of best.values()) if (c.length > longest.length) longest = c;
+  const keep = new Set(longest);
+  const accepted = new Set(longest.map((i) => blocks[i]!));
+  const present = new Set(idx.map((i) => blocks[i]!));
+  const misplaced = new Set<string>();
+  return blocks.map((b, i): TickPlace => {
+    if (b === null || !STEP_RANK.has(b)) return { kind: "other", where: "" };
+    if (keep.has(i)) return { kind: "ok", where: "" };
+    if (accepted.has(b) || misplaced.has(b)) return { kind: "extra", where: "" };
+    misplaced.add(b);
+    return { kind: "misplaced", where: stepWhere(b, present) };
+  });
+}
+
+/** PURE: where a step goes -- after the step before it in the runner's order, before the one after
+ * it, of the steps the tick holds (poring_flow.tick _where). */
+export function stepWhere(moved: string, present: ReadonlySet<string>): string {
+  const at = STEP_RANK.get(moved)!;
+  const have = STEP_BLOCKS.filter((b) => present.has(b) && b !== moved);
+  const before = [...have].reverse().find((b) => STEP_RANK.get(b)! < at);
+  const after = have.find((b) => STEP_RANK.get(b)! > at);
+  if (before && after) return `it goes after ${before}() and before ${after}()`;
+  if (after) return `it goes first, before ${after}()`;
+  return before ? `it goes last, after ${before}()` : "it goes in its own place";
+}
+
+/** What a step block's own rows say about its place (round 28; empty: in its place). */
+export function placeWords(p: TickPlace | null): string {
+  if (!p || p.kind === "ok" || p.kind === "other") return "";
+  return p.kind === "extra" ? `${EXTRA_WORDS} (each step plays once a tick)` : `out of its place: ${p.where}`;
+}

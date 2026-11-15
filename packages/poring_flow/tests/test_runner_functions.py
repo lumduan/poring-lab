@@ -263,3 +263,48 @@ def test_round26_answered_bindings_in_a_learners_words_and_hunt_loop_named() -> 
     # the old one-block shape shows the runner block: its words keep its name
     old = {f["path"]: f["text"] for f in _lint(XMAS) if f.get("answered")}
     assert old["xmas_dun02/main/main.2"].startswith("dungeon_hunt ")
+
+
+# --- round 28 (live-blocks.md 12.12): which copy of a step the tick accepts -----------------------
+# The SAME cases pin the browser's twin (services/frontend/src/lib/flow/tick_lock.test.ts
+# PLACE_CASES, lib/flow/tick.ts tickPlaces): the editor locks only the copy the lint accepts.
+_A = list(tk.STEP_BLOCKS)
+
+
+def _without(b: str) -> list[str | None]:
+    return [x for x in _A if x != b]
+
+
+PLACE_CASES: list[tuple[str, list[str | None], list[tuple[int, str, str]]]] = [
+    ("in order", list(_A), []),
+    ("a second survive after pace", [*_A, "step_survive"], [(20, "extra", "")]),
+    ("a second survive at the top", ["step_survive", *_A], [(0, "extra", "")]),
+    ("a second survive beside it", [*_A[:6], "step_survive", *_A[6:]], [(6, "extra", "")]),
+    ("loot put back at the end", [*_without("step_loot"), "step_loot"],
+     [(19, "misplaced", "it goes after step_hold() and before step_after()")]),
+    ("sense before begin", [_A[1], _A[0], *_A[2:]],
+     [(0, "misplaced", "it goes after step_begin() and before step_hook()")]),
+    ("survive only at the end", [*_without("step_survive"), "step_survive"],
+     [(19, "misplaced", "it goes after step_battle_log() and before step_engage()")]),
+    ("two loots, none in place", [*_without("step_loot"), "step_loot", "step_loot"],
+     [(19, "misplaced", "it goes after step_hold() and before step_after()"), (20, "extra", "")]),
+    ("a call in the tick", [*_A[:3], None, *_A[3:]], [(3, "other", "")]),
+]  # fmt: skip
+
+
+@pytest.mark.parametrize(("why", "blocks", "want"), PLACE_CASES)
+def test_which_copy_the_tick_accepts(why: str, blocks: list[str | None], want: list[Any]) -> None:
+    got = [(i, p.kind, p.where) for i, p in enumerate(tk.places(blocks)) if p.kind != "ok"]
+    assert got == want, why
+
+
+def test_a_second_safety_step_is_an_extra_copy_to_delete_and_without_it_the_tick_is_clean() -> None:
+    d = box(lambda d: _tick(d, steps(*ALL, "step_survive")))
+    found = texts(d, "tick_step")
+    assert any("step_survive() twice in hunt_tick(): an extra copy: delete it" in t for t in found)
+    assert not any("out of its place" in t for t in found)  # the original is in its place
+    assert texts(box(lambda d: _tick(d, steps(*ALL))), "tick_step") == []
+    # the words name the runner's order, never run(): no block shows run()
+    moved = texts(box(lambda d: _tick(d, steps(*[b for b in ALL if b != "step_loot"],
+                                                 "step_loot"))), "tick_step")  # fmt: skip
+    assert moved and all("run()" not in t and "the runner's order" in t for t in moved)
