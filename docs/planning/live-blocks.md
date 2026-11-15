@@ -3155,6 +3155,53 @@ s5c-ab runs FROM MAIN after 5c merges there: the runner's start check reads giti
   files; the frontend's 532 tests 531 passed, 0 failed (1 skipped), tsc and eslint clean; stage5c_ab's
   plan passes in process (no input); stage6_ab's and the cookie box's tests pass.
 
+### 15.12 Result of s5c-ab (run 2026-11-15 16:13-17:55 ICT, scored 17:55): INCONCLUSIVE -- two of three pairs valid
+
+`stage5c_ab.py score --label s5c-ab`: A = the hunt box (B5b-2), B = the functions box (B5c).
+
+    run       arm  min   death kills/h loot/h open/h  tick median  p95     end
+    r01A      A     6.2    1   174.4   164.7  145.3    202.1      1052.7    death
+    r02B      B     6.5    1   157.3   185.0  111.0    201.6      1143.1    death
+    r03B      B    19.9    0   145.0   172.2  126.9    201.5       980.9    time box
+    r04A      A    19.9    0   153.8   165.8  126.6    202.1      1043.0    time box
+    r05A      A    19.4    0   142.0   182.1  120.4    201.7      1021.1    weight home (bag_full)
+    r06B      B    19.9    0   105.7   148.0  105.7    202.1       978.3    time box
+
+- Pair 1 is invalid: both runs ended by a death in under 80 % of their minutes. So kills/h and loot/h
+  are NOT judged (they need >= 3 valid pairs), and the verdict is **INCONCLUSIVE**, as pre-registered.
+- The lines that are judged all pass:
+  - deaths: A 1, B 1 (B <= A);
+  - record kinds: none new;
+  - errors: none;
+  - openers/h: A 123.5, B 116.3;
+  - pace: median A 201.9, B 201.8 ms;
+  - drive: every run of both arms drove, passed no step, left none out, and ended run_end.
+- Reported only, 2 pairs: kills/h -8.7 and -36.2 (mean -22.5, SE 13.8); loot/h +6.4 and -34.1. The
+  low one is r06B, at 105.7 kills/h.
+- The equivalence stands on the build's proofs (15.11):
+  - the functions box LOWERS to the hunt box's IR, with the same argv, keys, vals, box arguments and
+    HuntPlan;
+  - the traces are equal on 446 scenarios.
+  - The live series could not add its kills line. Whether to re-run it is Batt's (16.8 / the report).
+
+**The two deaths (from the packets; findings, not verdicts):**
+- **r01A: the Fly Wing worked, but the Knight met her again.**
+  - At -10.6 s the fast alarm (garm, inside a long action) pressed the Fly Wing. use_item_result 601
+    ok, then a map_change on xmas_dun02: a random cell on the SAME map.
+  - At -0.94 s and -0.47 s the Knight (1251) hit 2,380 and 1,310. The box's fly_away fired at HP 0,
+    too late.
+- **r02B: the Fly Wing never reached the server.**
+  - The Knight and 6 Goblins appeared 2.05 s before the death.
+  - The runner pressed F5 (its "safety" dagger equip) at -1.42 s, and the box's fly_away pressed F8 at
+    -1.21 s (sees_boss: Christmas Goblin).
+  - The server got the EQUIP only at -0.02 s, 1.4 s late, and NO use_item_request.
+  - HP 4,323 went to 0 in one hit that is not an `act` packet: a skill.
+  - The F5 equip queued in the client seems to have held up the Fly Wing.
+- **Candidates for a next, pre-registered step (not built):**
+  - when a boss is seen, press the Fly Wing FIRST, with no safety equip before it;
+  - after a Knight escape by Fly Wing, leave the MAP (the Butterfly Wing home) instead of staying on
+    it.
+
 ## 16. The first real experiment in blocks: no Knife swap on the Christmas Cookie and the Cookie (➡️ BUILT 2026-11-15, feat/cookie-noswap; offline only, NOT run live; its A/B pre-registered 2026-11-15 13:32 ICT from `date`, BEFORE any run)
 
 Batt's words (14.12 #2, 2026-11-15 ~13:0x): "Test it, and make it work too." The experiment is 14.8's
