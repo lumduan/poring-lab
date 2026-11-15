@@ -1333,6 +1333,14 @@ only). On sk3a the Goblin's Q1s recall is 0.807 but its precision **0.597 < 0.80
 26 of them on real Goblins not drawn into the pack: the scorer's crowd rule, S4.10); the knight 59 /
 59 (reported); Garm Baby, the four species and D1 (17.96 ms) PASS. The alarm stays xmas02gb's.
 
+➡️ **S5 (2026-11-15 14:06 ICT, xmas02-detector.md S5, scored once on the FRESH held-out sk4a, Batt's
+"Allowed"): FAIL by ONE crop.** The same frozen model, under the crowd rule pre-registered before
+sk4a existed. The Goblin's precision is 1.000 (every charged box lay on a Goblin), but its per-crop
+recall is 43 / 54 = 0.796 < 0.80 (44 would pass). The alarm's view, reported: frame recall 0.911
+(0.856 at conf 0.7), 0 false-alarm frames (0 / 95 on sk4a, 0 / 231 TEST, 0 / 261 gw3), the first
+Goblin box within 2 s in 16 of 17 visits (the 17th 2.01 s). Not deployed; the next step is the
+parent's / Batt's.
+
 ### 11.5 The Butterfly Wings (done 14:02 ICT)
 
 The lab GM's `@item 602 4` (crusader.py, `"typed": true`), read back from the hotbar: F9 1 -> **5**.

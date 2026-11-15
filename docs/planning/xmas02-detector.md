@@ -4762,3 +4762,64 @@ amendment scores the same frozen model on NEW data under a rule fixed before tha
 - **The labellers' copy** `/dev/shm/poring-lab-tmp/blind-sk53-sk4a/pack` (checked), an empty
   `answers/`. **Two NEW blind labellers, Y and Z**, M9's brief with the paths changed (Y `e700b4c4...`,
   Z `325b2334...`).
+
+#### S5.6 (2026-11-15 14:06 ICT from `date`): THE RESULT (scored once) -- FAIL BY ONE CROP OF RECALL; THE ALARM'S VIEW IS CLEAN
+
+**The inputs (B0, 14:05:37, before any score):**
+- labellers Y and Z (both NEW, blind, the pack only; each answered all 403 crops; each ran a parse
+  check on its own answers file only): **Y `69326e31f8424e4ddd1d41b5893cebf87173b3a9e352d674a25261149831fe79`**,
+  **Z `032cf5f1e33b26355b8d322313046804ca63b5839da412b64e24291ad1d0ae5b`**;
+- the labellers' pack unchanged (427 / 427);
+- re-hashed, equal to S5.5 / S4: the key `aa0dc002...`, last.pt `0b43ebbf...` (the NAS copy), the
+  cache manifest `9d7a9b38...`, `pred-sk4a-all.json` `5a0462b5...`, and S4.10's TEST / gw3
+  predictions `531b7cdc...` / `ffa36882...`;
+- the units (13:55, the label stack, CPU): sk4a's pack frames 312 frames / 2,754 units
+  (`79e27a5d...`); every candidate frame 703 / 5,483 (`3f5b0ac9...`); pooled TEST 231 / 430
+  (`986f13b4...`); gw3 261 / 943 (`f90c70b3...`).
+
+**The score (14:05:38, `eval_q1.py score ... --units`, once; `q1-score-sk4a.json`
+`e714d79745ef78873e6e00184e3f4e29a4b0107fc1379c726043b6ab5405daa7`):** 394 of 403 crops evaluated
+(Y excluded 8, Z 4, all q2 not good).
+
+| bar (S5.2) | measured | rule | verdict |
+|---|---|---|---|
+| **Christmas Goblin on sk4a, Q1crowd** | **54 evaluated; recall 43 / 54 = 0.796; precision 43 / (43 + 0) = 1.000** (32 unmatched Goblin boxes inside evaluated boxes, ALL on Goblin units by the packets) | >= 50; recall >= 0.80 AND precision >= 0.80 (5 tp >= 4 n: 215 < 216) | **FAIL (recall, by one crop)** |
+| Garm Baby (gw3), the four species (pooled TEST), D1 | S4.10's PASS stands (not re-scored) | - | PASS |
+| Stormy Knight on sk4a (reported) | Q1s 60 / 60 = 1.000 (precision 0.870; Q1crowd 1.000) | no bar | - |
+
+**THE VERDICT: FAIL.** The Goblin's per-crop recall is 0.796 < 0.80: 44 matches would have passed.
+Not re-scored. The model is not deployed by this amendment; the decision is the parent's / Batt's.
+
+**Reported, deciding nothing:**
+- **The Goblin's 11 missed crops:** 9 unboxed, 2 boxed garm_baby. Clear 31 / 40, under a model
+  12 / 14. Q1s (S4's rule) on the same crops: precision 0.573. **The crowd rule absolved all 32
+  charged boxes.**
+- **Frame-wide:** all 675 unmatched Goblin boxes of the evaluated frames lie on Goblins by the
+  packets (precision 1.000).
+- **The alarm's view (`party`, every candidate frame of sk4a; `party-sk4a.json` `c6011679...`):**
+
+| conf | frames with a Goblin on screen boxed (frame recall) | false-alarm frames (no party on screen, yet a Goblin box) |
+|---|---|---|
+| >= 0.25 | 431 / 473 = **0.911** | **0 / 95** |
+| >= 0.5 | 422 / 473 = 0.892 | 0 / 95 |
+| >= 0.7 (the live `--alarm-solo`) | 405 / 473 = 0.856 | 0 / 95 |
+
+  - All **1,443** Goblin boxes of sk4a lie on a Goblin.
+  - **17 visits, all with Goblins; the first Goblin box came 0 s after the first Goblin on screen
+    (median), 16 of 17 within 2 s (the last 2.01 s), none never boxed** (per-visit delays, s: 2.01,
+    1.0, 0, 0, 0, 0, 0, 0, 0, 1.0, 1.0, 0, 0, 1.0, 1.0, 0.97, 0; at 1 fps a 1-s delay is one frame).
+  - **Goblin-free held-outs:** pooled TEST 0 Goblin boxes in 231 frames, gw3 0 in 261
+    (`party-test.json` `13a35da8...`, `party-gw3.json` `a5b1d169...`).
+- **sk4a's other species (Q1crowd / Q1s, reported):**
+  - Myst Case 60, 0.983 / 1.000;
+  - Cruiser 59, 1.000 / 0.983;
+  - Cookie 43 (no bar), 1.000 / 0.956;
+  - Christmas Cookie 59, 1.000 / 1.000;
+  - Garm Baby 59, 0.983 / 1.000 (Q1s precision 0.866: its 9 charged boxes are all on dogs).
+  - Q1c pooled: recall 0.977, precision 0.879.
+- **What it means:**
+  - As an ALARM ("a Goblin is near"), the frozen S4 model saw the party within 2 s in 16 of 17
+    visits and in all 17 by 2.01 s, with no Goblin box on any Goblin-free frame of three held-outs.
+  - The pre-registered per-CROP recall (S2's Q1) misses its bar by one crop of 54.
+  - Whether a per-visit or per-frame alarm bar should decide a deployment is a new decision, for a
+    new amendment and a new held-out, never a re-reading of this one.
