@@ -101,6 +101,7 @@ from poring_flow import functions as fn
 from poring_flow import huntloop as hl
 from poring_flow import ir
 from poring_flow import recipes as rc
+from poring_flow import tick as tk
 from poring_flow.catalogue import Catalogue, catalogue
 
 STAGE = 4
@@ -242,6 +243,9 @@ def problems(flow: ir.Flow, cat: Catalogue | None = None) -> list[NotLive]:
         if iss.live:
             bad(iss.path, iss.what, iss.words)
     for iss in hl.analyse(flow)[1]:  # 5b-2: the hunt loop, its blocks' places (live-blocks 14)
+        if iss.live:
+            bad(iss.path, iss.what, iss.words)
+    for iss in tk.analyse(flow)[1]:  # 5c: the tick's step blocks (live-blocks 15.3)
         if iss.live:
             bad(iss.path, iss.what, iss.words)
     for nl in click_problems(flow):  # stage 3: click_at only in the death exit
@@ -403,6 +407,9 @@ class HuntPlan:
     # Not a play: run() gets the same arguments; a hook with drive is what makes it play the loop
     loop: str | None = None
     skill_keys: tuple[str, ...] = ()
+    # live-blocks 5c (15.3): the tick's OPTIONAL steps the node's tick() leaves out (run()'s step
+    # names; the runner's cursor never plays them); () = the full tick
+    tick_left_out: tuple[str, ...] = ()
 
 
 def _sensors(e: Any) -> set[str]:
@@ -612,6 +619,9 @@ def hunt_plan(flow: ir.Flow, block: str, cat: Catalogue | None = None) -> HuntPl
             by[play] = [names[r] for r in roles_ if r in names]
     lp = hl.analyse(flow)  # 5b-2: the hunt loop of THIS hunt core (its issues: problems())
     loop = lp[0].get(block)
+    tq = tk.analyse(flow)  # 5c: its tick (the left-out optional steps)
+    tp = tq[0].get(block)
+    out += [NotLive(i.path, i.what, i.words) for i in tq[1] if i.live and i.block == block]
     out += [NotLive(i.path, i.what, i.words) for i in lp[1] if i.live and i.block == block]
     rplans, issues = rc.analyse(flow)  # stage 4a: the model and the recipes of THIS hunt core
     out += [NotLive(i.path, i.what, i.words) for i in issues if i.live and i.block == block]
@@ -631,7 +641,8 @@ def hunt_plan(flow: ir.Flow, block: str, cat: Catalogue | None = None) -> HuntPl
                     {k: tuple(v) for k, v in by.items()}, tuple(sorted(eat_keys)),
                     eat_fn if eat_keys else None, tuple(sorted(hot)),
                     None if loop is None else loop.function,
-                    () if loop is None else loop.skill_keys)  # fmt: skip
+                    () if loop is None else loop.skill_keys,
+                    () if tp is None else tp.left_out)  # fmt: skip
 
 
 def _weight_event(e: Any, conds: list[Any], out: list[NotLive]) -> None:

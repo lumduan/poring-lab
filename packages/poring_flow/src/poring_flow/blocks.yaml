@@ -345,6 +345,132 @@ blocks:
     live: true  # stage 5b-2: in the hunt loop only (the monster's recipe, played as blocks)
     affects: {hp_percent: "-", sp_percent: "~", base_level: "+", job_level: "+", weight_percent: "+", item_count: "+", sees: "~", count_visible: "~", engagement_seen: "~"}
     note: the monsters tab's recipe for t's species (the species the runner locked; its own recipe where there is none), played as blocks -- strike(t), wait_steal(t), wait_kill(t), loot(t), the Knife's knife_on() / knife_back() at the runner's moments; live only in the hunt loop
+  # --- live blocks STAGE 5c (Batt 2026-11-15 ~13:0x: "dungeon_hunt.py should be blocks the user sees
+  # and can edit himself"; docs/planning/live-blocks.md 15.3): THE TICK'S STEP BLOCKS. A map node's
+  # tick() (its tab tick) lists run()'s 20 steps (dungeon_hunt hunt_steps), one block each, in their
+  # order: SAFETY and REQUIRED ones stay, the OPTIONAL ones (loot, ready, plant) may be left out
+  # (poring_flow.tick holds the classes and the rules). No input of their own; read by the hunt core,
+  # never played as a statement; refused anywhere but tick() before any input.
+  step_begin:
+    concept: core.tick_step
+    kind: core
+    timeout_s: 1
+    live: true  # 5c: in tick() only
+    note: "SAFETY -- the tick's clock; the Run's Stop; every tick, whichever block plays; without it the Run's Stop would not be read"
+  step_sense:
+    concept: core.tick_step
+    kind: core
+    timeout_s: 1
+    live: true  # 5c: in tick() only
+    note: "SAFETY -- the frame, HP, SP, the position; every tick, whichever block plays; without it HP and her position would not be read"
+  step_hook:
+    concept: core.tick_step
+    kind: core
+    timeout_s: 1
+    live: true  # 5c: in tick() only
+    note: "SAFETY -- the box's own tick - its Stop, its events; every tick, whichever block plays; without it the box's Stop and its events would not play"
+  step_vitals:
+    concept: core.tick_step
+    kind: core
+    timeout_s: 1
+    live: true  # 5c: in tick() only
+    note: "SAFETY -- death; every tick, whichever block plays; without it a death would not be seen"
+  step_battle_log:
+    concept: core.tick_step
+    kind: core
+    timeout_s: 1
+    live: true  # 5c: in tick() only
+    note: "SAFETY -- the Battle Log - hits, kills, a boss; every tick, whichever block plays; without it a boss line (its Fly Wing), the hits and the kills would not be read"
+  step_survive:
+    concept: core.tick_step
+    kind: core
+    timeout_s: 1
+    live: true  # 5c: in tick() only
+    note: "SAFETY -- the potion, the Fly Wing, Auto Guard; every tick, whichever block plays; without it no potion and no Fly Wing would be pressed"
+  step_engage:
+    concept: core.tick_step
+    kind: core
+    timeout_s: 1
+    live: true  # 5c: in tick() only
+    note: "SAFETY -- a fight begins; the Garm Baby alarm; every tick, whichever block plays; without it an attack, the Garm Baby alarm and the boss guard would not be seen"
+  step_ui:
+    concept: core.tick_step
+    kind: core
+    timeout_s: 1
+    live: true  # 5c: in tick() only
+    note: "SAFETY -- the UI watch; the weight; home; every tick, whichever block plays; without it an unknown UI state would not stop the run, and the weight would not take her home"
+  step_upkeep:
+    concept: core.tick_step
+    kind: core
+    timeout_s: 1
+    live: true  # 5c: in tick() only
+    note: "SAFETY -- the Knife's HP floor; overweight; HUD; every tick, whichever block plays; without it the Knife would not come off at the HP floor"
+  step_fight:
+    concept: core.tick_step
+    kind: core
+    timeout_s: 1
+    live: true  # 5c: in tick() only
+    note: "REQUIRED -- the fight (the recipe's steps); played while fight_target plays; without it no target would ever be struck"
+  step_hold:
+    concept: core.tick_step
+    kind: core
+    timeout_s: 1
+    live: true  # 5c: in tick() only
+    note: "REQUIRED -- a held target waits; the loot recheck; played while find_target plays; without it she would walk away from a target she holds"
+  step_loot:
+    concept: core.tick_step
+    kind: core
+    timeout_s: 1
+    live: true  # 5c: in tick() only
+    note: "optional -- the loot step after a fight; played while fight_target plays; may be left out"
+  step_after:
+    concept: core.tick_step
+    kind: core
+    timeout_s: 1
+    live: true  # 5c: in tick() only
+    note: "REQUIRED -- a fight's end - rest or search; played while find_target plays; without it a fight's end would never become a search"
+  step_ready:
+    concept: core.tick_step
+    kind: core
+    timeout_s: 1
+    live: true  # 5c: in tick() only
+    note: "optional -- the Knife while idle; the queue; played while find_target plays; may be left out"
+  step_rest:
+    concept: core.tick_step
+    kind: core
+    timeout_s: 1
+    live: true  # 5c: in tick() only
+    note: "REQUIRED -- sit until HP is full; played while find_target plays; without it a rest the after step decides would freeze her"
+  step_idle:
+    concept: core.tick_step
+    kind: core
+    timeout_s: 1
+    live: true  # 5c: in tick() only
+    note: "SAFETY -- stuck - uncarve, or a Fly Wing; played while find_target plays; without it being stuck would never end"
+  step_plant:
+    concept: core.tick_step
+    kind: core
+    timeout_s: 1
+    live: true  # 5c: in tick() only
+    note: "optional -- the White Plant sweep; played while find_target plays; may be left out"
+  step_search:
+    concept: core.tick_step
+    kind: core
+    timeout_s: 1
+    live: true  # 5c: in tick() only
+    note: "REQUIRED -- the walk; played while find_target plays; without it she would never walk to a monster"
+  step_position:
+    concept: core.tick_step
+    kind: core
+    timeout_s: 1
+    live: true  # 5c: in tick() only
+    note: "SAFETY -- an unread position - a Fly Wing; played while find_target plays; without it an unread position would neither fly nor end the run"
+  step_pace:
+    concept: core.tick_step
+    kind: core
+    timeout_s: 1
+    live: true  # 5c: in tick() only
+    note: "REQUIRED -- the tick's pace (200 ms); played while find_target plays; without it the tick would spin with no pause"
   use_model:
     # The TRAINED DATA (Batt 2026-11-13: "the flow page should also have a block to LOAD THE TRAINED
     # DATA, with the monsters the bot already knows"): a models.yaml entry by its id. Its `strikes`

@@ -64,6 +64,9 @@ import dungeon_hunt as dh  # noqa: E402
 
 FIX = ROOT / "services/frontend/src/lib/flow/fixtures"
 PROJECT = FIX / "project_xmas_dun02_hunt.json"
+# live-blocks 5c (15.7): the ready-made box as functions in tabs -- hunt_loop() in main, its role
+# blocks, the full hunt_tick(): the same hunt core, so the same steps
+FUNCTIONS = FIX / "project_xmas_dun02_functions.json"
 NODE = "xmas_dun02"
 STEP_S, PACE_S = 0.01, 0.2  # the simulated cost of a step and of the pace sleep
 SPECIES = ("mystcase", "cruiser", "cookie", "cookie_xmas")
@@ -468,18 +471,39 @@ def short_boxes(text: str, s: float = 1.0) -> str:
     return json.dumps(d)
 
 
+def leave_out(text: str, steps: Sequence[str]) -> str:
+    """The same project with its hunt_tick() leaving these steps out (5c: an OPTIONAL step's edit;
+    the trace then PASSES those steps: the edit plays)."""
+    import json
+
+    d = json.loads(text)
+    blocks = {f"step_{x}" for x in steps}
+    for n in d["nodes"]:
+        for t in n.get("tabs") or []:
+            for df in t.get("defs") or []:
+                if df["name"] == "hunt_tick":
+                    df["body"] = [st for st in df["body"] if st.get("block") not in blocks]
+    return json.dumps(d)
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     ap = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     sub = ap.add_subparsers(dest="cmd", required=True)
     c = sub.add_parser("check")
     c.add_argument("--seeds", type=int, default=50)
-    c.add_argument("--project", type=Path, default=PROJECT)
+    c.add_argument("--project", type=Path, default=None,
+                   help="one project (default: the hunt box and the functions box, 5c)",
+                   )  # fmt: skip
     a = ap.parse_args(argv)
-    text = a.project.read_text()
     bad = 0
     total: Counter[str] = Counter()
-    runs = [(scn, text, "") for scn in [*hand_scenarios(), *random_scenarios(a.seeds)]]
-    runs += [(scn, short_boxes(text), " (every time box 1 s)") for scn in random_scenarios(10)]
+    runs: list[tuple[Scenario, str, str]] = []
+    for path in [a.project] if a.project else [PROJECT, FUNCTIONS]:
+        text = path.read_text()
+        tag = "" if a.project else f" [{path.stem.removeprefix('project_')}]"
+        runs += [(scn, text, tag) for scn in [*hand_scenarios(), *random_scenarios(a.seeds)]]
+        runs += [(scn, short_boxes(text), f"{tag} (every time box 1 s)")
+                 for scn in random_scenarios(10)]  # fmt: skip
     for scn, txt, how in runs:
         r = compare(scn, txt)
         total.update(r.effects)

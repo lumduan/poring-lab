@@ -1784,7 +1784,8 @@ def build() -> dict[str, Any]:
 NOT_FEATURES = ("LIVE_BLOCKS_VERSION", "SURVIVAL_EVENTS_VERSION", "BOX_FUNCTIONS_VERSION",
                 "BOX_RECIPES_VERSION", "BOX_EAT_VERSION",
                 "HUNT_STEPS_VERSION",  # 5b-1: a refactor, no feature
-                "HUNT_BLOCKS_VERSION")  # 5b-2: the box's hunt loop drives the steps  # fmt: skip
+                "HUNT_BLOCKS_VERSION",  # 5b-2: the box's hunt loop drives the steps
+                "RUNNER_BLOCKS_VERSION")  # 5c: the tick made visible  # fmt: skip
 
 
 def feature_version(dh: Any) -> str:

@@ -225,6 +225,9 @@ class RunnerPlan:
     # press. Not a run() argument: the hook's `drive` (DriveHook) is what plays it
     loop: str | None = None
     skill_keys: tuple[str, ...] = ()
+    # live-blocks 5c (15.3): the OPTIONAL steps the node's hunt_tick() leaves out (the cursor never
+    # plays them: HuntCursor.leave_out); () = the full tick
+    tick_left_out: tuple[str, ...] = ()
 
     def box_kwargs(self) -> dict[str, Any]:
         """dungeon_hunt run(...)'s box arguments: none at all for a box without events, functions,
@@ -297,7 +300,9 @@ class Prepared:
                                 **({"hotbar_keys": list(p.hotbar_keys)}
                                    if p.hotbar_keys else {}),
                                 **({"loop": p.loop, "skill_keys": list(p.skill_keys)}
-                                   if p.loop else {})} for b, p in
+                                   if p.loop else {}),
+                                **({"tick_left_out": list(p.tick_left_out)}
+                                   if p.tick_left_out else {})} for b, p in
                             self.runners.items()}}  # fmt: skip
 
 
@@ -366,7 +371,8 @@ def prepare(text: str, node: str, max_s: int | None, *,
                                     dict(hp.calls), dict(hp.call_names), hp.weight_events,
                                     hp.knife_ends, hp.model_doc, dict(hp.recipes),
                                     hp.default_species, hp.eat_keys, hp.eat_name,
-                                    hp.hotbar_keys, hp.loop, hp.skill_keys)  # fmt: skip
+                                    hp.hotbar_keys, hp.loop, hp.skill_keys,
+                                    hp.tick_left_out)  # fmt: skip
         roles.update({k: ROLE_PRESS[f] for f, k in rk.keys.items() if f in ROLE_PRESS})
         roles.update({k: "eat" for k in hp.eat_keys})  # 2026-11-14: the live line's words
     return Prepared(p, c, node, h, float(min(p.max_runtime_s, max_s)), runners, roles)
@@ -1179,7 +1185,14 @@ class LivePlayer(Sim):
         name = plan.loop
         path = self.c.where(name).path or name
         sig = self.flow.signatures.get(name) or ir.Signature()
-        self.rec.ev({"kind": "drive", "what": "start", "loop": name, "node": path, "in": "hunt"})
+        if plan.tick_left_out:  # 5c (15.3): the box's hunt_tick() leaves these steps out
+            try:
+                cursor.leave_out(plan.tick_left_out)
+            except (ValueError, AttributeError) as e:  # the runner's own check refuses it
+                return f"the box's tick: {str(e)[:200]}"
+        self.rec.ev({"kind": "drive", "what": "start", "loop": name, "node": path, "in": "hunt",
+                     **({"left_out": list(plan.tick_left_out)} if plan.tick_left_out
+                        else {})})  # fmt: skip
         saved = (self.frame, self._cursor)
         self._cursor, self._lock_answer = cursor, None
         self.frame = _Frame(name, MAIN_RANK, iter(()))  # the loop's own frame: its locals

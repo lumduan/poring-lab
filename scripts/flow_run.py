@@ -507,9 +507,14 @@ def project_node_problem(doc: Mapping[str, Any], node: str) -> str | None:
 
 
 def has_hunt_core(doc: Any) -> bool:
-    """PURE: the project holds a dungeon_hunt action anywhere (the detect server is started)."""
+    """PURE: the project holds a dungeon_hunt action anywhere, or (live-blocks 5c, 15.2) a map
+    node's main starts its hunt core with hunt_loop() (the detect server is started)."""
     if isinstance(doc, dict):
         if doc.get("kind") == "action" and doc.get("block") == "dungeon_hunt":
+            return True
+        if doc.get("kind") == "map" and any(
+            isinstance(st, dict) and st.get("kind") == "call" and st.get("proc") == "hunt_loop"
+            for t in doc.get("tabs") or [] for st in (t.get("main") or [])):  # fmt: skip
             return True
         return any(has_hunt_core(v) for v in doc.values())
     if isinstance(doc, list):

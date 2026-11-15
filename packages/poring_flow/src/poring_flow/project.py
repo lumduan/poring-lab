@@ -1167,10 +1167,87 @@ class _Rewriter:
 
 
 def compile_project(p: Project, cat: Any = None) -> Compiled:
-    """The project as ONE internal IR flow (the module docstring)."""
+    """The project as ONE internal IR flow (the module docstring). Live blocks 5c (live-blocks.md
+    15.2): a map node whose main calls ``hunt_loop()`` is LOWERED first (lower_hunt_core)."""
     from poring_flow.catalogue import catalogue
 
-    return _Compiler(p, cat or catalogue()).run()
+    return _Compiler(lower_hunt_core(p), cat or catalogue()).run()
+
+
+# --- live blocks 5c (live-blocks.md 15.2): the hunt core as functions in tabs ---------------------
+# (the names: poring_flow.huntloop, the ONE place the lint and the live set read too)
+from poring_flow.huntloop import HUNT_CALL, HUNT_ROLES, LOWERED_NOTE, ROLE_PREFIX  # noqa: E402
+
+
+def _is_hunt_call(st: Any) -> bool:
+    return (isinstance(st, ir.CallProc) and st.proc == HUNT_CALL and not st.args
+            and not st.kwargs)  # fmt: skip
+
+
+def _has_runner_block(n: MapNode) -> bool:
+    def walk(stmts: list[Any]) -> bool:
+        for st in stmts:
+            if isinstance(st, ir.ActionStmt) and st.block == "dungeon_hunt":
+                return True
+            if isinstance(st, ir.If) and (walk(list(st.then)) or walk(list(st.orelse))):
+                return True
+            if isinstance(st, ir.While | ir.Repeat | ir.ForEach) and walk(list(st.body)):
+                return True
+        return False
+
+    return any(walk(list(t.main or [])) or any(walk(list(d.body)) for d in t.defs) for t in n.tabs)
+
+
+def role_values(n: MapNode) -> dict[str, str]:
+    """PURE: the node's role blocks: dungeon_hunt's role -> the function its block names."""
+    out: dict[str, str] = {}
+    for t in n.tabs:
+        for name, lit in t.vars.items():
+            role = name[len(ROLE_PREFIX) :] if name.startswith(ROLE_PREFIX) else None
+            if role in HUNT_ROLES and isinstance(lit.value, str):
+                out[role] = lit.value
+    return out
+
+
+def lowered_nodes(p: Project) -> list[str]:
+    """PURE: the map nodes the 5c lowering applies to -- a main that calls hunt_loop() ONCE at its
+    top level, with no inputs, on a node with no runner block (any other call stays a call: the
+    lint names it, huntloop's hunt_core_call)."""
+    out: list[str] = []
+    for n in p.map_nodes:
+        calls = [st for st in n.main if _is_hunt_call(st)]
+        if len(calls) == 1 and not _has_runner_block(n):
+            out.append(n.id)
+    return out
+
+
+def lower_hunt_core(p: Project) -> Project:
+    """PURE (live-blocks.md 15.2): the project the engine compiles -- each node of lowered_nodes
+    has its main's hunt_loop() call replaced, at its place, by the hunt core's action, its roles
+    from the node's role blocks: exactly what the runner block (with the hunt tab's loop) compiled
+    to. The project itself (its blocks, its Python view) keeps the call and the role blocks.
+    Nothing to lower: the same object."""
+    nodes = lowered_nodes(p)
+    if not nodes:
+        return p
+    d = dump(p)
+    for nd in d["nodes"]:
+        if nd.get("id") not in nodes:
+            continue
+        node = p.node(nd["id"])
+        assert isinstance(node, MapNode)
+        roles = role_values(node)
+        params = {r: {"kind": "lit", "value": roles[r]} for r in HUNT_ROLES if r in roles}
+        for t in nd["tabs"]:
+            if t.get("main") is None:
+                continue
+            t["main"] = [{"kind": "action", "block": "dungeon_hunt", "concept": "combat.hunt",
+                          "params": params, "timeout_s": 600, "on_fail": "stop",
+                          "outcome_to": None, "note": LOWERED_NOTE}
+                         if st.get("kind") == "call" and st.get("proc") == HUNT_CALL
+                         and not st.get("args") and not st.get("kwargs") else st
+                         for st in t["main"]]  # fmt: skip
+    return validate(d)
 
 
 # --- the linter (layers 1-3 on the compiled IR, plus the project's own rules) ---------------------
