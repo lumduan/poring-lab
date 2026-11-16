@@ -4178,9 +4178,9 @@ fly_first ON, **default OFF until s8ab passes**):
   does.
 
 **How often an HP Fly Wing happens** (the 78 hunt sessions of 2026-11-14..16, 22.7 h; the runner's
-press records): 31 HP Fly Wings while alive (28 HP-rate, 1 under fly_below, 2 the box's on HP;
-3 more after a death are not counted), **1.37 an hour**; of them **8 while she wore the Knife
-(0.35 an hour)**. Only those 8 differ between the arms: when she is armed, 9.57's escape presses no
+press records): 31 HP Fly Wings while alive (28 the runner's HP-rate fly, 3 the box's fly_away on HP;
+3 more pressed after a death are not counted), **1.37 an hour**; of them **8 while she wore the
+Knife (6 HP-rate, 2 the box's; 0.35 an hour)**. Only those 8 differ between the arms: when she is armed, 9.57's escape presses no
 dagger either, so an armed HP Fly Wing is the same program in both arms.
 - In 4 pairs (80 minutes of B): about 1.8 HP Fly Wings in B, about 0.47 while bare. P(at least one
   bare) ~ 37 % (Poisson); in 8 pairs ~ 61 %; in 12 pairs ~ 75 %.
