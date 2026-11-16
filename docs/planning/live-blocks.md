@@ -4157,3 +4157,63 @@ question 1; Batt's own 17 #6 asks for this behaviour.
 4. **The A/B tools' z/h counts steal income:** "Count the steal income too, since stealing is our
    main income." Every stage tool's per-run z/h and econ report use the totals with Steal and
    Snatcher income, the dashboards' gross, not econ_row's picked-only net_h.
+
+### 18.11 The HP Fly Wing first too (Batt 18.10 #2), and THE A/B s8ab -- design and pre-registration written 2026-11-16 20:40 ICT from `date`, BEFORE any code or run
+
+**What changes** (dungeon@9.58 `--fly-first-hp`, the Run setting `fly_first_hp`, safety tab, needs
+fly_first ON, **default OFF until s8ab passes**):
+- An HP Fly Wing -- the runner's own (sustain's "hp ..." under fly_below, the HP-rate fly
+  "rate ... at hp ...") or the box's fly_away on HP (a box Fly Wing on a tick with no boss line,
+  its why naming hp_percent) -- sends F8 ALONE: no dagger key (BareCtl.escape) before it, as a boss
+  Fly Wing under 9.57. The dagger goes back on FF_REARM_S (1 s) after the landing, by 9.57's own
+  re-arm. The stand-up when she sits stays before it (not a weapon key).
+- Other Fly Wings keep their order: the end's escape, an unread position, stuck, unreachable.
+- Its record: 9.57's fly_first record with `src` "hp" (the runner's) or "box_hp" (the box's), its
+  read time the press's start, and `sight` = {"hp": true, "bare": whether she wore the Knife}.
+- **The proofs:** every change is a branch `if fly_first_hp:` (run()'s) or `if FLY_FIRST_HP:` (the
+  module's), whose else is 9.57's code. huntstate_check's `drive` and `check` read every fly-first
+  branch (both families) as its else, as before; and a new `flag` proof reads ONLY the
+  fly_first_hp branches as their else and finds the WHOLE module equal to main 8a091a72's runner --
+  the very program s7ab measured (18.9). So the A arm below is s7ab's B, byte for byte in what it
+  does.
+
+**How often an HP Fly Wing happens** (the 78 hunt sessions of 2026-11-14..16, 22.7 h; the runner's
+press records): 31 HP Fly Wings while alive (28 HP-rate, 1 under fly_below, 2 the box's on HP;
+3 more after a death are not counted), **1.37 an hour**; of them **8 while she wore the Knife
+(0.35 an hour)**. Only those 8 differ between the arms: when she is armed, 9.57's escape presses no
+dagger either, so an armed HP Fly Wing is the same program in both arms.
+- In 4 pairs (80 minutes of B): about 1.8 HP Fly Wings in B, about 0.47 while bare. P(at least one
+  bare) ~ 37 % (Poisson); in 8 pairs ~ 61 %; in 12 pairs ~ 75 %.
+
+**THE A/B s8ab** (`scripts/stage8_ab.py`, stage7_ab's pattern and score):
+- **A** = the ready-made functions box as 18.10 #1 makes it (fly_first ON) with fly_first_hp OFF;
+  **B** = the same with fly_first_hp ON. The arms differ ONLY in that block; `plan` refuses before
+  any input unless the copies, their settings and their argv (`--fly-first-hp` alone) differ in it
+  alone, the runner is 9.58, and `drive`, `check` and `flag` hold.
+- 4 pairs of 20 min, order A B, B A, A B, B A; stage2_ab's setup; a STOP file ends the series.
+
+      cd /home/bot/docker/poring-lab
+      .venv/bin/python scripts/stage8_ab.py plan  --label s8ab --pairs 4 --minutes 20
+      .venv/bin/python scripts/stage8_ab.py run   --label s8ab --pairs 4 --minutes 20
+      .venv/bin/python scripts/stage8_ab.py score --label s8ab
+
+- **THE BAR** (`stage8_ab.BAR`): 18.7's lines -- kills/h and loot steps/h (mean paired difference
+  >= -2 SE over >= 3 valid pairs), openers/h within +-20 %, the median tick pace <= A's + 5 ms, no
+  new record kind, no runner error, the drive line for both arms, a valid run as 14.7 -- and:
+  - **fly first on HP:** every B HP fly-first Fly Wing pressed while she was alive: no F4 / F5 key
+    down (the backend's input log) between the press's start and its F8, and its use_item_request
+    within 0.35 s of the F8's send time (18.2). **The line is judgeable only when B made at least
+    ONE such Fly Wing while she wore the Knife** (the only case where B differs from A); otherwise it
+    is INCONCLUSIVE, and so is the verdict unless a judged line failed.
+  - **The pre-registered extension** (decided now, before any data, because 4 pairs judge it only
+    ~37 % of the time): if the HP line is INCONCLUSIVE and no judged line failed, the series may be
+    extended by blocks of 4 more pairs, each its own label (`s8ab-x2`, `s8ab-x3`), up to 12 pairs in
+    all: `stage8_ab.py score --label s8ab --also s8ab-x2 [--also s8ab-x3]` judges the HP line on
+    every block pooled; the other lines stay judged on s8ab's first 4 pairs (their own sample);
+    nothing is dropped or re-run.
+- Reported, not judged: deaths per played run per arm; the boss fly-first Fly Wings of both arms
+  (9.57's line, as a check); every Fly Wing by source; the HP ones armed and bare; potions / h; the
+  economy per arm WITH steals (18.10 #4: the dashboards' gross, cost and net an hour).
+- FAIL when a judged line fails; INCONCLUSIVE when fewer than 3 pairs are valid or the HP line is not
+  judgeable, and nothing failed; else PASS. PASS: fly_first_hp ON by default is the parent's (18.10
+  #2).
