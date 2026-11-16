@@ -267,12 +267,12 @@ test("round 25's layout: the role blocks and hunt_tick have their keys; the func
 
 // live-blocks 18.10 #1 (Batt 2026-11-16: "On"): the ready-made functions box and its cookie twin
 // hold fly_first ON; the one box, the hunt box (the reference arms) keep it off; fly_first_hp
-// (18.11) is off in all of them until its A/B passes
-test("the ready-made functions boxes hold fly_first ON, the reference boxes off, fly_first_hp off everywhere", () => {
+// (18.11) is ON in the two functions boxes since s8ab passed (18.13), off in the reference boxes
+test("the ready-made functions boxes hold fly_first and fly_first_hp ON, the reference boxes off", () => {
   const safety = (p: ReturnType<typeof xmasFunctionsProject>) => mapNodes(p)[0].tabs.find((t) => t.name === "safety")!.vars;
   for (const p of [xmasFunctionsProject(), xmasFunctionsCookieNoSwapProject()]) {
     assert.equal(safety(p).fly_first?.value, true, p.name);
-    assert.equal(safety(p).fly_first_hp?.value, false, p.name);
+    assert.equal(safety(p).fly_first_hp?.value, true, p.name);
   }
   for (const p of [xmasProject(), xmasHuntProject()]) {
     assert.equal(safety(p).fly_first?.value, false, p.name);

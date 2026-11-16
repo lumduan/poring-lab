@@ -131,14 +131,16 @@ def box_difference(a: Mapping[str, Any], b: Mapping[str, Any]) -> str | None:
     return None
 
 
-# live-blocks 18.10 #1: the block B is built with as the hunt box holds it (the shape alone differs)
-B_SAME_AS_A = (("safety", "fly_first"),)
+# live-blocks 18.10 #1 / 18.13: the blocks B is built with as the hunt box holds them (the shape
+# alone differs): the ready-made functions box holds fly_first and fly_first_hp ON, the hunt box off
+B_SAME_AS_A = (("safety", "fly_first"), ("safety", "fly_first_hp"))
 
 
 def arm_doc(arm: str, minutes: float | None = None) -> dict[str, Any]:
     """PURE but for the read: an arm's box -- its fixture, its time box set to the run's length
-    when ``minutes`` is given; B's B_SAME_AS_A blocks set to A's values (18.10 #1: the ready-made
-    functions box holds fly_first ON; the hunt box, A, holds it off)."""
+    when ``minutes`` is given; B's B_SAME_AS_A blocks set to A's values (18.10 #1, 18.13: the
+    ready-made functions box holds fly_first and fly_first_hp ON; the hunt box, A, holds them
+    off)."""
     d = json.loads(PROJECTS[arm].read_text())
     if minutes is not None:
         d["max_runtime_s"] = int(round(minutes * 60))

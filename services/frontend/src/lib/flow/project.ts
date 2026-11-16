@@ -609,9 +609,11 @@ export function xmasHuntProject(): Project {
  * user sees and can edit himself"): the tab tick -- hunt_tick(), run()'s 20 steps as step blocks in
  * run()'s order (tick.ts; the engine's poring_flow.tick). */
 export const tickDef = (steps: readonly string[] = STEP_BLOCKS): Def => def(TICK_FN, steps.map((block) => ({ kind: "action", block, concept: "core.tick_step", params: {}, timeout_s: 1, ...rest })));
-/** Live-blocks 18.10 #1: the setting block the ready-made functions box holds ON (fly_first). */
+/** Live-blocks 18.10 #1: the setting block the ready-made functions box holds ON (fly_first); 18.13
+ * (s8ab passed, Batt 18.10 #2): fly_first_hp too. */
 export const FLY_FIRST_TAB = "safety";
 export const FLY_FIRST_VAR = "fly_first";
+export const FLY_FIRST_HP_VAR = "fly_first_hp";
 
 /** The ready-made box as FUNCTIONS IN TABS (fixtures/project_xmas_dun02_functions.json, 5c's live
  * A/B arm B5c; what /flows and /maps open first): the hunt box (xmasHuntProject) with its runner
@@ -622,7 +624,9 @@ export const FLY_FIRST_VAR = "fly_first";
  * box's old shape stays xmasProject() (the runner block), the hunt box xmasHuntProject().
  * Live-blocks 18.10 #1 (Batt 2026-11-16: "On"): its safety tab holds fly_first ON (the Fly Wing
  * first on a boss, dungeon@9.57, proven live by s7ab), so its runner argv is the hunt box's plus
- * --fly-first; the one box, the hunt box and the frozen A/B arms keep it off (reference arms). */
+ * --fly-first; the one box, the hunt box and the frozen A/B arms keep it off (reference arms).
+ * Live-blocks 18.13 (s8ab passed): fly_first_hp ON too (the HP Fly Wing first, dungeon@9.58), its
+ * argv + --fly-first-hp; the reference arms keep it off. */
 export function xmasFunctionsProject(): Project {
   const p = xmasHuntProject();
   const n = p.nodes[0];
@@ -639,6 +643,8 @@ export function xmasFunctionsProject(): Project {
   const safety = n.tabs.find((t) => t.name === FLY_FIRST_TAB);
   if (!safety || !(FLY_FIRST_VAR in safety.vars)) throw new Error("the ready-made box's safety tab holds fly_first");
   safety.vars[FLY_FIRST_VAR] = lit(true); // 18.10 #1
+  if (!(FLY_FIRST_HP_VAR in safety.vars)) throw new Error("the ready-made box's safety tab holds fly_first_hp");
+  safety.vars[FLY_FIRST_HP_VAR] = lit(true); // 18.13: s8ab passed
   return {
     ...p,
     name: "xmas_dun02",
