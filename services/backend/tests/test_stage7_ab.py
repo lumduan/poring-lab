@@ -7,7 +7,6 @@ from __future__ import annotations
 
 import gzip
 import json
-import sqlite3
 import subprocess
 import sys
 from pathlib import Path
@@ -180,20 +179,30 @@ def test_the_bar_judges_the_fly_first_line_and_only_reports_deaths() -> None:
     assert ab.verdict(kind_new, 20, kinds)["lines"]["kinds"]["pass"] is True  # fly-first's own
 
 
-def test_the_economy_is_read_from_the_lab_file(tmp_path: Path) -> None:
-    db = tmp_path / "lab.sqlite"
-    con = sqlite3.connect(db)
-    con.execute("CREATE TABLE runs (session TEXT, econ_row TEXT)")
-    row = json.dumps({"gross_h": 1200.5, "net_h": 900.0})
-    con.execute("INSERT INTO runs VALUES (?, ?)", ("sid1", row))
-    con.commit()
-    con.close()
-    assert ab.econ_of("sid1", db) == {"gross_h": 1200.5, "net_h": 900.0}
-    assert ab.econ_of("nope", db) is None and ab.econ_of("sid1", tmp_path / "x.sqlite") is None
-    s = [_sc(f"r{i}{x}", x, i, econ={"gross_h": 1000.0 + i, "net_h": 800.0}) for i in (1, 2)
-         for x in ("A", "B")]  # fmt: skip
-    rep = ab.report_of(s, 20)
-    assert rep["A"]["econ_runs"] == 2 and rep["A"]["net_h"] == 800.0
+def test_the_economy_is_the_dashboards_with_steals(monkeypatch: pytest.MonkeyPatch) -> None:
+    """live-blocks 18.10 #4: the per-run z/h and each arm's are econ_db.totals_of's (the
+    dashboard's gross / cost / net WITH Steal and Snatcher income), each arm's valid runs pooled."""
+    import econ_db as edb
+
+    assert ab.econ_pick({"gross_h": 50207.3, "cost_h": 6998.0, "net_h": 43209.3, "x": 1}) == {
+        "gross_h": 50207.3, "cost_h": 6998.0, "net_h": 43209.3}  # fmt: skip
+    assert ab.econ_pick(None) is None
+    seen: list[list[str]] = []
+
+    def fake(sids: list[str], **_k: object) -> dict[str, object]:
+        seen.append(list(sids))
+        return {"runs": {s: {} for s in sids}, "missing": [],
+                "pooled": ({"gross_h": 1.0, "cost_h": 0.5, "net_h": 0.5}
+                           if sids else None)}  # fmt: skip
+
+    monkeypatch.setattr(edb, "totals_of", fake)
+    s = [_sc(f"r{i}{x}", x, i, sessions=[f"sid-{i}{x}"]) for i in (1, 2) for x in ("A", "B")]
+    s.append(_sc("r3A", "A", 3, minutes=5.0, sessions=["sid-short"]))  # not valid: not pooled
+    got = ab.econ_arms(s, 20)
+    assert seen == [["sid-1A", "sid-2A"], ["sid-1B", "sid-2B"]]
+    assert got["A"] == {"gross_h": 1.0, "cost_h": 0.5, "net_h": 0.5, "runs": 2, "missing": []}
+    rep = ab.report_of(s, 20, econ=got)
+    assert rep["B"]["econ_with_steals"]["net_h"] == 0.5
 
 
 def test_the_measure_of_18_2_reads_the_keys_and_the_requests(tmp_path: Path) -> None:

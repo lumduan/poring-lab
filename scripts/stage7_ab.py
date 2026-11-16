@@ -7,13 +7,15 @@ mode; the MVP alive).
 
 THE ARMS differ ONLY in one setting block: each arm plays a copy of
 services/frontend/src/lib/flow/fixtures/project_xmas_dun02_functions.json whose safety tab's
-`fly_first` is False (A) or True (B), through `flow_play.py play` with that copy's own runner
-settings (runner-config-A.json / -B.json). `plan` refuses before any input unless: the copies
-differ in that block alone; their runner settings differ in fly_first alone and keep the fast alarm
-on (section 11); their runner argv differ by `--fly-first` alone and their run() arguments, keys
-and loop not at all; the checkout's runner is 9.57 (it takes --fly-first) and huntstate_check's
-`drive` and `check` hold (every fly-first change a branch whose else is today's code); and the
-box's step traces equal the driver's (hunt_trace.compare: the hand scenarios and SEEDS random ones).
+`fly_first` is False (A) or True (B) -- BOTH set explicitly (arm_doc): since live-blocks 18.10 #1
+the fixture itself holds it ON, and A stays today's 9.56 order -- through `flow_play.py play` with
+that copy's own runner settings (runner-config-A.json / -B.json). `plan` refuses before any input
+unless: the copies differ in that block alone; their runner settings differ in fly_first alone and
+keep the fast alarm on (section 11); their runner argv differ by `--fly-first` alone and their run()
+arguments, keys and loop not at all; the checkout's runner is 9.57 (it takes --fly-first) and
+huntstate_check's `drive` and `check` hold (every fly-first change a branch whose else is today's
+code); and the box's step traces equal the driver's (hunt_trace.compare: the hand scenarios and
+SEEDS random ones).
 
 THE SETUP before every run: exactly stage2_ab.py's. A STOP file in the series folder
 (/dev/shm/poring-lab-tmp/stage7-ab/<label>/STOP) ends the series before its next run.
@@ -22,8 +24,9 @@ THE SCORE per run: stage5b2_ab's (kills, loot steps, openers, the tick pace, the
 runner exception, the drive's records) and, from the runner session, its packets and the backend's
 input log (data/input_log/<UTC date>.jsonl): every fly-first Fly Wing (its read, its send time, the
 F4 / F5 keys between them, its use_item_request), the deaths, the boss sightings and the flies by
-source, and the economy (data/econ/lab.sqlite, after `econ_db.py update`). The verdict applies BAR
-(18.7). `derive` re-measures 18.2's key-to-request delays over sessions (read-only).
+source, and the economy WITH steals (18.10 #4: econ_db.totals_of, the dashboard's gross / cost / net
+an hour; each arm's valid runs pooled; data/econ/lab.sqlite, after `econ_db.py update`). The verdict
+applies BAR (18.7). `derive` re-measures 18.2's key-to-request delays over sessions (read-only).
 
     stage7_ab.py plan   --label s7ab --pairs 4 --minutes 20
     stage7_ab.py run    --label s7ab --pairs 4 --minutes 20
@@ -66,7 +69,7 @@ ARMS = {"A": "fly_first off: today's runner", "B": "fly_first on: the Fly Wing f
 FLY_TAB, FLY_VAR, FLY_FLAG = "safety", "fly_first", "--fly-first"
 SCRATCH = Path("/dev/shm/poring-lab-tmp/stage7-ab")
 INPUT_LOG = ROOT / "data" / "input_log"
-ECON_DB = ROOT / "data" / "econ" / "lab.sqlite"
+ECON_DATA = ROOT / "data"  # data/econ/lab.sqlite, the item table, the KB names (econ_db.totals_of)
 SEEDS = 50
 FLY_KIND = "fly_first"  # the runner's fly-first record (dungeon_hunt 9.57)
 SELF_GID = 2000002  # the lab Rogue's block id (her own entity_vanish, reason 1: her death)
@@ -133,18 +136,8 @@ def box_difference(a: Mapping[str, Any], b: Mapping[str, Any]) -> str | None:
     return None
 
 
-def vals_of(text: str) -> dict[str, Any] | str:
-    """The runner settings a box text's hunt core takes (stage2_ab.box_vals' rule): its setting
-    blocks over the defaults, its keys over them. A refusal: its words."""
-    from poring_flow import project as pj
-
-    rk = pj.runner_keys(pj.from_json(text), NODE)
-    if rk.keys is None:
-        return f"the box's keys: {'; '.join(rk.problems)}"
-    vals, _src, _ks, why = fr.project_values(json.loads(text), NODE, rk.keys)
-    if why:
-        return why
-    return vals
+# the runner settings a box text's hunt core takes: stage5c_ab's (one rule for the A/B tools)
+vals_of = s5c.vals_of
 
 
 def runner_problem(runner_text: str) -> str | None:
@@ -334,7 +327,7 @@ class Score7(s5b2.Score5b2):
     garm_seen: int = 0
     dagger_first: int = 0  # Fly Wing presses with the dagger key (F5) in the 0.3 s before
     sessions: list[str] = field(default_factory=list)
-    econ: dict[str, float] | None = None  # gross_h, net_h (econ_db), when the run is there
+    econ: dict[str, float] | None = None  # gross_h, cost_h, net_h WITH steals (econ_db.totals_of)
 
     def doc(self) -> dict[str, Any]:
         return {**super().doc(), "flies_ff": [asdict(f) for f in self.flies_ff],
@@ -361,24 +354,53 @@ def score_session(sc: Score7, events: Sequence[Mapping[str, Any]],
     sc.dagger_first += sum(1 for t in f8 if any(0 < t - x <= 300_000_000 for x in f5))
 
 
-def econ_of(session: str, db: Path = ECON_DB) -> dict[str, float] | None:
-    """The run's economy (econ_db's runs row: gross_h, net_h), read-only; None: not in the file."""
-    if not db.is_file():
+ECON_KEYS = ("gross_h", "cost_h", "net_h")
+
+
+def econ_pick(t: Mapping[str, Any] | None) -> dict[str, float] | None:
+    """PURE: the zeny an hour of a dashboard totals dict (econ_dash.totals), or None."""
+    if not t:
         return None
+    return {k: float(t[k]) for k in ECON_KEYS if isinstance(t.get(k), int | float)}
+
+
+def econ_of(session: str, data: Path = ECON_DATA) -> dict[str, float] | None:
+    """One run's economy WITH Steal and Snatcher income (live-blocks 18.10 #4): the dashboard's
+    totals (econ_db.totals_of), read-only; None: not in the file."""
+    import econ_db as edb
+
     try:
-        con = sqlite3.connect(f"file:{db}?mode=ro", uri=True)
-        row = con.execute("SELECT econ_row FROM runs WHERE session = ?", (session,)).fetchone()
-        con.close()
-    except sqlite3.Error:
+        got = edb.totals_of([session], data=data)
+    except (OSError, sqlite3.Error, ValueError):
         return None
-    if row is None or not row[0]:
-        return None
-    e = json.loads(row[0])
-    return {k: float(e[k]) for k in ("gross_h", "net_h") if isinstance(e.get(k), int | float)}
+    return econ_pick(got["runs"].get(Path(session).name))
+
+
+def econ_arms(scores: Sequence[Score7], minutes: float, data: Path = ECON_DATA,
+              bar: Mapping[str, Any] = BAR) -> dict[str, dict[str, Any] | None]:  # fmt: skip
+    """Each arm's economy WITH steals, its valid runs POOLED (econ_db.totals_of: the dashboard's
+    per-arm figure, the counts summed over the hours summed)."""
+    import econ_db as edb
+
+    ok_min = minutes * float(bar["min_minutes_share"])
+    out: dict[str, dict[str, Any] | None] = {}
+    for x in ("A", "B"):
+        sids = [d for s in scores if s.arm == x and s.found
+                and (s.minutes >= ok_min or str(s.end or "").startswith("weight_home"))
+                for d in s.sessions]  # fmt: skip
+        try:
+            got = edb.totals_of(sids, data=data)
+        except (OSError, sqlite3.Error, ValueError):
+            out[x] = None
+            continue
+        pooled = econ_pick(got["pooled"])
+        out[x] = None if pooled is None else {**pooled, "runs": len(got["runs"]),
+                                               "missing": got["missing"]}  # fmt: skip
+    return out
 
 
 def score_run(r: Mapping[str, Any], folder: Path, demo: Path = s2.DEMO,
-              logs: Path = INPUT_LOG, db: Path = ECON_DB) -> Score7:  # fmt: skip
+              logs: Path = INPUT_LOG, data: Path = ECON_DATA) -> Score7:  # fmt: skip
     """Reads (no screen): one run's sessions by its label, its log, the input log, the economy."""
     base = s5b2.score_run(r, folder, demo)
     sc = Score7(**{k: getattr(base, k) for k in base.__dataclass_fields__})
@@ -398,7 +420,7 @@ def score_run(r: Mapping[str, Any], folder: Path, demo: Path = s2.DEMO,
                 downs.extend(key_downs(f, t0 - 5_000_000_000, t1 + 5_000_000_000))
         score_session(sc, ev, read_packets(d / "packets.jsonl.gz"), downs)
         sc.sessions.append(d.name)
-        sc.econ = econ_of(d.name, db) or sc.econ
+        sc.econ = econ_of(d.name, data) or sc.econ
     return sc
 
 
@@ -421,9 +443,11 @@ def fly_line(scores: Sequence[Score7], bound_s: float = FLY_BOUND_S) -> dict[str
             "problems": bad, "pass": None if not judged else not bad}  # fmt: skip
 
 
-def report_of(scores: Sequence[Score7], minutes: float, bar: Mapping[str, Any] = BAR
+def report_of(scores: Sequence[Score7], minutes: float, bar: Mapping[str, Any] = BAR,
+              econ: Mapping[str, Mapping[str, Any] | None] | None = None,
               ) -> dict[str, Any]:  # fmt: skip
-    """PURE: the reported lines: deaths per played run, flies by source, the economy."""
+    """PURE: the reported lines: deaths per played run, flies by source, the economy (``econ``:
+    each arm's pooled totals WITH steals, econ_arms)."""
     ok_min = minutes * float(bar["min_minutes_share"])
     out: dict[str, Any] = {}
     for x in ("A", "B"):
@@ -433,7 +457,6 @@ def report_of(scores: Sequence[Score7], minutes: float, bar: Mapping[str, Any] =
             s for s in arm if s.minutes >= ok_min or str(s.end or "").startswith("weight_home")
         ]
         hours = sum(s.minutes for s in valid) / 60.0
-        econ = [s.econ for s in valid if s.econ]
         presses: dict[str, int] = {}
         for s in valid:
             for k, n in s.fly_presses.items():
@@ -448,17 +471,15 @@ def report_of(scores: Sequence[Score7], minutes: float, bar: Mapping[str, Any] =
             "dagger_first": sum(s.dagger_first for s in valid),
             "inside": sum(1 for s in valid for f in s.flies_ff if f.src == "alarm" and f.sight
                           and f.t_read_ns is not None) if x == "B" else None,
-            "econ_runs": len(econ),
-            "gross_h": round(statistics.fmean(e["gross_h"] for e in econ if "gross_h" in e), 0)
-            if any("gross_h" in e for e in econ) else None,
-            "net_h": round(statistics.fmean(e["net_h"] for e in econ if "net_h" in e), 0)
-            if any("net_h" in e for e in econ) else None,
+            "econ_with_steals": (econ or {}).get(x),  # gross_h, cost_h, net_h: the dashboard's
         }  # fmt: skip
     return out
 
 
 def verdict(scores: Sequence[Score7], minutes: float, a_kinds: set[str],
-            bar: Mapping[str, Any] = BAR) -> dict[str, Any]:  # fmt: skip
+            bar: Mapping[str, Any] = BAR,
+            econ: Mapping[str, Mapping[str, Any] | None] | None = None,
+            ) -> dict[str, Any]:  # fmt: skip
     """PURE: the pre-registered bar (18.7). `a_kinds`: the 5b-1 runner text's kinds (the drive's
     and fly-first's own kinds are allowed besides). Deaths are reported, never judged."""
     v = s5b.verdict(scores, minutes, set(a_kinds) | {s5c.DRIVE_KIND, FLY_KIND}, bar)
@@ -466,7 +487,7 @@ def verdict(scores: Sequence[Score7], minutes: float, a_kinds: set[str],
     deaths = lines.pop("deaths", None)
     rep = dict(lines.get("report") or {})
     rep["deaths"] = deaths
-    rep["arms"] = report_of(scores, minutes, bar)
+    rep["arms"] = report_of(scores, minutes, bar, econ)
     lines["report"] = rep
     lines["drive"] = s5c.drive_line(scores)
     lines["fly_first"] = fly_line(scores, float(bar["fly_bound_s"]))
@@ -581,7 +602,8 @@ def main(argv: Sequence[str] | None = None) -> int:
             print(econ_update(doc["runs"]), flush=True)
         scores = [score_run(r, folder) for r in doc["runs"]]
         base = (folder / "runner-5b1.py").read_text()
-        v = verdict(scores, float(doc["minutes"]), s5b.base_kinds(base))
+        v = verdict(scores, float(doc["minutes"]), s5b.base_kinds(base),
+                    econ=econ_arms(scores, float(doc["minutes"])))  # fmt: skip
         if a.json:
             print(json.dumps({"runs": [s.doc() for s in scores], "verdict": v}, indent=1))
         else:
