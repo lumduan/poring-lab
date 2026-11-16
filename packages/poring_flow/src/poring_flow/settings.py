@@ -903,7 +903,15 @@ SWITCHES: tuple[Field, ...] = (
         "switch",
         "a boss seen, at any distance: the Fly Wing first, no Knife swap before it",
         flag="--fly-first",
-    ),  # fmt: skip  # dungeon@9.57 (Batt 2026-11-16; live-blocks.md 18): OFF until s7ab passes
+    ),  # fmt: skip  # dungeon@9.57 (live-blocks.md 18); ON in the ready-made boxes (18.10)
+    Field(
+        "fly_first_hp",
+        "safety",
+        "switch",
+        "HP low, no boss in sight: the Fly Wing first too, no Knife swap before it",
+        flag="--fly-first-hp",
+        needs=(("fly_first", _ON),),
+    ),  # fmt: skip  # dungeon@9.58 (18.10 #2; live-blocks.md 18.11): OFF until s8ab
     Field(
         "boss_walk",
         "safety",
@@ -1100,7 +1108,11 @@ DEFAULTS: dict[str, Any] = {
     "garm_confirm": 2,
     "alarm_fast": True,  # dungeon@9.53 (Batt 2026-11-14: "Fly Wing away"; live-blocks 11)
     "alarm_solo": 0.7,
-    "fly_first": False,  # dungeon@9.57 (live-blocks.md 18): off until s7ab passes (18.4 #8)
+    # dungeon@9.57 (live-blocks.md 18): the registry's default stays OFF (a project without the
+    # block: the frozen A/B arms keep their pinned argv); the ready-made functions boxes hold the
+    # block ON since 18.10 #1 (Batt: "On")
+    "fly_first": False,
+    "fly_first_hp": False,  # dungeon@9.58 (18.11): off until s8ab passes
     "boss_walk": False,
     "unread_step": False,
     "box_detector": "gpu",
@@ -1150,6 +1162,7 @@ FIND: dict[str, tuple[str, ...]] = {
     "alarm_fast": ("garm", "alarm", "hud"),
     "alarm_solo": ("garm", "alarm"),
     "fly_first": ("boss", "knight", "fly", "wing", "first"),
+    "fly_first_hp": ("hp", "fly", "wing", "first"),
     "GARM_FRESH_S": ("garm", "alarm"),
     "npc_guard": ("npc",),
     "NPC_NO_FIGHT": ("npc",),

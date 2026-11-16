@@ -108,7 +108,8 @@ def test_the_flag_is_off_by_default_and_recorded_when_on() -> None:
 
 
 # --- the press: the Fly Wing FIRST on a boss, by execution ---------------------------------------
-def _press_ns(fly_first: bool, keys: list[str], evs: list[dict[str, Any]]) -> dict[str, Any]:
+def _press_ns(fly_first: bool, keys: list[str], evs: list[dict[str, Any]],
+              fly_first_hp: bool = False) -> dict[str, Any]:  # fmt: skip
     class Bare:
         st = SimpleNamespace(armed=False)
 
@@ -121,7 +122,7 @@ def _press_ns(fly_first: bool, keys: list[str], evs: list[dict[str, Any]]) -> di
         "agent_raw": SimpleNamespace(keys=keys.append), "keys_": {"fly": "F8", "potion": "F1"},
         "counts": Counter(), "ev": evs.append, "stock_watch": None, "STOCK_ITEMS": {},
         "stock_due": {}, "stock_tries": {}, "stock_items": {}, "STOCK_READ_S": 1.0, "time": time,
-        "fly_first": fly_first,
+        "fly_first": fly_first, "fly_first_hp": fly_first_hp, "ff_hp_why": dh.ff_hp_why,
         "ff": {"after": None, "boss": False, "read_ns": None, "src": None, "sight": None},
         "FF_BOSS_WHYS": dh.FF_BOSS_WHYS, "r": SimpleNamespace(ns=time.monotonic_ns),
     }  # fmt: skip
@@ -375,3 +376,49 @@ def test_a_change_outside_a_branch_is_refused_by_both_proofs() -> None:
     )
     with pytest.raises(ValueError, match="empty"):
         hc.unflag("def f(x):\n    if fly_first:\n        return 1\n")
+
+
+# --- 9.58 --fly-first-hp (live-blocks.md 18.11): the HP Fly Wing first too ------------------------
+def test_an_hp_fly_wing_goes_first_only_with_fly_first_hp() -> None:
+    assert dh.FLY_FIRST_HP_VERSION == "9.58"
+    for why in ("hp 0.18", "rate 1200 at hp 0.40", "box fly_away (hp_percent 20, sees_boss None)"):
+        assert dh.ff_hp_why(why), why
+    for why in ("end", "pos_unread", "stuck", "unreach", "garm", "box bag_full (weight 51)"):
+        assert not dh.ff_hp_why(why), why
+    keys: list[str] = []
+    evs: list[dict[str, Any]] = []
+    ns = _press_ns(True, keys, evs, fly_first_hp=True)
+    press = closure("press", ns)
+    press("fly", "rate 1200 at hp 0.40")  # the runner's HP-rate fly, she wears the Knife
+    assert keys == ["F8"] and ns["ff"]["after"] is not None
+    rec = [e for e in evs if e["kind"] == "fly_first"][-1]
+    assert rec["src"] == "hp" and rec["sight"] == {"hp": True, "bare": True}
+    assert isinstance(rec["t_read_ns"], int) and rec["t_read_ns"] <= rec["t_key_ns"]
+    keys.clear()
+    press("fly", "box fly_away (hp_percent 20, sees_boss None)")  # the box's fly_away on HP
+    assert keys == ["F8"]
+    assert [e for e in evs if e["kind"] == "fly_first"][-1]["src"] == "box_hp"
+    keys.clear()
+    press("fly", "end")  # the end's escape keeps 9.27's order
+    assert keys == ["F5", "F8"]
+    # fly_first_hp off: the HP Fly Wing as under 9.57 (the dagger first), a boss one still first
+    keys2: list[str] = []
+    press2 = closure("press", _press_ns(True, keys2, [], fly_first_hp=False))
+    press2("fly", "rate 1200 at hp 0.40")
+    assert keys2 == ["F5", "F8"]
+    keys2.clear()
+    press2("fly", "garm")
+    assert keys2 == ["F8"]
+
+
+def test_the_flag_proof_finds_the_runner_s7ab_measured_with_fly_first_hp_off() -> None:
+    try:
+        base = hc.git_show(hc.FLAG_BASE, hc.TARGET)
+    except (subprocess.CalledProcessError, OSError):
+        pytest.skip("git cannot show the flag base here (a shallow checkout)")
+    rc, out = _quiet(hc.flag_check, base, SRC)
+    assert rc == 0 and "the module == the base's (as ASTs): YES" in out, out
+    bent = SRC.replace("FF_REARM_S = 1.0", "FF_REARM_S = 1.5", 1)  # a 9.57 line, outside a branch
+    assert _quiet(hc.flag_check, base, bent)[0] == 1
+    on = hc._Unflag(take_body=True).visit(ast.parse(SRC))
+    assert "fly_first_hp = fly_first and bool(getattr(a, 'fly_first_hp', False))" in ast.unparse(on)

@@ -14,7 +14,7 @@ import { canonical } from "./ir.ts";
 import { layoutKey, overlaps, rowsOf, shelfWidth, STACK_GAP } from "./layout.ts";
 import { reachable } from "./liveready.ts";
 import { skillKeysOn } from "./pickers.ts";
-import { engineKey, HUNT_TAB, homeFunctionOn, huntCoreCallOn, mainOf, mapNodes, MONSTERS_TAB, nodeById, rolesOn, runnerBlockOn, runnerKeysOn, tabOf, tickDef, xmasFunctionsProject, xmasHuntProject, xmasProject } from "./project.ts";
+import { engineKey, homeFunctionOn, HUNT_TAB, huntCoreCallOn, mainOf, mapNodes, MONSTERS_TAB, nodeById, rolesOn, runnerBlockOn, runnerKeysOn, tabOf, tickDef, xmasFunctionsCookieNoSwapProject, xmasFunctionsProject, xmasHuntProject, xmasProject } from "./project.ts";
 import { SETTING_ROW_BUDGET } from "./settings.ts";
 import { sessionProject } from "./testkit.ts";
 import { HUNT_CALL, HUNT_ROLES, LOWERED_NOTE, OPTIONAL_STEPS, REQUIRED_ROLES, ROLE_PREFIX, STEP_BLOCKS, STEP_OF_TYPE, stepBlock, stepType, TICK_FN, TICK_STEPS, TICK_TAB } from "./tick.ts";
@@ -262,5 +262,20 @@ test("round 25's layout: the role blocks and hunt_tick have their keys; the func
     assert.deepEqual(Object.keys(lay).sort(), ws.blocks.blocks.map((b) => layoutKey(b.type, b.fields)!).sort());
     assert.equal(engineKey(back.project), engineKey(p), tab);
     assert.equal(canonical(runnerBlockOn(mapNodes(back.project)[0])), canonical(runnerBlockOn(mapNodes(p)[0])));
+  }
+});
+
+// live-blocks 18.10 #1 (Batt 2026-11-16: "On"): the ready-made functions box and its cookie twin
+// hold fly_first ON; the one box, the hunt box (the reference arms) keep it off; fly_first_hp
+// (18.11) is off in all of them until its A/B passes
+test("the ready-made functions boxes hold fly_first ON, the reference boxes off, fly_first_hp off everywhere", () => {
+  const safety = (p: ReturnType<typeof xmasFunctionsProject>) => mapNodes(p)[0].tabs.find((t) => t.name === "safety")!.vars;
+  for (const p of [xmasFunctionsProject(), xmasFunctionsCookieNoSwapProject()]) {
+    assert.equal(safety(p).fly_first?.value, true, p.name);
+    assert.equal(safety(p).fly_first_hp?.value, false, p.name);
+  }
+  for (const p of [xmasProject(), xmasHuntProject()]) {
+    assert.equal(safety(p).fly_first?.value, false, p.name);
+    assert.equal(safety(p).fly_first_hp?.value, false, p.name);
   }
 });

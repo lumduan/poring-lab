@@ -609,13 +609,20 @@ export function xmasHuntProject(): Project {
  * user sees and can edit himself"): the tab tick -- hunt_tick(), run()'s 20 steps as step blocks in
  * run()'s order (tick.ts; the engine's poring_flow.tick). */
 export const tickDef = (steps: readonly string[] = STEP_BLOCKS): Def => def(TICK_FN, steps.map((block) => ({ kind: "action", block, concept: "core.tick_step", params: {}, timeout_s: 1, ...rest })));
+/** Live-blocks 18.10 #1: the setting block the ready-made functions box holds ON (fly_first). */
+export const FLY_FIRST_TAB = "safety";
+export const FLY_FIRST_VAR = "fly_first";
+
 /** The ready-made box as FUNCTIONS IN TABS (fixtures/project_xmas_dun02_functions.json, 5c's live
  * A/B arm B5c; what /flows and /maps open first): the hunt box (xmasHuntProject) with its runner
  * block dissolved -- the main calls hunt_loop() where the runner block stood; the tab hunt holds
  * the role blocks (role_<param> = the function the runner block named) and the loop, its input
  * t=False so main can call it; the tab tick after it holds hunt_tick(). The engine lowers it to the
  * hunt box's hunt core exactly (the same runner argv, keys, settings and run() arguments). The one
- * box's old shape stays xmasProject() (the runner block), the hunt box xmasHuntProject(). */
+ * box's old shape stays xmasProject() (the runner block), the hunt box xmasHuntProject().
+ * Live-blocks 18.10 #1 (Batt 2026-11-16: "On"): its safety tab holds fly_first ON (the Fly Wing
+ * first on a boss, dungeon@9.57, proven live by s7ab), so its runner argv is the hunt box's plus
+ * --fly-first; the one box, the hunt box and the frozen A/B arms keep it off (reference arms). */
 export function xmasFunctionsProject(): Project {
   const p = xmasHuntProject();
   const n = p.nodes[0];
@@ -629,6 +636,9 @@ export function xmasFunctionsProject(): Project {
   hunt.vars = Object.fromEntries(Object.entries(runner.params).map(([k, v]) => [`${ROLE_PREFIX}${k}`, v as Lit]));
   hunt.defs = [{ ...huntLoopDef(), params: [{ name: "t", default: lit(false) }] }];
   n.tabs.splice(n.tabs.indexOf(hunt) + 1, 0, tab(TICK_TAB, [tickDef()]));
+  const safety = n.tabs.find((t) => t.name === FLY_FIRST_TAB);
+  if (!safety || !(FLY_FIRST_VAR in safety.vars)) throw new Error("the ready-made box's safety tab holds fly_first");
+  safety.vars[FLY_FIRST_VAR] = lit(true); // 18.10 #1
   return {
     ...p,
     name: "xmas_dun02",

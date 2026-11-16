@@ -39,7 +39,18 @@ def test_the_plan_alternates_the_two_shapes_with_the_same_runner(tmp_path: Path)
 
 
 def _boxes() -> tuple[dict[str, Any], dict[str, Any]]:
-    return json.loads(ab.PROJECTS["A"].read_text()), json.loads(ab.PROJECTS["B"].read_text())
+    """The arms as the tool builds them (live-blocks 18.10 #1: B is the functions box with
+    fly_first set to the hunt box's value, off; the fixture itself holds it on)."""
+    return ab.arm_doc("A"), ab.arm_doc("B")
+
+
+def test_b_is_the_ready_made_box_with_fly_first_off_and_the_fixture_alone_differs() -> None:
+    raw = json.loads(ab.PROJECTS["B"].read_text())
+    a, b = _boxes()
+    assert "more than its shape" in str(ab.box_difference(a, raw))  # the fixture: fly_first ON
+    assert ab.box_difference(a, b) is None  # the arm: the shape alone
+    tab = next(t for t in b["nodes"][0]["tabs"] if t["name"] == "safety")
+    assert tab["vars"]["fly_first"]["value"] is False
 
 
 def _tab(d: dict[str, Any], name: str) -> dict[str, Any]:

@@ -54,6 +54,9 @@ FLY_FIRST_TESTS (`if fly_first:` in run(), `if FLY_FIRST:` in the module), its e
 `check` and `drive` read the file with every such branch as its else and without the module names
 fly-first adds (FLY_FIRST_ADDED): so with the flag off the program they prove is the base's, and a
 change anywhere else is refused as before.
+    huntstate_check.py flag [--base REV] [--file F]
+        live-blocks 18.11 (dungeon@9.58 --fly-first-hp): with ONLY the fly_first_hp branches read
+        as their else, F's whole module equals REV's (default FLAG_BASE: the runner s7ab measured)
 
 The text it derives is formatted by `ruff format` afterwards (formatting is AST-neutral); `check`
 reads the committed file, never trusts `derive`'s output.
@@ -91,12 +94,17 @@ DRIVE_ADDED = (
     "HuntView", "HuntCursor", "hook_drives", "drive_refused", "hunt_drive",
     "RUNNER_BLOCKS_VERSION", "DRIVE_OPTIONAL_STEPS",  # 5c (live-blocks 15.3): the visible tick
 )  # fmt: skip
-# live-blocks 18 (dungeon@9.57): the fly-first branches' conditions, and the module names it adds
-FLY_FIRST_TESTS = ("fly_first", "FLY_FIRST")
+# live-blocks 18 (dungeon@9.57): the fly-first branches' conditions, and the module names it adds;
+# 18.11 (dungeon@9.58): the fly-first-hp family's, which `flag` reads alone against FLAG_BASE
+FLY_FIRST_HP_TESTS = ("fly_first_hp", "FLY_FIRST_HP")
+FLY_FIRST_HP_ADDED = ("FLY_FIRST_HP", "FLY_FIRST_HP_VERSION", "ff_hp_why")
+FLY_FIRST_TESTS = ("fly_first", "FLY_FIRST", *FLY_FIRST_HP_TESTS)
 FLY_FIRST_ADDED = (
     "FLY_FIRST", "FLY_FIRST_VERSION", "FF_LATCH_S", "FF_REARM_S", "FF_BOSS_WHYS", "alarm_classes",
-    "ff_latch", "ff_sighting",
+    "ff_latch", "ff_sighting", *FLY_FIRST_HP_ADDED,
 )  # fmt: skip
+# 18.11: main when 9.58 began (2026-11-16 20:3x ICT): the 9.57 runner s7ab measured (18.9)
+FLAG_BASE = "8a091a72"
 # the mode steps the cursor calls whoever plays when their mode is another (STEP_GUARD): each one's
 # body acts only in that mode (the proof: its statements are ifs on that mode, nothing else)
 GUARDED = {"fight": "fight", "loot": "after"}
@@ -1007,15 +1015,16 @@ class _Unflag(ast.NodeTransformer):
     """live-blocks 18: every statement list with each fly-first branch replaced by its else (or,
     ``take_body``, by its body: the program with the flag on)."""
 
-    def __init__(self, take_body: bool = False) -> None:
+    def __init__(self, take_body: bool = False, tests: Sequence[str] = FLY_FIRST_TESTS) -> None:
         self.n = 0
         self.empty: list[int] = []
         self.take_body = take_body
+        self.tests = tuple(tests)
 
     def _stmts(self, stmts: list[ast.stmt]) -> list[ast.stmt]:
         out: list[ast.stmt] = []
         for st in stmts:
-            if isinstance(st, ast.If) and ast.unparse(st.test) in FLY_FIRST_TESTS:
+            if isinstance(st, ast.If) and ast.unparse(st.test) in self.tests:
                 self.n += 1
                 out.extend(self._stmts(st.body if self.take_body else st.orelse))
             else:
@@ -1036,13 +1045,14 @@ class _Unflag(ast.NodeTransformer):
         return node
 
 
-def unflag(src: str) -> tuple[str, int]:
-    """PURE (live-blocks 18): ``src`` with every fly-first branch (``if <FLY_FIRST_TESTS>:``,
-    anywhere) read as its else, and without the top-level statements named in FLY_FIRST_ADDED;
-    and how many branches it read. Unchanged text when there are none. Raises ValueError when a
-    branch's removal leaves a body empty (a branch must REPLACE code or add to it)."""
+def unflag(src: str, tests: Sequence[str] = FLY_FIRST_TESTS,
+           added: Sequence[str] = FLY_FIRST_ADDED) -> tuple[str, int]:  # fmt: skip
+    """PURE (live-blocks 18): ``src`` with every fly-first branch (``if <tests>:``, anywhere) read
+    as its else, and without the top-level statements named in ``added``; and how many branches it
+    read. Unchanged text when there are none. Raises ValueError when a branch's removal leaves a
+    body empty (a branch must REPLACE code or add to it)."""
     tree = ast.parse(src)
-    u = _Unflag()
+    u = _Unflag(tests=tests)
     tree = u.visit(tree)
     if u.empty:
         raise ValueError(f"a fly-first branch leaves a body empty (line {u.empty[0]})")
@@ -1056,11 +1066,30 @@ def unflag(src: str) -> tuple[str, int]:
             return ast.unparse(n.target)
         return None
 
-    kept = [n for n in tree.body if name_of(n) not in FLY_FIRST_ADDED]
+    kept = [n for n in tree.body if name_of(n) not in added]
     if u.n == 0 and len(kept) == len(tree.body):
         return src, 0
     tree.body = kept
     return ast.unparse(tree), u.n
+
+
+def flag_check(base_src: str, new_src: str, tests: Sequence[str] = FLY_FIRST_HP_TESTS,
+               added: Sequence[str] = FLY_FIRST_HP_ADDED) -> int:  # fmt: skip
+    """live-blocks 18.11: with ONLY the ``tests`` branches read as their else and ``added`` left
+    out, the WHOLE module is ``base_src``'s (FLAG_BASE: the runner s7ab measured), as ASTs,
+    docstrings included. Prints each fact; rc 0 when it holds."""
+    got, n = unflag(new_src, tests, added)
+    print(f"{'/'.join(tests)} branches read as their else: {n}; left out {list(added)}")
+    a, b = ast.parse(base_src), ast.parse(got)
+    same = dump(a) == dump(b)
+    print(f"the module == the base's (as ASTs): {'YES' if same else 'NO'}")
+    if not same:
+        import difflib
+
+        ua, ub = ast.unparse(a).splitlines(), ast.unparse(b).splitlines()
+        for ln in list(difflib.unified_diff(ua, ub, "base", "committed", lineterm="", n=2))[:60]:
+            print("   ", ln)
+    return 0 if same and n > 0 else 1
 
 
 def drive_check(base_src: str, new_src: str) -> int:
@@ -1341,9 +1370,14 @@ def main(argv: Sequence[str] | None = None) -> int:
     dv = sub.add_parser("drive", help="5b-2: with no drive, run() is 5b-1's (section 14)")
     dv.add_argument("--base", default=DRIVE_BASE)
     dv.add_argument("--file", default=str(TARGET))
+    fl = sub.add_parser("flag", help="18.11: with fly_first_hp's branches as else, FLAG_BASE")
+    fl.add_argument("--base", default=FLAG_BASE)
+    fl.add_argument("--file", default=str(TARGET))
     a = ap.parse_args(argv)
     if a.cmd == "drive":
         return drive_check(git_show(a.base, TARGET), Path(a.file).read_text())
+    if a.cmd == "flag":
+        return flag_check(git_show(a.base, TARGET), Path(a.file).read_text())
     if a.cmd == "derive":
         src = Path(a.base).read_text()
         if a.steps:

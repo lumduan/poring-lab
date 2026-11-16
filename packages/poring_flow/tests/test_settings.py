@@ -72,8 +72,8 @@ def test_the_one_box_holds_every_setting_block_it_uses_at_its_default_in_its_gro
     (x,) = p.nodes
     got = {k: (t.name, v.value) for t in x.tabs for k, v in t.vars.items()}
     assert got == {f.var: (f.group, f.default) for f in st.BLOCKS if f.name not in BOX_PLAYS_THEM}
-    # 117 since live-blocks 18 (fly_first, dungeon@9.57)
-    assert len(got) == 117 and not any(f.var in got for f in st.FIELDS if not f.block)
+    # 117 since live-blocks 18 (fly_first, dungeon@9.57); 118 since 18.11 (fly_first_hp, 9.58)
+    assert len(got) == 118 and not any(f.var in got for f in st.FIELDS if not f.block)
     # the five are exactly what the engine's takeovers say this box plays itself (live.takeovers)
     c = P.compile_project(p)
     assert c.flow is not None
@@ -184,17 +184,21 @@ def test_the_clash_rule_is_an_error_and_unused_settings_are_info() -> None:
     info = {w: t for s, w, t in rules(p, "settings_use") if s == "info"}
     assert "is not in use while Batt's Knife swap (knife_swap) is off" in info[
         "xmas_dun02/knife/knife_max_s"]  # fmt: skip
-    # the one box as shipped: no clash, no setting error, no safety switch off; the two blocks it
-    # holds that are not in use say so (their needs are off by default)
+    # the one box as shipped: no clash, no setting error, no safety switch off; the blocks it holds
+    # that are not in use say so (their needs are off: by default, or fly_first in this reference
+    # box)
     shipped = P.from_json(XMAS.read_text())
     assert rules(shipped, "settings_clash", "settings", "settings_safety") == []
     c = P.compile_project(shipped)
     assert ls.notes(shipped, c) == {
         "xmas_dun02/fight/quick_drop_scaled": {"unused": "not used while quick_drop is off"},
         "xmas_dun02/aim/near_single_still": {"unused": "not used while near_single is off"},
+        # 18.11: the one box (a reference arm) keeps fly_first off, so fly_first_hp is not in use
+        "xmas_dun02/safety/fly_first_hp": {"unused": "not used while fly_first is off"},
     }
     assert sorted(w for _s, w, _t in rules(shipped, "settings_use")) == [
-        "xmas_dun02/aim/near_single_still", "xmas_dun02/fight/quick_drop_scaled"]  # fmt: skip
+        "xmas_dun02/aim/near_single_still", "xmas_dun02/fight/quick_drop_scaled",
+        "xmas_dun02/safety/fly_first_hp"]  # fmt: skip
 
 
 def test_a_block_the_box_plays_itself_is_marked_not_used_here_by_lint_block_and_python() -> None:

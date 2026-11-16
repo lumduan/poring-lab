@@ -39,10 +39,17 @@ def _plan(text: str) -> fp.RunnerPlan:
 
 
 def test_the_functions_box_plays_the_hunt_boxs_runner_exactly() -> None:
+    """The hunt box's runner exactly, but for live-blocks 18.10 #1: the ready-made functions box
+    holds fly_first ON (the one box and the hunt box, the reference arms, keep it off), so its
+    argv carries --fly-first and its settings differ in fly_first alone."""
     one, hunt, fun = _plan(ONE), _plan(HUNT), _plan(FUN)
     for a in (one, hunt):
-        assert fun.argv("L", Path("/S"), None) == a.argv("L", Path("/S"), None)
-        assert fun.keys == a.keys and fun.vals == a.vals and fun.box_kwargs() == a.box_kwargs()
+        got = fun.argv("L", Path("/S"), None)
+        assert got.count("--fly-first") == 1 and "--fly-first" not in a.argv("L", Path("/S"), None)
+        assert [x for x in got if x != "--fly-first"] == a.argv("L", Path("/S"), None)
+        assert {k for k in fun.vals if fun.vals[k] != a.vals.get(k)} == {"fly_first"}
+        assert fun.vals["fly_first"] is True and a.vals["fly_first"] is False
+        assert fun.keys == a.keys and fun.box_kwargs() == a.box_kwargs()
     assert fun.loop == hunt.loop == "hunt_loop" and fun.tick_left_out == ()
     assert fun.skill_keys == hunt.skill_keys == ("F1",)
     assert fr.has_hunt_core(json.loads(FUN)) and fr.has_hunt_core(json.loads(HUNT))
