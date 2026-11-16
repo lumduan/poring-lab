@@ -4967,3 +4967,38 @@ Item 6 adds: "A boss on the screen, at ANY distance: press the Fly Wing first, n
    - two NEW blind labellers, AA and AB (M9's brief);
    - `score --units`: Q1crowd, Q1s and Q1c.
 7. The result here and in live-blocks.md 17; the scratch to the NAS the same day.
+
+#### S6.5 (2026-11-16 14:16 ICT from `date`, BEFORE any labeller sees the pack and before THE BAR is scored): sk5a recorded; its checks, the GPU step, labels and pack
+
+- **The stands:** the parent confirmed S6.3's choice (19 never-used TEST stands + 13 from xw5 / gw3,
+  never seen with a knight).
+- **Recorded by the parent, S6.3's steps (a)-(e) as written** (its report):
+  - immunity ON judged ("You are now immune to attacks.");
+  - the aura off by a full-client shot;
+  - no toast;
+  - `sk_watch.sh` (`39e01caa...`), seed 2611125, 32 / 32 cells: the recorder started 13:25:42, the
+    watch ended rc 0 at 13:55:18, the recorder stopped 13:55:23, shipped 13:57:54;
+  - immunity OFF read back ("Returned to normal state."), then her save point, HP 100.
+- **The recording `20261116T132543-rdp-xmas02-sk5a`:** 1,771 frames, 3,740,057,261 bytes, its
+  checksums verified on the NAS (14:04:52-14:05:16). 3c's path: rdp, png, recorder v7, [80, 77, 1280,
+  720], lab-rathena.
+- **The watch** `20261116T132551-watch-xmas_dun02-sk5a` ("done", 32 cells): its folder was already
+  gone from /dev/shm/poring-lab-demo when read, so its log (`run.log` `709edc73...`) was checked
+  instead. 32 `@warp`, 32 `@monster 1251 1`, 32 `@killmonster2`, and the 32 cells in EXACTLY S6.3's
+  order.
+- **The toast test:** no match; the lowest score is 31.13 (the toast reads 0.00-0.08).
+- **The one GPU step** (allowed by the parent; 13:59:24-14:02:47, the worker free, no Run, "ALL
+  STEPS OK"): predict_dir with the frozen last.pt over every recorded frame (1,771; refs
+  `04f9bc3e...`) -> **`pred-sk5a-all.json` `6e570e7f957a12e35b46a8865e23a419238ba3d30756295c9485118c7332fd3f`**.
+  Nothing of it is read before THE BAR.
+- **sk5a's labels** (`--eval-test`, the FROZEN params, `classes-none.json`; 14:03:20-14:14:16):
+  **`b74cfec393eda7ce0ef86cd6776356cd07ddf6b3a2f8a7e54a58699060bd45fa`**. 1,422 candidates (gm_window
+  263, map_change 74, other_map 12), 334 whole. Kept: Myst Case 626, Cruiser 537, Cookie 261,
+  Christmas Cookie 120, Garm Baby 1,090, **Goblin 2,856**, **knight 679**.
+- **The pack** (seed 53, 60 a species, the 0.536 floor; 14:14:16-14:14:40): 420 crops, 348 frames;
+  the key **`e3bef0f9086113c4331200dd686feaee211a79ce3e3d455b4c0e8b380ebf4b4f`**; `reference.png`
+  `2cae63ad...` (the same letters as S4.9 / S5.5); the instructions `dc48fb15...`; the file list
+  (444 files) `7b75b553...`. The labellers' copy: `/dev/shm/poring-lab-tmp/blind-sk53-sk5a/pack`
+  (checked).
+- **Two NEW blind labellers, AA and AB** (M9's brief, the paths changed; AA `f62092d6...`, AB
+  `106cc93c...`). Their answers feed only S6.2's REPORTED Q1crowd; THE BAR needs none.
