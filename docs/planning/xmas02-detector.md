@@ -5310,3 +5310,12 @@ the parent's and Batt's to take.
     - Myst Case 60 and Cruiser 57: 1.000 / 1.000 each;
     - Cookie and Christmas Cookie 60 each: 1.000 / 0.968 each;
     - Q1crowd's per-species bars all pass. Q1c pooled 0.976 / 0.869.
+- **Where it lives (verified):**
+  - The outputs (refs, predictions, units, vanishes, the alarm and Q1 scores; 7 files) moved by the
+    guarded `archive:` to the NAS `archive/train/eval/xmas02sk-s7/` (22:04, sha256 7 / 7).
+  - The scratch went to `scratch-archive/2026-11-16/goblin-s7/` (924 files, `SHA256SUMS`
+    `fbce7070...`), then was deleted from /dev/shm: the labels, pack, key, the labellers' pack and
+    answers, the briefs, logs, the watch script and its lattice, the immunity / aura crops, and the
+    two looked-at fires.
+  - The S7 prep scratch (the lag measures, lattices, crops) is in
+    `scratch-archive/2026-11-16/goblin-s7-prep/` (31 files).
