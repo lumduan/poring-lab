@@ -4146,17 +4146,20 @@ question 1; Batt's own 17 #6 asks for this behaviour.
 
 1. **fly_first ON by default** in the ready-made boxes: "On." The functions box and its cookie twin
    get the block at ON. The old one-box, hunt-box and frozen A/B fixtures keep their pinned argv
-   (reference arms).
+   (reference arms). ➡️ **BUILT 2026-11-16 (18.12, feat/fly-first-hp).**
 2. **The HP Fly Wing first too:** "Agree, do it." When HP calls for the Fly Wing with no boss in
    sight, the F8 also goes out alone, with no dagger key before it.
    - It is built behind its own setting, default OFF until a pre-registered live A/B (s8ab) passes,
-     the same discipline as 18.7.
+     the same discipline as 18.7. ➡️ **Designed and pre-registered in 18.11; BUILT 2026-11-16
+     (18.12): dungeon@9.58 `--fly-first-hp`, the setting fly_first_hp (off), scripts/stage8_ab.py.**
 3. **The Goblin alarm: "test again."** Amendment S7 fixes S6's truth gap (frames just after a GM
    kill are not alarm-free), is pre-registered before any new data, and is scored once on a NEW
    held-out.
 4. **The A/B tools' z/h counts steal income:** "Count the steal income too, since stealing is our
    main income." Every stage tool's per-run z/h and econ report use the totals with Steal and
-   Snatcher income, the dashboards' gross, not econ_row's picked-only net_h.
+   Snatcher income, the dashboards' gross, not econ_row's picked-only net_h. ➡️ **BUILT 2026-11-16
+   (18.12): econ_db.totals_of, used by stage7_ab and stage8_ab; on s7ab's runs it gives 18.9's
+   dashboard figures exactly.**
 
 ### 18.11 The HP Fly Wing first too (Batt 18.10 #2), and THE A/B s8ab -- design and pre-registration written 2026-11-16 20:40 ICT from `date`, BEFORE any code or run
 
@@ -4217,3 +4220,55 @@ dagger either, so an armed HP Fly Wing is the same program in both arms.
 - FAIL when a judged line fails; INCONCLUSIVE when fewer than 3 pairs are valid or the HP line is not
   judgeable, and nothing failed; else PASS. PASS: fly_first_hp ON by default is the parent's (18.10
   #2).
+
+### 18.12 ➡️ BUILT: 18.10's items 1, 2 and 4 (2026-11-16 20:4x-21:4x ICT from `date`; feat/fly-first-hp from main 8a091a72; offline only, NOT run live)
+
+1. **fly_first ON in the ready-made boxes (18.10 #1).**
+   - project_xmas_dun02_functions.json and its cookie twin (project_xmas_dun02_functions_cookie_noswap
+     .json) hold the fly_first block ON. Their TS twins set it: xmasFunctionsProject(), and the cookie
+     twin through it.
+   - **The reference arms keep it OFF and keep their pinned argv:** the old one box
+     (project_xmas_dun02.json), the hunt box (_hunt), the one-box cookie box and the frozen A/B
+     fixtures (stage2 / 3 / 4: no setting blocks, so the registry's default). The registry's default
+     stays OFF for that reason: a project WITHOUT the block runs fly_first off.
+   - The functions box's runner argv is the hunt box's plus `--fly-first`, and its settings differ
+     in fly_first alone (test_runner_blocks says so now).
+   - The A/B tools keep their meaning, each arm's blocks set explicitly:
+     - stage5c_ab (15.8, the shape alone): B is the functions box with fly_first set to the hunt box's
+       value (off; arm_doc, B_SAME_AS_A), as s5c-ab and s5c-ab2 ran it; its box_difference, its
+       settings check (now from the arms' texts) and its argv check mean what they meant;
+     - stage7_ab (18.7): both arms' fly_first were already set explicitly (A off, B on): unchanged
+       logic, its docstring says so;
+     - stage8_ab (18.11): fly_first ON in both, fly_first_hp set per arm.
+2. **The HP Fly Wing first (18.10 #2), as 18.11:**
+   - dungeon@9.58 `--fly-first-hp`, the setting `fly_first_hp` (safety tab, needs fly_first, OFF in
+     every ready-made box);
+   - the HP Fly Wings (sustain's "hp ..." and "rate ...", the box's fly_away naming hp_percent:
+     `ff_hp_why`) send F8 alone and re-arm 1 s after, their record `src` "hp" / "box_hp" with
+     `sight` {"hp", "bare"};
+   - every change is a branch `if fly_first_hp:` / `if FLY_FIRST_HP:` (4). huntstate_check `flag`
+     (new) reads ONLY those as their else and finds the whole module equal to 8a091a72's -- the
+     runner s7ab measured -- and refuses a changed 9.57 line; `drive` and `check` hold as before
+     (22 branches read as else).
+   - scripts/stage8_ab.py: 18.11's bar exactly (stage8_ab.BAR), the HP line (B's HP fly-first Fly
+     Wings; judgeable with at least one pressed while bare), `score --also` for the pre-registered
+     extension, the boss line of both arms reported.
+3. **The A/B tools' z/h with steal income (18.10 #4):**
+   - the one function: `econ_db.totals_of(sessions)` -- the DASHBOARD's totals, each run's
+     (econ_dash.entry_of) and the runs pooled (econ_dash.pool_runs), through econ_dash.totals: gross
+     = (picked + stolen by Steal and Snatcher) x NPC sell, cost = the consumables used, net = gross -
+     cost, each an hour; the file read-only;
+   - stage7_ab's per-run "z/h" column and its per-arm economy (now `econ_with_steals`: gross_h,
+     cost_h, net_h, each arm's valid runs pooled) use it; stage8_ab reuses stage7_ab's;
+   - **checked on s7ab's 8 recorded runs:** A 50,207 / 6,998 / **43,209** and B 54,117 / 10,212 /
+     **43,905** gross / cost / net z/h -- 18.9's dashboard figures exactly;
+   - the other stage tools print no econ zeny: stage5_ab has none; stage6_ab's `steal_zeny` is its
+     own per-steal value line (data/econ/maps.json), already a steal figure; nothing else read
+     econ_row's net_h.
+4. **The checks:** the full Python suite (nice 10) 6,033 passed, 94 skipped, 5 failed -- the
+   worktree's 3 data files, and two pins that 18.10 #1 / 18.11 moved (test_settings' unused-setting
+   notes of the one box, test_runner_blocks' functions-box argv), updated after and re-run green;
+   huntstate_check drive / check / flag rc 0; hunt_trace check --seeds 50, 146 scenarios the same;
+   ruff and mypy clean, ruff format clean but main's two files; the frontend's 550 tests 549 passed,
+   0 failed (1 skipped), tsc and eslint clean; stage8_ab's, stage7_ab's and stage5c_ab's plans pass
+   in process (no input).
