@@ -3363,6 +3363,23 @@ s5c-ab runs FROM MAIN after 5c merges there: the runner's start check reads giti
   - after a Knight escape by Fly Wing, leave the MAP (the Butterfly Wing home) instead of staying on
     it.
 
+### 15.13 THE RE-RUN s5c-ab2 -- pre-registered 2026-11-16 10:3x ICT from `date`, BEFORE any of its data (Batt 2026-11-16: "test it again")
+
+- **What:** the same arms and the same bar as 15.8 (14.7's lines, 14.7a's median pace line, the
+  drive line for both arms), the same tool:
+  `stage5c_ab.py run --label s5c-ab2 --pairs 4 --minutes 20` (order alternate: A B, B A, A B, B A).
+- **The one change, decided BEFORE any new data and for a reason that is not an outcome:**
+  - **4 pairs instead of 3.** s5c-ab lost a pair to two Knight deaths, and the Knight still roams in
+    player mode. The verdict is judged on every valid pair, with >= 3 valid pairs needed for
+    kills/h and loot/h, as before. A 4th pair only makes 3 valid pairs likelier. No pair is dropped
+    or added after the run.
+  - **s5c-ab stays scored as it was:** INCONCLUSIVE (15.12). s5c-ab2 is scored on its own, never
+    pooled with it.
+- **The runner:** today's main. Batt's decision 6 (Fly Wing first on a boss) is NOT in it yet; it
+  is its own step (section 17). Both arms play the same runner.
+- **The economy** of every run is recorded in data/econ/lab.sqlite (Batt 2026-11-16: "collect the
+  economy every run"), report only.
+
 ## 16. The first real experiment in blocks: no Knife swap on the Christmas Cookie and the Cookie (➡️ BUILT 2026-11-15, feat/cookie-noswap; offline only, NOT run live; its A/B pre-registered 2026-11-15 13:32 ICT from `date`, BEFORE any run)
 
 Batt's words (14.12 #2, 2026-11-15 ~13:0x): "Test it, and make it work too." The experiment is 14.8's
@@ -3631,3 +3648,30 @@ The bar (16.5):
 - Keep it as a loadable example (xmas_dun02_cookie_noswap). It shows that a recipe edit plays live.
 - The next block experiment should target time without giving up steals, e.g. no loot(t) for a
   species whose drops are trimmed anyway (needs recipes.SHAPES widened, 14.8).
+
+
+## 17. Batt's decisions on the day report (2026-11-16 ~10:2x ICT, Thai, translated)
+
+1. **The SAFETY steps (15.10 Q1):** "Delete, move: it must be editable. If it cannot run, just Undo or
+   load the file we saved back."
+   - So SAFETY and REQUIRED steps become EDITABLE in the editor: round 26's lock goes.
+   - The lint still refuses a Run without them, in its words, and a person undoes or reloads.
+2. **The old runner block (15.10 Q2):** "Keep it as a backup, but it is no longer used in real runs:
+   only the separate blocks."
+   - A RUN of a project whose hunt core is the old one-block runner is refused, in words that point
+     to hunt_loop().
+   - The block stays loadable, under Advanced > Old projects.
+   - The parent's reading: the A/B tools' REFERENCE arms (e.g. 15.13's arm A) are tests of the new
+     shape against the old, not real runs, and stay allowed there.
+3. **The cookie no-swap box as the default:** "No." It stays a loadable example (16.8).
+4. **5c:** "Test it again." -> 15.13, s5c-ab2.
+5. **The Goblin:** "the alarm signal". A per-visit ALARM bar is pre-registered and scored once on a NEW
+   held-out with staged knights (xmas02-detector S6); deployment is its own step after it.
+6. **The Knight:** "A boss on the screen, at ANY distance: press the Fly Wing first, no Knife swap."
+   - It is built as its own pre-registered live A/B.
+   - The second candidate in 15.12, leaving the map after the escape, was NOT chosen and is not
+     built.
+7. **New standing ask:** "Every run, collect the economy too."
+   - Every live run's session goes into data/econ/lab.sqlite (scripts/econ_db.py update) when it
+     ends: the stage A/B series and the Run helper's project runs.
+   - The 11-14 / 11-15 runs are back-filled from the NAS archive.
