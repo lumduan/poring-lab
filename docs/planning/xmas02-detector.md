@@ -5224,3 +5224,24 @@ S6, and scores the frozen `xmas02sk` (`0b43ebbf...`) once on a NEW held-out, sk6
   - S5's `units-test.json`: x2, xw5, xp1 (231 frames);
   - `units-gw3.json`: gw3 (261 frames);
   - every one has its `packets.jsonl.gz`.
+- **Added at 21:54 ICT, still before THE BAR:**
+  - **sk6a's labels** (`--eval-test`, the FROZEN params `d4cc0a5d...`, `classes-none.json`
+    `516cf0f5...`; the worktree at cf9020c4; 21:38:33-21:50:30):
+    **`01938ec365257da66a3c7f9553b8f1d0159c1f99a5d533aa96f1724d65175277`**.
+    - 1,432 candidates of 1,771 frames (dropped: gm_window 252, map_change 76, other_map 11); 277
+      whole.
+    - Kept: Myst Case 751, Cruiser 424, Cookie 248, Christmas Cookie 318, Garm Baby 1,277,
+      **Goblin 3,056**, **knight 742**.
+  - **The pack** (seed 53, 60 a species, the 0.536 floor; 21:50:30-21:50:55):
+    - 420 crops; the key **`04493b6979ccbf261625d04d02a40f6dfcae0f43bdcb083a01acb18e53f8d24e`**;
+    - `reference.png` `2cae63ad...` (the same letters as S4.9 / S5.5 / S6.5);
+    - the instructions `dc48fb15...`; the file list (444 files) `7d03ee35...`;
+    - the labellers' copy: `/dev/shm/poring-lab-tmp/blind-sk53-sk6a/pack` (checked, 444 / 444).
+  - **The units** (21:51:47): every candidate frame `units-sk6a-all.json` `f5db9a00...` (1,432
+    frames, 11,262 units); the pack's frames `units-sk6a.json` `28641198...` (352 frames, 3,129
+    units).
+  - **The vanishes** (S7.4 step 4, 21:39:37; `vanishes-s7.json` `c7bcd77e...`): sk6a 372, gw3
+    35, xw5 / xp1 / x2 0. The last three fit S6.6, where all 231 TEST frames were alarm-free.
+  - **Two NEW blind labellers, AC and AD** (M9's brief, the paths changed; AC `aa353028...`, AD
+    `008eb056...`). They are working; their answers feed only the REPORTED Q1crowd, and THE BAR
+    needs none.
