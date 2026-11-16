@@ -79,6 +79,25 @@ Goblin / a party unit is on screen (packets) and whether a Goblin-class box is (
 Goblin-class box lies, and per VISIT (a run of party frames, a gap > 5 s ends it) the delay from
 the first Goblin on screen to the first Goblin-class box.
 
+THE ALARM (docs/planning/xmas02-detector.md Amendment S6, 2026-11-16, Batt: "the alarm signal"):
+
+    eval_q1.py alarm --held-out UNITS PRED [--free UNITS PRED ...] --cache-manifest MANIFEST.json
+                     --out ALARM.json
+
+judged per VISIT and per frame, the way the runner flies (live-blocks.md 11.2, dungeon@9.53):
+  * an ALARM-CLASS box is a box of the Goblin, the knight or Garm Baby (their union: a boss
+    sighting, Batt's decision 6). The runner FIRES at a frame holding one at conf >= ALARM_SOLO,
+    or holding one at conf >= ALARM_CONF when the previous frame (<= CONFIRM_GAP_S earlier) held
+    one too (--garm-confirm 2);
+  * a VISIT (the packets, as party): a run of frames with a party unit (Goblin or knight) on
+    screen; a gap > VISIT_GAP_S ends it. It is DETECTED when a fire falls within ALARM_WINDOW_S
+    of its first frame;
+  * an ALARM-FREE frame has no unit of the three species on screen; a fire there is a FALSE fire.
+The bar lines (S6) and their minimums are in ``alarm_bars``; the verdict is FAIL when a judged
+line fails, INCONCLUSIVE when none fails but one cannot be judged, else PASS. --free sets are
+pooled (Goblin-free held-outs whose frames need not be consecutive: there only the solo branch
+can fire).
+
 The species <-> class map is EXPLICIT: ``--cache-manifest``, the manifest of the cache the model
 trained on (its ``names`` = the model's class names, its ``classes`` = the committed list's mob ids
 in id order; build_frame_cache.py SpeciesClasses). A detection class the manifest does not name
@@ -729,6 +748,159 @@ def party_view(units: Mapping[str, Mapping[str, Any]],
             "visit_gap_s": VISIT_GAP_S}  # fmt: skip
 
 
+# --- the alarm bar (xmas02-detector.md Amendment S6) ------------------------------------------
+
+ALARM_SOLO = 0.7  # the live --alarm-solo default (dungeon@9.53, live-blocks.md 11.2)
+ALARM_CONF = 0.25  # predict_dir's conf: the --garm-confirm 2 branch takes any box it keeps
+CONFIRM_GAP_S = 1.5  # the previous frame of a two-in-a-row pair (1-fps recordings)
+ALARM_WINDOW_S = 2.5  # a visit is detected by a fire this soon after its first frame (3 frames)
+ALARM_SPECIES = (1607, 1251, 1515)  # the Goblin, the knight, Garm Baby
+S6_MIN_VISITS = 30  # fewer visits: the detection line is INCONCLUSIVE
+S6_DETECT = (9, 10)  # >= 9 / 10 of the visits detected (10 detected >= 9 visits)
+S6_MIN_FREE = 50  # fewer alarm-free frames in a set: its false-fire line is INCONCLUSIVE
+S6_FALSE = (1, 100)  # <= 1 / 100 of the alarm-free frames fire (100 false <= 1 free)
+
+
+def session_of(fk: str) -> str:
+    """PURE: a frame key's session (``frame_key``: <session>.<frame id>); "" for a bare key."""
+    return fk.rsplit(".", 1)[0] if "." in fk else ""
+
+
+def alarm_fires(order: Sequence[str], units: Mapping[str, Mapping[str, Any]],
+                frames: Mapping[str, Sequence[Mapping[str, Any]]], alarm_cls: Iterable[str]
+                ) -> dict[str, str | None]:  # fmt: skip
+    """PURE (S6): per frame (``order``: by session, then time), how the runner fires there: "solo"
+    (an alarm-class box >= ALARM_SOLO), "confirm" (one >= ALARM_CONF here and in the previous frame
+    of the SAME session, <= CONFIRM_GAP_S earlier), else None."""
+    cls = set(alarm_cls)
+    out: dict[str, str | None] = {}
+    prev: tuple[str, int] | None = None
+    prev_hit = False
+    for fk in order:
+        t, sess = int(units[fk]["t"]), session_of(fk)
+        confs = [float(d["conf"]) for d in frames[fk] if d["cls"] in cls]
+        hit = any(c >= ALARM_CONF for c in confs)
+        near = prev is not None and prev[0] == sess and (t - prev[1]) / 1e9 <= CONFIRM_GAP_S
+        out[fk] = ("solo" if any(c >= ALARM_SOLO for c in confs)
+                   else "confirm" if hit and prev_hit and near else None)  # fmt: skip
+        prev, prev_hit = (sess, t), hit
+    return out
+
+
+def alarm_view(units: Mapping[str, Mapping[str, Any]],
+               frames: Mapping[str, Sequence[Mapping[str, Any]]], alarm_cls: Iterable[str],
+               party: Sequence[int] = PARTY, species: Sequence[int] = ALARM_SPECIES,
+               goblin: int = GOBLIN) -> dict[str, Any]:  # fmt: skip
+    """PURE (S6): one set's visits (detected or not, the delay to the first fire, and from the
+    first GOBLIN on screen: reported) and its alarm-free frames (false fires, and any alarm-class
+    box at all: reported)."""
+    lacking = sorted(set(units) - set(frames))
+    if lacking:
+        raise SystemExit(f"PRED.json lacks {len(lacking)} units frames: {lacking[:5]}")
+    acls = set(alarm_cls)
+    order = sorted(units, key=lambda fk: (session_of(fk), int(units[fk]["t"])))
+    fire = alarm_fires(order, units, frames, acls)
+    visits: list[list[str]] = []
+    last_t: int | None = None
+    last_s: str | None = None
+    free = false = any_box = 0
+    false_keys: list[str] = []
+    for fk in order:
+        mobs = {int(u["mob"]) for u in units[fk]["units"]}
+        t, sess = int(units[fk]["t"]), session_of(fk)
+        if mobs & set(party):
+            if last_t is None or sess != last_s or (t - last_t) / 1e9 > VISIT_GAP_S:
+                visits.append([])
+            visits[-1].append(fk)
+            last_t, last_s = t, sess
+        if not mobs & set(species):
+            free += 1
+            any_box += any(d["cls"] in acls for d in frames[fk])
+            if fire[fk]:
+                false += 1
+                false_keys.append(fk)
+    rows = []
+    for v in visits:
+        t0 = int(units[v[0]]["t"])
+        fired = [fk for fk in v if fire[fk]]
+        d = round((int(units[fired[0]]["t"]) - t0) / 1e9, 2) if fired else None
+        g = [fk for fk in v if goblin in {int(u["mob"]) for u in units[fk]["units"]}]
+        dg = None
+        if g:
+            tg = int(units[g[0]]["t"])
+            after = [fk for fk in v if fire[fk] and int(units[fk]["t"]) >= tg]
+            before = any(fire[fk] for fk in v if int(units[fk]["t"]) < tg)
+            dg = 0.0 if before else (round((int(units[after[0]]["t"]) - tg) / 1e9, 2)
+                                     if after else None)  # fmt: skip
+        rows.append({"first": v[0], "frames": len(v), "delay_s": d,
+                     "detected": d is not None and d <= ALARM_WINDOW_S,
+                     "first_fire": fire[fired[0]] if fired else None,
+                     "goblin_delay_s": dg})  # fmt: skip
+    return {"visits": rows, "n_visits": len(rows),
+            "detected": sum(1 for r in rows if r["detected"]),
+            "alarm_free_frames": free, "false_fires": false, "false_fire_frames": false_keys,
+            "alarm_free_frames_with_a_box": any_box, "frames": len(order)}  # fmt: skip
+
+
+def alarm_bars(held: Mapping[str, Any], free: Sequence[Mapping[str, Any]]) -> dict[str, Any]:
+    """PURE (S6): the three bar lines and the verdict (the module doc)."""
+
+    def line(judged: bool, ok: bool, **kw: Any) -> dict[str, Any]:
+        return {**kw, "judged": judged, "pass": ok if judged else None}
+
+    n, k = int(held["n_visits"]), int(held["detected"])
+    a, b = S6_DETECT
+    detect = line(n >= S6_MIN_VISITS, b * k >= a * n, visits=n, detected=k,
+                  rate=round(k / n, 4) if n else None,
+                  bar=f">= {a}/{b} of >= {S6_MIN_VISITS}")  # fmt: skip
+    lines = {"detection": detect}
+    fp, fq = S6_FALSE
+    pool_free = sum(int(f["alarm_free_frames"]) for f in free)
+    pool_false = sum(int(f["false_fires"]) for f in free)
+    for name, nf, nfalse in (("false_held_out", int(held["alarm_free_frames"]),
+                              int(held["false_fires"])),
+                             ("false_goblin_free", pool_free, pool_false)):  # fmt: skip
+        lines[name] = line(nf >= S6_MIN_FREE, fq * nfalse <= fp * nf, alarm_free_frames=nf,
+                           false_fires=nfalse, rate=round(nfalse / nf, 4) if nf else None,
+                           bar=f"<= {fp}/{fq} of >= {S6_MIN_FREE}")  # fmt: skip
+    if any(v["pass"] is False for v in lines.values()):
+        verdict = "FAIL"
+    elif any(not v["judged"] for v in lines.values()):
+        verdict = "INCONCLUSIVE"
+    else:
+        verdict = "PASS"
+    return {"lines": lines, "verdict": verdict}
+
+
+def cmd_alarm(a: argparse.Namespace) -> int:
+    manifest = json.loads(a.cache_manifest.read_text())
+    species_cls = class_map(manifest)
+    missing = [m for m in ALARM_SPECIES if m not in species_cls]
+    if missing:
+        raise SystemExit(f"{a.cache_manifest}: no class for {missing}")
+    acls = [species_cls[m] for m in ALARM_SPECIES]
+
+    def one(pair: Sequence[Path]) -> dict[str, Any]:
+        units_p, pred_p = Path(pair[0]), Path(pair[1])
+        pred = load_pred(pred_p, manifest["names"].values(), a.any_settings)
+        units = json.loads(units_p.read_text())
+        return {"units": [str(units_p), sha256_file(units_p)],
+                "pred": [str(pred_p), sha256_file(pred_p)],
+                **alarm_view(units["frames"], pred["frames"], acls)}  # fmt: skip
+
+    held = one(a.held_out)
+    free = [one(p) for p in a.free or []]
+    out = {"what": "xmas02-detector.md S6: the alarm bar (per visit, per frame)",
+           "alarm_classes": acls, "solo": ALARM_SOLO, "conf": ALARM_CONF,
+           "confirm_gap_s": CONFIRM_GAP_S, "window_s": ALARM_WINDOW_S,
+           "visit_gap_s": VISIT_GAP_S, "held_out": held, "free": free,
+           **alarm_bars(held, free)}  # fmt: skip
+    a.out.parent.mkdir(parents=True, exist_ok=True)
+    a.out.write_text(json.dumps(out, indent=1) + "\n")
+    print(json.dumps({"lines": out["lines"], "verdict": out["verdict"]}, indent=1))
+    return 0
+
+
 def cmd_units(a: argparse.Namespace) -> int:
     """S5: the crowd truth (module doc); needs the map's label stack (packets + sprites)."""
     import map_labels as ml
@@ -913,8 +1085,16 @@ def main(argv: Sequence[str] | None = None) -> int:
     p.add_argument("--cache-manifest", type=Path, required=True)
     p.add_argument("--out", type=Path, required=True)
     p.add_argument("--any-settings", action="store_true")
+    p = sub.add_parser("alarm", help="S6: the alarm bar (per visit, per frame)")
+    p.add_argument("--held-out", type=Path, nargs=2, required=True, metavar=("UNITS", "PRED"))
+    p.add_argument("--free", type=Path, nargs=2, action="append", metavar=("UNITS", "PRED"),
+                   help="a Goblin-free held-out (pooled)")  # fmt: skip
+    p.add_argument("--cache-manifest", type=Path, required=True)
+    p.add_argument("--out", type=Path, required=True)
+    p.add_argument("--any-settings", action="store_true")
     a = ap.parse_args(argv)
-    run = {"refs": cmd_refs, "score": cmd_score, "units": cmd_units, "party": cmd_party}
+    run = {"refs": cmd_refs, "score": cmd_score, "units": cmd_units, "party": cmd_party,
+           "alarm": cmd_alarm}  # fmt: skip
     return run[a.cmd](a)
 
 

@@ -355,6 +355,9 @@ XMAS02_SK3A = "-rdp-xmas02-sk3a"
 # `--label xmas02-sk4a`), refused by NAME like TEST before it records; read only by --eval-test,
 # once, with the frozen S4 model (it is never TRAIN for that model)
 XMAS02_SK4A = "-rdp-xmas02-sk4a"
+# Amendment S6 (2026-11-16): the alarm bar's FRESH held-out sk5a (32 TEST stands no knight watch
+# used), refused by NAME like TEST before it records; read only by --eval-test
+XMAS02_SK5A = "-rdp-xmas02-sk5a"
 # Amendment S (2026-11-12): sk1a's first stand had a OneDrive toast over the client's bottom-right
 # (game region x >= 980, y >= 470): frames 22-46, the first and last frame showing it (a pixel test
 # against frame 30's panel: mean abs difference 0.00-0.08 on those 25 frames, >= 26.16 on every
@@ -388,7 +391,7 @@ XMAS02 = MapSpec(
     # held out until the model is frozen (refused by labels / pack / the cache like xw5);
     # Amendment S (2026-11-12): + sk3a, the Stormy Knight watch on 3a's TEST stands, the same way
     test_suffixes=("-rdp-xmas02-xw5", "-rdp-xmas02-xp1", XMAS02_X2, XMAS02_GW3, *XMAS02_FIT,
-                   XMAS02_SK3A, XMAS02_SK4A),
+                   XMAS02_SK3A, XMAS02_SK4A, XMAS02_SK5A),
     # D3: in T2's tier only with >= 30 kept labels; Amendment M: Garm Baby (1515) IN the tier;
     # Amendment S: Stormy Knight (1251) IN the tier (not conditional); the Goblin unchanged
     conditional=(1607,),
@@ -408,7 +411,7 @@ XMAS02 = MapSpec(
     # sk3a, the held-out knight-party watch, the same way (read once, after the Goblin round's
     # last.pt sha256 is recorded)
     eval_suffixes=("-rdp-xmas02-xw5", "-rdp-xmas02-xp1", XMAS02_X2, XMAS02_GW3, XMAS02_SK3A,
-                   XMAS02_SK4A),
+                   XMAS02_SK4A, XMAS02_SK5A),
     t2_seed=51,
     eval_seed=53,
     eval_per_species=60,

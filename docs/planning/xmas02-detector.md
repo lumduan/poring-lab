@@ -4831,3 +4831,228 @@ Not re-scored. The model is not deployed by this amendment; the decision is the 
     **`scratch-archive/2026-11-15/goblin-s5/`** (885 files, `SHA256SUMS` `ef705586...`), then deleted
     from /dev/shm;
   - the recording on the NAS as shipped.
+
+### Amendment S6 (2026-11-16 10:39 ICT from `date`, written BEFORE any new data: sk5a is not recorded): THE ALARM BAR for the frozen xmas02sk, per visit, on a FRESH held-out
+
+**Batt (2026-11-16 ~10:2x, live-blocks.md 17 items 5 and 6, Thai, translated):** "the alarm signal".
+A per-visit ALARM bar is pre-registered here and scored once on a NEW held-out with staged knights.
+Item 6 adds: "A boss on the screen, at ANY distance: press the Fly Wing first, no Knife swap."
+- The model: the FROZEN S4 model, `xmas02sk` last.pt `0b43ebbf...`, unchanged.
+- S4.10 (FAIL) and S5.6 (FAIL) stand and are never re-scored. Nothing below is tuned on sk4a beyond
+  what S5.6 already reported.
+- Deployment is its own step after a PASS.
+
+#### S6.1 The alarm, as the runner uses it (`eval_q1.py alarm`, this amendment's code commit)
+
+- **The classes: the union of the Goblin, the knight and Garm Baby** (`g_gobline_xmas`,
+  `knight_of_windstorm`, `garm_baby`): an ALARM-CLASS box is a box of any of them. Why:
+  - Batt's item 6 flies on ANY boss sighting;
+  - the party is the knight, its two Garm Babies and its summoned Goblins (S1);
+  - the live alarm already flies on garm_baby boxes (`--garm-fly`).
+  A natural Garm Baby (a regular spawn here) is an alarm-class unit too, as it is for the runner
+  today.
+- **The fire rule, the live alarm's (dungeon@9.53 `--alarm-fast`, live-blocks.md 11.2), on the 1-fps
+  frames:** a FIRE at a frame that holds
+  - an alarm-class box at conf >= **0.7** (`--alarm-solo`), or
+  - one at conf >= **0.25** (predict_dir's conf, which `--garm-confirm 2` takes) when the previous
+    frame (<= 1.5 s earlier) held one too.
+  The classes combine freely: a Goblin box then a knight box is a pair. A pair is never formed
+  across two sessions, and neither is a visit. The runner reads ~4 times a
+  second (the HUD twin); at 1 fps the two-in-a-row branch can only fire later, never earlier, so
+  this rule is conservative.
+- **A VISIT, from the packets** (S5's units and party definition): a run of frames with a PARTY unit
+  (the knight or a Goblin) on screen (`map_labels.frame_units`: its envelope region on screen); a
+  gap > 5 s ends it. A Garm Baby alone does not open a visit (it is also a natural spawn). The
+  visit's start t0 is its first frame.
+- **DETECTED:** a fire within **2.5 s of t0** (the visit's first 3 frames at 1 fps). Why 2.5 s: in
+  11.1 the party was in view 2.4-6.4 s before each of the 11 deaths, and the runner presses the Fly
+  Wing 0.21-0.42 s after a fire (10.2). A fire by the third frame (~2 s) presses before the earliest
+  death.
+- **ALARM-FREE frames:** no Goblin, knight or Garm Baby on screen (packets). A fire there is FALSE.
+- Only CANDIDATE frames count (labelled frames: the GM windows and map changes are not), because the
+  units come from the label file.
+
+#### S6.2 The bar (the verdict: FAIL if a judged line fails; INCONCLUSIVE if none fails but one cannot be judged; else PASS)
+
+| line | what | bar | judged only with |
+|---|---|---|---|
+| **1. detection** | visits of sk5a DETECTED (S6.1) | **>= 90 %** (10 detected >= 9 visits) | **>= 30 visits** |
+| **2a. false fires, sk5a** | fires on sk5a's alarm-free candidate frames | **<= 1 %** (100 false <= frames) | >= 50 alarm-free frames |
+| **2b. false fires, the Goblin-free held-outs** | the same on pooled TEST (231 pack frames) + gw3 (261), S4.10's frozen-model predictions and S5's units, pooled | **<= 1 %** | >= 50 alarm-free frames |
+
+- **Why these numbers (only what was already reported):**
+  - Line 1: S5.6 reported the Goblin class ALONE boxed the party within ~2 s in 16 of 17 sk4a
+    visits; the union adds the knight (Q1 recall 60 / 60 on sk3a and on sk4a). 90 % allows 3 misses
+    in 30.
+  - Lines 2a / 2b: S5.6 reported no Goblin box on 95 party-free sk4a frames and none on the 492 TEST +
+    gw3 frames; the deployed model boxed no Garm Baby on the 231 TEST frames (M11).
+  - Honestly, a few hundred frames cannot resolve the live rate (1.5 false fires / h with xmas02gb,
+    10.2). Lines 2a / 2b catch a model that cries wolf; the deployment's pilot measures the hour.
+- **Why 30 visits:** below it one miss moves the rate by more than 3 points. sk4a gave 17 visits for 16
+  stands, so sk5a records **32 stands** (S6.3); fewer than 30 visits means INCONCLUSIVE, never a
+  pass or a fail of line 1.
+- **Reported, deciding nothing:**
+  - per visit, the delay to the first fire and its branch (solo / confirm);
+  - the GOBLIN-LED delay (from the first Goblin on screen; 0 when the visit had already fired). A
+    staged visit starts with the knight beside her, while the deaths of 11.1 were Goblin-led, so
+    this is the closest staged reading of a natural approach;
+  - the share of alarm-free frames holding any alarm-class box;
+  - **Q1crowd per species on sk5a** (S5's scorer; two NEW blind labellers, AA and AB);
+  - Q1s and Q1c.
+
+#### S6.3 The fresh held-out sk5a: the recording protocol (LIVE; the parent runs it after s5c-ab2)
+
+- **The stands:** the TEST lattice's stands that NO knight watch used (not sk3a, sk4a or R2-W): 47.
+  - All **19 never used by any watch at all**:
+    71,27 203,26 203,38 236,60 158,82 27,91 170,94 223,105 225,115 214,127 225,127 182,159 71,181
+    236,192 247,192 41,213 49,214 181,225 82,236.
+  - **13 drawn** (seed 2611125) from the 28 used only by xw5 / gw3 (the species and Garm Baby
+    held-outs: no knight, never part of the Goblin alarm's design):
+    107,72 60,27 201,181 60,170 69,46 14,137 82,248 82,118 8,16 49,82 181,216 181,93 159,216.
+  - The file: `/dev/shm/poring-lab-tmp/goblin-s6/lattice-test-sk5.json` (32 stands, sha256
+    `a1d4523ab12014dbc4d2ff801d0f6b496cc6605e3ece326c7cde70e90154c2ed`).
+  - The watch order (seed **2611125**): 203,26 159,216 49,82 14,137 170,94 69,46 181,93 60,27 158,82
+    236,192 82,248 71,27 214,127 181,225 49,214 182,159 8,16 107,72 41,213 225,127 181,216 236,60
+    82,236 82,118 225,115 247,192 27,91 203,38 71,181 201,181 60,170 223,105.
+  - Why not 32 never-used stands: only 19 exist. The model never trained on any TEST stand, and the
+    13 were never seen with a knight.
+- **The name** `<stamp>-rdp-xmas02-sk5a`. It is refused by NAME like TEST before it records
+  (`map_labels.XMAS02_SK5A`, tested); only `--eval-test` reads it.
+- **The steps** (the Rogue on xmas_dun02, ASSIST, the interlock green, no runner / series / chain):
+  1. **Immunity ON, judged:** `cd /home/bot/docker/poring-lab && .venv/bin/python
+     scripts/crusader.py --char thief gm --job rogue '@monsterignore'`. Expect "You are now immune to
+     attacks." If it says "Returned to normal state.", type it again. Save the crop.
+  2. **The aura off:** a screenshot. Re-type `/aura` / `/aura2` (ro_agent.chat_line) only if the
+     disc or the sparkles are back.
+  3. **No Windows toast** on screen.
+  4. **The watch + its recorder** (S5's `sk_watch.sh`, changed only in its scratch dir, 32 cells,
+     the 40-min time box and the 8 GB cap; staged at `/dev/shm/poring-lab-tmp/goblin-s6/sk_watch.sh`,
+     sha256 `39e01caa...`):
+
+         bash /dev/shm/poring-lab-tmp/goblin-s6/sk_watch.sh sk5a /dev/shm/poring-lab-tmp/goblin-s6/lattice-test-sk5.json 2611125
+
+     It runs `record_session.py --backend rdp --label xmas02-sk5a --seconds 2700 --fps 1 --format
+     png --max-bytes 8G` (~3.9 GB) and `stage_items.py --char thief watch --map xmas_dun02 --lattice
+     ... --seed 2611125 --spawn 1251 --spawn-n 1 --dwell-s 40 --max-cells 32 --max-minutes 40
+     --immune-confirmed --label sk5a`.
+     At each stand: `@warp`, `@monster 1251 1`, a 40-s dwell, `@killmonster2`. Then the recorder
+     stops and the recording ships to the NAS.
+     **~30 min** (sk4a's 16 stands took 14 min 46 s), plus ~3 min to ship.
+  5. **Immunity OFF, read back:** "Returned to normal state." Save the crop. Then warp her to her
+     save point.
+  - **Client time: ~38 min.** A failed step stops the chain. A watch that stops early keeps its
+    recording; its visits are counted as recorded (S6.2's minimum decides).
+
+#### S6.4 After the recording (scored ONCE; one GPU step, when the parent allows it)
+
+1. The recording checks:
+   - the NAS checksums;
+   - 3c's path;
+   - the watch events (32 spawns / dwells / kills, the cells = S6.3's order);
+   - S1's toast test.
+2. **The GPU step:** predict_dir with the frozen last.pt
+   (`/datasets/archive/train/xmas02-sk-20261114/weights/last.pt`, imgsz 1280, conf 0.25) over EVERY
+   recorded frame (refs from the recording's index): one guarded `execdev:vision`, ~2 min.
+3. sk5a's labels (`--eval-test`, the FROZEN params, `classes-none.json`).
+4. The units: `eval_q1.py units --all-frames`.
+5. **THE BAR, once:**
+
+       eval_q1.py alarm --held-out UNITS-sk5a-all PRED-sk5a-all \
+         --free archive/train/eval/xmas02sk-s5/units-test.json archive/train/eval/xmas02sk/q1-pred-test.json \
+         --free archive/train/eval/xmas02sk-s5/units-gw3.json archive/train/eval/xmas02sk/q1-pred-gw3.json \
+         --cache-manifest <the S4 cache 9d7a9b38...>
+
+6. Reported only:
+   - the pack (`--per-species 60 --seed 53 --min-fit 0.536`);
+   - two NEW blind labellers, AA and AB (M9's brief);
+   - `score --units`: Q1crowd, Q1s and Q1c.
+7. The result here and in live-blocks.md 17; the scratch to the NAS the same day.
+
+#### S6.5 (2026-11-16 14:15 ICT from `date`, BEFORE any labeller sees the pack and before THE BAR is scored): sk5a recorded; its checks, the GPU step, labels and pack
+
+- **The stands:** the parent confirmed S6.3's choice (19 never-used TEST stands + 13 from xw5 / gw3,
+  never seen with a knight).
+- **Recorded by the parent, S6.3's steps (a)-(e) as written** (its report):
+  - immunity ON judged ("You are now immune to attacks.");
+  - the aura off by a full-client shot;
+  - no toast;
+  - `sk_watch.sh` (`39e01caa...`), seed 2611125, 32 / 32 cells: the recorder started 13:25:42, the
+    watch ended rc 0 at 13:55:18, the recorder stopped 13:55:23, shipped 13:57:54;
+  - immunity OFF read back ("Returned to normal state."), then her save point, HP 100.
+- **The recording `20261116T132543-rdp-xmas02-sk5a`:** 1,771 frames, 3,740,057,261 bytes, its
+  checksums verified on the NAS (14:04:52-14:05:16). 3c's path: rdp, png, recorder v7, [80, 77, 1280,
+  720], lab-rathena.
+- **The watch** `20261116T132551-watch-xmas_dun02-sk5a` ("done", 32 cells): its folder was already
+  gone from /dev/shm/poring-lab-demo when read, so its log (`run.log` `709edc73...`) was checked
+  instead. 32 `@warp`, 32 `@monster 1251 1`, 32 `@killmonster2`, and the 32 cells in EXACTLY S6.3's
+  order.
+- **The toast test:** no match; the lowest score is 31.13 (the toast reads 0.00-0.08).
+- **The one GPU step** (allowed by the parent; 13:59:24-14:02:47, the worker free, no Run, "ALL
+  STEPS OK"): predict_dir with the frozen last.pt over every recorded frame (1,771; refs
+  `04f9bc3e...`) -> **`pred-sk5a-all.json` `6e570e7f957a12e35b46a8865e23a419238ba3d30756295c9485118c7332fd3f`**.
+  Nothing of it is read before THE BAR.
+- **sk5a's labels** (`--eval-test`, the FROZEN params, `classes-none.json`; 14:03:20-14:14:16):
+  **`b74cfec393eda7ce0ef86cd6776356cd07ddf6b3a2f8a7e54a58699060bd45fa`**. 1,422 candidates (gm_window
+  263, map_change 74, other_map 12), 334 whole. Kept: Myst Case 626, Cruiser 537, Cookie 261,
+  Christmas Cookie 120, Garm Baby 1,090, **Goblin 2,856**, **knight 679**.
+- **The pack** (seed 53, 60 a species, the 0.536 floor; 14:14:16-14:14:40): 420 crops, 348 frames;
+  the key **`e3bef0f9086113c4331200dd686feaee211a79ce3e3d455b4c0e8b380ebf4b4f`**; `reference.png`
+  `2cae63ad...` (the same letters as S4.9 / S5.5); the instructions `dc48fb15...`; the file list
+  (444 files) `7b75b553...`. The labellers' copy: `/dev/shm/poring-lab-tmp/blind-sk53-sk5a/pack`
+  (checked).
+- **Two NEW blind labellers, AA and AB** (M9's brief, the paths changed; AA `f62092d6...`, AB
+  `106cc93c...`). Their answers feed only S6.2's REPORTED Q1crowd; THE BAR needs none.
+
+#### S6.6 (2026-11-16 14:18 ICT from `date`): THE RESULT (scored once) -- FAIL BY ONE FALSE FIRE, and the three "false" fires were the party still on screen
+
+**The inputs (14:17:36, re-hashed before the score; all equal to S6.5 / S5 / S4):**
+- `pred-sk5a-all.json` `6e570e7f...`;
+- sk5a's units (every candidate frame: 1,422 frames, 10,656 units) `cce31836...`;
+- the Goblin-free held-outs: S5's `units-test.json` `986f13b4...` + S4.10's `q1-pred-test.json`
+  `531b7cdc...`, and `units-gw3.json` `f90c70b3...` + `q1-pred-gw3.json` `ffa36882...`;
+- the cache manifest `9d7a9b38...`, last.pt `0b43ebbf...`.
+**`eval_q1.py alarm`, once (14:17), `alarm-sk5a.json` `cb55837c800ce8d6c7be2967bfcbe36cdab2433e5db588c9b50862fc91da185b`:**
+
+| line (S6.2) | measured | bar | verdict |
+|---|---|---|---|
+| **1. detection** | **38 / 39 visits = 0.974** (37 fired at the visit's first frame, 1 at 1.97 s, 1 at 3.01 s) | >= 90 % of >= 30 | **PASS** |
+| **2a. false fires, sk5a** | **3 / 254 alarm-free frames = 1.18 %** (6 of them hold an alarm-class box) | <= 1 % (here <= 2 fires) of >= 50 | **FAIL** |
+| **2b. false fires, pooled TEST + gw3** | 0 / 265 (TEST 0 / 231, gw3 0 / 34); no alarm-class box at all | <= 1 % of >= 50 | **PASS** |
+
+**THE VERDICT: FAIL** (line 2a, by one fire: 2 of 254 would pass). Not re-scored. xmas02sk is not
+deployed by this amendment.
+
+**Reported, deciding nothing:**
+- **The three "false" fires, by geometry and then by looking at the three frames:** every one is a
+  party member STILL DRAWN on screen just after the watch's `@killmonster2`, when the packets'
+  world had already removed it:
+  - frame 787 (the frame before, 784, held the knight + 6 Goblins; 785-786 are the GM window): a
+    knight box 0.91 on the whole party, still visible as a heap of knight, dogs and Goblins;
+  - frame 989 (after 988's Goblins): a Goblin box 0.30 on a Goblin still drawn (a two-in-a-row
+    fire);
+  - frame 1360 (two frames after 1358's Goblins): a Goblin box 0.81 on a Goblin plainly in view.
+  The label rule calls these frames clean (no `dying_in_view`, no Goblin label), so S6's
+  alarm-free definition (the packets' units) counted them. **The detector was right in all three;
+  the truth was late.** This is a gap in S6's own definition, recorded here and never applied to
+  this score. A next amendment would close it before any new held-out (e.g. frames within a few
+  seconds after a `@killmonster2` are not alarm-free, or the die animations from the Timeline).
+- **The one missed visit** (starting at frame 907, 40 frames): its first fire came at 3.01 s (a
+  two-in-a-row), 0.5 s outside the window.
+- **First fires:** 38 solo (a box >= 0.7), 1 two-in-a-row.
+- **Goblin-led:** in 38 of 39 visits the alarm had already fired when the first Goblin came on screen
+  (delay 0); one visit had no Goblin.
+- **Q1crowd / Q1s / Q1c on sk5a** (reported; labellers AA `78c16ef1...` and AB `b766de28...`, both
+  NEW, blind, all 420 crops; the pack unchanged; 419 evaluated; `eval_q1.py score --units`, 14:24,
+  `q1-score-sk5a.json` `5cf6e49c...`). Q1crowd recall / precision:
+  - **Goblin 60: 47 / 60 = 0.783 / 1.000** (32 charged boxes, all on Goblins; Q1s precision 0.595;
+    misses: 9 unboxed, 2 garm_baby, 2 knight);
+  - knight 60: 0.983 / 1.000;
+  - Garm Baby 60: 0.983 / 1.000;
+  - Myst Case, Cruiser, Cookie, Christmas Cookie: 1.000 / 1.000 each;
+  - Q1c pooled 0.976 / 0.891.
+- **Where it lives (verified):** the outputs (refs, predictions, units, the alarm and Q1 scores) moved
+  by the guarded `archive:` to the NAS `archive/train/eval/xmas02sk-s6/`; the scratch (labels, pack,
+  key, the labellers' pack and answers, briefs, logs, the watch script, its lattice, the immunity /
+  aura crops, the three looked-at frames) to `scratch-archive/2026-11-16/goblin-s6/` (921 files,
+  `SHA256SUMS` `9e5468b7...`), then deleted from /dev/shm.
+
