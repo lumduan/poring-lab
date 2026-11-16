@@ -16,7 +16,7 @@ import { useEffect, useRef, useState } from "react";
 
 import { followModel, registerDetectorMenus } from "@/components/flows/blockly-fields";
 import { keepDropDownsInside, refreshPickers, setPickerSource } from "@/components/flows/blockly-pickers";
-import { huntKey, inTick, register, registerHunt, setFlyoutNotes, syncExprWrap, syncLabelRows, syncSetting, syncStepPlace, themesOf, tickLock } from "@/components/flows/blockly-register";
+import { huntKey, inTick, register, registerHunt, setFlyoutNotes, syncExprWrap, syncLabelRows, syncSetting, syncStepPlace, themesOf, tickDrag } from "@/components/flows/blockly-register";
 import { registerSearch } from "@/components/flows/blockly-search";
 import type { CatalogueDoc, Finding, LintDoc, Trace } from "@/lib/flow/api";
 import { BADGE_TEXT, sitePath, warningText } from "@/lib/flow/api";
@@ -462,8 +462,8 @@ function paint(B: typeof BlocklyT, w: BlocklyT.WorkspaceSvg, catalogue: Catalogu
   for (const b of w.getAllBlocks(false)) {
     // round 22: a long condition wraps onto rows of its own (loaded ones too); its stack moves down
     if (b.type === "pl_expr" && !b.isInFlyout && syncExprWrap(B, b)) grew.push(b);
-    // round 26: a block inside hunt_tick() is dragged out alone, a locked step not at all (tickLock)
-    if (!b.isInFlyout && inTick(b)) tickLock(B, b);
+    // round 26: a block inside hunt_tick() is dragged out alone (tickDrag; round 29: no step locked)
+    if (!b.isInFlyout && inTick(b)) tickDrag(B, b);
     // round 28: a step's padlock and WHY rows follow its place (an extra or a misplaced copy says why)
     if (!b.isInFlyout && syncStepPlace(B, b)) grew.push(b);
     // round 27: a function's and a variable's tooltip names Global only in a project that has one;

@@ -1254,18 +1254,51 @@ def _is_hunt_call(st: Any) -> bool:
             and not st.kwargs)  # fmt: skip
 
 
-def _has_runner_block(n: MapNode) -> bool:
-    def walk(stmts: list[Any]) -> bool:
-        for st in stmts:
-            if isinstance(st, ir.ActionStmt) and st.block == "dungeon_hunt":
-                return True
-            if isinstance(st, ir.If) and (walk(list(st.then)) or walk(list(st.orelse))):
-                return True
-            if isinstance(st, ir.While | ir.Repeat | ir.ForEach) and walk(list(st.body)):
-                return True
-        return False
+def _holds_runner(stmts: list[Any]) -> bool:
+    for st in stmts:
+        if isinstance(st, ir.ActionStmt) and st.block == "dungeon_hunt":
+            return True
+        if isinstance(st, ir.If) and (
+            _holds_runner(list(st.then)) or _holds_runner(list(st.orelse))
+        ):
+            return True
+        if isinstance(st, ir.While | ir.Repeat | ir.ForEach) and _holds_runner(list(st.body)):
+            return True
+    return False
 
-    return any(walk(list(t.main or [])) or any(walk(list(d.body)) for d in t.defs) for t in n.tabs)
+
+def _has_runner_block(n: MapNode) -> bool:
+    return any(_holds_runner(list(t.main or [])) or any(_holds_runner(list(d.body)) for d in t.defs)
+               for t in n.tabs)  # fmt: skip
+
+
+# Round 29 (Batt 2026-11-16, live-blocks.md 17 #2: "keep it as a backup, but it is no longer used
+# in real runs: only the separate blocks"): a map node whose hunt core is the OLD one-block runner
+# (the runner block itself, not a lowered hunt_loop()) is refused on the PRODUCT Run path -- the
+# lint's run verdict (a readiness item: the design stays valid and loadable), POST
+# /flows/run/project and /flows/run/check, the Run helper's start. NOT in flow_play's own play
+# refusal (live.problems): the stage A/B tools play their REFERENCE arms (the old shapes) through
+# it directly; those are tests of the new shape against the old, not real runs.
+OLD_RUNNER_WORDS = (
+    "this box uses the old one-block runner; real runs use hunt_loop() (load xmas_dun02)"
+)
+
+
+def old_runner_nodes(p: Project) -> list[str]:
+    """PURE: the map nodes whose hunt core is the old one-block runner block (OLD_RUNNER_WORDS)."""
+    return [n.id for n in p.map_nodes if _has_runner_block(n)]
+
+
+def _runner_site(n: MapNode) -> Where:
+    """Where a node's runner block stands: its tab's main statement, or the function holding it."""
+    for t in n.tabs:
+        for i, st in enumerate(t.main or []):
+            if _holds_runner([st]):
+                return Where(n.id, t.name, f"main.{i}")
+        for d in t.defs:
+            if _holds_runner(list(d.body)):
+                return Where(n.id, t.name, d.name)
+    return Where(n.id, MAIN)
 
 
 def role_values(n: MapNode) -> dict[str, str]:
@@ -1406,6 +1439,10 @@ def _project_rules(
             add("empty_main", "error", Where(n.id, MAIN), f"the main of {n.id} is empty: it "
                 "needs at least one block (every path ends in take_exit or stop)")  # fmt: skip
     _session_rules(p, add, envs)
+    # round 29 (OLD_RUNNER_WORDS): the old one-block runner is no real run's hunt core any more
+    for mn in p.map_nodes:
+        if _has_runner_block(mn):
+            add("old_runner", "readiness", _runner_site(mn), OLD_RUNNER_WORDS)
     # the setting blocks (live-blocks.md 12): their values, typos, the clash rule, what is not used
     from poring_flow.lint import settings as setting_rules
 

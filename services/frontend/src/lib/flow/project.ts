@@ -198,6 +198,19 @@ export function* allStmts(stmts: readonly Stmt[]): Generator<Stmt> {
 }
 
 /** Every statement a node holds: its main and every function of its tabs. */
+/** Round 29 (Batt 2026-11-16, live-blocks.md 17 #2: "keep it as a backup, but it is no longer used
+ * in real runs: only the separate blocks"): the engine's words (poring_flow.project
+ * OLD_RUNNER_WORDS) for a box whose hunt core is the old one-block runner block -- loadable, never
+ * a REAL run (the Run button says why; the Run route and the Run helper refuse it too). */
+export const OLD_RUNNER_WORDS = "this box uses the old one-block runner; real runs use hunt_loop() (load xmas_dun02)";
+/** PURE: does this map node's hunt core use the old one-block runner block (anywhere in its tabs; a
+ * main's hunt_loop() is the new shape)? */
+export function oldRunnerOn(n: PNode | undefined): boolean {
+  if (!n || n.kind !== "map") return false;
+  for (const s of nodeStmts(n)) if (s.kind === "action" && s.block === "dungeon_hunt") return true;
+  return false;
+}
+
 export function* nodeStmts(n: PNode): Generator<Stmt> {
   for (const t of n.tabs) {
     if (t.main) yield* allStmts(t.main);

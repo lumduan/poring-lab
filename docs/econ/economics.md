@@ -522,6 +522,30 @@ and its flow (the run's label, the runner's version, strategy and search; its fl
   - `econ_db.py export --format csv|json` shares ids and counts.
   - The page itself still reads the JSON exports (ADR-0025 phase 2).
   - How to use the file: `docs/setup/new-lab-host.md` section 10.1.
+  - ➡️ **When a run is recorded (round 29, 2026-11-16; Batt: "every run, collect the economy
+    too", [live-blocks.md](../planning/live-blocks.md) 17 #7):** every live run records itself
+    when it ends, with no one asking. Before it, a run was in the file only after someone ran
+    `update`.
+    - WHO: the Run helper (`scripts/flow_run.py`) at the end of each project run, and the stage A/B
+      series (`stage2_ab.py Series`, shared by stage3/4/5/5b/5b2/5c/6) after each run of a series.
+    - WHAT: the run's hunt sessions, found by its label (`econ_db.hunt_sessions`): the runner's
+      own session `<ts>-<label>` and a box run's hunt cores `<ts>-<label>-hunt<n>`. The player's
+      own session `<ts>-play-<label>` has no packets of its own and is never one of them.
+    - HOW: `econ_db.record_after_run` runs `nice -n 10 timeout 900 python scripts/econ_db.py
+      update SESSION ...`, a process of its own. `update` skips a session already in the file,
+      so recording again changes nothing.
+    - BOUNDED: a series waits at most 60 s (`AFTER_RUN_WAIT_S`), so the next run's setup is
+      never held longer. The Run helper waits 5 s (`flow_run.ECON_WAIT_S`, under the backend's
+      10 s helper freshness), so the page never reads "the Run helper has not answered". Past
+      that, the record goes on in the background under its own 900 s cap (`AFTER_RUN_CAP_S`);
+      the next record waits for it first, and the helper's loop notes its end (`econ_end`).
+    - NON-FATAL: a failed or slow record never changes the run's result.
+    - WHERE IT SAYS SO:
+      - the Run helper: an `econ` row in `settings/flowrun/runs.jsonl` (state `done`, `failed`,
+        `background` or `none`, the sessions, the why), with the update's own output in the
+        run's `econ.log`;
+      - a series: a `series.log` line ("<label>: economy record done (...)"), the state in the
+        run's row in `done.json` (`econ`), and the output in `<label>.econ.log`.
 
 **What an export holds** (one JSON, per run and pooled): the run's facts (session, map, character,
 judged window and hours, kills, deaths) and COUNTS, never only rates, so the page can recompute every

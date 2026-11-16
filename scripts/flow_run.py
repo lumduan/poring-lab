@@ -89,6 +89,10 @@ WORKER = "poring-lab-vision-worker-1"
 PY = str(ROOT / ".venv" / "bin" / "python")
 STATUS_EVERY_S = 2.0
 POLL_S = 1.0
+# round 29: how long a run's end waits for its economy record (econ_db.record_after_run) before the
+# record goes on in the background -- under the backend's HELPER_FRESH_S (10 s), so the helper's
+# status stays fresh and the page never reads "the Run helper has not answered"
+ECON_WAIT_S = 5.0
 LISTEN_WAIT_S = 120.0
 CAP_GRACE_S = 300.0  # the helper's own cap beyond the runner's --minutes
 VERSION = 1
@@ -522,6 +526,25 @@ def has_hunt_core(doc: Any) -> bool:
     return False
 
 
+def old_runner_problem(doc: Any) -> str | None:
+    """PURE (round 29, live-blocks.md 17 #2): why a project is no REAL run -- a map node whose hunt
+    core is the old one-block runner block (a dungeon_hunt action in its tabs; a lowered
+    hunt_loop() is never in the file). The engine's words (poring_flow.project OLD_RUNNER_WORDS).
+    The stage A/B tools play their reference arms through flow_play directly, never here."""
+    from poring_flow.project import OLD_RUNNER_WORDS
+
+    def holds(x: Any) -> bool:
+        if isinstance(x, dict):
+            if x.get("kind") == "action" and x.get("block") == "dungeon_hunt":
+                return True
+            return any(holds(v) for v in x.values())
+        return isinstance(x, list) and any(holds(v) for v in x)
+
+    if any(n.get("kind") == "map" and holds(n.get("tabs")) for n in _nodes(doc)):
+        return f"refused before any input: {OLD_RUNNER_WORDS}"
+    return None
+
+
 def player_lines(lines: Sequence[str]) -> list[str]:
     """PURE: the log lines a person reads (matpilot: a server path and a raw JSON line cut off
     mid-word are a developer's): none starting with "{" or "/"."""
@@ -783,7 +806,7 @@ class Helper:
             doc, why = read_project(self.dir / PROJECT_FILE, str(req["project_hash"]))
         node = str(req["node"])
         if why is None and doc is not None:
-            why = project_node_problem(doc, node)
+            why = project_node_problem(doc, node) or old_runner_problem(doc)
         if why is not None or doc is None:
             self.state, self.detail, self.request_id = "refused", str(why), rid
             self.note(event="start_refused", why=why, request=rid, flow=PROJECT)
@@ -977,22 +1000,35 @@ class Helper:
         self.stop_t = None
         self.note(event="end", label=self.label, rc=rc, detail=self.detail)
         self.end_server()
+        self.write_status()  # the run's end shows at once; its economy record follows
         self.record()
         self.write_status()
 
     def record(self) -> None:
-        """The run's session into data/econ/lab.sqlite (ADR-0025), when it made one (a project
-        run: each of its hunt core's runner sessions)."""
-        demo = Path("/dev/shm/poring-lab-demo")
-        if self.flow == PROJECT and self.label:
-            for d in sorted(demo.glob(f"*-{self.label}-hunt*")):
-                subprocess.run([PY, "scripts/econ_db.py", "update", str(d)], cwd=ROOT,
-                               capture_output=True)  # fmt: skip
-            return
-        sess = sorted(demo.glob(f"*-{self.label}")) if self.label else []
-        if sess:
-            subprocess.run([PY, "scripts/econ_db.py", "update", str(sess[-1])], cwd=ROOT,
-                           capture_output=True)  # fmt: skip
+        """The run's hunt sessions into data/econ/lab.sqlite (ADR-0025; round 29, Batt 2026-11-16:
+        "every run, collect the economy too"): econ_db.record_after_run -- `update`, niced, under
+        its own cap, waited for ECON_WAIT_S (then in the background: reap_econ notes its end);
+        NON-FATAL: whatever happens is a note in the helper's log, and the run's own result is
+        never touched."""
+        try:
+            import econ_db
+
+            sessions = econ_db.hunt_sessions(self.label or "", DEMO)
+            log = (self.run_dir or self.dir) / "econ.log"
+            res = econ_db.record_after_run(sessions, log, wait_s=ECON_WAIT_S, py=PY)
+        except Exception as e:  # noqa: BLE001 -- never the run's result
+            res = {"state": "failed", "why": f"{type(e).__name__}: {e}"}
+        self.note(event="econ", label=self.label, **res)
+
+    def reap_econ(self) -> None:
+        """A background economy record that has ended: a note (``econ_end``), never more."""
+        try:
+            import econ_db
+
+            for r in econ_db.reap_background():
+                self.note(event="econ_end", **r)
+        except Exception as e:  # noqa: BLE001 -- never the helper's loop
+            self.note(event="econ_end", state="failed", why=f"{type(e).__name__}: {e}")
 
     def serve(self) -> int:
         self.dir.mkdir(parents=True, exist_ok=True)
@@ -1002,6 +1038,7 @@ class Helper:
             if req is not None:
                 self.handle(req)
             self.tick()
+            self.reap_econ()
             if time.monotonic() - last >= STATUS_EVERY_S:
                 self.busy_tick()
                 self.write_status()

@@ -2825,3 +2825,41 @@ section 15 (built offline, 15.11; the A/B not run).
   stays loadable (`project_xmas_dun02.json`, the pinned argv) and the hunt box (Amendment L).
 - **Open (live-blocks.md 15.10, Batt's):** whether a person may leave out a SAFETY step (built: no),
   and whether the runner block leaves the toolbox (built: it stays, for old projects).
+  ➡️ **ANSWERED 2026-11-16 by Batt: Amendment N.** In the editor, every step can be deleted and
+  moved; a Run without a SAFETY or REQUIRED step is still refused. The runner block stays loadable,
+  but it is no real run.
+
+## Amendment N (2026-11-16 ~10:2x, Batt decided; round 29): every step is editable; the old runner block is no real run
+
+**Batt (live-blocks.md 17, translated):** on the SAFETY steps (15.10 Q1): "Delete, move: it must be
+editable. If it cannot run, just Undo or load the file we saved back." On the old runner block
+(15.10 Q2): "Keep it as a backup, but it is no longer used in real runs: only the separate blocks."
+This amendment ANSWERS Amendment M's two open questions. Nothing above is rewritten: Amendment M's
+"SAFETY and REQUIRED steps can be neither left out nor moved" stays true of the RUN. The built
+record is [live-blocks.md](../planning/live-blocks.md) 12.13.
+
+- **The editor locks no step.** A SAFETY or REQUIRED step deletes and drags like any block; a drag
+  takes that one step out. Its class line says "needed to run"; the class colours stay. A tick
+  without one of them is refused before any input: by the lint (tick_step), by not_live, and by the
+  Run, in the same words. The person undoes, or loads the saved file. The one rule for extra and
+  misplaced copies (`poring_flow.tick places` = `lib/flow/tick.ts tickPlaces`) now decides words
+  only, never a lock.
+- **The old one-block runner block is no REAL run.** A project whose map node holds it (a
+  `dungeon_hunt` action, not a lowered `hunt_loop()`) is refused on the PRODUCT Run path, in
+  `poring_flow.project.OLD_RUNNER_WORDS`: "this box uses the old one-block runner; real runs use
+  hunt_loop() (load xmas_dun02)". The refusal comes from:
+  - the lint, as an `old_runner` readiness finding (not an error, so the box stays a valid design
+    that loads and simulates);
+  - POST /flows/run/check and /flows/run/project (`old_runner`);
+  - the Run helper's start (`flow_run.old_runner_problem`);
+  - the Run button on /flows and /maps.
+
+  The block stays loadable under Advanced > Old projects (`xmas_dun02_runner`).
+- **The A/B tools are not the product path.** `scripts/stage*_ab.py` play their REFERENCE arms (the
+  runner block, against the new shape) through `flow_play.py play` directly. Those are
+  measurements, not real runs, so `flow_play.py`'s own refusal (`live.problems`) does not refuse
+  them. The rule sits on the product path only.
+- **Every live run records its economy** (Batt, 17 #7; it is not an ADR-0020 rule, and it is
+  recorded here only because it lands with this round). The Run helper and the A/B series call
+  `econ_db.record_after_run` when a run ends. It is bounded and non-fatal; the details are in
+  docs/econ/economics.md section 10.

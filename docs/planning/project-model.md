@@ -373,7 +373,10 @@ place, by `hunt_loop()`; the tab `hunt` holds the role blocks (`role_heal = "hea
 `role_respawn_confirm`, `role_eat`) and `def hunt_loop(t=False)`; a new tab `tick` after it holds
 `hunt_tick()`, run()'s 20 step blocks in their order. Its runner argv, keys, settings and run()
 arguments are the hunt box's exactly. `project_xmas_dun02.json` (`xmasProject()`, the runner block)
-stays the old one-box shape: loadable, its argv pinned.
+stays the old one-box shape: loadable, its argv pinned. ➡️ **Since 2026-11-16 (Batt, live-blocks.md 17 #2; ADR-0020
+Amendment N):** loadable, but no real run. The lint (`old_runner`, readiness), the Run routes,
+the Run helper and the Run button refuse it; the A/B tools' reference arms still play it through
+`flow_play.py`.
 
 ## 8. Not converted (Batt's answer 6)
 
