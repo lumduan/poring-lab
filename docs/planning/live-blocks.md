@@ -3675,3 +3675,32 @@ The bar (16.5):
    - Every live run's session goes into data/econ/lab.sqlite (scripts/econ_db.py update) when it
      ends: the stage A/B series and the Run helper's project runs.
    - The 11-14 / 11-15 runs are back-filled from the NAS archive.
+
+
+### 17.1 The economy back-fill (2026-11-16 ~10:4x ICT; Batt's item 7)
+
+- `econ_db.py update` was run over every archived live run of 11-14 and 11-15 (the NAS
+  scratch-archive copies): 61 added, 1 already in the file. data/econ/lab.sqlite now holds 113 runs.
+- Dashboards for the /economy page (data/econ/dashboard/): xmas02-1114-stage2-4 (30 runs),
+  xmas02-1114-s5ab (6), xmas02-1115-s5b1-s5b2 (12), xmas02-1115-s6ab-cookie (6),
+  xmas02-1115-s5c-ab (6).
+- Net zeny / h per arm, from the dashboards' totals (gross = picked + STOLEN at NPC sell, minus the
+  consumables), report only:
+
+      series                   arm   net z/h   stolen  picked
+      s5ab (drink 30 vs 50 %)  B4     62,766    106      30
+                               B5     36,705    104      30   (cost 12,819 z/h: the 50 % drink)
+      s5b1/s5b2                A      49,809    198      52
+                               B      50,704    216      66
+      s6ab (cookie no-swap)    B      70,527    112      49
+                               C      55,205     94      27
+      s5c-ab (2 deaths)        A      64,284     87      34
+                               B      33,855     70      21
+
+  - **The cookie series agrees with 16.8, and more strongly:** the Knife swap on cookies (B) nets about
+    15,300 z/h more than C, because C also picked less.
+  - **A correction to the parent's first reading:** an earlier quick read of econ_row's net_h
+    (PICKED drops only, no steals) had C ahead. That field leaves Steal / Snatcher income out. The
+    dashboard totals above are the ones to use.
+  - **Every series is below Batt's 100,000 z/h goal**: 34k-71k net. Batt's own benchmark run was
+    135,737 common z/h (memory: batt-benchmark-knife-swap).
