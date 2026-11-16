@@ -47,7 +47,7 @@ import { browserStorage, hasOldFlow, KEYS, readChoice, readProjectText, readText
 import { ACTIVE, busyWhy, liveLabel, liveLine, PROJECT_FLOW } from "@/lib/flow/liverun";
 import { mapsReadyText } from "@/lib/flow/words";
 import { liveReady } from "@/lib/flow/liveready";
-import { forEngine, mapNodes, nodeById, type Project, runnerBlockOn, runnerKeysOn, sampleProject, sessionPath, startMap as mapStartOf, xmasCookieNoSwapProject, xmasFunctionsProject, xmasHuntProject, xmasProject } from "@/lib/flow/project";
+import { forEngine, mapNodes, nodeById, OLD_RUNNER_WORDS, oldRunnerOn, type Project, runnerBlockOn, runnerKeysOn, sampleProject, sessionPath, startMap as mapStartOf, xmasFunctionsCookieNoSwapProject, xmasFunctionsProject, xmasHuntProject, xmasProject } from "@/lib/flow/project";
 import { RUNNER_MAPS } from "@/lib/flow/settings";
 import { exportProject, importProject } from "@/lib/flow/projectfile";
 import { type FileMeta, newFileMeta, readFileMeta, writeFileMeta } from "@/lib/flow/file";
@@ -99,9 +99,13 @@ type Selection = { kind: "node"; id: string } | { kind: "rules" } | { kind: "lin
 const READY: { id: string; make: () => Project; world: WorldSource; title: string; words: string }[] = [
   // live blocks 5c (live-blocks.md 15.6): the ready-made box is the hunt core as functions in tabs
   { id: "xmas", make: xmasFunctionsProject, world: "local", title: "xmas_dun02", words: "the Rogue, ONE box: START → xmas_dun02, where you put her; its hunt core is blocks in tabs (main calls hunt_loop(); the tab hunt: its roles and loop; the tab tick: its steps); every key a function in its keys tab" },
-  { id: "xmas_runner", make: xmasProject, world: "local", title: "xmas_dun02_runner", words: "the same one box in its old shape: one block \"hunt with the runner\" holds the hunt core (it flies home on the Butterfly Wing itself)" },
-  { id: "xmas_hunt", make: xmasHuntProject, world: "local", title: "xmas_dun02_hunt", words: "the same one box plus its tab hunt: hunt_loop(t) plays the runner's own steps as blocks (t = find_target(), then fight_target(t): the monsters tab's recipe)" },
-  { id: "xmas_noswap", make: xmasCookieNoSwapProject, world: "local", title: "xmas_dun02_cookie_noswap", words: "the same one box with NO Knife swap on the Christmas Cookie and the Cookie (attack_cookie, attack_cookie_xmas: strike, wait_kill, loot; live-blocks 16); the other monsters keep it" },
+  // ➡️ round 29 (Batt 2026-11-16, live-blocks.md 17 #2): the two boxes below hold the old runner
+  // block, so they load but are no real run (oldRunnerOn; the Run button says why)
+  { id: "xmas_runner", make: xmasProject, world: "local", title: "xmas_dun02_runner", words: "the same one box in its old shape: one block \"hunt with the runner\" holds the hunt core (it flies home on the Butterfly Wing itself); it loads and simulates, but Run is held: real runs use hunt_loop()" },
+  { id: "xmas_hunt", make: xmasHuntProject, world: "local", title: "xmas_dun02_hunt", words: "the same one box plus its tab hunt: hunt_loop(t) plays the runner's own steps as blocks (t = find_target(), then fight_target(t): the monsters tab's recipe), its main still the runner block; it loads and simulates, but Run is held: real runs use hunt_loop()" },
+  // live blocks 16, ➡️ round 29: the no-swap EXAMPLE in the functions shape (a real Run); the one-box
+  // version (xmasCookieNoSwapProject, stage6_ab's arm C) is off the list
+  { id: "xmas_noswap", make: xmasFunctionsCookieNoSwapProject, world: "local", title: "xmas_dun02_cookie_noswap", words: "an EXAMPLE of a recipe edit, not the default: the ready-made xmas_dun02 with NO Knife swap on the Christmas Cookie and the Cookie (the monsters tab: attack_cookie, attack_cookie_xmas = strike, wait_kill, loot; live-blocks 16); the other monsters keep it, everything else is xmas_dun02; Run plays it" },
   { id: "sample", make: sampleProject, world: "sample", title: "my_first_project", words: "two SYNTHETIC maps on the sample sheets: a town (save point, NPC warp) and a field (attack 5 times, a wing back)" },
 ];
 
@@ -589,15 +593,18 @@ export default function MapsApp({ backendUrl, initialNode }: { backendUrl: strin
   const sm = mapStartOf(project);
   const startReady = sm ? liveReady(project, sm.id, catalogue?.blocks ?? null) : null;
   const smRunner = sm && runnerBlockOn(sm) && RUNNER_MAPS.includes(sm.map.map) ? sm.map.map : null; // a map with a runner
-  const runnable = !!sm && startReady?.ready === true && (!runnerBlockOn(sm) || !!smRunner);
+  const oldRunner = oldRunnerOn(sm ?? undefined); // round 29: never a real run (live-blocks.md 17 #2)
+  const runnable = !!sm && !oldRunner && startReady?.ready === true && (!runnerBlockOn(sm) || !!smRunner);
   const keysR = runnable && sm && smRunner ? runnerKeysOn(project, sm.id) : null;
   // matpilot round 16 #4: a lint ERROR blocks Run (the Run route refuses it too: lint_errors)
   const lintErr = lintDoc && lintDoc.counts.error > 0 ? (lintDoc.findings.find((f) => f.severity === "error")?.message ?? "") : null;
   const runBlocked = keysR && !keysR.ok ? `the keys: ${keysR.problems.join("; ")}` : lintErr !== null ? `the lint has ${lintDoc?.counts.error} error(s): ${lintErr}` : null;
   const notRunWhy = !sm
     ? "login is not live yet: put START on a map node (drag START's connection onto a map, or “Start here” in a map node's inspector); the run then starts where a person put her"
-    : runnerBlockOn(sm) && !smRunner
-      ? `"hunt with the runner" plays only a map that has a runner (today xmas_dun02), not ${sm.map.map}`
+    : oldRunner
+      ? OLD_RUNNER_WORDS
+      : runnerBlockOn(sm) && !smRunner
+        ? `"hunt with the runner" plays only a map that has a runner (today xmas_dun02), not ${sm.map.map}`
       : startReady && !startReady.ready
         ? startReady.why
         : "Run is not available now";

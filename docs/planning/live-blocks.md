@@ -1381,7 +1381,7 @@ blocks, no hardcoding like this. The xmas_dun02 map in /flows may have as many t
 | The Python view | `pyproject.print_tab` | `knife_hp_min = 0.5  # or at once under HP (50 %)`, `knife_swap = True  # Batt's Knife swap (on / off)`, `respawn_at = "645,481"  # respawn button at ("X,Y" in the game picture)`; the settings in the registry's order after the plain variables; a map's that overrides Global's says so in the line above. The parser reads the assignment (the comment is words), so the round trip is exact ➡️ partly superseded by 12.4 (round 20) |
 | The lint | `poring_flow/lint/settings.py` (from project._project_rules), in words on the block | `settings` ERROR: the wrong kind, out of range or off the grid ("or at once under HP: 95 % is not from 20 % to 90 %"); `settings` WARNING: a name that looks like a typo of a setting's (another case, or difflib >= 0.85: "potion_bellow is not a setting: did you mean potion_below ...?"; any other name is an ordinary variable and says nothing), and a hotbar key as a variable ("not read: the hunt core takes its hotbar keys from the functions ..."); `settings_clash` ERROR on the node: flow_config's clash rule on the values its hunt core takes (two roles on one key, hud_fast not faster than BOX_EVERY_S); `settings_use` INFO: a setting not in use ("not in use while Batt's Knife swap (knife_swap) is off: the runner is not given it"), one the box replaces in a Run (live.takeovers: "potion_below ... is not used in a Run of this box: drink plays the runner's potion on HP instead"), settings on a node without a hunt core ("not read") ➡️ partly superseded by 12.4 (round 20) |
 | The Run | `flow_play.prepare` (`flow_run.project_values`) | a hunt core's runner settings = the checked project's setting blocks on its node (> Global's > the defaults), the node's keys over them, then the clash rule; `runner_vals` (an A/B series' runner-config.json) still replaces them for a block. `settings.argv` skips a runner constant AT ITS DEFAULT (the runner keeps its own number), so a box whose blocks hold every default runs exactly today's command |
-| The check | `POST /flows/run/check {project, node}` (routes_flowrun `check_values`) -> request `{action: "check", flow: "project", node, keys, vals}` -> flow_run `check_start` | the backend validates the project, the node's hunt core, its keys and its setting blocks (`settings_refused`, `no_hunt_core`, `keys_refused`, `not_a_map_node`, `invalid_project`) and sends every setting block's value; the helper checks them again (`check_level`, every block named, the clash rule) and runs the runner's read-only check with them. The checklist on /flows states the same values (`startChecklist(nodeSettings(...))`) |
+| The check | `POST /flows/run/check {project, node}` (routes_flowrun `check_values`) -> request `{action: "check", flow: "project", node, keys, vals}` -> flow_run `check_start` | the backend validates the project, the node's hunt core, its keys and its setting blocks (`settings_refused`, `no_hunt_core`, `keys_refused`, `not_a_map_node`, `invalid_project`; ➡️ round 29: `old_runner`, 12.13) and sends every setting block's value; the helper checks them again (`check_level`, every block named, the clash rule) and runs the runner's read-only check with them. The checklist on /flows states the same values (`startChecklist(nodeSettings(...))`) |
 | The stage tools | `stage2_ab.box_vals` / `same_vals`; stage3-5 `run_vals` | each arm's box's setting blocks and keys; a series REFUSES before any input when two arms' runner settings differ ("the boxes' runner settings differ: knife_hp_min is 0.5 in B4, 0.6 in B5 (an A/B changes the box, not the settings)"). A still plays `flow_run.command` with those values |
 
 **The settings file is not imported:** settings/flowrun/config.json was `{"v": 2, "global": {},
@@ -2145,6 +2145,125 @@ The tests check that the misplaced words no longer say "run()".
   its 🔒 again while it still reads "an extra copy: delete it". Delete still removes it, so the
   padlock only misleads there. The next frontend round takes it: a step outside hunt_tick shows no
   padlock.
+
+### 12.13 Round 29: Batt's decisions 17 #1, #2 and #7 (written 2026-11-16 10:5x ICT from `date`; branch fix/round29 from f4342ed9, fast-forwarded to main 1f260bd7 (docs only) before its commit; offline only, while s5c-ab2 ran from main)
+
+**1. Every step can be edited (17 #1; 15.10 Q1 answered).** Round 26's editor lock is gone.
+- SAFETY and REQUIRED steps delete (context menu, Delete, the trashcan, Cut) and drag like any
+  block. `isDeletable` is Blockly's own again, and the tick's drag strategy no longer freezes a
+  step.
+- The drag still takes ONE step out (`takeOutAlone`; the steps under it close up), as round 26
+  built for the optional steps. No block is ever made `setMovable(false)`.
+- The 🔒 is gone. It no longer stood for anything, and on a loose copy it misled (12.12's open
+  item). Each needed step's first line now reads "SAFETY · needed to run" (or "REQUIRED · needed
+  to run") in the class colours. That is true of the step wherever a copy of it stands.
+  - It is not on the head row because there it ran to 349 of the 300-unit budget
+    (step_battle_log).
+- The Run is held, not the edit. A tick without a SAFETY or REQUIRED step is refused:
+  - by the lint, in its words: "hunt_tick() leaves out step_survive(), a SAFETY step (...):
+    without it ...";
+  - by live.problems (not_live), in the same words (`test_the_tick_refuses_each_unsafe_edit_in_words`);
+  - by POST /flows/run/project (`lint_errors`).
+  The page's Run button shows that reason (round 21's hold). Batt: "if it cannot run, just Undo
+  or load the saved file".
+- Round 28's ONE rule for extra and misplaced copies (`tick.places` = `tickPlaces`) stays, as do
+  its WHY rows. It now decides only the words, never a lock.
+
+**2. The old one-block runner is no real run (17 #2; 15.10 Q2 answered).** A project whose map node
+holds the old runner block (a `dungeon_hunt` action in any of its tabs, i.e. NOT a lowered
+`hunt_loop()`) is refused on the PRODUCT Run path, in the engine's words
+(`poring_flow.project.OLD_RUNNER_WORDS`): "this box uses the old one-block runner; real runs use
+hunt_loop() (load xmas_dun02)".
+- **The lint:** a `readiness` finding `old_runner` at the block. It is not an error: the old box
+  stays a valid design that loads and simulates. A readiness finding refuses the run start
+  (`run_start_refused`).
+- **The check and the Run:** POST /flows/run/check and /flows/run/project refuse
+  `old_runner` (400) before anything is written.
+- **The Run helper:** `flow_run.old_runner_problem`. A start of such a checked file is "refused
+  before any input: ...", even with the right hash.
+- **The pages:** the Run button on /flows (ProjectStudio) and /maps is held with the same words
+  (`lib/flow/project.ts oldRunnerOn` / `OLD_RUNNER_WORDS`).
+- **The block stays loadable** under Advanced > Old projects (round 26), as `xmas_dun02_runner`.
+- **Which ready-made boxes this holds:** every one whose main still calls the runner block:
+  - xmas_dun02_runner;
+  - xmas_dun02_hunt (14: its hunt tab plays as blocks, but main is the runner block);
+  - the one-box xmas_dun02_cookie_noswap file (16: stage6_ab's arm C; ➡️ off the Load lists since
+    its functions twin, below);
+  - the stage 2-4 and session fixtures.
+
+  The listed ones' Load-list words now say "it loads and simulates, but Run is held". Only
+  xmas_dun02 (the functions box) and boxes built like it run.
+  - ➡️ **The no-swap example's twin is BUILT (the parent's follow-up, 2026-11-16; Batt 14.12 #2
+    "make it work", 16.8 "an example, not the default"):**
+    - `fixtures/project_xmas_dun02_functions_cookie_noswap.json` = `xmasFunctionsCookieNoSwapProject()`.
+      It is the functions box with attack_cookie and attack_cookie_xmas cut to strike(t);
+      wait_kill(t); loot(t), 16.1's very recipes. Everything else is the functions box byte for
+      byte (`stage6_ab.box_difference(functions, twin)` is None).
+    - It replaces the old entry on both Load lists, under the same title,
+      xmas_dun02_cookie_noswap. Its words say "an EXAMPLE of a recipe edit, not the default".
+    - Its Run is not held: there is no old runner block.
+    - The one-box file stays for stage6_ab's arm C (its sha256 pins), off the lists.
+    - Tests:
+      - test_cookie_noswap.py: prepare gives the functions box's argv and run() arguments but
+        box_recipes for the two cookies; lint without errors or readiness items, its rules the
+        functions box's; not_live none; the same keys.
+      - project.test.ts: the fixture equals the TS twin; the twin is the functions box but the
+        two recipes; every tab round-trips.
+      - blockly_headless.test.ts: every tab through real Blockly.
+      - layout.test.ts: no overlap, at 390 to 2400.
+      - tick_lock.test.ts: oldRunnerOn is false.
+- **Reading (the parent's, 17 #2):** the stage A/B tools (`scripts/stage*_ab.py`) launch
+  `flow_play.py play` directly with their REFERENCE arms (e.g. 15.13's arm A, the runner block).
+  Those are tests of the new shape against the old, not real runs, so they stay allowed.
+  `flow_play.py`'s own play refusal (`live.problems`) is unchanged: the rule lives on the product
+  path only.
+
+**3. Every run records its economy (17 #7).** It is `econ_db.record_after_run`, called from:
+- the Run helper, at each project run's end (`flow_run.Helper.record`);
+- the A/B series, after each run (`stage2_ab.Series.econ`, so stage3/4/5/5b/5b2/5c/6 too).
+
+The details are in [econ/economics.md](../econ/economics.md) section 10, "When a run is recorded":
+- the sessions by label: `*-<label>` and `*-<label>-hunt<n>`, never `-play-`;
+- `econ_db.py update`, niced, under a 900 s cap; a session already in the file is skipped;
+- the wait: a series waits at most 60 s, the helper 5 s (under the backend's 10 s helper
+  freshness); past that the record goes on in the background and its end is noted;
+- non-fatal: the outcome is a series.log line and done.json's `econ`, or a runs.jsonl `econ` /
+  `econ_end` row. The run's result never changes.
+
+The 11-14 / 11-15 runs are back-filled by the parent separately (17.1), not here.
+
+**Tests:**
+- Python:
+  - test_routes_flowrun.py (2 new): the old box refused on the project run and the check, nothing
+    written, the functions shape running, the lint's one readiness finding at field/main/main.1;
+    a tick without step_survive refused by the Run in the lint's words.
+  - test_live_player.py: the helper refuses an old-shape start in words, then starts the functions
+    shape. `functions_shape()` turns a test project's runner block into hunt_loop() + role blocks
+    + the box's own hunt_loop def; the route tests' real runs use it.
+  - test_econ_db.py (5 new, synthetic sessions as its own tests):
+    - done, idempotent, none;
+    - failed is reported, never raised;
+    - the background record and its reap;
+    - sessions found by label, `-play-` never;
+    - the helper's and the series' hooks are non-fatal, and the helper waits under the freshness.
+- Frontend (tick_lock.test.ts, real Blockly on the page's load path):
+  - every step deletable and movable, in the tick and out;
+  - a SAFETY step deleted converts (the design is kept), and Undo puts it back;
+  - a SAFETY step comes out alone;
+  - each class's mark and colour, with no padlock label;
+  - round 28's extra / misplaced copies are deletable and say why.
+
+**For the re-measure (no browser here):**
+1. Tab tick: delete step_survive (and drag step_pace out). Both go; the steps close up. The lint
+   says "leaves out step_survive(), a SAFETY step ...", and Run is held with that reason. Ctrl+Z
+   puts it back and Run is ready again.
+2. No 🔒 anywhere. SAFETY and REQUIRED steps read "· needed to run" in red / blue; optional steps
+   are green. A step copy dragged loose shows no padlock (12.12's open item).
+3. Load xmas_dun02_runner (Advanced > Old projects). It loads and simulates. Run (on /flows and
+   /maps) is held: "this box uses the old one-block runner; real runs use hunt_loop() (load
+   xmas_dun02)".
+4. After the next live run: `econ_db.py list` shows its session(s), and runs.jsonl / series.log
+   says "economy record done".
 
 ## 13. Stage 5b-1: HuntState and the loop as steps (design written 2026-11-14 18:3x ICT from `date`, before any 5b code; offline only)
 
@@ -3676,6 +3795,11 @@ The bar (16.5):
 **Recommendation (the parent, for Batt):**
 - Do NOT make the no-swap box the default: same kills within noise, about 7,500 z/h less.
 - Keep it as a loadable example (xmas_dun02_cookie_noswap). It shows that a recipe edit plays live.
+  - ➡️ **2026-11-16 (round 29 follow-up, 12.13):** the example on the Load lists is now the
+    FUNCTIONS-shape twin (`project_xmas_dun02_functions_cookie_noswap.json`,
+    `xmasFunctionsCookieNoSwapProject()`): the ready-made xmas_dun02 with the same two recipes, so
+    its Run is a real run. Its words say it is an example, not the default. The one-box file
+    measured here stays for stage6_ab's arm C and its sha256 pins, off the lists.
 - The next block experiment should target time without giving up steals, e.g. no loot(t) for a
   species whose drops are trimmed anyway (needs recipes.SHAPES widened, 14.8).
 
@@ -3686,6 +3810,7 @@ The bar (16.5):
    load the file we saved back."
    - So SAFETY and REQUIRED steps become EDITABLE in the editor: round 26's lock goes.
    - The lint still refuses a Run without them, in its words, and a person undoes or reloads.
+   - ➡️ **BUILT 2026-11-16 (round 29, 12.13 item 1; fix/round29).**
 2. **The old runner block (15.10 Q2):** "Keep it as a backup, but it is no longer used in real runs:
    only the separate blocks."
    - A RUN of a project whose hunt core is the old one-block runner is refused, in words that point
@@ -3693,6 +3818,9 @@ The bar (16.5):
    - The block stays loadable, under Advanced > Old projects.
    - The parent's reading: the A/B tools' REFERENCE arms (e.g. 15.13's arm A) are tests of the new
      shape against the old, not real runs, and stay allowed there.
+   - ➡️ **BUILT 2026-11-16 (round 29, 12.13 item 2; fix/round29):** the lint (`old_runner`,
+     readiness), the check and the Run routes, the Run helper, and the Run button on /flows and
+     /maps all refuse it. `flow_play.py` is unchanged, so the A/B reference arms still play.
 3. **The cookie no-swap box as the default:** "No." It stays a loadable example (16.8).
 4. **5c:** "Test it again." -> 15.13, s5c-ab2.
 5. **The Goblin:** "the alarm signal". A per-visit ALARM bar is pre-registered and scored once on a NEW
@@ -3705,6 +3833,9 @@ The bar (16.5):
    - Every live run's session goes into data/econ/lab.sqlite (scripts/econ_db.py update) when it
      ends: the stage A/B series and the Run helper's project runs.
    - The 11-14 / 11-15 runs are back-filled from the NAS archive.
+   - ➡️ **The every-run hook BUILT 2026-11-16 (round 29, 12.13 item 3; fix/round29):** the Run
+     helper and the A/B series (`econ_db.record_after_run`; economics.md section 10). The
+     back-fill is 17.1's.
 
 
 ### 17.1 The economy back-fill (2026-11-16 ~10:3x ICT; Batt's item 7)

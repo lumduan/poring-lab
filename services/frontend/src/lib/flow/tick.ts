@@ -65,14 +65,17 @@ export const STEP_BY_BLOCK: ReadonlyMap<string, TickStep> = new Map(TICK_STEPS.m
 export const OPTIONAL_STEPS: readonly string[] = TICK_STEPS.filter((t) => t.klass === "optional").map((t) => t.name);
 /** A class as a block shows it. */
 export const CLASS_WORDS: Record<StepClass, string> = { safety: "SAFETY", required: "REQUIRED", optional: "optional" };
-/** Round 26 (the reviewer's 5c review; until Batt answers 15.10 Q1 the editor matches the built
- * default): a SAFETY or REQUIRED step in hunt_tick() is LOCKED -- it cannot be deleted or dragged
- * out (blockly-register.ts tickLock); its head row shows a padlock, and each class has a colour of
- * its own (theme.ts). An optional step may be dragged out, alone (the steps under it close up). */
-export const LOCKED_CLASSES: readonly StepClass[] = ["safety", "required"];
-export const isLockedClass = (k: StepClass): boolean => LOCKED_CLASSES.includes(k);
+/** Round 29 (Batt 2026-11-16, live-blocks.md 17 #1: "delete, move: it must be editable; if it cannot
+ * run, just Undo or load the saved file"; round 26's lock, which 15.10 Q1 left open, is gone): a
+ * SAFETY or REQUIRED step is NEEDED TO RUN -- it can be deleted and dragged like any block (alone,
+ * the steps under it closing up), and a Run without it is refused in the lint's words; its head
+ * class line says so ("SAFETY · needed to run"), each class keeps its colour (theme.ts). An optional step may be
+ * left out. */
+export const NEEDED_CLASSES: readonly StepClass[] = ["safety", "required"];
+export const isNeededClass = (k: StepClass): boolean => NEEDED_CLASSES.includes(k);
 export const STEP_STYLE: Record<StepClass, string> = { safety: "pl_step_safety_blocks", required: "pl_step_required_blocks", optional: "pl_step_optional_blocks" };
-export const PADLOCK = "🔒";
+/** The mark on a needed step's class line (round 26-28's padlock, which a lock no longer backs). */
+export const NEED_WORDS = "needed to run";
 /** The block type of a step block (one per step: its words are its own). */
 export const stepType = (t: TickStep): string => `pl_${STEP_PREFIX}${t.name}`;
 export const STEP_OF_TYPE: ReadonlyMap<string, TickStep> = new Map(TICK_STEPS.map((t) => [stepType(t), t]));
@@ -83,8 +86,8 @@ export const STEP_OF_TYPE: ReadonlyMap<string, TickStep> = new Map(TICK_STEPS.ma
  * test_runner_functions.py and tick_lock.test.ts). The copies in their place in the runner's order
  * (the longest run of steps already in order, one copy of a step at most, the earlier copy where two
  * would do) are accepted; another copy of an accepted step is an EXTRA copy; a step with no copy in
- * its place is OUT OF ITS PLACE (its first copy; its other copies extra). The editor locks only an
- * accepted SAFETY or REQUIRED step and shows the lint's words on the others. */
+ * its place is OUT OF ITS PLACE (its first copy; its other copies extra). The editor shows the
+ * lint's words on an extra or a misplaced copy (➡️ round 29: and locks no step). */
 export type TickPlace = { kind: "ok" | "extra" | "misplaced" | "other"; where: string };
 export const EXTRA_WORDS = "an extra copy: delete it";
 const STEP_RANK: ReadonlyMap<string, number> = new Map(STEP_BLOCKS.map((b, i) => [b, i]));

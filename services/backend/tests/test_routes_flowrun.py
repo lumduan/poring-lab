@@ -106,7 +106,7 @@ def hunt_project(**node_vars: Any) -> dict[str, Any]:
     sys.path.insert(0, str(Path(__file__).parent))
     import test_live_player as tl
 
-    d = tl.project([tl.HUNT, tl.wing_exit()])
+    d = tl.functions_shape(tl.project([tl.HUNT, tl.wing_exit()]))  # round 29: a REAL run's shape
     if node_vars:
         field = next(n for n in d["nodes"] if n["id"] == "field")
         field["tabs"].append({"name": "settings", "main": None, "defs": [],
@@ -404,7 +404,8 @@ def test_a_project_with_a_hunt_core_carries_its_keys(
 
     helper(tmp_path)
     assist(client)
-    r = post_project(client, {"project": _project([tl.HUNT, tl.wing_exit()]), "node": "field"})
+    r = post_project(client, {"project": tl.functions_shape(_project([tl.HUNT, tl.wing_exit()])),
+                              "node": "field"})  # fmt: skip
     assert r.status_code == 200, r.text
     keys = {"heal_key": "F1", "fly_key": "F8", "home_key": "F9", "knife_key": "F4",
             "dagger_key": "F5"}  # fmt: skip
@@ -439,7 +440,7 @@ def test_a_project_run_is_refused_with_words_the_page_can_say(
     assert r.status_code == 422 and reason(r) == "invalid_project"
     r = post_project(client, {"project": _project(), "node": "field", "argv": ["--clear-map"]})
     assert r.status_code == 422 and reason(r) == "invalid_body"
-    no_keys = _project([tl.HUNT])  # a hunt core whose map node has no wing home: no home key
+    no_keys = tl.functions_shape(_project([tl.HUNT]))  # no wing home on its map node: no home key
     r = post_project(client, {"project": no_keys, "node": "field"})
     assert r.status_code == 400 and reason(r) in ("keys_refused", "lint_errors")
     assert not (d / "request.json").exists() and not (d / "project.json").exists()
@@ -480,3 +481,67 @@ def test_a_project_run_needs_the_write_gate(client: TestClient, tmp_path: Path) 
     r = client.post("/flows/run/project", headers={"origin": "http://evil.test"},
                     json={"project": _project(), "node": "field"})  # fmt: skip
     assert r.status_code == 403
+
+
+# --- round 29 (live-blocks.md 12.13; Batt 2026-11-16, 17 #1 and #2) -------------------------------
+def test_the_old_one_block_runner_is_no_real_run_and_says_so(
+    client: TestClient, tmp_path: Path, allowed: list[Any]
+) -> None:
+    """Batt: "keep it as a backup, but it is no longer used in real runs". The product Run path --
+    a project run and a check -- refuses a hunt core that is the old runner block, in words that
+    point to hunt_loop(); the same box as functions runs. Nothing is written."""
+    from poring_flow import project as pj
+
+    sys.path.insert(0, str(Path(__file__).parent))
+    import test_live_player as tl
+
+    helper(tmp_path)
+    assist(client)
+    old = _project([tl.HUNT, tl.wing_exit()])
+    r = post_project(client, {"project": old, "node": "field"})
+    assert r.status_code == 400 and reason(r) == "old_runner"
+    assert r.json()["detail"]["detail"] == pj.OLD_RUNNER_WORDS
+    assert "hunt_loop()" in pj.OLD_RUNNER_WORDS and "load xmas_dun02" in pj.OLD_RUNNER_WORDS
+    front = Path(__file__).resolve().parents[3] / "services/frontend/src/lib/flow"
+    ts = (front / "project.ts").read_text()  # the Run button's twin
+    assert f'export const OLD_RUNNER_WORDS = "{pj.OLD_RUNNER_WORDS}";' in ts
+    r = check(client, old)
+    assert r.status_code == 400 and reason(r) == "old_runner"
+    d = tmp_path / "settings" / "flowrun"
+    assert not (d / "request.json").exists() and not (d / "project.json").exists()
+    # the same box as functions: the run goes on
+    assert (
+        post_project(client, {"project": tl.functions_shape(old), "node": "field"}).status_code
+        == 200
+    )
+    # the lint says it as a readiness item (the page's Run reason), never as an error: the old
+    # box stays a valid design that loads
+    p = pj.from_json(json.dumps(old))
+    _c, found = pj.project_lint(p)
+    ours = [f for f in found if f.rule == "old_runner"]
+    assert [(f.severity, f.where.path, f.text) for f in ours] == [
+        ("readiness", "field/main/main.1", pj.OLD_RUNNER_WORDS)]  # fmt: skip
+    assert not [f for f in found if f.severity == "error"]
+
+
+def test_a_tick_without_a_safety_step_is_refused_with_its_words(
+    client: TestClient, tmp_path: Path, allowed: list[Any]
+) -> None:
+    """Batt: "delete, move: it must be editable; if it cannot run, just Undo or load the saved
+    file". A SAFETY step deleted in the editor makes a tick the Run refuses, in the lint's words."""
+    sys.path.insert(0, str(Path(__file__).parent))
+    import test_live_player as tl
+
+    helper(tmp_path)
+    assist(client)
+    d = tl.functions_shape(_project([tl.HUNT, tl.wing_exit()]))
+    box = json.loads(tl.FUNCTIONS_BOX.read_text())
+    tick = next(t for t in box["nodes"][0]["tabs"] if t["name"] == "tick")
+    tick["defs"][0]["body"] = [
+        st for st in tick["defs"][0]["body"] if st["block"] != "step_survive"
+    ]
+    next(n for n in d["nodes"] if n["id"] == "field")["tabs"].append(tick)
+    r = post_project(client, {"project": d, "node": "field"})
+    assert r.status_code == 400 and reason(r) == "lint_errors", r.text
+    first = " ".join(r.json()["detail"]["detail"]["first"])
+    assert "leaves out step_survive(), a SAFETY step" in first

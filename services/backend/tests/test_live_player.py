@@ -135,6 +135,38 @@ def project(field_main: list[Any], home_main: list[Any] | None = None) -> dict[s
     }  # fmt: skip
 
 
+# Round 29 (Batt 2026-11-16, live-blocks.md 17 #2: the old one-block runner is no longer used in
+# real runs): a project as the PRODUCT Run path takes it -- every map node's runner block (HUNT) as
+# the functions shape: its main calls hunt_loop(), its roles are role blocks on a tab hunt with the
+# hunt loop (the ready-made functions box's own def). flow_play itself still plays both shapes.
+HUNT_LOOP_CALL = {"kind": "call", "proc": "hunt_loop", "args": [], "kwargs": {}}
+FUNCTIONS_BOX = ROOT / "services/frontend/src/lib/flow/fixtures/project_xmas_dun02_functions.json"
+
+
+def functions_shape(d: dict[str, Any]) -> dict[str, Any]:
+    import copy
+
+    out = copy.deepcopy(d)
+    box = json.loads(FUNCTIONS_BOX.read_text())
+    loop = next(x for t in box["nodes"][0]["tabs"] if t["name"] == "hunt" for x in t["defs"]
+                if x["name"] == "hunt_loop")  # fmt: skip
+    for n in out["nodes"]:
+        if n.get("kind") != "map":
+            continue
+        for t in n["tabs"]:
+            if t["name"] != "main" or not t["main"]:
+                continue
+            hunts = [st for st in t["main"] if st.get("block") == "dungeon_hunt"]
+            if not hunts:
+                continue
+            t["main"] = [HUNT_LOOP_CALL if st.get("block") == "dungeon_hunt" else st
+                         for st in t["main"]]  # fmt: skip
+            roles = {f"role_{k}": v for k, v in hunts[0]["params"].items()}
+            n["tabs"].append({"name": "hunt", "main": None, "defs": [loop], "vars": roles})
+            break
+    return out
+
+
 START = {"hp_percent": 100, "sp_percent": 100, "weight_percent": 10, "is_dead": False,
          "map": "xmas_dun02"}  # fmt: skip
 
@@ -700,14 +732,22 @@ def test_the_helper_starts_the_player_with_the_checked_file_only(
         fr.subprocess, "run", lambda *a, **k: types.SimpleNamespace(stdout="", returncode=0)
     )
     monkeypatch.setattr(fr.subprocess, "Popen", Proc)
-    p = pj.from_json(json.dumps(project([HUNT, wing_exit()])))
-    text = pj.canonical_json(p).encode()
-    (tmp_path / fr.PROJECT_FILE).write_bytes(text)
     h = fr.Helper(tmp_path)
     detect: list[float] = []
     monkeypatch.setattr(h, "detect_up", lambda: detect.append(h.cap_s) or True)
     req = {"id": "a1b2c3d4e5", "action": "start", "flow": "project", "node": "field",
            "project_hash": "b" * 64, "max_s": 86400}  # fmt: skip
+    # round 29 (live-blocks.md 17 #2): the old one-block runner is no real run -- refused in words,
+    # before any input, even as the checked file
+    old = pj.canonical_json(pj.from_json(json.dumps(project([HUNT, wing_exit()])))).encode()
+    (tmp_path / fr.PROJECT_FILE).write_bytes(old)
+    h.handle({**req, "project_hash": hashlib.sha256(old).hexdigest()})
+    assert h.state == "refused" and made == []
+    assert h.detail == f"refused before any input: {pj.OLD_RUNNER_WORDS}"
+    h.state = "idle"
+    p = pj.from_json(json.dumps(functions_shape(project([HUNT, wing_exit()]))))
+    text = pj.canonical_json(p).encode()
+    (tmp_path / fr.PROJECT_FILE).write_bytes(text)
     h.handle(req)
     assert h.state == "refused" and "not the one checked" in h.detail and made == []
     req["project_hash"] = hashlib.sha256(text).hexdigest()

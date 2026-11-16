@@ -696,3 +696,155 @@ def test_real_xmas02_p57_p58_through_the_file(tmp_path: Path) -> None:
         doc.pop("exported_at")
     assert got == want
     con.close()
+
+
+# --- round 29 (live-blocks.md 12.13; Batt 2026-11-16, 17 #7) ---------------------------------
+# ("every run, collect the economy too")
+def _wait_background(timeout: float = 60.0) -> None:
+    import time as _t
+
+    end = _t.monotonic() + timeout
+    while any(p.poll() is None for p in edb._running) and _t.monotonic() < end:
+        _t.sleep(0.2)
+
+
+def test_every_run_records_itself_bounded_and_non_fatal(
+    lab: SimpleNamespace, tmp_path: Path
+) -> None:
+    log = tmp_path / "run" / "econ.log"
+    argv = edb.after_run_command([lab.s1], lab.db, lab.data)
+    assert argv[:5] == ["nice", "-n", "10", "timeout", str(edb.AFTER_RUN_CAP_S)]
+    assert argv[5:8] == [sys.executable, str(Path(edb.__file__).resolve()), "update"]
+    res = edb.record_after_run([lab.s1, lab.s2], log, db=lab.db, data=lab.data)
+    assert res["state"] == "done" and res["rc"] == 0, res
+    assert res["sessions"] == [lab.s1.name, lab.s2.name]
+    con = edb.connect(lab.db, create=False)
+    assert sorted(edb.run_ids(con)) == sorted(edb.sid_of(str(s)) for s in (lab.s1, lab.s2))
+    con.close()
+    # the next run's record leaves the runs already in the file as they are (update)
+    again = edb.record_after_run([lab.s1], log, db=lab.db, data=lab.data)
+    assert again["state"] == "done" and '"result": "skipped"' in log.read_text()
+    # nothing to record (a refused start made no hunt session)
+    assert edb.record_after_run([], log, db=lab.db, data=lab.data)["state"] == "none"
+
+
+def test_a_failed_record_is_reported_never_raised(lab: SimpleNamespace, tmp_path: Path) -> None:
+    log = tmp_path / "econ.log"
+    bad = edb.record_after_run([tmp_path / "20261116T000000-gone"], log, db=lab.db, data=lab.data)
+    assert bad["state"] == "failed" and bad["rc"] == 1 and "refused" in bad["why"]
+    not_a_dir = tmp_path / "file"
+    not_a_dir.write_text("x")
+    oops = edb.record_after_run([lab.s1], not_a_dir / "econ.log", db=lab.db, data=lab.data)
+    assert oops["state"] == "failed" and oops["rc"] is None and "Error" in oops["why"]
+
+
+def test_a_slow_record_goes_on_in_the_background(lab: SimpleNamespace, tmp_path: Path) -> None:
+    """The next run's setup waits a minute at most: past ``wait_s`` the record goes on by itself
+    (under its own cap) and the caller says so; the next record reaps it first."""
+    res = edb.record_after_run([lab.s1], tmp_path / "econ.log", wait_s=0.0, db=lab.db,
+                               data=lab.data)  # fmt: skip
+    assert res["state"] in ("background", "done"), res  # (a very fast machine may finish first)
+    if res["state"] == "background":
+        assert isinstance(res["pid"], int) and edb._running
+    _wait_background()
+    if res["state"] == "background":  # its end is reaped once, and said
+        assert edb.reap_background() == [{"pid": res["pid"], "rc": 0, "state": "done"}]
+    assert edb.reap_background() == []
+    con = edb.connect(lab.db, create=False)
+    assert edb.run_ids(con) == [edb.sid_of(str(lab.s1))]
+    con.close()
+    nxt = edb.record_after_run([lab.s2], tmp_path / "econ.log", db=lab.db, data=lab.data)
+    assert nxt["state"] == "done" and not [p for p in edb._running if p.poll() is None]
+
+
+def test_a_runs_hunt_sessions_are_found_by_its_label(tmp_path: Path) -> None:
+    """The A/B tools' and the Run helper's naming: the runner's own session (*-<label>), a box run's
+    hunt cores (*-<label>-hunt<n>); never the player's own (*-play-<label>, no packets) nor another
+    label's."""
+    demo = tmp_path / "demo"
+    names = {
+        "20261116T100000-s5c-p1A": True,
+        "20261116T110000-s5c-p1B-hunt1": True,
+        "20261116T110500-s5c-p1B-hunt2": True,
+        "20261116T110000-play-s5c-p1B": True,
+        "20261116T120000-s5c-p1Bx-hunt1": True,
+        "20261116T130000-s5c-p1B": False,  # no events: not a session
+    }
+    for name, events in names.items():
+        (demo / name).mkdir(parents=True)
+        if events:
+            (demo / name / "events.jsonl").write_text("{}\n")
+    got = [d.name for d in edb.hunt_sessions("s5c-p1B", demo)]
+    assert got == ["20261116T110000-s5c-p1B-hunt1", "20261116T110500-s5c-p1B-hunt2"]
+    assert [d.name for d in edb.hunt_sessions("s5c-p1A", demo)] == ["20261116T100000-s5c-p1A"]
+    assert edb.hunt_sessions("", demo) == []
+
+
+def test_the_run_helper_and_the_ab_series_record_each_run_and_never_fail_for_it(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import flow_run as fr
+    import stage2_ab as s2
+
+    calls: list[tuple[list[str], Path]] = []
+
+    def fake(sessions: Any, log: Path, **kw: Any) -> dict[str, Any]:
+        calls.append(([Path(s).name for s in sessions], log))
+        return {
+            "state": "done",
+            "rc": 0,
+            "sessions": [Path(s).name for s in sessions],
+            "log": str(log),
+        }
+
+    demo = tmp_path / "demo"
+    (demo / "20261116T100000-project-11161000-hunt1").mkdir(parents=True)
+    (demo / "20261116T100000-project-11161000-hunt1" / "events.jsonl").write_text("{}\n")
+    monkeypatch.setattr(edb, "record_after_run", fake)
+    monkeypatch.setattr(fr, "DEMO", demo)
+    h = fr.Helper(tmp_path / "helper")
+    h.dir.mkdir()
+    h.label, h.run_dir = "project-11161000", tmp_path / "rundir"
+    waits: list[float] = []
+
+    def timed(sessions: Any, log: Path, **kw: Any) -> dict[str, Any]:
+        waits.append(kw.get("wait_s", edb.AFTER_RUN_WAIT_S))
+        return fake(sessions, log, **kw)
+
+    monkeypatch.setattr(edb, "record_after_run", timed)
+    h.record()
+    # the helper waits less than the backend's freshness (its status never goes stale), then the
+    # record goes on in the background, whose end its loop notes
+    from poring_backend.routes_flowrun import HELPER_FRESH_S
+
+    assert waits == [fr.ECON_WAIT_S] and fr.ECON_WAIT_S < HELPER_FRESH_S
+    assert calls[-1] == (
+        ["20261116T100000-project-11161000-hunt1"],
+        tmp_path / "rundir" / "econ.log",
+    )
+    note = json.loads((h.dir / "runs.jsonl").read_text().splitlines()[-1])
+    assert note["event"] == "econ" and note["state"] == "done"
+    monkeypatch.setattr(edb, "reap_background", lambda: [{"pid": 7, "rc": 0, "state": "done"}])
+    h.reap_econ()
+    assert json.loads((h.dir / "runs.jsonl").read_text().splitlines()[-1])["event"] == "econ_end"
+    monkeypatch.setattr(edb, "reap_background", lambda: [])
+    # a failure is a note, never the run's end
+    monkeypatch.setattr(edb, "record_after_run", lambda *a, **k: 1 / 0)
+    h.record()
+    note = json.loads((h.dir / "runs.jsonl").read_text().splitlines()[-1])
+    assert note["state"] == "failed" and "ZeroDivisionError" in note["why"]
+    # the A/B series: after each run, its state into done.json's row
+    monkeypatch.setattr(edb, "record_after_run", fake)
+    monkeypatch.setattr(s2, "DEMO", demo)
+    (demo / "20261116T110000-s2-p1B-hunt1").mkdir()
+    (demo / "20261116T110000-s2-p1B-hunt1" / "events.jsonl").write_text("{}\n")
+    series = s2.Series({"label": "s2"}, tmp_path / "series")
+    series.dir.mkdir()
+    assert series.econ("s2-p1B") == "done"
+    assert calls[-1] == (["20261116T110000-s2-p1B-hunt1"], tmp_path / "series" / "s2-p1B.econ.log")
+    assert (
+        "economy record done (20261116T110000-s2-p1B-hunt1)"
+        in (series.dir / "series.log").read_text()
+    )
+    monkeypatch.setattr(edb, "record_after_run", lambda *a, **k: 1 / 0)
+    assert series.econ("s2-p1B") == "failed"
