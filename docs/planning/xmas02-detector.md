@@ -5293,4 +5293,20 @@ the parent's and Batt's to take.
   - The slowest visit fired at 1.97 s (frame 1234, 21:18:27). Visits run 10-42 frames.
 - **First fires:** 33 solo (a box >= 0.7). **Goblin-led:** in all 33 visits the alarm had fired by
   the time the first Goblin came on screen (delay 0).
-- **Q1crowd / Q1s / Q1c on sk6a:** to follow when labellers AC and AD finish (reported only).
+- **Q1crowd / Q1s / Q1c on sk6a** (reported only):
+  - The labellers: AC `e8bdc436...` and AD `bd3d262f...`, both NEW, blind, all 420 crops. The
+    pack was unchanged (checked before the score). 416 crops were evaluated (AC: 1 not yes; AD: 1 not
+    yes, 3 not good).
+  - AD reported one listing of the answers directory before writing: it saw AC's file NAME and did
+    not open it.
+  - The score: `eval_q1.py score --units`, 22:02, `q1-score-sk6a.json` `0904ef78...`.
+  - Q1crowd recall / precision:
+    - **Goblin 59: 51 / 59 = 0.864 / 1.000.** 29 charged boxes, all absolved by the crowd rule (on
+      Goblins); Q1s precision 0.638.
+    - The misses are unboxed crops. A recount at IoU 0.5 found no Goblin boxed as another class (7
+      unboxed by the recount; the scorer's matching counts 8 misses).
+    - knight 60: 1.000 / 1.000;
+    - Garm Baby 60: 0.933 / 1.000;
+    - Myst Case 60 and Cruiser 57: 1.000 / 1.000 each;
+    - Cookie and Christmas Cookie 60 each: 1.000 / 0.968 each;
+    - Q1crowd's per-species bars all pass. Q1c pooled 0.976 / 0.869.

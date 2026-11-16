@@ -1350,7 +1350,7 @@ fresh 32-stand sk5a): FAIL by ONE false fire.**
   in S6's own truth, to be closed by a new amendment before any new held-out.
 - Not deployed.
 
-➡️ **S7 (2026-11-16 21:5x ICT, xmas02-detector.md S7, Batt's "test again", scored once on the NEW
+➡️ **S7 (2026-11-16 21:54 ICT, xmas02-detector.md S7, Batt's "test again", scored once on the NEW
 32-stand sk6a): PASS on every line.**
 - The truth fix, pre-registered before sk6a: a frame within 5 s after an alarm unit's vanish
   (died or out of sight) is not alarm-free.
