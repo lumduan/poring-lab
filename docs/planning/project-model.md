@@ -376,7 +376,11 @@ arguments are the hunt box's exactly. `project_xmas_dun02.json` (`xmasProject()`
 stays the old one-box shape: loadable, its argv pinned. ➡️ **Since 2026-11-16 (Batt, live-blocks.md 17 #2; ADR-0020
 Amendment N):** loadable, but no real run. The lint (`old_runner`, readiness), the Run routes,
 the Run helper and the Run button refuse it; the A/B tools' reference arms still play it through
-`flow_play.py`.
+`flow_play.py`. The cookie no-swap example (live-blocks 16) is on the Load lists as its
+FUNCTIONS twin, `project_xmas_dun02_functions_cookie_noswap.json`
+(`xmasFunctionsCookieNoSwapProject()`): the functions box but attack_cookie and
+attack_cookie_xmas = strike(t); wait_kill(t); loot(t). Its one-box file
+(`project_xmas_dun02_cookie_noswap.json`) stays for stage6_ab's arm C.
 
 ## 8. Not converted (Batt's answer 6)
 

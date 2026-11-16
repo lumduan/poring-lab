@@ -66,7 +66,7 @@ import {
   startMap,
   type Tab,
   tabNameProblem,
-  xmasCookieNoSwapProject,
+  xmasFunctionsCookieNoSwapProject,
   xmasFunctionsProject,
   xmasHuntProject,
   xmasProject,
@@ -110,7 +110,9 @@ const READY: Record<string, () => { project: Project; world: WorldSource }> = {
   xmas_dun02: () => ({ project: xmasFunctionsProject(), world: "local" }),
   xmas_dun02_runner: () => ({ project: xmasProject(), world: "local" }),
   xmas_dun02_hunt: () => ({ project: xmasHuntProject(), world: "local" }), // live blocks 5b-2
-  xmas_dun02_cookie_noswap: () => ({ project: xmasCookieNoSwapProject(), world: "local" }), // live blocks 16
+  // live blocks 16, ➡️ round 29: the no-swap EXAMPLE in the functions shape (a real Run); the one-box
+  // version (xmasCookieNoSwapProject, stage6_ab's arm C) is off the lists
+  xmas_dun02_cookie_noswap: () => ({ project: xmasFunctionsCookieNoSwapProject(), world: "local" }),
   my_first_project: () => ({ project: sampleProject(), world: "sample" }),
 };
 

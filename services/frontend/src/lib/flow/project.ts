@@ -658,6 +658,27 @@ export function xmasCookieNoSwapProject(): Project {
   };
 }
 
+/** Round 29 follow-up (Batt 14.12 #2: make the no-swap box "work"; 16.8: a loadable EXAMPLE, not
+ * the default): the cookie no-swap box in the FUNCTIONS shape
+ * (fixtures/project_xmas_dun02_functions_cookie_noswap.json) -- exactly xmasFunctionsProject() but
+ * attack_cookie and attack_cookie_xmas cut to strike(t); wait_kill(t); loot(t), as
+ * xmasCookieNoSwapProject() cuts the one box. Its Run is a real run (no old runner block: round 29);
+ * the one-box version stays for stage6_ab's arm C (its sha256 pins), off the Load lists. */
+export function xmasFunctionsCookieNoSwapProject(): Project {
+  const p = xmasFunctionsProject();
+  const n = p.nodes[0];
+  if (n.kind !== "map") throw new Error("the ready-made box's node is a map node");
+  const mon = n.tabs.find((t) => t.name === MONSTERS_TAB);
+  if (!mon) throw new Error("the ready-made box has a monsters tab");
+  const plain = new Set<string>(NO_SWAP_MONSTERS.map((sp) => `${RECIPE_PREFIX}${sp}`));
+  mon.defs = mon.defs.map((d) => (plain.has(d.name) ? recipeDef(d.name.slice(RECIPE_PREFIX.length), false) : d));
+  return {
+    ...p,
+    name: "xmas_dun02_cookie_noswap",
+    description: "The ready-made xmas_dun02 with ONE recipe edit, an example (not the default; live-blocks 16): attack_cookie and attack_cookie_xmas are strike(t); wait_kill(t); loot(t) -- no Knife swap on the Christmas Cookie and the Cookie. The other monsters keep the Knife swap; everything else is the ready-made box.",
+  };
+}
+
 /** The two-map sample on the SYNTHETIC sample sheets (town_1 / field_1; the first screen). */
 export function sampleProject(): Project {
   return {

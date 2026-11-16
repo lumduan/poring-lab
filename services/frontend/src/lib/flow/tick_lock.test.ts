@@ -364,10 +364,11 @@ test("round 28: a misplaced copy of a SAFETY step says where it goes; moved back
 });
 
 test("round 29: a box whose main holds the old one-block runner loads but is no real Run -- the Run button's words are the engine's", async () => {
-  const { OLD_RUNNER_WORDS, oldRunnerOn, sampleProject, xmasCookieNoSwapProject, xmasHuntProject, xmasProject } = await import("./project.ts");
+  const { OLD_RUNNER_WORDS, oldRunnerOn, sampleProject, xmasCookieNoSwapProject, xmasFunctionsCookieNoSwapProject, xmasHuntProject, xmasProject } = await import("./project.ts");
   const mapOf = (p: ReturnType<typeof xmasProject>) => p.nodes.find((n) => n.kind === "map");
   for (const p of [xmasProject(), xmasHuntProject(), xmasCookieNoSwapProject()]) assert.ok(oldRunnerOn(mapOf(p)), p.name);
   assert.ok(!oldRunnerOn(mapOf(xmasFunctionsProject())), "the functions box runs");
+  assert.ok(!oldRunnerOn(mapOf(xmasFunctionsCookieNoSwapProject())), "the no-swap example (functions shape) runs");
   assert.ok(!sampleProject().nodes.some((n) => oldRunnerOn(n)));
   assert.ok(!oldRunnerOn(undefined));
   // (test_routes_flowrun.py pins these words to poring_flow.project.OLD_RUNNER_WORDS)

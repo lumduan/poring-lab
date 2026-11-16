@@ -50,6 +50,8 @@ TDH = TBF.TDH  # test_dungeon_hunt's simulated client
 FIX = TBF.FIX
 ONE = FIX / "project_xmas_dun02.json"
 NOSWAP = FIX / "project_xmas_dun02_cookie_noswap.json"
+FUN = FIX / "project_xmas_dun02_functions.json"  # the ready-made box (functions in tabs, 5c)
+FUN_NOSWAP = FIX / "project_xmas_dun02_functions_cookie_noswap.json"  # round 29: its twin
 NODE = "xmas_dun02"
 KNIFE, PLAIN = list(rc.KNIFE_SHAPE), list(rc.PLAIN_SHAPE)
 
@@ -96,6 +98,41 @@ def test_the_no_swap_box_is_the_one_box_but_its_two_cookie_recipes(tmp_path: Pat
             eat=kw["box_eat"], keys={k: x for k, x in n.keys.items() if k != "knife_key"},
             opener=n.keys["knife_key"]) is None  # fmt: skip
     assert v["bare_ready"] is True and v["knife_swap"] is True and v["steal_cue"] == "popup"
+
+
+# --- round 29 (Batt 14.12 #2 "make it work"; 16.8: an example, not the default): the twin -------
+def test_the_functions_twin_is_the_ready_made_box_but_its_two_cookie_recipes_and_runs() -> None:
+    """The Load lists' no-swap example in the FUNCTIONS shape: the ready-made box but the same two
+    recipes (16.1's check against the functions box), no old runner block (so its Run is a real
+    run, round 29), and prepared as a Run does: the functions box's argv and run() arguments but
+    box_recipes for the two cookies."""
+    text = FUN_NOSWAP.read_text()
+    assert text == pj.canonical_json(pj.from_json(text)) + "\n"
+    fun, old = json.loads(FUN.read_text()), json.loads(NOSWAP.read_text())
+    twin = json.loads(text)
+    assert ab.box_difference(fun, twin) is None  # the functions box but its two cookie recipes
+    mon = lambda d: next(t for t in d["nodes"][0]["tabs"] if t["name"] == "monsters")  # noqa: E731
+    assert mon(twin)["defs"] == mon(old)["defs"]  # 16.1's very recipes
+    p = pj.from_json(text)
+    assert pj.old_runner_nodes(p) == []  # no old runner block: the Run is not held
+    c, found = pj.project_lint(p)
+    assert [f.text for f in found if f.severity in ("error", "readiness")] == []
+    _fc, fun_found = pj.project_lint(pj.from_json(FUN.read_text()))
+    assert sorted(f.rule for f in found) == sorted(f.rule for f in fun_found)
+    assert c.flow is not None and live.problems(c.flow) == []
+    assert pj.runner_keys(p, NODE).keys == pj.runner_keys(pj.from_json(FUN.read_text()), NODE).keys
+    b, n = _prep(FUN), _prep(FUN_NOSWAP)
+    assert n.argv("L", Path("/S"), None) == b.argv("L", Path("/S"), None)
+    kb, kn = b.box_kwargs(), n.box_kwargs()
+    assert {k: v for k, v in kn.items() if k != "box_recipes"} == {
+        k: v for k, v in kb.items() if k != "box_recipes"}  # fmt: skip
+    assert (n.keys, n.vals) == (b.keys, b.vals)
+    assert (n.loop, n.default_species) == (b.loop, b.default_species)
+    assert {sp: (r["steps"], r["knife"], r["priority"]) for sp, r in kn["box_recipes"].items()} == {
+        "mystcase": (KNIFE, True, 1.0), "cruiser": (KNIFE, True, 1.0),
+        "cookie": (PLAIN, False, 1.0), "cookie_xmas": (PLAIN, False, 1.0)}  # fmt: skip
+    # the one-box no-swap recipes and the twin's are prepared alike (the same plan per species)
+    assert kn["box_recipes"] == _prep(NOSWAP).box_kwargs()["box_recipes"]
 
 
 # --- the lock: the hook answers from the fixture, the runner's BareCtl plays it ------------------

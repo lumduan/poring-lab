@@ -441,9 +441,10 @@ Amendment B); a not-adopted model is never offered.
   The /maps Load list also offers **xmas_dun02_cookie_noswap** (live-blocks 16: the one box with
   no Knife swap on the Christmas Cookie and the Cookie, `attack_cookie` / `attack_cookie_xmas` =
   strike, wait_kill, loot; the other monsters keep the swap): load it there and Run it from START. ➡️ **Since
-  round 29 (2026-11-16):** its main is the old runner block, so it loads and simulates but Run is
-  held (as for xmas_dun02_runner and xmas_dun02_hunt). Its stage-6 A/B arm still plays it
-  through `flow_play.py`.
+  round 29 (2026-11-16):** that entry is the FUNCTIONS-shape twin: the ready-made xmas_dun02 with
+  those two recipes, an example of a recipe edit, not the default. Its Run is a real run. The
+  one-box version (the old runner block, stage-6 A/B arm C) is off the Load lists; the A/B still
+  plays it through `flow_play.py`.
   - **/maps:** a small **START** pill left of the start map, joined to its entry; drag that
     connection onto another map and the run starts there (or "Start here" in a node's inspector).
     **Run** (amber, beside Simulate; press, then press again within 4 s) plays the project in the

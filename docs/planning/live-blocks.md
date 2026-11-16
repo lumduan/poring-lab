@@ -2187,14 +2187,31 @@ hunt_loop() (load xmas_dun02)".
 - **Which ready-made boxes this holds:** every one whose main still calls the runner block:
   - xmas_dun02_runner;
   - xmas_dun02_hunt (14: its hunt tab plays as blocks, but main is the runner block);
-  - xmas_dun02_cookie_noswap (16: stage6_ab's arm C);
+  - the one-box xmas_dun02_cookie_noswap file (16: stage6_ab's arm C; ➡️ off the Load lists since
+    its functions twin, below);
   - the stage 2-4 and session fixtures.
 
-  Their Load-list words now say "it loads and simulates, but Run is held". Only xmas_dun02 (the
-  functions box) and boxes built like it run.
-  - **OPEN, for the parent / Batt:** the cookie no-swap example can no longer be Run from the
-    page. If it should be, it needs a functions-shape twin (the functions box with 16's two
-    recipes). That is not built here.
+  The listed ones' Load-list words now say "it loads and simulates, but Run is held". Only
+  xmas_dun02 (the functions box) and boxes built like it run.
+  - ➡️ **The no-swap example's twin is BUILT (the parent's follow-up, 2026-11-16; Batt 14.12 #2
+    "make it work", 16.8 "an example, not the default"):**
+    - `fixtures/project_xmas_dun02_functions_cookie_noswap.json` = `xmasFunctionsCookieNoSwapProject()`.
+      It is the functions box with attack_cookie and attack_cookie_xmas cut to strike(t);
+      wait_kill(t); loot(t), 16.1's very recipes. Everything else is the functions box byte for
+      byte (`stage6_ab.box_difference(functions, twin)` is None).
+    - It replaces the old entry on both Load lists, under the same title,
+      xmas_dun02_cookie_noswap. Its words say "an EXAMPLE of a recipe edit, not the default".
+    - Its Run is not held: there is no old runner block.
+    - The one-box file stays for stage6_ab's arm C (its sha256 pins), off the lists.
+    - Tests:
+      - test_cookie_noswap.py: prepare gives the functions box's argv and run() arguments but
+        box_recipes for the two cookies; lint without errors or readiness items, its rules the
+        functions box's; not_live none; the same keys.
+      - project.test.ts: the fixture equals the TS twin; the twin is the functions box but the
+        two recipes; every tab round-trips.
+      - blockly_headless.test.ts: every tab through real Blockly.
+      - layout.test.ts: no overlap, at 390 to 2400.
+      - tick_lock.test.ts: oldRunnerOn is false.
 - **Reading (the parent's, 17 #2):** the stage A/B tools (`scripts/stage*_ab.py`) launch
   `flow_play.py play` directly with their REFERENCE arms (e.g. 15.13's arm A, the runner block).
   Those are tests of the new shape against the old, not real runs, so they stay allowed.
@@ -3748,6 +3765,11 @@ The bar (16.5):
 **Recommendation (the parent, for Batt):**
 - Do NOT make the no-swap box the default: same kills within noise, about 7,500 z/h less.
 - Keep it as a loadable example (xmas_dun02_cookie_noswap). It shows that a recipe edit plays live.
+  - ➡️ **2026-11-16 (round 29 follow-up, 12.13):** the example on the Load lists is now the
+    FUNCTIONS-shape twin (`project_xmas_dun02_functions_cookie_noswap.json`,
+    `xmasFunctionsCookieNoSwapProject()`): the ready-made xmas_dun02 with the same two recipes, so
+    its Run is a real run. Its words say it is an example, not the default. The one-box file
+    measured here stays for stage6_ab's arm C and its sha256 pins, off the lists.
 - The next block experiment should target time without giving up steals, e.g. no loot(t) for a
   species whose drops are trimmed anyway (needs recipes.SHAPES widened, 14.8).
 
