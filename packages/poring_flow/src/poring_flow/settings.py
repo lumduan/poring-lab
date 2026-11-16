@@ -898,6 +898,13 @@ SWITCHES: tuple[Field, ...] = (
         needs=(("alarm_fast", _ON),),
     ),  # fmt: skip
     Field(
+        "fly_first",
+        "safety",
+        "switch",
+        "a boss seen, at any distance: the Fly Wing first, no Knife swap before it",
+        flag="--fly-first",
+    ),  # fmt: skip  # dungeon@9.57 (Batt 2026-11-16; live-blocks.md 18): OFF until s7ab passes
+    Field(
         "boss_walk",
         "safety",
         "switch",
@@ -1093,6 +1100,7 @@ DEFAULTS: dict[str, Any] = {
     "garm_confirm": 2,
     "alarm_fast": True,  # dungeon@9.53 (Batt 2026-11-14: "Fly Wing away"; live-blocks 11)
     "alarm_solo": 0.7,
+    "fly_first": False,  # dungeon@9.57 (live-blocks.md 18): off until s7ab passes (18.4 #8)
     "boss_walk": False,
     "unread_step": False,
     "box_detector": "gpu",
@@ -1141,6 +1149,7 @@ FIND: dict[str, tuple[str, ...]] = {
     "garm_confirm": ("garm", "alarm"),
     "alarm_fast": ("garm", "alarm", "hud"),
     "alarm_solo": ("garm", "alarm"),
+    "fly_first": ("boss", "knight", "fly", "wing", "first"),
     "GARM_FRESH_S": ("garm", "alarm"),
     "npc_guard": ("npc",),
     "NPC_NO_FIGHT": ("npc",),

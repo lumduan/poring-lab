@@ -3039,7 +3039,10 @@ def test_bare_steal_is_wired_off_by_default_at_strike_tick_escapes_and_end() -> 
     pb = pb[: pb.index("\n        def ", 10)]
     assert pb.index("hs.bare.escape()") < pb.index("agent_raw.keys(keys_[what])")
     assert 'if what == "fly" and hs.bare is not None:' in pb
-    assert src.count("hs.bare.escape()") == 3  # press + the boss walk-away + the unreach walk
+    # press + the boss walk-away + the unreach walk (today's program: the fly-first branches read
+    # as their else, live-blocks 18; with them, its HP Fly Wing and the re-arm after a boss one)
+    assert hc.unflag(src)[0].count("hs.bare.escape()") == 3
+    assert src.count("hs.bare.escape()") == 5
     for ind in (" " * 24, " " * 16):  # the boss guard's walk-away; --unreach-escape's walk
         assert (f"{ind}hs.bare.escape()  # dungeon@9.27: never walk away bare\n{ind}"
                 'click_at(u_w, v_w, "walk")') in src  # fmt: skip

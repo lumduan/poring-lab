@@ -72,7 +72,8 @@ def test_the_one_box_holds_every_setting_block_it_uses_at_its_default_in_its_gro
     (x,) = p.nodes
     got = {k: (t.name, v.value) for t in x.tabs for k, v in t.vars.items()}
     assert got == {f.var: (f.group, f.default) for f in st.BLOCKS if f.name not in BOX_PLAYS_THEM}
-    assert len(got) == 116 and not any(f.var in got for f in st.FIELDS if not f.block)
+    # 117 since live-blocks 18 (fly_first, dungeon@9.57)
+    assert len(got) == 117 and not any(f.var in got for f in st.FIELDS if not f.block)
     # the five are exactly what the engine's takeovers say this box plays itself (live.takeovers)
     c = P.compile_project(p)
     assert c.flow is not None

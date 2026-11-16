@@ -48,6 +48,13 @@ Why each rewrite keeps behaviour (the conditions `check` verifies on the base):
         (default DRIVE_BASE, 5b-1's merged runner) as ASTs; the module outside run() is REV's plus
         exactly DRIVE_ADDED; the guarded steps act only in their mode; rc 1 on any difference
 
+live-blocks 18 (dungeon@9.57 --fly-first, Batt 2026-11-16: "a boss on the screen, at any distance:
+the Fly Wing first"): every fly-first change is a BRANCH whose condition is exactly one of
+FLY_FIRST_TESTS (`if fly_first:` in run(), `if FLY_FIRST:` in the module), its else today's code.
+`check` and `drive` read the file with every such branch as its else and without the module names
+fly-first adds (FLY_FIRST_ADDED): so with the flag off the program they prove is the base's, and a
+change anywhere else is refused as before.
+
 The text it derives is formatted by `ruff format` afterwards (formatting is AST-neutral); `check`
 reads the committed file, never trusts `derive`'s output.
 """
@@ -83,6 +90,12 @@ DRIVE_ADDED = (
     "STEP_GUARD", "BLOCK_OWNS", "DRIVE_SPIN_MAX", "DRIVE_SKILL_ROLES", "DRIVE_HOOK", "HuntTarget",
     "HuntView", "HuntCursor", "hook_drives", "drive_refused", "hunt_drive",
     "RUNNER_BLOCKS_VERSION", "DRIVE_OPTIONAL_STEPS",  # 5c (live-blocks 15.3): the visible tick
+)  # fmt: skip
+# live-blocks 18 (dungeon@9.57): the fly-first branches' conditions, and the module names it adds
+FLY_FIRST_TESTS = ("fly_first", "FLY_FIRST")
+FLY_FIRST_ADDED = (
+    "FLY_FIRST", "FLY_FIRST_VERSION", "FF_LATCH_S", "FF_REARM_S", "FF_BOSS_WHYS", "alarm_classes",
+    "ff_latch", "ff_sighting",
 )  # fmt: skip
 # the mode steps the cursor calls whoever plays when their mode is another (STEP_GUARD): each one's
 # body acts only in that mode (the proof: its statements are ifs on that mode, nothing else)
@@ -990,9 +1003,71 @@ def guard_problems(run: ast.FunctionDef, guarded: dict[str, str] = GUARDED) -> l
     return bad
 
 
+class _Unflag(ast.NodeTransformer):
+    """live-blocks 18: every statement list with each fly-first branch replaced by its else (or,
+    ``take_body``, by its body: the program with the flag on)."""
+
+    def __init__(self, take_body: bool = False) -> None:
+        self.n = 0
+        self.empty: list[int] = []
+        self.take_body = take_body
+
+    def _stmts(self, stmts: list[ast.stmt]) -> list[ast.stmt]:
+        out: list[ast.stmt] = []
+        for st in stmts:
+            if isinstance(st, ast.If) and ast.unparse(st.test) in FLY_FIRST_TESTS:
+                self.n += 1
+                out.extend(self._stmts(st.body if self.take_body else st.orelse))
+            else:
+                out.append(self.visit(st))
+        return out
+
+    def generic_visit(self, node: ast.AST) -> ast.AST:
+        for name, value in ast.iter_fields(node):
+            if isinstance(value, list) and value and all(isinstance(x, ast.stmt) for x in value):
+                got = self._stmts(value)
+                if not got:
+                    self.empty.append(getattr(node, "lineno", 0))
+                setattr(node, name, got)
+            elif isinstance(value, list):
+                setattr(node, name, [self.visit(x) if isinstance(x, ast.AST) else x for x in value])
+            elif isinstance(value, ast.AST):
+                setattr(node, name, self.visit(value))
+        return node
+
+
+def unflag(src: str) -> tuple[str, int]:
+    """PURE (live-blocks 18): ``src`` with every fly-first branch (``if <FLY_FIRST_TESTS>:``,
+    anywhere) read as its else, and without the top-level statements named in FLY_FIRST_ADDED;
+    and how many branches it read. Unchanged text when there are none. Raises ValueError when a
+    branch's removal leaves a body empty (a branch must REPLACE code or add to it)."""
+    tree = ast.parse(src)
+    u = _Unflag()
+    tree = u.visit(tree)
+    if u.empty:
+        raise ValueError(f"a fly-first branch leaves a body empty (line {u.empty[0]})")
+
+    def name_of(n: ast.stmt) -> str | None:
+        if isinstance(n, ast.FunctionDef | ast.ClassDef | ast.AsyncFunctionDef):
+            return n.name
+        if isinstance(n, ast.Assign) and len(n.targets) == 1:
+            return ast.unparse(n.targets[0])
+        if isinstance(n, ast.AnnAssign):
+            return ast.unparse(n.target)
+        return None
+
+    kept = [n for n in tree.body if name_of(n) not in FLY_FIRST_ADDED]
+    if u.n == 0 and len(kept) == len(tree.body):
+        return src, 0
+    tree.body = kept
+    return ast.unparse(tree), u.n
+
+
 def drive_check(base_src: str, new_src: str) -> int:
     """5b-2's proof (live-blocks.md 14): with no drive the program is 5b-1's. Prints each fact,
-    rc 0 when all hold."""
+    rc 0 when all hold. live-blocks 18: the file's fly-first branches are read as their else."""
+    new_src, n_ff = unflag(new_src)
+    print(f"fly-first branches read as their else (live-blocks 18): {n_ff}")
     base_tree, new_tree = ast.parse(base_src), ast.parse(new_src)
 
     def run_of(t: ast.Module) -> ast.FunctionDef:
@@ -1062,11 +1137,14 @@ def drive_check(base_src: str, new_src: str) -> int:
     return 0 if ok else 1
 
 
-def driver_loop(tree: ast.AST) -> ast.While:
+def driver_loop(tree: ast.AST, fly_first: bool = False) -> ast.While:
     """For tests that reason about "the loop's statements": run()'s main loop as the driver PLAYS
     it -- the steps' bodies inlined in hunt_steps' order, `return TICK_DONE` as `continue`,
     `return RUN_END` as `break` (OUTLINE's inverse; `check` proves it is the same program). `tree`:
-    run()'s FunctionDef or a module holding it; a run() not outlined: its own loop."""
+    run()'s FunctionDef or a module holding it; a run() not outlined: its own loop. live-blocks 18:
+    the fly-first branches read as their else (today's runner), or with ``fly_first`` as their
+    body (the runner with --fly-first)."""
+    tree = _Unflag(take_body=fly_first).visit(copy.deepcopy(tree))
     run = tree if isinstance(tree, ast.FunctionDef) else next(
         n for n in ast.walk(tree)
         if isinstance(n, ast.FunctionDef) and n.name == "run")  # fmt: skip
@@ -1161,7 +1239,10 @@ def check(
     *,
     drive_ok: bool = False,
 ) -> int:
-    """``drive_ok`` (the CLI's): a 5b-2 drive branch is read as its else (inline_steps)."""
+    """``drive_ok`` (the CLI's): a 5b-2 drive branch is read as its else (inline_steps).
+    live-blocks 18: the file's fly-first branches are read as their else (unflag)."""
+    new_src, n_ff = unflag(new_src)
+    print(f"fly-first branches read as their else (live-blocks 18): {n_ff}")
     ri = parse_run(base_src)
     lifted = lifted_names(ri, not_lifted, extra)
     cond = conditions(ri, lifted, aliased)

@@ -517,7 +517,10 @@ Amendment B); a not-adopted model is never offered.
   be no runner [page]: it makes learning very hard. Everything in the xmas_dun02 flow, split into
   tabs ... make them ALL blocks, no hardcoding"; [planning/live-blocks.md](planning/live-blocks.md)
   section 12):
-  - **Every setting of the runner's hunt core is a block** (121 of them: heal and escape, the
+  - **Every setting of the runner's hunt core is a block** (121 of them -- ➡️ 122 since
+    2026-11-16, with the safety tab's `fly_first`, "a boss seen, at any distance: the Fly Wing
+    first, no Knife swap before it", off until its A/B s7ab passes,
+    [planning/live-blocks.md](planning/live-blocks.md) 18 --: heal and escape, the
     Knife swap, leaving the map, the respawn, the start, the fight, choosing and striking, loot,
     walking and exploring, safety and the end, timing), in the TAB of its group on a map node or
     on Global: its words, its value as it is set (a number or a percent with its range, step and

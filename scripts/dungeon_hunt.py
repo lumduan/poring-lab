@@ -394,6 +394,69 @@ GARM_CONFIRM = 1
 # flies an hour (no party member in view, +-2 s), at --alarm-solo 0.7 with --garm-confirm 2.
 ALARM_FAST_VERSION = "9.53"
 ALARM_SOLO_SCORE = 0.7
+# --fly-first (dungeon@9.57, live-blocks.md 18; Batt 2026-11-16 ~10:2x, translated: "A boss on the
+# screen, at ANY distance: press the Fly Wing first, no Knife swap"). s5c-ab's two deaths (18.1):
+# a sighting by the alarm's own rule 2.2 s and 3.4 s before each death, inside box_target's settle
+# and still waits, which never read the alarm, gone before the loop read it; the Fly Wing that
+# did go out came after the dagger key (BareCtl.escape: 0.21 s) and after the death. Under the
+# flag: ONE boss read first in the tick (before any press), a qualifying detection LATCHED
+# FF_LATCH_S until a Fly Wing acts on it, the read inside those waits and before a strike's
+# opener, the Fly Wing with nothing before it (the dagger back on FF_REARM_S after the landing),
+# the HUD twin's boxes fed, --boss-walk off. Every change is a branch `if fly_first:` / `if
+# FLY_FIRST:` whose else is today's code (huntstate_check reads it as its else: the flag off is
+# today's runner).
+FLY_FIRST = True  # this module's fly-first branches (taken; what they change is set only by run())
+FLY_FIRST_VERSION = "9.57"
+FF_LATCH_S = 3.0  # > the longest unread wait left (the fresh-box wait, <= BOX_TARGET_WAIT_S)
+FF_REARM_S = 1.0  # after a fly-first Fly Wing: the dagger back on (she is elsewhere by then)
+FF_BOSS_WHYS = ("garm", "boss")  # the press whys of a boss Fly Wing (the alarm's, the line's)
+
+
+def alarm_classes(model: Mapping[str, Any] | None) -> tuple[str, ...]:
+    """PURE (9.57, live-blocks.md 18.3; the hook for a model with a Goblin or Knight class): the
+    classes the alarm flies on -- the box model's models.yaml ``alarm`` list, when it names classes
+    of that model, else ALARM_CLASSES (garm_baby)."""
+    own = (model or {}).get("alarm")
+    if isinstance(own, list | tuple) and own:
+        classes = set((model or {}).get("classes") or ())
+        names = tuple(str(c) for c in own)
+        if all(c in classes for c in names):
+            return names
+    return ALARM_CLASSES
+
+
+def ff_latch(boxes: Any, need: int, solo: float | None) -> None:
+    """9.57 (--fly-first): the box watcher's alarm feed LATCHES a sighting: a detection whose alarm
+    boxes qualify (``need`` in a row, or one at ``solo`` or more: alarm_seen's rule) is kept in
+    ``boxes.ff_seen`` = (grab time, the box, the streak, from the HUD twin) until a newer one
+    replaces it -- the next empty detection no longer erases it (ff_sighting reads it). The feed
+    itself (``alarm``, ``alarm_n``) is unchanged; the wrapper runs under the watcher's lock."""
+    feed = boxes._feed_alarm
+    boxes.ff_seen = None
+
+    def latched(t: float, alarm: list[Any], hud: bool = False) -> None:
+        feed(t, alarm, hud)
+        if boxes.alarm[0] != t or not alarm:
+            return  # a detection grabbed before the alarm's own (late), or no alarm box
+        b = alarm_seen(boxes.alarm, t, streak=boxes.alarm_n, need=need, solo=solo)
+        if b is not None:
+            boxes.ff_seen = (t, b, int(boxes.alarm_n), bool(hud))
+
+    boxes._feed_alarm = latched
+
+
+def ff_sighting(seen: Any, now: float, after: float,
+                latch_s: float | None = None) -> Any | None:  # fmt: skip
+    """PURE (9.57): the latched sighting (ff_latch's tuple) when it is at most ``latch_s`` old
+    (FF_LATCH_S) and was grabbed after ``after`` (the last Fly Wing: one Fly Wing a sighting),
+    else None."""
+    latch_s = FF_LATCH_S if latch_s is None else latch_s
+    if not seen:
+        return None
+    t = float(seen[0])
+    return seen if now - t <= latch_s and t > after else None
+
+
 # --far-single (dungeon@9.8, rogue-xmas02.md 4Z, pilot p18; Amendment J item 2a, "why far strikes
 # miss"): on p16 the strikes 2-6 cells away missed 5 of 41, 7-8 cells 19 of 30, 9-12 cells 33 of
 # 35. The packets: a click on a monster out of reach makes the CLIENT walk to it first (a walk
@@ -3742,6 +3805,9 @@ def fixes_of(a: argparse.Namespace) -> dict[str, Any]:
     if getattr(a, "alarm_fast", False) and getattr(a, "garm_fly", False):  # dungeon@9.53
         out["alarm_fast"] = [float(getattr(a, "alarm_solo", ALARM_SOLO_SCORE)),
                              bool(getattr(a, "hud_fast", None)), ALARM_FAST_VERSION]  # fmt: skip
+    if FLY_FIRST:  # noqa: SIM102 -- a fly-first branch (huntstate_check)
+        if getattr(a, "fly_first", False):  # dungeon@9.57 (live-blocks.md 18)
+            out["fly_first"] = [FF_LATCH_S, FF_REARM_S, FLY_FIRST_VERSION]
     if getattr(a, "boss_walk", False):  # dungeon@9.18 (rogue-xmas02.md 4AZ)
         out["boss_walk"] = [BOSS_WALK_R, BOSS_WALK_MIN, BOSS_WALK_GRACE_S, BOSS_WALK_MAX,
                             BOSS_WALK_WINDOW_S, "9.18"]  # fmt: skip
@@ -4468,7 +4534,10 @@ class BoxWatch:
                 raw = self.det.detect(img, prefer=prefer or "gpu") if self.gpu else \
                     self.det.detect(img)  # fmt: skip
                 got = [b for b in raw if b.cls == "monster"]
-                alarm = [b for b in raw if b.cls in ALARM_CLASSES]  # 9.19: never struck
+                if FLY_FIRST:  # 9.57: the box model's alarm classes (alarm_classes), else these
+                    alarm = [b for b in raw if b.cls in getattr(self, "alarm_cls", ALARM_CLASSES)]
+                else:
+                    alarm = [b for b in raw if b.cls in ALARM_CLASSES]  # 9.19: never struck
             except Exception:  # noqa: BLE001 -- a dead worker ends the watcher, not the run
                 return
             path = str(getattr(self.det, "last_path", "")) or "cpu"
@@ -4499,7 +4568,12 @@ class BoxWatch:
                     self.hud_last = (t_h, [b for b in raw_h if b.cls == "monster"])
                     self.n_hud += 1
                     if getattr(self, "alarm_hud", False):  # 9.53 (--alarm-fast)
-                        self._feed_alarm(t_h, [b for b in raw_h if b.cls in ALARM_CLASSES], True)
+                        if FLY_FIRST:  # 9.57: the box model's alarm classes
+                            cls_h = getattr(self, "alarm_cls", ALARM_CLASSES)
+                            self._feed_alarm(t_h, [b for b in raw_h if b.cls in cls_h], True)
+                        else:
+                            self._feed_alarm(t_h, [b for b in raw_h if b.cls in ALARM_CLASSES],
+                                             True)  # fmt: skip
             self.kick_ev.wait(max(0.0, every - (time.monotonic() - t)))
             self.kick_ev.clear()
 
@@ -4642,7 +4716,11 @@ class BoxWatch:
                 self.hud_last = (t_h, [b for b in raw_h if b.cls == "monster"])
                 self.n_hud += 1
                 if getattr(self, "alarm_hud", False):  # 9.53 (--alarm-fast): its alarm too
-                    self._feed_alarm(t_h, [b for b in raw_h if b.cls in ALARM_CLASSES], True)
+                    if FLY_FIRST:  # 9.57: the box model's alarm classes
+                        cls_h = getattr(self, "alarm_cls", ALARM_CLASSES)
+                        self._feed_alarm(t_h, [b for b in raw_h if b.cls in cls_h], True)
+                    else:
+                        self._feed_alarm(t_h, [b for b in raw_h if b.cls in ALARM_CLASSES], True)
 
     def hud_info(self) -> dict[str, Any] | None:
         """dungeon@9.29c: for the run's end event, the HUD twin's detections (None without)."""
@@ -7583,6 +7661,18 @@ def run(a: argparse.Namespace, *, hook: Any = None, session: tuple[Any, Any] | N
                 boxes.alarm_hud = bool(getattr(a, "alarm_fast", False)
                                        and getattr(a, "garm_fly", False))  # 9.53  # fmt: skip
                 boxes.start_hud(float(hud_fast), out / "detections_hud.jsonl")
+        if FLY_FIRST:
+            fly_first = bool(getattr(a, "fly_first", False))  # dungeon@9.57 (live-blocks.md 18)
+            # its state: the dagger's re-arm time, this tick's boss line, the record of the press
+            ff: dict[str, Any] = {"after": None, "boss": False, "read_ns": None, "src": None,
+                                  "sight": None}  # fmt: skip
+            if fly_first and boxes is not None and getattr(a, "garm_fly", False):
+                boxes.alarm_cls = alarm_classes(box_model_)  # 18.3's hook (else garm_baby)
+                if getattr(boxes, "hud_th", None) is not None:
+                    boxes.alarm_hud = True  # the HUD twin's detections are sightings too
+                solo_f = (float(getattr(a, "alarm_solo", ALARM_SOLO_SCORE))
+                          if getattr(a, "alarm_fast", False) else None)  # fmt: skip
+                ff_latch(boxes, int(getattr(a, "garm_confirm", GARM_CONFIRM)), solo_f or None)
         queue = hs.queue = []  # MELEE-RING: SWORD cells seen while fighting
         hs.qscan_i = 0
         hs.ours_used = -2e9
@@ -7623,6 +7713,8 @@ def run(a: argparse.Namespace, *, hook: Any = None, session: tuple[Any, Any] | N
             ust["t0"] = None
 
         boss_walk_on = getattr(a, "boss_walk", False) and bool(bosses)  # dungeon@9.18
+        if fly_first:
+            boss_walk_on = False  # dungeon@9.57: a summon's boss line flies (a sighting means fly)
         boss_walks = hs.boss_walks = deque(maxlen=16)  # 9.18: the walk-aways' ticks
         hs.boss_grace_until = -1e9  # 9.18: boss lines read while walking away are the dog's last
         hs.fight_t0 = -1e9  # 9.16: when the current fight began (the engage below)
@@ -7754,13 +7846,27 @@ def run(a: argparse.Namespace, *, hook: Any = None, session: tuple[Any, Any] | N
         def press(what: str, why: str) -> None:
             if what == "fly" and why != "pos_unread":
                 unread_end("fly", why=why)  # 9.22: a teleport ends an escape (no-op without one)
-            if what == "fly" and hs.bare is not None:  # dungeon@9.27: never fly away bare -- the
+            if fly_first:
+                ff_now = what == "fly" and (why in FF_BOSS_WHYS or bool(ff["boss"]))
+                if ff_now:  # dungeon@9.57: a boss Fly Wing FIRST -- no dagger key before it; the
+                    ff["after"] = time.monotonic()  # dagger back on FF_REARM_S after (step_survive)
+                elif what == "fly" and hs.bare is not None:  # an HP Fly Wing: 9.27's order
+                    hs.bare.escape()
+            elif what == "fly" and hs.bare is not None:  # dungeon@9.27: never fly away bare -- the
                 hs.bare.escape()  # dagger's key first (no read-back here: the wing is not delayed)
             if what == "potion" and heal_candy:  # dungeon@9.31: a candy first while one is left
                 what = heal_pick(heal_left)
+            if fly_first:
+                t_key_f = r.ns()  # 9.57: the F8's send time (s7ab's fly-first line, 18.7)
             agent_raw.keys(keys_[what])
             counts[what] += 1
             ev({"kind": "press", "what": what, "key": keys_[what], "why": why})
+            if fly_first:  # noqa: SIM102 -- a fly-first branch (huntstate_check)
+                if ff_now:  # 9.57: the fly-first record (the read, the sighting, the send time)
+                    ev({"kind": "fly_first", "what": "fly", "why": why, "src": ff["src"] or "box",
+                        "t_read_ns": ff["read_ns"], "t_key_ns": t_key_f,
+                        "sight": ff["sight"]})  # fmt: skip
+                    ff["src"], ff["read_ns"], ff["sight"] = None, None, None
             if stock_watch is not None and what in STOCK_ITEMS:  # dungeon@8.4
                 stock_due[STOCK_ITEMS[what]] = time.monotonic() + STOCK_READ_S
                 stock_tries[STOCK_ITEMS[what]] = 0
@@ -8081,6 +8187,61 @@ def run(a: argparse.Namespace, *, hook: Any = None, session: tuple[Any, Any] | N
             escaped[0] = True
             return True
 
+        if FLY_FIRST:
+
+            def ff_fly(seen_f: Any, now_: float, src: str, inside: bool) -> None:
+                """dungeon@9.57 (--fly-first): a boss Fly Wing with nothing before it: the
+                sighting's record (an alarm one), the stand-up when she sits (the runner's own
+                rule; no weapon key), the press (a boss why: press() puts no dagger first and
+                writes the fly_first record), the sighting consumed (hs.fly_at)."""
+                ff["read_ns"], ff["src"] = r.ns(), src
+                if seen_f is not None:
+                    t_g, b_g, n_g, hud_g = seen_f
+                    ff["sight"] = {"t_ns": round(t_g * 1e9), "cls": b_g.cls,
+                                   "score": round(float(b_g.score), 3), "streak": n_g,
+                                   "hud": hud_g, "age_s": round(now_ - t_g, 2)}  # fmt: skip
+                    ev({"kind": "garm_seen", "cls": b_g.cls, "score": round(float(b_g.score), 3),
+                        "box": [round(float(v_), 1) for v_ in (b_g.x0, b_g.y0, b_g.x1, b_g.y1)],
+                        "age_s": round(now_ - t_g, 2), "streak": n_g, "inside": inside,
+                        "mode": hs.mode, "latched": True, "hud": hud_g})  # fmt: skip
+                    counts["garm_seen"] += 1
+                    if inside:
+                        counts["garm_inside"] += 1
+                if hs.sitting:
+                    press("stand", "boss")
+                    hs.sitting = False
+                press("fly", "garm" if src == "alarm" else "boss")
+                hs.fly_at = time.monotonic()
+                counts["fly_first"] += 1
+                if inside:
+                    counts["fly_first_inside"] += 1
+
+            def ff_inside(now_: float) -> bool:
+                """dungeon@9.57 (--fly-first): the latched sighting read INSIDE an action or a wait
+                (guard_tick, box_target's waits, a strike's start): its Fly Wing at once, and the
+                caller stops (escaped). Not within 2 s of a Fly Wing (its teleport still
+                landing), never twice in one action."""
+                if boxes is None or escaped[0] or now_ - hs.fly_at <= 2.0:
+                    return False
+                seen_i = ff_sighting(getattr(boxes, "ff_seen", None), now_, hs.fly_at)
+                if seen_i is None:
+                    return False
+                ff_fly(seen_i, now_, "alarm", True)
+                st.fly = time.monotonic()  # the HP-rate fly waits 3 s after it
+                ev({"kind": "escape", "how": "fly", "why": "garm", "inside": True,
+                    "by": "fly_first"})  # fmt: skip
+                escaped[0] = True
+                return True
+
+            def ff_wait(s_: float) -> bool:
+                """dungeon@9.57: a wait that reads the sighting every QUICK_S; True: it flew."""
+                end_ = time.monotonic() + s_
+                while (left_ := end_ - time.monotonic()) > 0:
+                    time.sleep(min(QUICK_S, left_))
+                    if ff_inside(time.monotonic()):
+                        return True
+                return False
+
         def guard_tick() -> bool:
             """Sustain INSIDE a long action (a scan's hovers, a strike's burst): a fresh HP / SP
             read and the strategy's keys at most every QUICK_S; True once we flew away (the caller
@@ -8089,7 +8250,10 @@ def run(a: argparse.Namespace, *, hook: Any = None, session: tuple[Any, Any] | N
             if now_ - last_quick[0] < QUICK_S:
                 return escaped[0]
             last_quick[0] = now_
-            if alarm_inside(now_):  # dungeon@9.53 (--alarm-fast): the party seen mid-action
+            if fly_first:
+                if ff_inside(now_):  # dungeon@9.57: the latched sighting, read mid-action
+                    return True
+            elif alarm_inside(now_):  # dungeon@9.53 (--alarm-fast): the party seen mid-action
                 return True
             img_ = frame()
             p_, s_ = hpp.read(img_, glyphs), hpp.read(img_, glyphs, hpp.SP_DY)
@@ -8368,6 +8532,9 @@ def run(a: argparse.Namespace, *, hook: Any = None, session: tuple[Any, Any] | N
             (BareCtl.before_strike); the swap's aim check may drop the click (False: no lock).
             dungeon@9.51 (the box's recipes): ``species`` -- the struck box's own species, when
             the strike knows it -- picks the box's recipe at that decision (recipe_knife)."""
+            if fly_first:  # noqa: SIM102 -- a fly-first branch (huntstate_check)
+                if ff_inside(time.monotonic()):  # dungeon@9.57: a sighting before the opener and
+                    return True  # the click: the Fly Wing first, the loop takes over
             if hs.bare is not None:
                 hp_b = st.hist[-1][1] if st.hist else None
                 rcp_ = (lambda: recipe_knife(species, by)) if box_recipe_on else None
@@ -8505,12 +8672,18 @@ def run(a: argparse.Namespace, *, hook: Any = None, session: tuple[Any, Any] | N
             assert boxes is not None
             box_sp[0] = None  # dungeon@9.51: the species of the box this call strikes
             t_0 = time.monotonic()
-            time.sleep(settle_left(hs.last_walk_click, t_0))
+            if fly_first:  # dungeon@9.57: the settle reads the sighting (18.1: both deaths)
+                ff_wait(settle_left(hs.last_walk_click, t_0))
+            else:
+                time.sleep(settle_left(hs.last_walk_click, t_0))
             still_rec: dict[str, Any] = {}
             if getattr(a, "still_strike", False):  # dungeon@9.4: the detection after a still scene
                 still_b, waited_b, _sh = wait_still()
                 still_rec = {"still": still_b, "still_wait_ms": round(waited_b * 1e3)}
                 counts["still_wait"] += 1
+            if fly_first:  # noqa: SIM102 -- a fly-first branch (huntstate_check)
+                if escaped[0]:  # 9.57: it flew in the wait: no strike (the loop takes over)
+                    return None
             t_set = time.monotonic()
             meta: dict[str, Any] | None = None
             arm = None
@@ -8521,6 +8694,9 @@ def run(a: argparse.Namespace, *, hook: Any = None, session: tuple[Any, Any] | N
                 fresh = meta is not None
             else:
                 fresh = boxes.wait_fresh(t_set, BOX_TARGET_WAIT_S)
+            if fly_first:  # noqa: SIM102 -- a fly-first branch (huntstate_check)
+                if ff_inside(time.monotonic()):  # 9.57: the sighting, after the fresh-box wait
+                    return None
             rec: dict[str, Any] = {"kind": "box_target", "fresh": fresh,
                                    "settle_ms": round((t_set - t_0) * 1e3),
                                    "wait_ms": round((time.monotonic() - t_set) * 1e3),
@@ -8652,6 +8828,9 @@ def run(a: argparse.Namespace, *, hook: Any = None, session: tuple[Any, Any] | N
             shifts: list[tuple[float, float]] = []
             while time.monotonic() - t_w < STILL_MAX_S:
                 time.sleep(0.06)
+                if fly_first:  # noqa: SIM102 -- a fly-first branch (huntstate_check)
+                    if ff_inside(time.monotonic()):  # dungeon@9.57: the sighting, every frame
+                        break
                 cur_ = np.ascontiguousarray(np.asarray(frame())[..., :3])
                 shifts.append(rp.scene_shift(prev, cur_))
                 prev = cur_
@@ -10207,6 +10386,10 @@ def run(a: argparse.Namespace, *, hook: Any = None, session: tuple[Any, Any] | N
                                 q for q in queue if list(q["cell"]) != list(hs.lock["cell"])
                             ]
                         hs.lock = None
+                if fly_first:  # noqa: SIM102 -- a fly-first branch (huntstate_check)
+                    if boss_hit is not None and tick - hs.fly_at <= 2.0:
+                        counts["fly_first_line_old"] += 1  # 9.57: a line from before the jump
+                        boss_hit = None
                 if not blt.alive():
                     hs.reason = "battle_log_reader_died"
                     return RUN_END
@@ -10214,6 +10397,37 @@ def run(a: argparse.Namespace, *, hook: Any = None, session: tuple[Any, Any] | N
             def step_survive() -> str | None:
                 """Calm; the box's survival events (stage 2); the runner's sustain; Auto Guard."""
                 nonlocal Image, box_fly, calm, diag_due, frac, off_t, spf, what, why, why_bx
+                if fly_first:  # dungeon@9.57 (live-blocks.md 18): the boss read, FIRST in the tick
+                    ff["boss"] = boss_hit is not None  # the box's Fly Wing on it: no dagger first
+                    if boss_hit is not None:
+                        hs.boss_until = tick + BOSS_AVOID_S  # no box engagement meanwhile
+                        ff["read_ns"] = r.ns()
+                    seen_t = (None if boxes is None else ff_sighting(
+                        getattr(boxes, "ff_seen", None), tick, hs.fly_at))  # fmt: skip
+                    if seen_t is not None:
+                        hs.boss_until = tick + BOSS_AVOID_S
+                    # the alarm's sighting is the runner's; a boss line is the box's when it plays
+                    # the boss fly (its event runs next, a pre-empt, its Fly Wing first)
+                    src_t = ("alarm" if seen_t is not None else
+                             "line" if boss_hit is not None and not box_boss else None)  # fmt: skip
+                    if src_t is not None and tick - hs.fly_at > 2.0:
+                        ff_fly(seen_t, tick, src_t, False)
+                        st.fly = time.monotonic()  # the HP-rate fly waits 3 s after it
+                        ev({"kind": "escape", "how": "fly", "why": "garm" if src_t == "alarm"
+                            else "boss", "by": "fly_first", "boss": boss_hit})  # fmt: skip
+                        hs.lock, hs.goal_path = None, None
+                        hs.loot_list, hs.fight_ref = [], None  # far away now
+                        hs.mode = "search"
+                        hs.here, hs.last_taken = None, -1e9  # Amendment F
+                        box_fight.clear()
+                        time.sleep(1.0)
+                        return TICK_DONE
+                    if ff["after"] is not None and tick - float(ff["after"]) >= FF_REARM_S:
+                        ff["after"] = None  # landed: the dagger back on (the next fight armed)
+                        if hs.bare is not None and not hs.bare.st.armed:
+                            hs.bare.escape()
+                            counts["fly_first_rearm"] += 1
+                            ev({"kind": "fly_first", "what": "rearm"})
                 frac = None if pct is None else pct / 100.0
                 spf = None if spp is None else spp / 100.0
                 # sustain first (every strategy), then Auto Guard (S4b2)
@@ -10318,7 +10532,9 @@ def run(a: argparse.Namespace, *, hook: Any = None, session: tuple[Any, Any] | N
                     hs.ua_drop_t = tick  # dungeon@9.26: an attacked sign
                 near_ = None
                 garm_now = False  # dungeon@9.49: this tick's boss_hit is the Garm Baby box's
-                if boss_hit is None and getattr(a, "garm_fly", False) and boxes is not None:
+                if fly_first:
+                    pass  # dungeon@9.57: the alarm is read first in the tick (step_survive)
+                elif boss_hit is None and getattr(a, "garm_fly", False) and boxes is not None:
                     streak_ = boxes.alarm_n  # 9.19b: --garm-confirm's consecutive detections
                     seen_ = alarm_seen(
                         boxes.alarm, tick, streak=streak_, need=a.garm_confirm, solo=alarm_solo
@@ -11685,6 +11901,17 @@ def build_parser() -> argparse.ArgumentParser:
         help="dungeon@9.53 (with --alarm-fast): one alarm box at this score or higher flies "
         "without --garm-confirm's streak (0 = off; default %(default)s)",
     )
+    if FLY_FIRST:
+        t.add_argument(
+            "--fly-first",
+            action=argparse.BooleanOptionalAction,
+            default=False,
+            help="dungeon@9.57 (live-blocks.md 18; OFF by default; Batt 2026-11-16: 'a boss on the "
+            "screen, at any distance: the Fly Wing first, no Knife swap'): one boss read first in "
+            "the tick, a Garm Baby alarm sighting latched 3 s and read inside the box target's "
+            "waits, the Fly Wing with no dagger key before it (the dagger back 1 s after), the "
+            "HUD twin's boxes fed to the alarm, --boss-walk off",
+        )
     t.add_argument(
         "--boss-walk",
         action=argparse.BooleanOptionalAction,

@@ -51,9 +51,9 @@ const f = (name: string) => {
 };
 const tabNamed = (p: Project, node: string, name: string) => nodeById(p, node)!.tabs.find((t) => t.name === name)!;
 
-test("the registry is the engine's: 121 setting blocks in 11 tabs, the keys none, each default valid", () => {
+test("the registry is the engine's: 122 setting blocks in 11 tabs, the keys none, each default valid", () => {
   assert.equal(SETTINGS.version, 3);
-  assert.equal(SETTING_BLOCKS.length, 121);
+  assert.equal(SETTING_BLOCKS.length, 122); // 122: + fly_first (live-blocks 18)
   // matpilot round 20 #5: in the box's tab order (survival before knife); "loop" is "timing"
   assert.deepEqual([...SETTING_TABS], ["survival", "knife", "exits", "respawn", "start", "fight", "aim", "loot", "walk", "safety", "timing"]);
   assert.deepEqual(SETTINGS.fields.filter((x) => !x.block).map((x) => x.name), ["heal_key", "fly_key", "home_key", "knife_key", "dagger_key"]);
@@ -75,7 +75,7 @@ test("the one box shows every setting it runs with, in its group's tab, at our d
   // respawn_button, respawn_ok): no block of them (test_settings.py pins the list to the engine's)
   assert.deepEqual([...BOX_PLAYS_THEM], ["potion_below", "fly_below", "weight_home", "respawn_at", "respawn_confirm_at"]);
   assert.deepEqual(shown, Object.fromEntries(SETTING_BLOCKS.filter((s) => !BOX_PLAYS_THEM.includes(s.name)).map((s) => [s.var, [s.group, s.default]])));
-  assert.equal(Object.keys(shown).length, 116);
+  assert.equal(Object.keys(shown).length, 117); // 117: + fly_first (live-blocks 18)
   // the file the engine and the Run read is the same project (byte-identical canonical)
   const file = JSON.parse(readFileSync(new URL("./fixtures/project_xmas_dun02.json", import.meta.url), "utf8")) as Project;
   assert.equal(canonical(file), canonical(x));
@@ -256,7 +256,7 @@ test("each setting is a block type of its own; the toolbox offers every one in i
     // the header is as narrow as the blocks (the old one was 1,062 px, cut at 1440)
     for (const l of labels) assert.ok(rowUnits([textUnits(l)]) <= SETTING_ROW_BUDGET, `${c.name}: ${l}`);
   }
-  assert.equal(toolboxBlocks(set).length, 121);
+  assert.equal(toolboxBlocks(set).length, 122);
   assert.equal(categoryOf(toolbox({}, { node: "login", main: true }), "Settings"), undefined);
 });
 
