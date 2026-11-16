@@ -4323,3 +4323,8 @@ Report only:
   - B nets more, from fewer potions and wings and more steals, within the run-to-run noise
     (r02B's 524 z/h short run among them). It is reported, not a claim.
 - **Next:** fly_first_hp goes ON in the ready-made boxes, as 18.10 #2 decided once the A/B passes.
+- ➡️ **fly_first_hp ON in the ready-made boxes, 17d18124** (2026-11-17, feat/fly-first-hp-on): the
+  functions box and its cookie twin hold the block ON (argv + `--fly-first-hp`); the reference arms
+  -- the one box, the hunt box, the one-box cookie box, the frozen A/B fixtures -- keep it off and
+  their pinned argv, and the registry's default stays off; stage5c_ab's, stage7_ab's and stage8_ab's
+  arms set the block explicitly, so each plan means what it meant.

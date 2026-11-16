@@ -521,9 +521,9 @@ Amendment B); a not-adopted model is never offered.
     2026-11-16, with the safety tab's `fly_first`, "a boss seen, at any distance: the Fly Wing
     first, no Knife swap before it" (➡️ ON in the ready-made xmas_dun02 and its cookie twin since
     s7ab passed, Batt 18.10 #1; the old one box, the hunt box and the A/B reference arms keep it
-    off), and `fly_first_hp`, "HP low, no boss in sight: the Fly Wing first too" (off until its
-    A/B s8ab passes), [planning/live-blocks.md](planning/live-blocks.md) 18 --: heal and escape, the
-    Knife swap, leaving the map, the respawn, the start, the fight, choosing and striking, loot,
+    off), and `fly_first_hp`, "HP low, no boss in sight: the Fly Wing first too" (➡️ ON in the same
+    two ready-made boxes since s8ab passed, 18.13; the reference boxes keep it off),
+    [planning/live-blocks.md](planning/live-blocks.md) 18 --: heal and escape, the Knife swap, leaving the map, the respawn, the start, the fight, choosing and striking, loot,
     walking and exploring, safety and the end, timing), in the TAB of its group on a map node or
     on Global: its words, its value as it is set (a number or a percent with its range, step and
     unit; on / off; a choice's options; a point's x and y, or none), its Python name after it
