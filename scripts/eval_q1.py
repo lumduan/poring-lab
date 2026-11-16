@@ -93,6 +93,11 @@ judged per VISIT and per frame, the way the runner flies (live-blocks.md 11.2, d
     screen; a gap > VISIT_GAP_S ends it. It is DETECTED when a fire falls within ALARM_WINDOW_S
     of its first frame;
   * an ALARM-FREE frame has no unit of the three species on screen; a fire there is a FALSE fire.
+S7's truth fix (``--vanishes V --post-vanish-s T``, ``eval_q1.py vanishes REC_DIR... --out V``): a
+frame within T s after a vanish (died, or out of sight) of an alarm-species unit of its session is
+NOT alarm-free (the client still draws the unit: its die animation and corpse, or its fade); it is
+counted apart, and a visit opening inside such a window is counted. Without the two options the
+view is S6's, unchanged.
 The bar lines (S6) and their minimums are in ``alarm_bars``; the verdict is FAIL when a judged
 line fails, INCONCLUSIVE when none fails but one cannot be judged, else PASS. --free sets are
 pooled (Goblin-free held-outs whose frames need not be consecutive: there only the solo branch
@@ -759,6 +764,11 @@ S6_MIN_VISITS = 30  # fewer visits: the detection line is INCONCLUSIVE
 S6_DETECT = (9, 10)  # >= 9 / 10 of the visits detected (10 detected >= 9 visits)
 S6_MIN_FREE = 50  # fewer alarm-free frames in a set: its false-fire line is INCONCLUSIVE
 S6_FALSE = (1, 100)  # <= 1 / 100 of the alarm-free frames fire (100 false <= 1 free)
+# Amendment S7 (2026-11-16): the client still DRAWS a unit after its vanish packet (a death: its die
+# animation and corpse; out of sight: its fade): a frame within POST_VANISH_S after such a vanish of
+# an alarm-species unit of its session is not alarm-free (measured on sk4a / sk1a / sk2a: S7.1)
+POST_VANISH_S = 5.0
+VANISH_REASONS = (0, 1)  # entity_vanish: 0 out of sight, 1 died (3 warped and 2 logout: not)
 
 
 def session_of(fk: str) -> str:
@@ -787,13 +797,30 @@ def alarm_fires(order: Sequence[str], units: Mapping[str, Mapping[str, Any]],
     return out
 
 
+def in_post_vanish(t: int, vanishes: Sequence[int], window_s: float | None) -> bool:
+    """PURE (S7): ``t`` lies in (vanish, vanish + window_s] for a vanish of its session (sorted
+    ns); ``window_s`` None: never (S6's definition)."""
+    if window_s is None:
+        return False
+    import bisect
+
+    i = bisect.bisect_left(vanishes, t)  # the vanishes strictly before t are vanishes[:i]
+    return i > 0 and t - vanishes[i - 1] <= window_s * 1e9
+
+
 def alarm_view(units: Mapping[str, Mapping[str, Any]],
                frames: Mapping[str, Sequence[Mapping[str, Any]]], alarm_cls: Iterable[str],
                party: Sequence[int] = PARTY, species: Sequence[int] = ALARM_SPECIES,
-               goblin: int = GOBLIN) -> dict[str, Any]:  # fmt: skip
+               goblin: int = GOBLIN, vanishes: Mapping[str, Sequence[int]] | None = None,
+               post_vanish_s: float | None = None) -> dict[str, Any]:  # fmt: skip
     """PURE (S6): one set's visits (detected or not, the delay to the first fire, and from the
     first GOBLIN on screen: reported) and its alarm-free frames (false fires, and any alarm-class
-    box at all: reported)."""
+    box at all: reported). S7: with ``vanishes`` (session -> its alarm-species vanish times) and
+    ``post_vanish_s``, a frame inside a post-vanish window is not alarm-free (counted apart), and a
+    visit opening inside one is counted (the symmetric case)."""
+    if post_vanish_s is not None and vanishes is None:
+        raise SystemExit("post_vanish_s needs the vanishes of every session")
+    gone = {k: sorted(v) for k, v in (vanishes or {}).items()}
     lacking = sorted(set(units) - set(frames))
     if lacking:
         raise SystemExit(f"PRED.json lacks {len(lacking)} units frames: {lacking[:5]}")
@@ -803,17 +830,24 @@ def alarm_view(units: Mapping[str, Mapping[str, Any]],
     visits: list[list[str]] = []
     last_t: int | None = None
     last_s: str | None = None
-    free = false = any_box = 0
+    free = false = any_box = post = 0
     false_keys: list[str] = []
+    post_keys: list[str] = []
+    opened_in_post = 0
     for fk in order:
         mobs = {int(u["mob"]) for u in units[fk]["units"]}
         t, sess = int(units[fk]["t"]), session_of(fk)
+        dead = in_post_vanish(t, gone.get(sess, []), post_vanish_s)
         if mobs & set(party):
             if last_t is None or sess != last_s or (t - last_t) / 1e9 > VISIT_GAP_S:
                 visits.append([])
+                opened_in_post += dead
             visits[-1].append(fk)
             last_t, last_s = t, sess
-        if not mobs & set(species):
+        if not mobs & set(species) and dead:
+            post += 1
+            post_keys.append(fk)
+        elif not mobs & set(species):
             free += 1
             any_box += any(d["cls"] in acls for d in frames[fk])
             if fire[fk]:
@@ -839,7 +873,48 @@ def alarm_view(units: Mapping[str, Mapping[str, Any]],
     return {"visits": rows, "n_visits": len(rows),
             "detected": sum(1 for r in rows if r["detected"]),
             "alarm_free_frames": free, "false_fires": false, "false_fire_frames": false_keys,
-            "alarm_free_frames_with_a_box": any_box, "frames": len(order)}  # fmt: skip
+            "alarm_free_frames_with_a_box": any_box, "frames": len(order),
+            "post_vanish_s": post_vanish_s, "post_vanish_frames": post,
+            "post_vanish_frame_keys": post_keys,
+            "post_vanish_fires": sum(1 for k in post_keys if fire[k]),
+            "visits_opened_in_post_vanish": opened_in_post}  # fmt: skip
+
+
+def session_vanishes(packets: Iterable[Mapping[str, Any]], species: Sequence[int] = ALARM_SPECIES,
+                     reasons: Sequence[int] = VANISH_REASONS) -> list[int]:  # fmt: skip
+    """PURE (S7): the receive times (ns, sorted) of every vanish of an alarm-species unit with a
+    reason in ``reasons`` (its job from the session's appear packets)."""
+    job: dict[int, int] = {}
+    out: list[int] = []
+    for e in packets:
+        appear = e.get("type") == "entity_appear" and e.get("gid") is not None
+        if appear and e.get("job") is not None:
+            job[int(e["gid"])] = int(e["job"])
+        elif (e.get("type") == "entity_vanish" and e.get("reason") in set(reasons)
+              and job.get(int(e.get("gid") or 0)) in set(species)):  # fmt: skip
+            out.append(int(e["t_mono_ns"]))
+    return sorted(out)
+
+
+def cmd_vanishes(a: argparse.Namespace) -> int:
+    """S7: every given session's alarm-species vanish times, from its packets (packets.jsonl.gz)."""
+    import gzip
+
+    out: dict[str, Any] = {}
+    reasons = tuple(a.reasons)
+    for d in a.sessions:
+        path = Path(d) / "packets.jsonl.gz"
+        with gzip.open(path, "rt") as fh:
+            packets = [json.loads(line) for line in fh if line.strip()]
+        out[Path(d).name] = {"vanishes_ns": session_vanishes(packets, reasons=reasons),
+                             "packets": str(path), "packets_sha256": sha256_file(path)}  # fmt: skip
+    doc = {"what": "xmas02-detector.md S7: alarm-species vanish times per session",
+           "species": list(ALARM_SPECIES), "reasons": list(reasons),
+           "sessions": out}  # fmt: skip
+    a.out.parent.mkdir(parents=True, exist_ok=True)
+    a.out.write_text(json.dumps(doc) + "\n")
+    print(json.dumps({s: len(v["vanishes_ns"]) for s, v in out.items()}))
+    return 0
 
 
 def alarm_bars(held: Mapping[str, Any], free: Sequence[Mapping[str, Any]]) -> dict[str, Any]:
@@ -873,28 +948,41 @@ def alarm_bars(held: Mapping[str, Any], free: Sequence[Mapping[str, Any]]) -> di
 
 
 def cmd_alarm(a: argparse.Namespace) -> int:
+    if (a.vanishes is None) != (a.post_vanish_s is None):
+        raise SystemExit("--vanishes and --post-vanish-s come together (S7)")
     manifest = json.loads(a.cache_manifest.read_text())
     species_cls = class_map(manifest)
     missing = [m for m in ALARM_SPECIES if m not in species_cls]
     if missing:
         raise SystemExit(f"{a.cache_manifest}: no class for {missing}")
     acls = [species_cls[m] for m in ALARM_SPECIES]
+    vanishes = None
+    if a.vanishes is not None:
+        vdoc = json.loads(a.vanishes.read_text())
+        vanishes = {s: list(v["vanishes_ns"]) for s, v in vdoc["sessions"].items()}
 
     def one(pair: Sequence[Path]) -> dict[str, Any]:
         units_p, pred_p = Path(pair[0]), Path(pair[1])
         pred = load_pred(pred_p, manifest["names"].values(), a.any_settings)
         units = json.loads(units_p.read_text())
+        if vanishes is not None:
+            lacking = sorted({session_of(k) for k in units["frames"]} - set(vanishes))
+            if lacking:
+                raise SystemExit(f"--vanishes lacks the sessions {lacking}")
         return {"units": [str(units_p), sha256_file(units_p)],
                 "pred": [str(pred_p), sha256_file(pred_p)],
-                **alarm_view(units["frames"], pred["frames"], acls)}  # fmt: skip
+                **alarm_view(units["frames"], pred["frames"], acls, vanishes=vanishes,
+                             post_vanish_s=a.post_vanish_s)}  # fmt: skip
 
     held = one(a.held_out)
     free = [one(p) for p in a.free or []]
     out = {"what": "xmas02-detector.md S6: the alarm bar (per visit, per frame)",
            "alarm_classes": acls, "solo": ALARM_SOLO, "conf": ALARM_CONF,
            "confirm_gap_s": CONFIRM_GAP_S, "window_s": ALARM_WINDOW_S,
-           "visit_gap_s": VISIT_GAP_S, "held_out": held, "free": free,
-           **alarm_bars(held, free)}  # fmt: skip
+           "visit_gap_s": VISIT_GAP_S, "post_vanish_s": a.post_vanish_s,
+           "vanishes": None if a.vanishes is None else [str(a.vanishes),
+                                                        sha256_file(a.vanishes)],
+           "held_out": held, "free": free, **alarm_bars(held, free)}  # fmt: skip
     a.out.parent.mkdir(parents=True, exist_ok=True)
     a.out.write_text(json.dumps(out, indent=1) + "\n")
     print(json.dumps({"lines": out["lines"], "verdict": out["verdict"]}, indent=1))
@@ -1092,9 +1180,23 @@ def main(argv: Sequence[str] | None = None) -> int:
     p.add_argument("--cache-manifest", type=Path, required=True)
     p.add_argument("--out", type=Path, required=True)
     p.add_argument("--any-settings", action="store_true")
+    p.add_argument("--vanishes", type=Path, default=None,
+                   help="S7: eval_q1.py vanishes' file (every set's sessions)")  # fmt: skip
+    p.add_argument("--post-vanish-s", type=float, default=None,
+                   help=f"S7: the post-vanish window (S7: {POST_VANISH_S})")  # fmt: skip
+    p = sub.add_parser("vanishes", help="S7: alarm-species vanish times per session (packets)")
+    p.add_argument("sessions", type=Path, nargs="+", help="recording directories")
+    p.add_argument(
+        "--reasons",
+        type=int,
+        nargs="+",
+        default=list(VANISH_REASONS),
+        help="the vanish reasons that open a window (S7: 0 out of sight, 1 died)",
+    )
+    p.add_argument("--out", type=Path, required=True)
     a = ap.parse_args(argv)
     run = {"refs": cmd_refs, "score": cmd_score, "units": cmd_units, "party": cmd_party,
-           "alarm": cmd_alarm}  # fmt: skip
+           "alarm": cmd_alarm, "vanishes": cmd_vanishes}  # fmt: skip
     return run[a.cmd](a)
 
 

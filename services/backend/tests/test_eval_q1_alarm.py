@@ -152,3 +152,72 @@ def test_alarm_cli(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
                 str(out),
             ]
         )
+
+
+# --- S7: the post-vanish windows (the client still draws a unit after its vanish packet) --------
+
+
+def test_in_post_vanish_is_after_a_vanish_and_within_the_window() -> None:
+    gone = [10 * 10**9, 50 * 10**9]
+    assert not q.in_post_vanish(10 * 10**9, gone, 5.0)  # the vanish's own instant: not after it
+    assert q.in_post_vanish(int(10.1e9), gone, 5.0) and q.in_post_vanish(15 * 10**9, gone, 5.0)
+    assert not q.in_post_vanish(int(15.1e9), gone, 5.0)
+    assert not q.in_post_vanish(5 * 10**9, gone, 5.0)  # before any vanish
+    assert not q.in_post_vanish(12 * 10**9, gone, None)  # S6's definition
+
+
+def test_session_vanishes_reads_died_and_out_of_sight_of_the_alarm_species() -> None:
+    pk = [{"type": "entity_appear", "gid": 1, "job": KNIGHT},
+          {"type": "entity_appear", "gid": 2, "job": MYST},
+          {"type": "entity_appear", "gid": 3, "job": GOB},
+          {"type": "entity_vanish", "gid": 1, "reason": 1, "t_mono_ns": 30},
+          {"type": "entity_vanish", "gid": 2, "reason": 1, "t_mono_ns": 20},  # not an alarm species
+          {"type": "entity_vanish", "gid": 3, "reason": 0, "t_mono_ns": 10},  # out of sight: counts
+          {"type": "entity_vanish", "gid": 3, "reason": 3, "t_mono_ns": 8},  # warped: not
+          {"type": "entity_vanish", "gid": 3, "reason": 1, "t_mono_ns": 5},
+          {"type": "entity_vanish", "gid": 9, "reason": 1, "t_mono_ns": 7}]  # fmt: skip
+    assert q.session_vanishes(pk) == [5, 10, 30]
+    assert q.session_vanishes(pk, reasons=(1,)) == [5, 30]
+
+
+def test_post_vanish_frames_leave_the_alarm_free_set_only() -> None:
+    """The party vanishes at t 12.5; frames 13-17.4 (inside 5 s) carry no unit yet a box is drawn
+    (fires at 13 and 14): S6 counts them false, S7 sets them apart. Frame 30 (outside) fires falsely
+    under both. A new party at 17 (6 s after the last party frame: a new visit) opens INSIDE the
+    window: counted; the visits and their detection are S6's."""
+    rows = [(10.0, [KNIGHT], [("k", 0.9)]), (11.0, [KNIGHT], [("k", 0.9)]),
+            (13.0, [], [("k", 0.9)]), (14.0, [], [("k", 0.8)]), (15.0, [], []),
+            (17.0, [GOB], [("g", 0.9)]), (17.4, [], []), (30.0, [], [("g", 0.9)])]  # fmt: skip
+    units, frames = world(rows)
+    s6 = q.alarm_view(units, frames, ACLS)
+    s7 = q.alarm_view(units, frames, ACLS, vanishes={"": [int(12.5e9)]}, post_vanish_s=5.0)
+    assert (s6["alarm_free_frames"], s6["false_fires"]) == (5, 3)
+    assert (s7["alarm_free_frames"], s7["false_fires"], s7["false_fire_frames"]) == \
+        (1, 1, ["f007"])  # fmt: skip
+    assert (s7["post_vanish_frames"], s7["post_vanish_fires"], s7["post_vanish_frame_keys"]) == \
+        (4, 2, ["f002", "f003", "f004", "f006"])  # fmt: skip
+    assert set(s6["false_fire_frames"]) - set(s7["false_fire_frames"]) == {"f002", "f003"}
+    assert s7["visits_opened_in_post_vanish"] == 1 and s6["visits_opened_in_post_vanish"] == 0
+    assert s7["visits"] == s6["visits"] and s7["n_visits"] == s6["n_visits"] == 2
+    with pytest.raises(SystemExit, match="needs the vanishes"):
+        q.alarm_view(units, frames, ACLS, post_vanish_s=5.0)
+
+
+def test_vanishes_cli_and_alarm_needs_both_options(tmp_path: Path) -> None:
+    import gzip
+
+    rec = tmp_path / "S"
+    rec.mkdir()
+    with gzip.open(rec / "packets.jsonl.gz", "wt") as fh:
+        for e in ({"type": "entity_appear", "gid": 1, "job": KNIGHT},
+                  {"type": "entity_vanish", "gid": 1, "reason": 1, "t_mono_ns": 42}):  # fmt: skip
+            fh.write(json.dumps(e) + "\n")
+    out = tmp_path / "v.json"
+    assert q.main(["vanishes", str(rec), "--out", str(out)]) == 0
+    doc = json.loads(out.read_text())
+    assert doc["sessions"]["S"]["vanishes_ns"] == [42] and doc["reasons"] == [0, 1]
+    assert q.main(["vanishes", str(rec), "--reasons", "0", "--out", str(out)]) == 0
+    assert json.loads(out.read_text())["sessions"]["S"]["vanishes_ns"] == []
+    with pytest.raises(SystemExit, match="come together"):
+        q.main(["alarm", "--held-out", "u", "p", "--cache-manifest", str(out), "--out", "x",
+                "--post-vanish-s", "5"])  # fmt: skip
