@@ -5245,3 +5245,52 @@ S6, and scores the frozen `xmas02sk` (`0b43ebbf...`) once on a NEW held-out, sk6
   - **Two NEW blind labellers, AC and AD** (M9's brief, the paths changed; AC `aa353028...`, AD
     `008eb056...`). They are working; their answers feed only the REPORTED Q1crowd, and THE BAR
     needs none.
+
+#### S7.6 (2026-11-16 21:56 ICT from `date`): THE RESULT (scored once) -- PASS on every line; the truth fix decided line 2a
+
+**The inputs (21:54:22, re-hashed before the score; each equals S7.5 / S5 / S4):**
+- `pred-sk6a-all.json` `2aa92e37...`, `units-sk6a-all.json` `f5db9a00...`, `vanishes-s7.json`
+  `c7bcd77e...`;
+- the Goblin-free held-outs: S5's `units-test.json` `986f13b4...` + S4.10's `q1-pred-test.json`
+  `531b7cdc...`, and `units-gw3.json` `f90c70b3...` + `q1-pred-gw3.json` `ffa36882...`;
+- the cache manifest `9d7a9b38...`, last.pt `0b43ebbf...`.
+
+**`eval_q1.py alarm --vanishes ... --post-vanish-s 5.0`, once (21:54), `alarm-sk6a.json`
+`347ed36590b2ac25485142b54e7c211972e8e20dc528e1e5a9da917c726ee875`:**
+
+| line (S7.2 = S6.2) | measured | bar | verdict |
+|---|---|---|---|
+| **1. detection** | **33 / 33 visits = 1.000** (31 fired at the visit's first frame, 1 at 1.00 s, 1 at 1.97 s) | >= 90 % of >= 30 | **PASS** |
+| **2a. false fires, sk6a** | **0 / 98 alarm-free frames = 0.0 %** (none holds an alarm-class box) | <= 1 % of >= 50 | **PASS** |
+| **2b. false fires, pooled TEST + gw3** | 0 / 265 (TEST 0 / 231, gw3 0 / 34); no alarm-class box at all | <= 1 % of >= 50 | **PASS** |
+
+**THE VERDICT: PASS.** It is scored once and is never re-scored. This amendment does not deploy
+xmas02sk: deployment is its own step (the runner's model and the detect server stay as they are),
+the parent's and Batt's to take.
+
+**Reported, deciding nothing:**
+- **The truth fix decided line 2a. Without it, sk6a would have failed by one fire, like sk5a.**
+  - 97 of sk6a's frames lay inside a post-vanish window; S6's definition would have counted them
+    alarm-free (195 frames).
+  - 2 of them fired. Under S6's definition sk6a would read 2 / 195 = 1.03 % and FAIL line 2a by one
+    fire (1 would pass).
+  - **Both were looked at, and in both the client still drew the unit:**
+    - **frame 602** (a Goblin box 0.76, solo), 0.25 s after OUT-OF-SIGHT vanishes (reason 0) of
+      Goblins and a Garm Baby. The frame shows a Goblin still drawn, half behind the Cruiser card;
+      601 held it in the packets, and in 603 it is gone. **This is the reason-0 case: a deaths-only
+      rule would have kept it a false fire and failed the line.**
+    - **frame 834** (garm_baby 0.39, a two-in-a-row after 833's 0.70), 3.11 s after the watch's
+      `@killmonster2` (reason 1). Frames 832-835 show the killed party still fading under "All
+      monsters killed!", the boxes on the fading Garm Babies.
+  - Both lie inside the derivation's measured range (2.89 s / 3.69 s, S7.1).
+- **The Goblin-free held-outs: the windows changed nothing.** TEST has no alarm-species vanish;
+  gw3 has 35, none with an alarm-free frame inside its window. So line 2b's frames are S6's.
+- **Visits:** 33 from 32 stands.
+  - Cell 28 (127,67) gave two: frame 1509 (21:23:05, 25 frames), then 1539 (21:23:35, 10 frames),
+    both between its warp at 21:22:56 and its kill at 21:23:46.
+  - The second opened inside a window, 0.47 s after an out-of-sight Goblin vanish: the one visit
+    opened in a window (S7.1's symmetric case). It fired at 1.00 s.
+  - The slowest visit fired at 1.97 s (frame 1234, 21:18:27). Visits run 10-42 frames.
+- **First fires:** 33 solo (a box >= 0.7). **Goblin-led:** in all 33 visits the alarm had fired by
+  the time the first Goblin came on screen (delay 0).
+- **Q1crowd / Q1s / Q1c on sk6a:** to follow when labellers AC and AD finish (reported only).

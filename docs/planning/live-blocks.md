@@ -1350,6 +1350,16 @@ fresh 32-stand sk5a): FAIL by ONE false fire.**
   in S6's own truth, to be closed by a new amendment before any new held-out.
 - Not deployed.
 
+➡️ **S7 (2026-11-16 21:5x ICT, xmas02-detector.md S7, Batt's "test again", scored once on the NEW
+32-stand sk6a): PASS on every line.**
+- The truth fix, pre-registered before sk6a: a frame within 5 s after an alarm unit's vanish
+  (died or out of sight) is not alarm-free.
+- Detection: 33 / 33 visits fired within 2.5 s.
+- False fires: 0 / 98 on sk6a's alarm-free frames, and 0 / 265 on the Goblin-free held-outs.
+- The fix decided it: under S6's definition sk6a would have read 2 / 195 = 1.03 % and failed by one
+  fire. Both fires were units the client still drew (looked at).
+- Not deployed by S7: deployment is its own step, the parent's and Batt's.
+
 ### 11.5 The Butterfly Wings (done 14:02 ICT)
 
 The lab GM's `@item 602 4` (crusader.py, `"typed": true`), read back from the hotbar: F9 1 -> **5**.
