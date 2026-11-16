@@ -1462,6 +1462,18 @@ def test_s5_sk4a_is_refused_by_name_before_it_records(tmp_path: Path) -> None:
     assert ml.eval_part_refusal(spec, SK4A, None, "eval_test") is None
 
 
+def test_s7_sk6a_is_refused_by_name_before_it_records(tmp_path: Path) -> None:
+    """Amendment S7 (2026-11-16): sk6a, the alarm bar's re-test held-out, is TEST by NAME; only
+    --eval-test reads it."""
+    sk6a = "20261117T100000-rdp-xmas02-sk6a"  # a made-up stamp
+    spec = ml.XMAS02
+    assert spec.is_test(sk6a, None) and not spec.is_fit(sk6a, None)
+    assert not spec.is_test("20261117T100000-rdp-xmas02-sk6ab", None)
+    with pytest.raises(SystemExit, match=r"shares frames with TEST \(3b\)"):
+        ml.cmd_labels(_xlabels_args(tmp_path, f"/nonexistent/{sk6a}"))
+    assert ml.eval_part_refusal(spec, sk6a, None, "eval_test") is None
+
+
 def test_s6_sk5a_is_refused_by_name_before_it_records(tmp_path: Path) -> None:
     """Amendment S6 (2026-11-16): sk5a, the alarm bar's held-out, is TEST by NAME; only --eval-test
     reads it."""
@@ -1848,6 +1860,7 @@ def test_t9_eval_flags_are_per_map() -> None:
     assert ml.XMAS02_SK3A in x.test_suffixes and ml.XMAS02_SK3A in x.eval_suffixes  # S4
     assert ml.XMAS02_SK4A in x.test_suffixes and ml.XMAS02_SK4A in x.eval_suffixes  # S5
     assert ml.XMAS02_SK5A in x.test_suffixes and ml.XMAS02_SK5A in x.eval_suffixes  # S6
+    assert ml.XMAS02_SK6A in x.test_suffixes and ml.XMAS02_SK6A in x.eval_suffixes  # S7
     assert not set(ml.XMAS02_FIT) & set(x.eval_suffixes)
     assert ml.GEF10.eval_suffixes == ml.GEF10.test2_suffixes
     with pytest.raises(SystemExit, match="one evaluation flag at a time"):
