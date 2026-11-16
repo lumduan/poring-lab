@@ -3380,6 +3380,36 @@ s5c-ab runs FROM MAIN after 5c merges there: the runner's start check reads giti
 - **The economy** of every run is recorded in data/econ/lab.sqlite (Batt 2026-11-16: "collect the
   economy every run"), report only.
 
+### 15.14 Result of s5c-ab2 (run 2026-11-16 10:35-13:22 ICT, scored 13:23): PASS on every line
+
+`stage5c_ab.py score --label s5c-ab2`: 4 pairs, all 8 runs valid (19.9-20.0 min, each ended by its time
+box), 0 deaths. A = the hunt box (runner block + hunt tab), B = the functions box (hunt_loop()).
+
+    run        arm  kills/h loot/h open/h  tick median  p95
+    r01A       A    157.1   181.3  142.0    201.7      1011.6
+    r02B       B    163.2   193.4  133.0    201.7      1082.3
+    r03B       B    141.6   192.9  111.5    202.2      1038.8
+    r04A       A     96.5   141.7  111.6    202.9      1010.1
+    r05A       A    139.0   163.2  120.9    201.6      1000.3
+    r06B       B    132.8   166.0  120.7    201.7       981.1
+    r07B       B    165.1   198.2  123.1    201.6      1032.0
+    r08A       A    142.1   157.2  126.9    201.7       958.2
+
+The bar (15.8, with 15.13's 4 pairs):
+- deaths 0 / 0 -> PASS;
+- record kinds: none new -> PASS;
+- errors: none -> PASS;
+- openers/h: A 125.3, B 122.1 -> PASS;
+- pace: median A 201.9, B 201.8 ms -> PASS; the p95 reported only (990.4 / 1020.8);
+- kills/h: paired +6.0, +45.2, -6.2, +23.1; mean +17.0, SE 11.1 -> PASS;
+- loot/h: paired +12.1, +51.2, +2.8, +41.0; mean +26.8, SE 11.5 -> PASS;
+- drive: every run of both arms drove cleanly -> PASS.
+**VERDICT: PASS.**
+- **The functions shape plays as the hunt box does, live.** The positive differences are within
+  noise, led by A's low r04A (96.5 kills/h). They are not a claim that B plays better.
+- **The economy** (17 #7; data/econ dashboard xmas02-1116-s5c-ab2), net z/h: A 50,205, B 49,367.
+  Equal.
+
 ## 16. The first real experiment in blocks: no Knife swap on the Christmas Cookie and the Cookie (➡️ BUILT 2026-11-15, feat/cookie-noswap; offline only, NOT run live; its A/B pre-registered 2026-11-15 13:32 ICT from `date`, BEFORE any run)
 
 Batt's words (14.12 #2, 2026-11-15 ~13:0x): "Test it, and make it work too." The experiment is 14.8's
