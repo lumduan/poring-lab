@@ -5180,3 +5180,47 @@ S6, and scores the frozen `xmas02sk` (`0b43ebbf...`) once on a NEW held-out, sk6
    --vanishes VANISHES --post-vanish-s 5.0 --cache-manifest <the S4 cache 9d7a9b38...>`.
 6. Reported only: two NEW blind labellers (AC, AD) and `score --units` (Q1crowd / Q1s / Q1c).
 7. The result here and in live-blocks.md; the scratch to the NAS the same day.
+
+#### S7.5 (2026-11-16 21:39 ICT from `date`, BEFORE THE BAR is scored and before any labeller sees the pack): the parent's decision on reason 0; sk6a recorded; its checks and the GPU step
+
+- **The parent's decision (20:5x ICT, BEFORE the recording started at 20:57:51; S7.1's disclosure):
+  reason 0 (out of sight) STAYS in the windows.** S7.1's rule is scored as written; the deaths-only
+  variant (`--reasons 1`) is not taken. The parent's reasons:
+  - it is the same mechanism as a death: the client drawing behind the packets (monster sprites
+    trail by ~0.16 s, the lab's measured frame lag);
+  - sk4a frame 748 is independent ground for it;
+  - T is not taken from sk5a;
+  - S7 scores a NEW held-out, so sk5a's role was only to reveal the mechanism, never to be
+    re-scored.
+- **Recorded by the parent, S7.3's steps 1-5 as written** (its report):
+  1. immunity ON judged at 20:5x: the Chat tab read "You are now immune to attacks."
+     (`immune-on.png` `fb25e9b6...`);
+  2. the aura off (`aura.png` `ae650253...`: no disc, no sparkles);
+  3. no toast;
+  4. `sk_watch.sh` as staged (`23a20b03...`), seed 2611126, 32 / 32 cells: the recorder (pid
+     562602) started 20:57:51, the watch ended rc 0 at 21:27:25, the recorder stopped 21:27:30, shipped
+     21:30:06;
+  5. immunity OFF read back ("Returned to normal state.", `immune-off.png` `53dae579...`), then
+     `@warp geffen 119 40`, the chat closed, HP 100.
+- **The recording `20261116T205751-rdp-xmas02-sk6a`:**
+  - 1,771 frames, 3,762,850,927 bytes of frames (15 files, 3,766,034,752 bytes);
+  - its checksums verified on the NAS (15 / 15, 21:36:24-21:37:15);
+  - 3c's path: rdp, png, recorder v7, [80, 77, 1280, 720], lab-rathena, FreeRDP 3.32.1 progressive;
+  - one difference from sk5a: `packet_anchor` is none (sk5a's was a map_change 168.5 s before t0).
+    The watch's first `@warp` came at 20:58:05.
+- **The watch** `20261116T205759-watch-xmas_dun02-sk6a` ("done", 32 cells; `run.log`
+  `22f144d3...`):
+  - 32 `@warp`, 32 `@monster 1251 1`, 32 `@killmonster2`;
+  - the 32 cells in EXACTLY S7.3's order (diffed, both the warps and the "cell N/32" lines);
+  - 9 chat-window notes "tabs unread ... typing goes on" (21:05-21:15; sk5a's log had 6).
+- **The toast test:** no match; the lowest score is 22.04 (the toast reads 0.00-0.08).
+- **The one GPU step** (allowed by the parent; 21:32:25-21:35:55, the worker free, no Run, "ALL
+  STEPS OK"; the worker idle after it): predict_dir with the frozen last.pt (`0b43ebbf...`, imgsz
+  1280, conf 0.25) over every recorded frame (1,771; refs `aee87fe1...`, each ref's image signature and
+  tar member name checked) -> **`pred-sk6a-all.json`
+  `2aa92e3785dba1249a02f28ffe6e47f7041b04c61658d7a8831c2abc3c876e6d`**. Nothing of it is read before
+  THE BAR.
+- **The vanishes' sessions** (S7.4 step 4) are exactly those of the Goblin-free held-outs' units:
+  - S5's `units-test.json`: x2, xw5, xp1 (231 frames);
+  - `units-gw3.json`: gw3 (261 frames);
+  - every one has its `packets.jsonl.gz`.
