@@ -51,6 +51,7 @@ def test_b_is_the_ready_made_box_with_fly_first_off_and_the_fixture_alone_differ
     assert ab.box_difference(a, b) is None  # the arm: the shape alone
     tab = next(t for t in b["nodes"][0]["tabs"] if t["name"] == "safety")
     assert tab["vars"]["fly_first"]["value"] is False
+    assert tab["vars"]["fly_first_hp"]["value"] is False  # 18.13: the hunt box's value too
 
 
 def _tab(d: dict[str, Any], name: str) -> dict[str, Any]:

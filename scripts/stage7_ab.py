@@ -7,15 +7,15 @@ mode; the MVP alive).
 
 THE ARMS differ ONLY in one setting block: each arm plays a copy of
 services/frontend/src/lib/flow/fixtures/project_xmas_dun02_functions.json whose safety tab's
-`fly_first` is False (A) or True (B) -- BOTH set explicitly (arm_doc): since live-blocks 18.10 #1
-the fixture itself holds it ON, and A stays today's 9.56 order -- through `flow_play.py play` with
-that copy's own runner settings (runner-config-A.json / -B.json). `plan` refuses before any input
-unless: the copies differ in that block alone; their runner settings differ in fly_first alone and
-keep the fast alarm on (section 11); their runner argv differ by `--fly-first` alone and their run()
-arguments, keys and loop not at all; the checkout's runner is 9.57 (it takes --fly-first) and
-huntstate_check's `drive` and `check` hold (every fly-first change a branch whose else is today's
-code); and the box's step traces equal the driver's (hunt_trace.compare: the hand scenarios and
-SEEDS random ones).
+`fly_first` is False (A) or True (B) and `fly_first_hp` False in both -- set explicitly (arm_doc):
+since live-blocks 18.10 #1 / 18.13 the fixture itself holds both ON, and A keeps the dagger-first
+order of 9.56 -- through `flow_play.py play` with that copy's own runner settings
+(runner-config-A.json / -B.json). `plan` refuses before any input unless: the copies differ in that
+block alone; their runner settings differ in fly_first alone and keep the fast alarm on (section
+11); their runner argv differ by `--fly-first` alone and their run() arguments, keys and loop not at
+all; the checkout's runner is 9.57 (it takes --fly-first) and huntstate_check's `drive` and `check`
+hold (every fly-first change a branch whose else is today's code); and the box's step traces equal
+the driver's (hunt_trace.compare: the hand scenarios and SEEDS random ones).
 
 THE SETUP before every run: exactly stage2_ab.py's. A STOP file in the series folder
 (/dev/shm/poring-lab-tmp/stage7-ab/<label>/STOP) ends the series before its next run.
@@ -102,15 +102,23 @@ def _quiet(f: Any, *a: Any, **k: Any) -> tuple[int, str]:
 
 
 # --- the arms ------------------------------------------------------------------------------------
+# live-blocks 18.13: the block both arms hold OFF -- s7ab measured the boss Fly Wing first alone
+# (the ready-made box holds fly_first_hp ON since s8ab passed)
+OFF_IN_BOTH = ("fly_first_hp",)
+
+
 def arm_doc(arm: str, minutes: float, path: Path = PROJECT) -> dict[str, Any]:
-    """PURE but for the read: the box with its time box set to the run's length and its safety
-    tab's fly_first block set for the arm (A off, B on)."""
+    """PURE but for the read: the box with its time box set to the run's length, its safety tab's
+    fly_first block set for the arm (A off, B on) and OFF_IN_BOTH off in both -- every one
+    explicitly, whatever the fixture holds (18.10 #1, 18.13)."""
     d = json.loads(path.read_text())
     d["max_runtime_s"] = int(round(minutes * 60))
     tab = next((t for t in d["nodes"][0]["tabs"] if t["name"] == FLY_TAB), None)
     if tab is None:
         raise ValueError(f"the box has no tab {FLY_TAB}")
     tab["vars"][FLY_VAR] = {"kind": "lit", "value": arm == "B"}
+    for var in OFF_IN_BOTH:
+        tab["vars"][var] = {"kind": "lit", "value": False}
     return d
 
 
@@ -129,6 +137,10 @@ def box_difference(a: Mapping[str, Any], b: Mapping[str, Any]) -> str | None:
         lit = None if tab is None else tab["vars"].get(FLY_VAR)
         if not isinstance(lit, Mapping) or lit.get("value") is not (arm == "B"):
             return f"{arm}'s {FLY_TAB} tab does not hold {FLY_VAR} = {arm == 'B'}"
+        for var in OFF_IN_BOTH:  # 18.13: s7ab's arms hold the HP Fly Wing first off
+            off = tab["vars"].get(var)
+            if not isinstance(off, Mapping) or off.get("value") is not False:
+                return f"{arm}'s {FLY_TAB} tab does not hold {var} = False (s7ab's arms)"
         got[arm] = tab
         tab["vars"].pop(FLY_VAR)
     if a != b:

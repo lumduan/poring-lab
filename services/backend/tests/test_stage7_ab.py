@@ -63,6 +63,15 @@ def test_the_arms_differ_in_their_fly_first_block_alone() -> None:
     assert isinstance(v["A"], dict) and isinstance(v["B"], dict)
     assert v["A"]["fly_first"] is False and v["B"]["fly_first"] is True
 
+    # 18.13: the ready-made box holds fly_first_hp ON; s7ab's arms hold it OFF, both, explicitly
+    for d in (a, b):
+        tab = next(t for t in d["nodes"][0]["tabs"] if t["name"] == "safety")
+        assert tab["vars"]["fly_first_hp"]["value"] is False
+    hp_on = json.loads(json.dumps(b))
+    next(t for t in hp_on["nodes"][0]["tabs"] if t["name"] == "safety")["vars"]["fly_first_hp"] = {
+        "kind": "lit", "value": True}  # fmt: skip
+    assert "fly_first_hp = False (s7ab's arms)" in str(ab.box_difference(a, hp_on))
+
 
 def test_the_plan_refuses_a_runner_that_is_not_9_57_or_whose_proofs_fail(tmp_path: Path) -> None:
     drive_base, check_base = _bases()
