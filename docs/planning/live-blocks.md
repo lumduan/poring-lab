@@ -3675,3 +3675,185 @@ The bar (16.5):
    - Every live run's session goes into data/econ/lab.sqlite (scripts/econ_db.py update) when it
      ends: the stage A/B series and the Run helper's project runs.
    - The 11-14 / 11-15 runs are back-filled from the NAS archive.
+
+## 18. The Fly Wing FIRST on a boss, at any distance (Batt 17 #6; design written 2026-11-16 10:51 ICT from `date`, BEFORE any code; offline only)
+
+**Batt (2026-11-16 ~10:2x, 17 item 6, Thai, translated):** "A boss on the screen, at ANY distance:
+press the Fly Wing first, no Knife swap." It is built as its own pre-registered live A/B (18.7).
+
+### 18.1 What the two deaths of s5c-ab show (the packets, the backend's input log and the runner's events, on ONE clock)
+
+The host's CLOCK_MONOTONIC is shared by the sniffer (`t_mono_ns`), the backend's input log (when
+it accepted each key, and the runner's own send time) and the runner's events (`t_ns`, written
+AFTER the key's batch returned: a median 158 ms after its key down, 2,100 presses). Times below are
+from the death packet (her own `entity_vanish`, reason 1) = 0.
+
+- **r02B** (s5c-ab, the functions box):
+  - The Stormy Knight came into view at -7.7 s, 13 cells away; 6 Christmas Goblins at -3.9 s.
+  - -3.26 s: the runner engaged a box (a Christmas Cookie) and sat in `box_target`'s settle sleep and
+    still wait (1,592 ms + 1,585 ms, to -1.27 s). Neither reads the Garm Baby alarm: 9.53's inside
+    read is guard_tick's, which scans, strikes, the steal and the hold call, but not these waits.
+  - In that wait the HUD twin boxed `garm_baby` at -2.21 s (score 0.74, above --alarm-solo 0.7) and
+    -1.97 s (0.50: two detections in a row = --garm-confirm 2). **A sighting by the runner's own rule,
+    2.2 s before the death.** It was gone (an empty detection) at -1.72 s, before the loop read it.
+  - -1.17 s: the opener (the Knife, F4), -1.11 s the strike; the Goblins' first hits at -0.80 s.
+  - The first boss line in the Battle Log (a Goblin's 94) was read at -0.28 s: the box's fly_away
+    fired. The backend accepted a ReleaseAll at -0.103 s (the pre-empt's), **F5 down at -0.050 s**
+    (BareCtl.escape: "never fly bare", the dagger first) and **F8 down at +0.162 s**, 0.21 s later.
+  - The F5's equip_request reached the server at -0.021 s (29 ms after its key). The death at 0.000
+    was one hit of 4,323 (not an `act`: a skill; the Battle Log read "Stormy Knight 6275").
+  - **No use_item_request: the Fly Wing key came 0.16 s after she was dead.**
+  - ➡️ **This corrects 15.12's reading** ("the server got the EQUIP only at -0.02 s, 1.4 s late; the
+    F5 seems to have held up the Fly Wing"). 15.12 compared the runner's death EVENT -- written
+    1.54 s after the death packet, when the runner READ the death -- with the packet clock. On one
+    clock there was no 1.4-s delay: the equip went out 29 ms after its key, and both keys came after
+    the boss line, the Fly Wing after the death.
+- **r01A** (s5c-ab, the hunt box):
+  - -10.8 s: the fast alarm flew inside a fight (garm_seen inside, 0.70): F5 (-10.73 s at the server),
+    then F8: use_item_result 601 ok at -10.53 s, a random cell on the same map.
+  - The Knight came into view again at -4.24 s, 14 cells away. Alarm boxes in two detections in a row
+    at -3.38 s (HUD 0.48) and -3.35 s (watcher 0.33), and -2.89 s (HUD 0.53): **a sighting by the
+    runner's own rule for ~0.7 s, 3.4 s before the death** -- again inside box_target's settle and
+    still wait (1,770 + 1,536 ms, to -2.85 s). The next box (-2.36 s, 0.38) stood alone: under 0.7.
+  - The Knight hit at -0.94 s (2,380) and -0.47 s (1,310). The box's fly_away (HP 0) pressed F5, then
+    F8, 0.4-0.6 s after the death.
+- **So both deaths had a sighting the runner's own rule counts, 2.2 s and 3.4 s before the death,
+  inside a wait that never reads the alarm.** The dagger-first escape cost 0.21 s more on each Fly
+  Wing pressed while she wore the Knife.
+
+### 18.2 The keys and the requests: what the data shows (the 24 series runs of 2026-11-15, 7.5 h)
+
+The backend's key down -> the sniffer's request for it (scratch analysis, read-only; its numbers
+are in this section, its script was not kept: `stage7_ab.py derive` re-measures it):
+
+| Key | n | Request after the key down: median / p95 / max |
+|---|---|---|
+| F8 Fly Wing | 76 | 24 / 38 / 221 ms (from the runner's own send time: 75 / 88 / 272 ms) |
+| F5 the dagger | 945 | 23 / 39 / 305 ms |
+| F4 the Knife | 946 | 21 / 37 / 126 ms |
+| F1, F6, F7, F9 | 129 | all within 41 ms |
+
+- **No systematic client delay of an item use after an equip:** of the 47 Fly Wings pressed 0.21 s
+  after an F5 (the dagger-first escape), 45 went within 40 ms, 2 at 212 and 221 ms (one while her
+  own attack motion played: her `act` came 19 ms before its request). Of the 29 with no equip in the
+  0.5 s before, every one within 38 ms. The occasional ~0.2-s wait (2 of 47) goes with the equip
+  before the fly; fly-first removes that equip.
+- **Every Fly Wing pressed alive reached the server:** the only 4 presses of 2,100 with no request
+  were all after the death (r01A: F5, F8, F1 at +0.44 to +0.95 s; r02B: F8 at +0.16 s).
+- The backend accepted every key ~50 ms after the runner sent it; no queue, no refusal.
+- **What I chose:** the Fly Wing goes first, nothing before it but the ReleaseAll of a box's
+  pre-empt (no key) and, when she sits, the stand-up (the runner's own rule; not a weapon key).
+
+### 18.3 The boss signals the runner and the box have today
+
+| Signal | Where it is read | Distance condition |
+|---|---|---|
+| The detector alarm: a `garm_baby` box (ALARM_CLASSES) in a detection <= 1.5 s old, --garm-confirm 2 in a row or one >= --alarm-solo 0.7 | step_engage every tick; (9.53, --alarm-fast) guard_tick inside scans, strikes, the steal, the hold | none |
+| The HUD twin's boxes | feed the alarm under --alarm-fast with --hud-fast (~0.2 s, 4x the watcher) | none |
+| The Battle Log boss line (boss_guard; the box's `sees_boss()`): a damage / taken line whose name fits the KB's boss names (Stormy Knight, Garm Baby, Christmas Goblin) | every full tick (step_battle_log) | contact only: it needs a hit |
+| --boss-walk (off in the box; the box's boss fly refuses it) | step_engage | walks away from a SUMMON's line when a far cell is reachable, and ignores boss lines 2.5 s after |
+
+- **Unread waits:** box_target's settle sleep (<= 1.2 s), its still wait (<= 1.5 s) and its fresh-box
+  wait (<= 1.8 s): up to 4.5 s with no alarm read (both deaths). The loot pickups' walks
+  (0.45 + 0.2 s a cell) lie between guard_tick reads.
+- **The models:** the deployed xmas02 (xmas02gb, b22d972b714f) has player, mystcase, cruiser, cookie,
+  cookie_xmas and garm_baby: no Knight or Goblin class. The boss recognizer stormy-v1 (class party:
+  1251 / 1515 / 1607) is NOT adopted (98 false per 10 min). **No class is unused.** The hook for the
+  Goblin alarm-bar round (xmas02sk, if it deploys): a model's models.yaml entry may name its alarm
+  classes (`alarm: [garm_baby, ...]`); the runner's alarm then takes those classes (else garm_baby),
+  with no code change. No model changes here.
+
+### 18.4 The design: dungeon@9.57 `--fly-first` (the Run setting `fly_first`, tab safety)
+
+1. **ONE boss read, FIRST in the tick.** At the start of step_survive -- before the box's events and
+   the runner's sustain, so before any press of the tick -- the latched alarm sighting (2), or the
+   tick's Battle Log boss line when the box does not play the boss fly, takes the Fly Wing at once
+   (the 2-s Fly Wing pace kept: a teleport still landing), then the boss guard's after-fly steps
+   (no box engagement for BOSS_AVOID_S, the lock / route / loot reset, mode search, 1 s) and
+   TICK_DONE. step_engage no longer reads the alarm itself under the flag.
+2. **A sighting is LATCHED.** A detection that qualifies (the streak, or one box >= --alarm-solo) is
+   kept FF_LATCH_S = 3.0 s, until a Fly Wing acts on it or a newer one replaces it: an empty
+   detection after it no longer erases it. Why 3 s: the longest wait left unread (the fresh-box
+   wait, <= 1.8 s) is under it; the party came 2.4-6.4 s before every death of 11.1.
+3. **Read inside the waits.** guard_tick's inside read is the fly-first read (latched; no
+   --alarm-fast needed); box_target's settle sleep reads it every QUICK_S and its still wait every
+   frame; a strike reads it before its opener and its click. A fly there ends the action
+   (`escaped`), as 9.53's.
+4. **The Fly Wing FIRST.** A boss Fly Wing (the alarm, the boss line, the box's Fly Wing on a tick
+   with a boss line) presses F8 with nothing before it: no BareCtl.escape() dagger (F5), no opener
+   (F4), no knife_back. FF_REARM_S = 1.0 s after the landing, the dagger goes back on (the escape's
+   own equip, read back on the next tick), so the next fight starts armed. Nothing is cancelled after
+   it is sent; what would have come is read first: a strike's opener and the box's knife_on wait for
+   the read in (3); a knife_back cue plays at a later step of the tick than the read in (1).
+5. **Every sighting stream:** under the flag the HUD twin's detections feed the alarm (as
+   --alarm-fast does), and --boss-walk is off (a summon's line flies).
+6. **The box's events play the same order.** The box still decides the Battle Log line: its
+   fly_away / boss fly runs right after the read in (1), a pre-empt (the engine's ReleaseAll, then
+   its body), and its F8 goes out with no dagger (the tick's boss flag). The alarm stays the
+   runner's, as today. A boss line read within 2 s after a Fly Wing is not a new sighting for the
+   box's events (the lines from before the jump). Both shapes -- the old runner block and the
+   functions box -- lower to the same runner, so they play the same.
+7. **Records:** `fly_first` events {what: fly / rearm, why, src: alarm / line, the sighting's grab
+   time, class, score, streak, HUD or watcher, its age, `t_read_ns`, `t_key_ns` (the F8's send
+   time)}; counts fly_first, fly_first_inside, fly_first_rearm; run_start `fixes.fly_first` =
+   [FF_LATCH_S, FF_REARM_S, "9.57"].
+8. **The setting:** `fly_first` (switch, safety tab, "a boss seen, at any distance: the Fly Wing
+   first, no Knife swap before it"), **default OFF until s7ab passes** (then one line turns it on,
+   with the ready-made boxes' block). Off: the runner is today's, byte for byte in what it does.
+9. **The proofs stay green:** every fly-first change is a branch `if fly_first:` (run()'s) or
+   `if FLY_FIRST:` (the module's), whose else is today's code. huntstate_check reads every such
+   branch as its else (and leaves out the names fly-first adds, FLY_FIRST_ADDED): with it, `check`
+   (5b-1) and `drive` (5b-2) read today's base exactly. A test stages a change OUTSIDE a branch and
+   sees both refuse. hunt_trace (the steps' trace) is untouched: the cursor and the steps' order do
+   not change.
+
+### 18.5 Limits
+
+- A boss the detector does not box and that does not hit her is not seen (the Goblins: no class; the
+  Knight: boxed as garm_baby only by accident, 11.1). The hook in 18.3 takes a new class.
+- The 2-s pace stays: a sighting within 2 s after a Fly Wing waits for the landing.
+- The fresh-box wait inside BoxWatch is read when it returns (<= 1.8 s), not during it.
+- A box event a PERSON writes whose body presses another key before the Fly Wing keeps its order.
+- False flies: the alarm rule is today's (11.2: ~1.7 an hour offline); the latch and the waits add
+  the sightings today's loop missed, true or false. s7ab measures the cost.
+
+### 18.6 Open for Batt
+
+1. When s7ab passes: fly_first ON in the ready-made boxes? (Built: off until then.)
+2. The HP Fly Wing (no boss) still puts the dagger on first; should it fly first too?
+
+### 18.7 THE A/B s7ab -- pre-registered 2026-11-16 10:51 ICT from `date`, BEFORE any of its data
+
+**The arms differ ONLY in the setting fly_first** (`scripts/stage7_ab.py`, stage5c_ab's pattern; the
+checkout's runner for both): the ready-made functions box (project_xmas_dun02_functions.json), its
+copy per arm with the safety tab's `fly_first` = False (**A**, today's runner) or True (**B**).
+`plan` refuses before any input unless the two copies differ in that block alone, give the same
+runner argv but `--fly-first`, and huntstate_check drive / check hold.
+
+    cd /home/bot/docker/poring-lab
+    .venv/bin/python scripts/stage7_ab.py plan  --label s7ab --pairs 4 --minutes 20
+    .venv/bin/python scripts/stage7_ab.py run   --label s7ab --pairs 4 --minutes 20
+    .venv/bin/python scripts/stage7_ab.py score --label s7ab
+
+4 pairs of 20 min, order A B, B A, A B, B A; stage2_ab's setup before every run; a STOP file ends the
+series before its next run; never beside another live series. **THE BAR** (`stage7_ab.BAR`):
+
+| Line | B must hold |
+|---|---|
+| kills per hour | the mean paired difference (B - A) >= -2 x its standard error, over at least 3 valid pairs |
+| loot steps per hour | the same rule |
+| Knife openers per hour | B's series rate within +-20 % of A's (valid runs pooled) |
+| the tick pace | B's MEDIAN gap between hp_read records <= A's + 5 ms (valid runs pooled); the p95 reported (14.7a) |
+| no new record kind | every kind B's runner sessions write is one the 5b-1 runner's source writes, one A's sessions wrote, the drive's own, or fly-first's (fly_first) |
+| no runner error | no B run ends by an exception of the runner |
+| the drive | every run of either arm that played drove, passed no step, left none out, and ended as the run did (15.8) |
+| **fly first** | every B fly-first Fly Wing pressed while she was alive: no F4 / F5 key down (the backend's input log) between the runner's read of the sighting and the F8, and its use_item_request within **0.35 s** of the F8's send time (18.2: 76 of 76 within 0.272 s, median 0.075). Judged when B made at least one; none: the line is INCONCLUSIVE |
+| a valid run | at least 80 % of M minutes on the runner's own clock, or a weight-home end; a pair counts when both runs are valid |
+
+Reported, not judged: **deaths per played run, per arm** (they are rare -- 2 in the 7.5 h of
+18.2 -- so no line compares them against an arm that may read 0: 13.7 / 10.2); the boss sightings,
+the flies by source (alarm / line / box / HP), B's flies inside a wait, the sightings A read late or
+never (from A's alarm boxes, offline), Fly Wings / h, potions / h, the economy per arm (gross_h and
+net_h, zeny an hour, from data/econ/lab.sqlite after `econ_db.py update`: Batt's "every run, the
+economy"), each record kind's rate. FAIL when a judged line fails; INCONCLUSIVE when fewer than 3
+pairs are valid or the fly-first line was not exercised, and nothing failed; else PASS.
