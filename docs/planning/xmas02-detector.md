@@ -5056,3 +5056,127 @@ deployed by this amendment.
   aura crops, the three looked-at frames) to `scratch-archive/2026-11-16/goblin-s6/` (921 files,
   `SHA256SUMS` `9e5468b7...`), then deleted from /dev/shm.
 
+
+### Amendment S7 (2026-11-16 20:53 ICT from `date`, written BEFORE any new data: sk6a is not recorded): the alarm bar RE-TESTED, with the truth fix (post-vanish windows)
+
+**Batt (2026-11-16 ~20:3x, live-blocks.md 18.10 item 3, Thai, translated): "test again".** S6.6
+(FAIL) stands and is never re-scored. S7 fixes the truth gap S6.6 found, keeps everything else of
+S6, and scores the frozen `xmas02sk` (`0b43ebbf...`) once on a NEW held-out, sk6a.
+
+#### S7.1 The truth fix and its derivation (`eval_q1.py vanishes` + `alarm --vanishes V --post-vanish-s 5.0`; code in this amendment's commit)
+
+- **The gap (S6.6):** the client still DRAWS a unit for a while after its vanish packet. S6
+  defined "alarm-free" from the packets alone, so a frame showing a just-gone party with no unit in
+  the packets' world counted as party-free.
+- **The fix:** a frame within **T = 5.0 s** after a vanish of an alarm-species unit (the Goblin, the
+  knight or Garm Baby) of its own session is **NOT alarm-free**.
+  - The vanishes counted: reason 1 (died) and reason 0 (out of sight), from the session's packets.
+    Reason 3 (warped) is not counted: nothing independent was measured for it.
+  - Such frames are set apart and reported: `post_vanish_frames`, `post_vanish_fires`.
+  - Nothing else changes: the classes, the fire rule, the visits, the detection line and every
+    number of S6.2.
+- **The derivation (none of it from sk5a):**
+  1. **Deaths, sk4a** (the frozen model's archived predictions over EVERY recorded frame at 1 fps;
+     12 kill bursts of the watch's `@killmonster2`): the last frame with an alarm-class box while the
+     packets showed no live alarm-species unit came **2.89 s** after the kill. At every kill, the
+     frame after it (3.05-3.89 s) held none.
+  2. **Deaths, sk1a / sk2a** (TRAIN watches; the deployed xmas02gb's archived predictions, garm_baby
+     only, candidate frames from ~2.1 s after the kill; 29 bursts): drawn up to **3.69 s**. The longer
+     ones (4.24-4.40 s) are that model's static boxes on a FLOOR PAINTING, not on units (looked at:
+     sk1a frames 834-836, the painted Garm Baby S4.2 found).
+  3. **Every frame of sk4a with an alarm-class box and no live alarm-species unit (10 frames) lies
+     within 2.89 s after a vanish:** 9 after deaths, 1 (frame 748) **0.15 s after an OUT-OF-SIGHT
+     vanish**. So the client keeps drawing after either kind.
+  4. The sprites' own die animations (their ACT): Goblin 0.48 s, knight 1.01 s, Garm Baby 2.28 s.
+     The client then holds and fades the corpse, and frames trail the packets (the 120-ms offset).
+  - **T = the longest drawn lag measured on these independent data (3.69 s) + one 1-fps frame of
+    sampling uncertainty (1.0 s) = 4.69 s, rounded up to 5.0 s.**
+- **A DISCLOSURE, for the parent to weigh before the recording:** reason 0 entered the rule because
+  the positive case below, on sk5a, showed that two of S6's three frames (989, 1360) followed
+  OUT-OF-SIGHT vanishes (0.24 s and 0.19 s before), not deaths. A deaths-only rule removes only frame
+  787.
+  - The rule's grounds are independent: sk4a's frame 748 (point 3).
+  - T is not taken from sk5a.
+  - The deaths-only variant is one flag away (`vanishes --reasons 1`). Choosing it is an edit to
+    this amendment before sk6a records, never after.
+- **The positive case** (the archived units and predictions of sk5a and sk4a; vanishes `46f7fa0f...`):
+  - **S7's alarm-free set is S6's minus exactly the S6-alarm-free frames inside a window; outside
+    the windows the two are identical.** sk5a: 254 -> 137 (117 removed, 378 vanishes); sk4a: 95 -> 52
+    (43 removed, 160 vanishes).
+  - The visits and their detection are unchanged (identical rows).
+  - S6's three frames (787, 989, 1360) all lie inside windows. This is a check of the mechanism, NOT
+    a re-score: S6 stays FAIL.
+- **The symmetric case: visits.** The visit rule is unchanged: live party units by the packets, a
+  gap > 5 s ends a visit.
+  - A visit cannot CLOSE inside a window by its own units: their vanish ends their frames, so the
+    window lies after them.
+  - A visit can OPEN inside one, when a party unit appears within 5 s of another alarm unit's
+    vanish (sk5a 2, sk4a 0). It is judged as any visit: its t0 is the packets' appear. The client
+    cannot draw a unit before its appear packet, so the measured delay can only be longer, never
+    shorter. The count is reported (`visits_opened_in_post_vanish`).
+- **The Goblin-free held-outs** get the same windows from their own packets (xw5, xp1, X2, gw3).
+
+#### S7.2 The bar (S6.2's lines, numbers and verdict rule, UNCHANGED; the alarm-free set as S7.1)
+
+| line | bar | judged only with |
+|---|---|---|
+| 1. detection: sk6a's visits detected (a fire within 2.5 s of t0) | >= 90 % | >= 30 visits |
+| 2a. false fires on sk6a's alarm-free frames | <= 1 % | >= 50 alarm-free frames |
+| 2b. false fires on pooled TEST + gw3 (S4.10's predictions, S5's units, S7.1's windows) | <= 1 % | >= 50 alarm-free frames |
+
+- The verdict: FAIL if a judged line fails; INCONCLUSIVE if none fails but one cannot be judged;
+  else PASS.
+- Reported only: S6.2's reported lines, plus the post-vanish frames and fires and the visits opened
+  in a window.
+
+#### S7.3 The NEW held-out sk6a: the protocol (LIVE; the parent runs it)
+
+- **The stands: 32 NEW stand cells in 3a's TEST blocks, none ever a stand.**
+  - The 11-06 TEST lattice has no 32 unused stands left (S6.3 took its last 19 never-used ones), so
+    new cells come from a denser lattice by the SAME builder and rules.
+  - `watch_lattice.py build --map xmas_dun02 --step 9 --avoid 129,130,16,12`, built offline: 129
+    TEST stands; the three stand-cell checks pass; `lattice.json` `41dd0952...`, its TEST file
+    `46de6507...`.
+  - First the 11-06 lattice was rebuilt from the same sources, byte-identical (`98d3f0d4...`,
+    `73053842...`): the sources are unchanged.
+  - Of those, the 82 lying >= 4 cells (Chebyshev) from EVERY 11-06 TEST stand (all 88, used or
+    not). 32 drawn by seed **2611126**: min spacing 6 cells, min distance to an old stand 4, all in
+    TEST blocks.
+  - File: `/dev/shm/poring-lab-tmp/goblin-s7/sk6/lattice-test-sk6.json`, sha256
+    `789f23e24d792374c589094fb5e4ace43e89b1c116e4ff3e14124ceffe0a91ef`.
+  - Watch order: 124,196 76,157 13,130 175,85 175,94 49,219 109,58 109,191 103,121 220,121 94,253
+    177,210 193,31 163,103 76,31 121,76 85,253 49,103 201,175 211,121 166,220 58,31 130,14 229,112
+    139,22 67,157 220,253 127,67 37,78 121,202 85,111 104,184.
+  - Like every TEST stand, a view still overlaps its neighbours' (3a's known limit).
+- **The name** `<stamp>-rdp-xmas02-sk6a`, refused by NAME like TEST before it records
+  (`map_labels.XMAS02_SK6A`, tested).
+- **The steps (S6.3's, with the sk6a paths):**
+  1. Immunity ON, judged: `cd /home/bot/docker/poring-lab && .venv/bin/python scripts/crusader.py
+     --char thief gm --job rogue '@monsterignore'`. Expect "You are now immune to attacks." If it
+     says "Returned to normal state.", type it again. Save the crop.
+  2. The aura off: a screenshot; re-type `/aura` / `/aura2` only if back.
+  3. No Windows toast.
+  4. The watch + recorder (S6's `sk_watch.sh`, only its scratch dir moved; staged at
+     `/dev/shm/poring-lab-tmp/goblin-s7/sk6/sk_watch.sh`, sha256 `23a20b03...`):
+
+         bash /dev/shm/poring-lab-tmp/goblin-s7/sk6/sk_watch.sh sk6a /dev/shm/poring-lab-tmp/goblin-s7/sk6/lattice-test-sk6.json 2611126
+
+     It runs `record_session.py --seconds 2700 --max-bytes 8G` (~3.8 GB) and `stage_items.py watch
+     --spawn 1251 --spawn-n 1 --dwell-s 40 --max-cells 32 --max-minutes 40`, then ships.
+     **~30 min** (sk5a's 32 stands: 13:25:42-13:55:18) + ~3 min to ship.
+  5. Immunity OFF, read back ("Returned to normal state."); save the crop; her save point.
+  - **Client time: ~38 min.**
+
+#### S7.4 After the recording (scored ONCE; one GPU step when the parent allows it)
+
+1. The checks as S6.4 (NAS checksums, 3c's path, the watch log's 32 cells in order, the toast test).
+2. **The GPU step:** predict_dir with the frozen last.pt over every recorded frame (~3 min).
+3. The labels (`--eval-test`), the pack (seed 53), and the units (`--all-frames`).
+4. **The vanishes:** `eval_q1.py vanishes <NAS>/<sk6a> <NAS>/20261106T162044-rdp-xmas02-xw5
+   <NAS>/20261106T171533-rdp-xmas02-xp1 <NAS>/20261105T225409-rdp-xmas02-x2
+   <NAS>/20261109T212445-rdp-gb-gw3 --out VANISHES`.
+5. **THE BAR, once:** `eval_q1.py alarm --held-out UNITS-sk6a-all PRED-sk6a-all --free
+   <S5's units-test> <S4.10's q1-pred-test> --free <S5's units-gw3> <S4.10's q1-pred-gw3>
+   --vanishes VANISHES --post-vanish-s 5.0 --cache-manifest <the S4 cache 9d7a9b38...>`.
+6. Reported only: two NEW blind labellers (AC, AD) and `score --units` (Q1crowd / Q1s / Q1c).
+7. The result here and in live-blocks.md; the scratch to the NAS the same day.
