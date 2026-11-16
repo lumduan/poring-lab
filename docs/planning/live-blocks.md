@@ -4328,3 +4328,17 @@ Report only:
   -- the one box, the hunt box, the one-box cookie box, the frozen A/B fixtures -- keep it off and
   their pinned argv, and the registry's default stays off; stage5c_ab's, stage7_ab's and stage8_ab's
   arms set the block explicitly, so each plan means what it meant.
+
+
+### 18.14 Batt's decision on the Goblin model (2026-11-17, Thai, translated)
+
+- **"Use it for real."** The frozen xmas02sk (S4 last.pt 0b43ebbf; S7 PASS) becomes the xmas_dun02
+  model in the ready-made boxes.
+- **What changes:** the live alarm flies on its Goblin and knight boxes as well as the Garm Baby, with
+  18's fly-first.
+- **The parent's way of doing it:**
+  - deploy it as the default (the registration, a serve test, the map's model, the box's use_model,
+    the alarm classes);
+  - check it with a pre-registered live A/B (A = the old xmas02 as the reference arm, B = xmas02sk):
+    deaths, false Fly Wings per hour against the packets (with S7's post-vanish rule), and kills/h.
+  - If B fails a judged line, the default goes back and Batt is told.
