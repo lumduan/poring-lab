@@ -3677,7 +3677,7 @@ The bar (16.5):
    - The 11-14 / 11-15 runs are back-filled from the NAS archive.
 
 
-### 17.1 The economy back-fill (2026-11-16 ~10:4x ICT; Batt's item 7)
+### 17.1 The economy back-fill (2026-11-16 ~10:3x ICT; Batt's item 7)
 
 - `econ_db.py update` was run over every archived live run of 11-14 and 11-15 (the NAS
   scratch-archive copies): 61 added, 1 already in the file. data/econ/lab.sqlite now holds 113 runs.
