@@ -4140,3 +4140,20 @@ Report only:
 **What it means:** Batt's rule plays live without costing kills or loot. A boss sighting now sends
 the Fly Wing alone and at once. Whether fly_first becomes ON in the ready-made boxes is 18.6's open
 question 1; Batt's own 17 #6 asks for this behaviour.
+
+
+### 18.10 Batt's decisions on 18.9 (2026-11-16 ~17:xx ICT, Thai, translated)
+
+1. **fly_first ON by default** in the ready-made boxes: "On." The functions box and its cookie twin
+   get the block at ON. The old one-box, hunt-box and frozen A/B fixtures keep their pinned argv
+   (reference arms).
+2. **The HP Fly Wing first too:** "Agree, do it." When HP calls for the Fly Wing with no boss in
+   sight, the F8 also goes out alone, with no dagger key before it.
+   - It is built behind its own setting, default OFF until a pre-registered live A/B (s8ab) passes,
+     the same discipline as 18.7.
+3. **The Goblin alarm: "test again."** Amendment S7 fixes S6's truth gap (frames just after a GM
+   kill are not alarm-free), is pre-registered before any new data, and is scored once on a NEW
+   held-out.
+4. **The A/B tools' z/h counts steal income:** "Count the steal income too, since stealing is our
+   main income." Every stage tool's per-run z/h and econ report use the totals with Steal and
+   Snatcher income, the dashboards' gross, not econ_row's picked-only net_h.
