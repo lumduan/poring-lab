@@ -4968,7 +4968,7 @@ Item 6 adds: "A boss on the screen, at ANY distance: press the Fly Wing first, n
    - `score --units`: Q1crowd, Q1s and Q1c.
 7. The result here and in live-blocks.md 17; the scratch to the NAS the same day.
 
-#### S6.5 (2026-11-16 14:16 ICT from `date`, BEFORE any labeller sees the pack and before THE BAR is scored): sk5a recorded; its checks, the GPU step, labels and pack
+#### S6.5 (2026-11-16 14:15 ICT from `date`, BEFORE any labeller sees the pack and before THE BAR is scored): sk5a recorded; its checks, the GPU step, labels and pack
 
 - **The stands:** the parent confirmed S6.3's choice (19 never-used TEST stands + 13 from xw5 / gw3,
   never seen with a knight).
@@ -5002,3 +5002,44 @@ Item 6 adds: "A boss on the screen, at ANY distance: press the Fly Wing first, n
   (checked).
 - **Two NEW blind labellers, AA and AB** (M9's brief, the paths changed; AA `f62092d6...`, AB
   `106cc93c...`). Their answers feed only S6.2's REPORTED Q1crowd; THE BAR needs none.
+
+#### S6.6 (2026-11-16 14:2x ICT from `date`): THE RESULT (scored once) -- FAIL BY ONE FALSE FIRE, and the three "false" fires were the party still on screen
+
+**The inputs (14:17:36, re-hashed before the score; all equal to S6.5 / S5 / S4):**
+- `pred-sk5a-all.json` `6e570e7f...`;
+- sk5a's units (every candidate frame: 1,422 frames, 10,656 units) `cce31836...`;
+- the Goblin-free held-outs: S5's `units-test.json` `986f13b4...` + S4.10's `q1-pred-test.json`
+  `531b7cdc...`, and `units-gw3.json` `f90c70b3...` + `q1-pred-gw3.json` `ffa36882...`;
+- the cache manifest `9d7a9b38...`, last.pt `0b43ebbf...`.
+**`eval_q1.py alarm`, once (14:17), `alarm-sk5a.json` `cb55837c800ce8d6c7be2967bfcbe36cdab2433e5db588c9b50862fc91da185b`:**
+
+| line (S6.2) | measured | bar | verdict |
+|---|---|---|---|
+| **1. detection** | **38 / 39 visits = 0.974** (37 fired at the visit's first frame, 1 at 1.97 s, 1 at 3.01 s) | >= 90 % of >= 30 | **PASS** |
+| **2a. false fires, sk5a** | **3 / 254 alarm-free frames = 1.18 %** (6 of them hold an alarm-class box) | <= 1 % (here <= 2 fires) of >= 50 | **FAIL** |
+| **2b. false fires, pooled TEST + gw3** | 0 / 265 (TEST 0 / 231, gw3 0 / 34); no alarm-class box at all | <= 1 % of >= 50 | **PASS** |
+
+**THE VERDICT: FAIL** (line 2a, by one fire: 2 of 254 would pass). Not re-scored. xmas02sk is not
+deployed by this amendment.
+
+**Reported, deciding nothing:**
+- **The three "false" fires, by geometry and then by looking at the three frames:** every one is a
+  party member STILL DRAWN on screen just after the watch's `@killmonster2`, when the packets'
+  world had already removed it:
+  - frame 787 (the frame before, 784, held the knight + 6 Goblins; 785-786 are the GM window): a
+    knight box 0.91 on the whole party, still visible as a heap of knight, dogs and Goblins;
+  - frame 989 (after 988's Goblins): a Goblin box 0.30 on a Goblin still drawn (a two-in-a-row
+    fire);
+  - frame 1360 (two frames after 1358's Goblins): a Goblin box 0.81 on a Goblin plainly in view.
+  The label rule calls these frames clean (no `dying_in_view`, no Goblin label), so S6's
+  alarm-free definition (the packets' units) counted them. **The detector was right in all three;
+  the truth was late.** This is a gap in S6's own definition, recorded here and never applied to
+  this score. A next amendment would close it before any new held-out (e.g. frames within a few
+  seconds after a `@killmonster2` are not alarm-free, or the die animations from the Timeline).
+- **The one missed visit** (starting at frame 907, 40 frames): its first fire came at 3.01 s (a
+  two-in-a-row), 0.5 s outside the window.
+- **First fires:** 38 solo (a box >= 0.7), 1 two-in-a-row.
+- **Goblin-led:** in 38 of 39 visits the alarm had already fired when the first Goblin came on screen
+  (delay 0); one visit had no Goblin.
+- Q1crowd / Q1s / Q1c on sk5a (labellers AA and AB): below, when both have answered.
+
