@@ -1341,6 +1341,15 @@ recall is 43 / 54 = 0.796 < 0.80 (44 would pass). The alarm's view, reported: fr
 Goblin box within 2 s in 16 of 17 visits (the 17th 2.01 s). Not deployed; the next step is the
 parent's / Batt's.
 
+➡️ **S6 (2026-11-16 14:18 ICT, xmas02-detector.md S6, Batt's "the alarm signal", scored once on the
+fresh 32-stand sk5a): FAIL by ONE false fire.**
+- Detection: 38 / 39 visits fired within 2.5 s (bar >= 90 %).
+- Goblin-free held-outs: 0 false fires in 265 frames.
+- But sk5a's alarm-free frames: 3 / 254 = 1.18 % > 1 %, and all three were party members the client
+  still drew just after the watch's `@killmonster2`, when the packets had already removed them: a gap
+  in S6's own truth, to be closed by a new amendment before any new held-out.
+- Not deployed.
+
 ### 11.5 The Butterfly Wings (done 14:02 ICT)
 
 The lab GM's `@item 602 4` (crusader.py, `"typed": true`), read back from the hotbar: F9 1 -> **5**.

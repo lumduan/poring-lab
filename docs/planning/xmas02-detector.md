@@ -5003,7 +5003,7 @@ Item 6 adds: "A boss on the screen, at ANY distance: press the Fly Wing first, n
 - **Two NEW blind labellers, AA and AB** (M9's brief, the paths changed; AA `f62092d6...`, AB
   `106cc93c...`). Their answers feed only S6.2's REPORTED Q1crowd; THE BAR needs none.
 
-#### S6.6 (2026-11-16 14:2x ICT from `date`): THE RESULT (scored once) -- FAIL BY ONE FALSE FIRE, and the three "false" fires were the party still on screen
+#### S6.6 (2026-11-16 14:18 ICT from `date`): THE RESULT (scored once) -- FAIL BY ONE FALSE FIRE, and the three "false" fires were the party still on screen
 
 **The inputs (14:17:36, re-hashed before the score; all equal to S6.5 / S5 / S4):**
 - `pred-sk5a-all.json` `6e570e7f...`;
@@ -5041,5 +5041,18 @@ deployed by this amendment.
 - **First fires:** 38 solo (a box >= 0.7), 1 two-in-a-row.
 - **Goblin-led:** in 38 of 39 visits the alarm had already fired when the first Goblin came on screen
   (delay 0); one visit had no Goblin.
-- Q1crowd / Q1s / Q1c on sk5a (labellers AA and AB): below, when both have answered.
+- **Q1crowd / Q1s / Q1c on sk5a** (reported; labellers AA `78c16ef1...` and AB `b766de28...`, both
+  NEW, blind, all 420 crops; the pack unchanged; 419 evaluated; `eval_q1.py score --units`, 14:24,
+  `q1-score-sk5a.json` `5cf6e49c...`). Q1crowd recall / precision:
+  - **Goblin 60: 47 / 60 = 0.783 / 1.000** (32 charged boxes, all on Goblins; Q1s precision 0.595;
+    misses: 9 unboxed, 2 garm_baby, 2 knight);
+  - knight 60: 0.983 / 1.000;
+  - Garm Baby 60: 0.983 / 1.000;
+  - Myst Case, Cruiser, Cookie, Christmas Cookie: 1.000 / 1.000 each;
+  - Q1c pooled 0.976 / 0.891.
+- **Where it lives (verified):** the outputs (refs, predictions, units, the alarm and Q1 scores) moved
+  by the guarded `archive:` to the NAS `archive/train/eval/xmas02sk-s6/`; the scratch (labels, pack,
+  key, the labellers' pack and answers, briefs, logs, the watch script, its lattice, the immunity /
+  aura crops, the three looked-at frames) to `scratch-archive/2026-11-16/goblin-s6/` (921 files,
+  `SHA256SUMS` `9e5468b7...`), then deleted from /dev/shm.
 
