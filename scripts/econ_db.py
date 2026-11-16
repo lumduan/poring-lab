@@ -51,6 +51,7 @@ mid-build never leaves half a run.
 from __future__ import annotations
 
 import argparse
+import contextlib
 import csv
 import json
 import re
@@ -490,6 +491,91 @@ def ingest(
                 "consumables": len(rec["consumables"]),
             }
         )
+    return out
+
+
+# --- every run records itself (round 29; Batt 2026-11-16, live-blocks.md 17 #7) ------------------
+# ("every run, collect the economy too")
+AFTER_RUN_WAIT_S = 60.0  # how long a run's end waits for its record before the next run's setup
+AFTER_RUN_CAP_S = 900  # the record's own hard cap (coreutils timeout): it never runs forever
+_running: list[subprocess.Popen[bytes]] = []  # the records left in the background (reaped later)
+
+
+def hunt_sessions(label: str, demo: Path) -> list[Path]:
+    """PURE but for the directory listing: a run's HUNT sessions by its label, as the A/B tools'
+    scores find them -- the runner's own (``*-<label>``: a runner run) and a box run's hunt cores
+    (``*-<label>-hunt*``); never the player's own session (``*-play-<label>``: no packets)."""
+    if not label:
+        return []
+    hits = {*demo.glob(f"*-{label}-hunt*"), *demo.glob(f"*-{label}")}
+    return sorted(d for d in hits if d.is_dir() and "-play-" not in d.name
+                  and (d / "events.jsonl").is_file())  # fmt: skip
+
+
+def after_run_command(sessions: Sequence[str | Path], db: Path | None = None,
+                      data: Path | None = None, cap_s: int = AFTER_RUN_CAP_S,
+                      py: str = sys.executable) -> list[str]:  # fmt: skip
+    """PURE: the record's argv -- `update` (a run already in the file is left as it is), niced
+    and under its own hard cap."""
+    argv = ["nice", "-n", "10", "timeout", str(int(cap_s)), py, str(Path(__file__).resolve()),
+            "update", *(str(s) for s in sessions)]  # fmt: skip
+    if db is not None:
+        argv += ["--db", str(db)]
+    if data is not None:
+        argv += ["--data", str(data)]
+    return argv
+
+
+def record_after_run(sessions: Sequence[str | Path], log_path: Path, *,
+                     wait_s: float = AFTER_RUN_WAIT_S, cap_s: int = AFTER_RUN_CAP_S,
+                     db: Path | None = None, data: Path | None = None,
+                     py: str = sys.executable) -> dict[str, Any]:  # fmt: skip
+    """A finished run's hunt sessions into the file, NON-FATAL and BOUNDED: `update` runs niced
+    under its own cap (its lines appended to ``log_path``); the caller waits at most ``wait_s``,
+    then the record goes on in the BACKGROUND (and says so). Never raises: a failure is returned
+    (and the run's own result is untouched). {"state": "none" | "done" | "failed" | "background",
+    "rc", "sessions", "log", "pid"?, "why"?}."""
+    for p in list(_running):  # the earlier background records: reaped, and one at a time
+        if p.poll() is None:
+            with contextlib.suppress(subprocess.TimeoutExpired):
+                p.wait(timeout=wait_s)
+        if p.poll() is not None:
+            _running.remove(p)
+    names = [Path(s).name for s in sessions]
+    out: dict[str, Any] = {"sessions": names, "log": str(log_path)}
+    if not sessions:
+        return {**out, "state": "none", "rc": None}
+    try:
+        log_path.parent.mkdir(parents=True, exist_ok=True)
+        with log_path.open("ab") as fh:
+            fh.write(f"[{time.strftime('%Y-%m-%d %H:%M:%S')}] econ_db update {' '.join(names)}\n"
+                     .encode())  # fmt: skip
+            fh.flush()
+            proc = subprocess.Popen(after_run_command(sessions, db, data, cap_s, py), cwd=ROOT,
+                                    stdout=fh, stderr=subprocess.STDOUT,
+                                    stdin=subprocess.DEVNULL, start_new_session=True)  # fmt: skip
+    except OSError as e:
+        return {**out, "state": "failed", "rc": None, "why": f"{type(e).__name__}: {e}"}
+    try:
+        rc = proc.wait(timeout=wait_s)
+    except subprocess.TimeoutExpired:
+        _running.append(proc)
+        return {**out, "state": "background", "rc": None, "pid": proc.pid}
+    if rc == 0:
+        return {**out, "state": "done", "rc": 0}
+    why = "the record's time cap" if rc == 124 else "a session refused (its log)"
+    return {**out, "state": "failed", "rc": rc, "why": why}
+
+
+def reap_background() -> list[dict[str, Any]]:
+    """The background records that have ended since the last ask, each reaped once: [{"pid", "rc",
+    "state": "done" | "failed"}] (a caller that waits less than a record takes notes its end)."""
+    out: list[dict[str, Any]] = []
+    for p in list(_running):
+        if p.poll() is not None:
+            _running.remove(p)
+            out.append({"pid": p.pid, "rc": p.returncode,
+                        "state": "done" if p.returncode == 0 else "failed"})  # fmt: skip
     return out
 
 

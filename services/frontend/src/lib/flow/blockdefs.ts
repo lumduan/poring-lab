@@ -24,7 +24,7 @@ import { groupOf, SETTING_BLOCKS, SETTING_GEOMETRY, SETTING_NOTE_ROWS, SETTING_R
 import { MAX_RANK } from "./ir.ts";
 import type { PickSpec, RefKind } from "./pickers.ts";
 import { BLOCK_STYLE } from "./theme.ts";
-import { CLASS_WORDS, HUNT_CALL, isLockedClass, PADLOCK, ROLE_PREFIX, STEP_BY_BLOCK, STEP_STYLE, stepBlock, stepType, TICK_FN, TICK_STEPS, TICK_TAB, type TickStep } from "./tick.ts";
+import { CLASS_WORDS, HUNT_CALL, isNeededClass, NEED_WORDS, ROLE_PREFIX, STEP_BY_BLOCK, STEP_STYLE, stepBlock, stepType, TICK_FN, TICK_STEPS, TICK_TAB, type TickStep } from "./tick.ts";
 
 export type ArgDef =
   | { type: FieldKind; name: string; text?: string; value?: number; min?: number; max?: number; precision?: number; options?: [string, string][]; class?: string; pick?: PickSpec }
@@ -587,7 +587,7 @@ export const DEF_ABOUT_WORDS: Record<string, string> = {
  * where the project has a Global node. */
 export function defTooltip(name: string, global: boolean): string {
   const g = global ? " In Global, every node can call it; the same name on a map replaces Global's there." : "";
-  if (name === TICK_FN) return `hunt_tick(): the hunt core's tick -- ${DEF_ABOUT_WORDS.hunt_tick}. Its step blocks play in the runner's order; a SAFETY or REQUIRED step in its place is locked, an optional one may be left out, an extra copy is deleted. No block calls it.${g}`;
+  if (name === TICK_FN) return `hunt_tick(): the hunt core's tick -- ${DEF_ABOUT_WORDS.hunt_tick}. Its step blocks play in the runner's order; a SAFETY or REQUIRED step is needed to run (without it the Run is refused), an optional one may be left out, an extra copy is deleted. No block calls it.${g}`;
   if (name === HUNT_CALL) return `hunt_loop(): the hunt core's loop -- ${DEF_ABOUT_WORDS.hunt_loop}. Each turn finds a target and fights it.${g}`;
   return `A FUNCTION: any tab of this node can call it by its name. Its inputs as in Python: key, times=1, *args, **kwargs.${g}`;
 }
@@ -777,19 +777,21 @@ function roleDef(r: RunnerRole): BlockDef {
  * hunt_tick()'s body, one statement input in (layout.ts INDENT 20, taken at 24). */
 function stepDef(t: TickStep): BlockDef {
   const width = SETTING_ROW_BUDGET - SETTING_GEOMETRY.side - 24;
-  // round 26: a locked class's head row shows the padlock (tick.ts LOCKED_CLASSES); ➡️ round 28: as
-  // a label of its own (LOCK), which the editor empties on a copy it does not lock (an extra or a
-  // misplaced one), whose WHY rows say why (tick.ts placeWords; hidden while empty)
-  const lines = [...wrapUnits(`${CLASS_WORDS[t.klass]} · ${t.words}`, width), ...(t.owner ? wrapUnits(`played while ${t.owner} plays`, width) : [])];
+  // ➡️ round 29: a needed class's first line is "SAFETY · needed to run" (tick.ts NEED_WORDS; round
+  // 26-28's padlock went with the lock): true of the step wherever a copy of it stands (an extra
+  // copy's WHY rows say "an extra copy: delete it"; tick.ts placeWords). (On the head row it ran to
+  // 349 of the 300-unit budget: step_battle_log.)
+  const said = isNeededClass(t.klass) ? [`${CLASS_WORDS[t.klass]} · ${NEED_WORDS}`, ...wrapUnits(t.words, width)] : wrapUnits(`${CLASS_WORDS[t.klass]} · ${t.words}`, width);
+  const lines = [...said, ...(t.owner ? wrapUnits(`played while ${t.owner} plays`, width) : [])];
   const args: ArgDef[] = [];
   const at = (a: ArgDef) => `%${args.push(a)}`;
-  const head = `${isLockedClass(t.klass) ? `${at({ type: "field_label", name: "LOCK", text: PADLOCK })} ` : ""}${stepBlock(t)}() ${at(endRow("ROW_HEAD"))}`;
+  const head = `${stepBlock(t)}() ${at(endRow("ROW_HEAD"))}`;
   const body = lines.map((l, i) => `${l} ${at(endRow(`ROW_LINE${i + 1}`))}`);
   const why = WHY_FIELDS.map((f, i) => `${at({ type: "field_label", name: f, text: "", class: "pl-setting-var" })} ${at(endRow(i ? `ROW_${f}` : "ROW_WHY"))}`);
   const rule =
     t.klass === "optional"
       ? "OPTIONAL: it may be left out of hunt_tick() -- drag it out (it comes alone, the steps under it close up) or delete it; the runner then never plays it; it cannot be moved"
-      : `${CLASS_WORDS[t.klass]}, LOCKED: it cannot be deleted or dragged out of hunt_tick() (the lint refuses a tick without it, and the runner too)`;
+      : `${CLASS_WORDS[t.klass]}, NEEDED TO RUN: a Run of a tick without it is refused (the lint says why, and the runner refuses it too); it can be deleted or moved like any block (alone: the steps under it close up) -- Undo, or load the saved file`;
   return {
     ...stmt({
       type: stepType(t),
@@ -799,7 +801,7 @@ function stepDef(t: TickStep): BlockDef {
       tooltip: `${stepBlock(t)}(): a step of the hunt core's tick -- ${t.words}. ${t.owner ? `A mode step: it plays while ${t.owner} plays. ` : "Every tick, whichever block of the hunt loop plays. "}${rule}. The steps play in the runner's order; only the copy in its place counts (another copy is an extra one: delete it).`,
     }),
     style: STEP_STYLE[t.klass],
-    extensions: ["pl_label_rows", "pl_tick_lock"],
+    extensions: ["pl_label_rows", "pl_tick_drag"],
   };
 }
 BLOCK_DEFS.push(...RUNNER_ROLES.map(roleDef), ...TICK_STEPS.map(stepDef));

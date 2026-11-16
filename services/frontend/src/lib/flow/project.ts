@@ -198,6 +198,19 @@ export function* allStmts(stmts: readonly Stmt[]): Generator<Stmt> {
 }
 
 /** Every statement a node holds: its main and every function of its tabs. */
+/** Round 29 (Batt 2026-11-16, live-blocks.md 17 #2: "keep it as a backup, but it is no longer used
+ * in real runs: only the separate blocks"): the engine's words (poring_flow.project
+ * OLD_RUNNER_WORDS) for a box whose hunt core is the old one-block runner block -- loadable, never
+ * a REAL run (the Run button says why; the Run route and the Run helper refuse it too). */
+export const OLD_RUNNER_WORDS = "this box uses the old one-block runner; real runs use hunt_loop() (load xmas_dun02)";
+/** PURE: does this map node's hunt core use the old one-block runner block (anywhere in its tabs; a
+ * main's hunt_loop() is the new shape)? */
+export function oldRunnerOn(n: PNode | undefined): boolean {
+  if (!n || n.kind !== "map") return false;
+  for (const s of nodeStmts(n)) if (s.kind === "action" && s.block === "dungeon_hunt") return true;
+  return false;
+}
+
 export function* nodeStmts(n: PNode): Generator<Stmt> {
   for (const t of n.tabs) {
     if (t.main) yield* allStmts(t.main);
@@ -642,6 +655,27 @@ export function xmasCookieNoSwapProject(): Project {
     ...p,
     name: "xmas_dun02_cookie_noswap",
     description: "One box with no Knife swap on the Christmas Cookie and the Cookie (live-blocks 16): attack_cookie and attack_cookie_xmas are strike(t); wait_kill(t); loot(t). The other monsters keep the Knife swap; everything else is the one box.",
+  };
+}
+
+/** Round 29 follow-up (Batt 14.12 #2: make the no-swap box "work"; 16.8: a loadable EXAMPLE, not
+ * the default): the cookie no-swap box in the FUNCTIONS shape
+ * (fixtures/project_xmas_dun02_functions_cookie_noswap.json) -- exactly xmasFunctionsProject() but
+ * attack_cookie and attack_cookie_xmas cut to strike(t); wait_kill(t); loot(t), as
+ * xmasCookieNoSwapProject() cuts the one box. Its Run is a real run (no old runner block: round 29);
+ * the one-box version stays for stage6_ab's arm C (its sha256 pins), off the Load lists. */
+export function xmasFunctionsCookieNoSwapProject(): Project {
+  const p = xmasFunctionsProject();
+  const n = p.nodes[0];
+  if (n.kind !== "map") throw new Error("the ready-made box's node is a map node");
+  const mon = n.tabs.find((t) => t.name === MONSTERS_TAB);
+  if (!mon) throw new Error("the ready-made box has a monsters tab");
+  const plain = new Set<string>(NO_SWAP_MONSTERS.map((sp) => `${RECIPE_PREFIX}${sp}`));
+  mon.defs = mon.defs.map((d) => (plain.has(d.name) ? recipeDef(d.name.slice(RECIPE_PREFIX.length), false) : d));
+  return {
+    ...p,
+    name: "xmas_dun02_cookie_noswap",
+    description: "The ready-made xmas_dun02 with ONE recipe edit, an example (not the default; live-blocks 16): attack_cookie and attack_cookie_xmas are strike(t); wait_kill(t); loot(t) -- no Knife swap on the Christmas Cookie and the Cookie. The other monsters keep the Knife swap; everything else is the ready-made box.",
   };
 }
 

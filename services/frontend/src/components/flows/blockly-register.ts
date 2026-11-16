@@ -10,7 +10,7 @@ import { huntDef, type HuntRules } from "../../lib/flow/hunt.ts";
 import { wrapExpr } from "../../lib/flow/pickers.ts";
 import { noteLines, SETTING_NOTE_ROWS, settingOfType, unitOf } from "../../lib/flow/settings.ts";
 import { BLOCK_STYLES, CATEGORY_STYLES, COMPONENT_STYLES, FONT_STYLE } from "../../lib/flow/theme.ts";
-import { isLockedClass, PADLOCK, placeWords, STEP_OF_TYPE, stepBlock, TICK_FN, type TickPlace, tickPlaces } from "../../lib/flow/tick.ts";
+import { placeWords, STEP_OF_TYPE, stepBlock, TICK_FN, type TickPlace, tickPlaces } from "../../lib/flow/tick.ts";
 
 let registered = false;
 /** Round 21 (the re-measure of round 20): the words a setting block in the FLYOUT or the search
@@ -118,10 +118,10 @@ export function register(B: typeof BlocklyT): void {
   B.Extensions.register("pl_def_about", function (this: BlocklyT.Block) {
     watchDefAbout(B, this);
   });
-  // round 26 (the reviewer's 5c review): a SAFETY or REQUIRED step in hunt_tick() cannot be
-  // deleted or dragged out; any step is dragged out ALONE (tickLock)
-  B.Extensions.register("pl_tick_lock", function (this: BlocklyT.Block) {
-    tickLock(B, this);
+  // round 26 (the reviewer's 5c review): any step is dragged out ALONE (tickDrag); ➡️ round 29
+  // (Batt, live-blocks.md 17 #1): the lock it also set (SAFETY / REQUIRED) is gone
+  B.Extensions.register("pl_tick_drag", function (this: BlocklyT.Block) {
+    tickDrag(B, this);
   });
   B.common.defineBlocksWithJsonArray(BLOCK_DEFS as unknown as object[]);
   // The IR has no "disabled" statement: a block the context menu disabled would still be converted
@@ -229,16 +229,6 @@ export function inTick(b: BlocklyT.Block): boolean {
   return root !== b && root.type === "pl_def" && String(root.getFieldValue("NAME") ?? "").trim() === TICK_FN;
 }
 
-/** Round 26: a step block of a LOCKED class (SAFETY, REQUIRED: tick.ts) inside hunt_tick(). Until
- * Batt answers live-blocks.md 15.10 Q1 the editor matches the built default: such a step cannot be
- * deleted or dragged out (the lint stays the backstop, e.g. for a Python edit). */
-export function lockedStep(b: BlocklyT.Block): boolean {
-  const t = STEP_OF_TYPE.get(b.type);
-  // round 28: only the copy the tick ACCEPTS (in its place; tick.ts tickPlaces, the lint's rule): an
-  // extra or a misplaced copy stays deletable and draggable, and says why (syncStepPlace)
-  return !!t && isLockedClass(t.klass) && stepPlace(b)?.kind === "ok";
-}
-
 /** Round 28: a block's place in hunt_tick() (tick.ts tickPlaces over the tick's statements, in
  * order; null: not inside the tick). Read fresh each time: a drop, a delete, an undo change it. */
 export function stepPlace(b: BlocklyT.Block): TickPlace | null {
@@ -255,18 +245,16 @@ export function stepPlace(b: BlocklyT.Block): TickPlace | null {
   return tickPlaces(names)[i];
 }
 
-/** Round 28: a step block's padlock and WHY rows as its place says (an extra or a misplaced copy:
- * no padlock, and why; in its place, or outside the tick: as its class). True: its rows changed. */
+/** Round 28: a step block's WHY rows as its place says (an extra or a misplaced copy: why). True:
+ * its rows changed. (➡️ Round 29: the padlock this also set went with the lock; a needed class's
+ * "needed to run" is in its class line, true wherever a copy stands.) */
 export function syncStepPlace(B: typeof BlocklyT, b: BlocklyT.Block): boolean {
-  const t = STEP_OF_TYPE.get(b.type);
-  if (!t) return false;
+  if (!STEP_OF_TYPE.has(b.type)) return false;
   const place = stepPlace(b);
   const rows = whyRows(placeWords(place));
-  const lock = isLockedClass(t.klass) && (!place || place.kind === "ok") ? PADLOCK : "";
   const was = B.Events.isEnabled();
   if (was) B.Events.disable();
   try {
-    if (b.getField("LOCK") && b.getFieldValue("LOCK") !== lock) b.getField("LOCK")?.setValue(lock);
     for (const f of WHY_FIELDS) if (b.getField(f) && b.getFieldValue(f) !== rows[f]) b.getField(f)?.setValue(rows[f]);
   } finally {
     if (was) B.Events.enable();
@@ -276,8 +264,7 @@ export function syncStepPlace(B: typeof BlocklyT, b: BlocklyT.Block): boolean {
 
 /** Round 26: takes a block out of its stack ALONE: the blocks under it go up to where it was,
  * whatever they are (Blockly's own heal keeps an unmovable block under it attached, so it is not
- * used; and no block is made unmovable: a locked step is locked by its drag strategy and by
- * isDeletable, never by setMovable). */
+ * used; no block is ever made unmovable). */
 export function takeOutAlone(b: BlocklyT.Block): void {
   const parent = b.previousConnection?.targetConnection ?? null;
   const next = b.getNextBlock();
@@ -288,36 +275,22 @@ export function takeOutAlone(b: BlocklyT.Block): void {
   }
 }
 
-const frozen = new WeakSet<object>();
 let TickDrag: (new (b: BlocklyT.BlockSvg) => BlocklyT.IDragStrategy) | null = null;
 /** Round 26 (the reviewer: "dragging the optional step_loot out took 9 steps and gave 6 errors"):
- * the drag of a block in hunt_tick() -- a step block anywhere, any block inside the tick: a locked
- * step does not move at all (the drag is a no-op: no disconnect, no move, no drop); any other is
- * taken out ALONE (takeOutAlone), as Delete already heals. Undo puts it back: the disconnects are in
- * the drag's own event group. */
+ * the drag of a block in hunt_tick() -- a step block anywhere, any block inside the tick -- takes
+ * it out ALONE (takeOutAlone), as Delete already heals; Undo puts it back (the disconnects are in
+ * the drag's own event group). ➡️ Round 29: no step is locked any more (Batt, live-blocks.md 17
+ * #1): a SAFETY or REQUIRED step drags and deletes like the others, and a Run without it is
+ * refused (the lint, live.problems). */
 export function tickDragOf(B: typeof BlocklyT): (new (b: BlocklyT.BlockSvg) => BlocklyT.IDragStrategy) | null {
   if (TickDrag) return TickDrag;
   const Base = B.dragging?.BlockDragStrategy;
   if (!Base) return null;
   class Drag extends Base {
     override startDrag(e?: PointerEvent | KeyboardEvent): BlocklyT.IDraggable {
-      frozen.delete(this);
-      if (lockedStep(this.block)) {
-        frozen.add(this); // locked: it stays where it is
-        return this.block;
-      }
       // (a block in the flyout has no stack: Blockly makes the copy that is dragged)
       if (inTick(this.block) || STEP_OF_TYPE.has(this.block.type)) takeOutAlone(this.block);
       return super.startDrag(e);
-    }
-    override drag(newLoc: BlocklyT.utils.Coordinate, e?: PointerEvent | KeyboardEvent): void {
-      if (!frozen.has(this)) super.drag(newLoc, e);
-    }
-    override endDrag(e: PointerEvent | KeyboardEvent | undefined, disposition: Parameters<BlocklyT.IDragStrategy["endDrag"]>[1]): void {
-      if (!frozen.has(this)) super.endDrag(e, disposition);
-    }
-    override revertDrag(): void {
-      if (!frozen.has(this)) super.revertDrag();
     }
   }
   TickDrag = Drag;
@@ -325,15 +298,8 @@ export function tickDragOf(B: typeof BlocklyT): (new (b: BlocklyT.BlockSvg) => B
 }
 
 /** Round 26: a step block (and, from the editor's paint, any block inside hunt_tick()) gets the
- * tick's drag (tickDragOf), and a locked step says it cannot be deleted (isDeletable): the
- * context menu, the Delete key, the trashcan and Cut all ask it. */
-export function tickLock(B: typeof BlocklyT, b: BlocklyT.Block): void {
-  const tagged = b as BlocklyT.Block & { plTickLock?: boolean };
-  if (!tagged.plTickLock) {
-    tagged.plTickLock = true;
-    const base = b.isDeletable.bind(b);
-    b.isDeletable = () => base() && !lockedStep(b);
-  }
+ * tick's one-step drag (tickDragOf). ➡️ Round 29: nothing else -- no lock. */
+export function tickDrag(B: typeof BlocklyT, b: BlocklyT.Block): void {
   const svg = b as BlocklyT.BlockSvg;
   const Drag = tickDragOf(B);
   if (Drag && typeof svg.setDragStrategy === "function" && !(svg.getDragStrategy?.() instanceof Drag)) svg.setDragStrategy(new Drag(svg));

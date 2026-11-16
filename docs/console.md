@@ -434,10 +434,17 @@ Amendment B); a not-adopted model is never offered.
   the runner then never plays it. The toolbox offers a **Roles** category on the tab hunt and a
   **Tick** category on the tab tick. Run plays it exactly as the hunt box. The old shape (the runner
   block) is **xmas_dun02_runner** in the Load lists; a saved project with the runner block loads and
-  runs as before.
+  runs as before. ➡️ **Since round 29 (2026-11-16, Batt: "keep it as a backup, but it is no longer
+  used in real runs"), a box with the runner block LOADS but does not RUN**: Run says "this box uses
+  the old one-block runner; real runs use hunt_loop() (load xmas_dun02)", and the Run route and the
+  Run helper refuse it in the same words (round 29 below).
   The /maps Load list also offers **xmas_dun02_cookie_noswap** (live-blocks 16: the one box with
   no Knife swap on the Christmas Cookie and the Cookie, `attack_cookie` / `attack_cookie_xmas` =
-  strike, wait_kill, loot; the other monsters keep the swap): load it there and Run it from START.
+  strike, wait_kill, loot; the other monsters keep the swap): load it there and Run it from START. ➡️ **Since
+  round 29 (2026-11-16):** that entry is the FUNCTIONS-shape twin: the ready-made xmas_dun02 with
+  those two recipes, an example of a recipe edit, not the default. Its Run is a real run. The
+  one-box version (the old runner block, stage-6 A/B arm C) is off the Load lists; the A/B still
+  plays it through `flow_play.py`.
   - **/maps:** a small **START** pill left of the start map, joined to its entry; drag that
     connection onto another map and the run starts there (or "Start here" in a node's inspector).
     **Run** (amber, beside Simulate; press, then press again within 4 s) plays the project in the
@@ -656,6 +663,21 @@ Amendment B); a not-adopted model is never offered.
     step_survive) or one out of its place shows no 🔒, can be deleted or moved, and its rows say
     why ("an extra copy: delete it" / "out of its place: it goes after ..."), as the lint does. The
     words say "the runner's order", never "run()".
+  - **Round 29** ([planning/live-blocks.md](planning/live-blocks.md) 12.13; Batt 2026-11-16, 17):
+    - **Every step can be edited.** SAFETY and REQUIRED steps delete and drag like any block (a
+      drag still takes that one step; the others close up). Their 🔒 is gone. Their class line
+      says "SAFETY · needed to run" (or "REQUIRED · needed to run"), in the class colours. A tick
+      without one of them is not a Run: the lint says which step it leaves out and what it
+      protects, and the Run button is held with that reason. Undo it (Ctrl+Z), or load the saved
+      file.
+    - **The old one-block runner is not a real run.** A box whose hunt core is the old runner
+      block (Advanced > Old projects, xmas_dun02_runner) still loads and simulates. Its Run
+      button is held: "this box uses the old one-block runner; real runs use hunt_loop() (load
+      xmas_dun02)". The check and the Run are refused in the same words (`old_runner`).
+    - **Every run records its economy.** When a Run ends, its hunt sessions go into
+      `data/econ/lab.sqlite` (`econ_db.py update`), so that file holds every real run. The
+      /economy page itself still reads the JSON exports
+      ([econ/economics.md](econ/economics.md) section 10).
 - **No live run (the block editor):** nothing in the block editor reaches the executor, the mux or an input path (➡️ Run, above, is the one live path: the Run helper's player, never the editor). The backend's
   `/flows/*` routes only compute (public listener, LAN viewer, Origin; POSTs need the CSRF token,
   20 a minute; the Python view 120 a minute on its own budget since 2026-11-09). See [planning/mw2-block-editor.md](planning/mw2-block-editor.md) and

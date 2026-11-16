@@ -203,9 +203,11 @@ def _body(flow: ir.Flow, name: str, owner: str | None, add: Callable[..., None])
 # ACCEPTS. The copies in their place in the runner's order (the longest run of steps already in
 # order, one copy of a step at most, the earlier copy where two would do) are accepted; any other
 # copy of an accepted step is an EXTRA copy; a step with no copy in its place is OUT OF ITS PLACE
-# (its first copy; its other copies extra). The editor locks only an accepted SAFETY or REQUIRED
-# step and says the same words on an extra or a misplaced one (lib/flow/tick.ts tickPlaces: the
-# same rule, pinned by the same cases in test_runner_functions.py and tick_lock.test.ts).
+# (its first copy; its other copies extra). The editor says the same words on an extra or a
+# misplaced one (lib/flow/tick.ts tickPlaces: the same rule, pinned by the same cases in
+# test_runner_functions.py and tick_lock.test.ts). ➡️ Round 29 (Batt 2026-11-16, live-blocks.md 17
+# #1): the editor locks no step any more; a tick without a SAFETY or REQUIRED step in its place is
+# refused here (tick_step) and by the Run (live.problems), in these words.
 EXTRA_WORDS = "an extra copy: delete it"
 
 

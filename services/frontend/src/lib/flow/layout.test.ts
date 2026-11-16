@@ -12,13 +12,13 @@ import { canonical } from "./ir.ts";
 import { BOX, blockHeight, blockRows, blockWidth, INDENT, layoutKey, overlaps, pushGrown, ROUND, rowsOf, SHELF_LEFT, shelfWidth, STACK_GAP, stackTops, type TopBox, WIDEST_BADGE } from "./layout.ts";
 import { checkBody, projectRunBody } from "./liverun.ts";
 import { EXPR_SHOW_UNITS, WRAP_UNITS, wrapExpr } from "./pickers.ts";
-import { engineKey, forEngine, nodeById, type Project, sampleProject, tabOf, xmasFunctionsProject, xmasHuntProject, xmasProject } from "./project.ts";
+import { engineKey, forEngine, nodeById, type Project, sampleProject, tabOf, xmasFunctionsCookieNoSwapProject, xmasFunctionsProject, xmasHuntProject, xmasProject } from "./project.ts";
 import { exportProject, importProject } from "./projectfile.ts";
 import { rowUnits, SETTING_BY_NAME, SETTING_GEOMETRY as G, SETTING_ROW_BUDGET, settingOfType, settingType, textUnits } from "./settings.ts";
 import { sessionProject } from "./testkit.ts";
 
 const fixture = (name: string): Project => JSON.parse(readFileSync(new URL(`./fixtures/${name}`, import.meta.url), "utf8")) as Project;
-const PROJECTS: Project[] = [xmasProject(), xmasHuntProject(), xmasFunctionsProject(), sampleProject(), sessionProject(), ...["project_xmas_dun02_stage2.json", "project_xmas_dun02_stage3.json", "project_xmas_dun02_stage4.json"].map(fixture)];
+const PROJECTS: Project[] = [xmasProject(), xmasHuntProject(), xmasFunctionsProject(), xmasFunctionsCookieNoSwapProject(), sampleProject(), sessionProject(), ...["project_xmas_dun02_stage2.json", "project_xmas_dun02_stage3.json", "project_xmas_dun02_stage4.json"].map(fixture)];
 const [T1, T2] = titleLines("when the run starts: she stands on xmas_dun02");
 /** The labels the editor fills, at their widest: the longest badge, "replaces Global's". */
 const LABELS = { BADGE: "● verified RDP + S2", RUN: "", TITLE: T1, TITLE2: T2, SCOPE: "replaces Global's" };

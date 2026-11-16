@@ -744,7 +744,25 @@ class Series:
         if s_ < SHORT_RUN_S and not died_in(self.dir / f"{rr['label']}.log"):
             out["short"] = True  # it never played (a start refusal, a safe end at once); a
             # death that respawned PLAYED (2026-11-14 05:31: the Knight 46 s after the warp)
+        out["econ"] = self.econ(str(rr["label"]))
         return out
+
+    def econ(self, label: str) -> str:
+        """The run's hunt sessions into data/econ/lab.sqlite (round 29; Batt 2026-11-16: "every
+        run, collect the economy too"): econ_db.record_after_run, bounded (a minute at most before
+        the next run's setup, then in the background) and NON-FATAL (logged; the run's result and
+        the series go on). Its state goes into done.json."""
+        try:
+            import econ_db
+
+            res = econ_db.record_after_run(econ_db.hunt_sessions(label, DEMO),
+                                           self.dir / f"{label}.econ.log", py=PY)  # fmt: skip
+        except Exception as e:  # noqa: BLE001 -- never the run's result
+            res = {"state": "failed", "why": f"{type(e).__name__}: {e}", "sessions": []}
+        names = ", ".join(res.get("sessions") or []) or "no hunt session"
+        why = f"; {res['why']}" if res.get("why") else ""
+        self.log(f"{label}: economy record {res['state']} ({names}){why}")
+        return str(res["state"])
 
     def run(self) -> int:
         done: list[dict[str, Any]] = []

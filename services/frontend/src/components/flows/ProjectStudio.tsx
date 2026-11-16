@@ -52,6 +52,8 @@ import {
   mapNodes,
   modelOn,
   namesOf,
+  OLD_RUNNER_WORDS,
+  oldRunnerOn,
   newTabName,
   nodeById,
   overriddenBy,
@@ -64,7 +66,7 @@ import {
   startMap,
   type Tab,
   tabNameProblem,
-  xmasCookieNoSwapProject,
+  xmasFunctionsCookieNoSwapProject,
   xmasFunctionsProject,
   xmasHuntProject,
   xmasProject,
@@ -108,7 +110,9 @@ const READY: Record<string, () => { project: Project; world: WorldSource }> = {
   xmas_dun02: () => ({ project: xmasFunctionsProject(), world: "local" }),
   xmas_dun02_runner: () => ({ project: xmasProject(), world: "local" }),
   xmas_dun02_hunt: () => ({ project: xmasHuntProject(), world: "local" }), // live blocks 5b-2
-  xmas_dun02_cookie_noswap: () => ({ project: xmasCookieNoSwapProject(), world: "local" }), // live blocks 16
+  // live blocks 16, ➡️ round 29: the no-swap EXAMPLE in the functions shape (a real Run); the one-box
+  // version (xmasCookieNoSwapProject, stage6_ab's arm C) is off the lists
+  xmas_dun02_cookie_noswap: () => ({ project: xmasFunctionsCookieNoSwapProject(), world: "local" }),
   my_first_project: () => ({ project: sampleProject(), world: "sample" }),
 };
 
@@ -206,7 +210,9 @@ export default function ProjectStudio({ backendUrl, initialNode = null }: { back
   const runnerMap = node.kind === "map" && runnerBlockOn(node) ? node.map.map : null;
   const runnerLive = !!runnerMap && RUNNER_MAPS.includes(runnerMap); // the Run helper plays this runner
   const ready = node.kind === "map" ? liveReady(project, node.id, catalogue?.blocks ?? null) : null;
-  const runnable = node.kind === "map" && ready?.ready === true && (!runnerBlockOn(node) || runnerLive);
+  // round 29: the old one-block runner is a backup, never a real run (live-blocks.md 17 #2)
+  const oldRunner = oldRunnerOn(node);
+  const runnable = node.kind === "map" && !oldRunner && ready?.ready === true && (!runnerBlockOn(node) || runnerLive);
   const keysR = runnerLive ? runnerKeysOn(project, node.id) : null;
   const runKeys = keysR?.ok ? keysR.keys : null;
   const projectRun = runnable ? { project, node: node.id } : null; // the hook keeps the latest in a ref
@@ -224,7 +230,9 @@ export default function ProjectStudio({ backendUrl, initialNode = null }: { back
       ? "Global is code every map shares: open a map node to Run"
       : node.kind !== "map"
         ? "login and choosing the character are not live yet: Run starts on a map node, where a person put her"
-        : runnerBlockOn(node) && !runnerLive
+        : oldRunner
+          ? OLD_RUNNER_WORDS
+          : runnerBlockOn(node) && !runnerLive
           ? `"hunt with the runner" plays only a map that has a runner (today ${RUNNER_MAPS.join(", ")}), not ${node.map.map}`
           : ready && !ready.ready
             ? ready.why
@@ -714,7 +722,7 @@ export default function ProjectStudio({ backendUrl, initialNode = null }: { back
                 {/* live blocks 5c (live-blocks.md 15.6): the old one-box shape stays loadable */}
                 <button type="button" role="menuitem" className="studio-menu-item studio-menu-item-map" onClick={() => openReady("xmas_dun02_runner")} data-testid="load-xmas-runner">
                   xmas_dun02_runner
-                  <small>the same one box in its old shape: one block &ldquo;hunt with the runner&rdquo; holds the hunt core (it flies home on the Butterfly Wing itself)</small>
+                  <small>the same one box in its old shape: one block &ldquo;hunt with the runner&rdquo; holds the hunt core (it flies home on the Butterfly Wing itself); it loads and simulates, but Run is held: real runs use hunt_loop()</small>
                 </button>
                 <button type="button" role="menuitem" className="studio-menu-item" onClick={() => openReady("my_first_project")} data-testid="load-sample-project">
                   my_first_project

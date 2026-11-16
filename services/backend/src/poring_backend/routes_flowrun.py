@@ -16,7 +16,8 @@ press run on flows, and the bot plays by itself").
          (settings/flowrun/project.json, its canonical JSON; never one that may hold a secret) with
          ONE request {"action": "start", "flow": "project", "node", "project_hash", "max_s",
          "keys"?, "at"}. Refusals: 400 / 409 / 503 {"reason", "detail"} with reasons
-         invalid_project (422, problems), not_a_map_node, lint_errors, not_live,
+         invalid_project (422, problems), not_a_map_node, old_runner (round 29: a hunt core that
+         is the old one-block runner block; real runs use hunt_loop()), lint_errors, not_live,
          run_start_refused, keys_refused, helper_not_running, already_running, input_writer_busy
          (round 17 N5: the helper's status names another input writer of ours playing, its
          `busy`), mode_not_assist. Status stays GET /flows/run (flow id "project"); Stop is POST
@@ -27,7 +28,7 @@ press run on flows, and the bot plays by itself").
          with the node's keys (its functions) and its SETTINGS (its setting blocks > Global's >
          the defaults: poring_flow.settings, live-blocks.md 12), which go in the request
          ({"action": "check", "flow": "project", "node", "keys", "vals"}; the helper checks them
-         again). Refusals: invalid_project, not_a_map_node, no_hunt_core, keys_refused,
+         again). Refusals: invalid_project, not_a_map_node, old_runner, no_hunt_core, keys_refused,
          settings_refused, and the helper's states
 
 ➡️ 2026-11-14 ~15:2x (Batt: "there should be no runner [page] ... make them ALL blocks"): GET /
@@ -228,6 +229,8 @@ def check_values(state: AppState, raw: dict[str, Any], node: str) -> dict[str, A
                           [q.doc() for q in e.problems[:50]]) from None  # fmt: skip
     if not isinstance(p.node(node), pj.MapNode):
         raise _refuse_run(state, 400, "not_a_map_node", f"{node} is no map node of the project")
+    if pj.old_runner_nodes(p):  # round 29: the old one-block runner is no real run's hunt core
+        raise _refuse_run(state, 400, "old_runner", pj.OLD_RUNNER_WORDS)
     hunts = {b for b, _ in live.runner_blocks(c.flow)} if c.flow is not None else set()
     if node not in hunts:
         raise _refuse_run(state, 400, "no_hunt_core", f"{node}'s main has no hunt with the "
@@ -311,6 +314,9 @@ def project_check(state: AppState, raw: dict[str, Any], node: str) -> dict[str, 
             "not_a_map_node",
             f"{node} is no map node of the project: the player starts on one",
         )
+    # round 29 (live-blocks.md 17 #2): the old one-block runner is a backup, never a real run
+    if pj.old_runner_nodes(p):
+        raise _refuse_run(state, 400, "old_runner", pj.OLD_RUNNER_WORDS)
     try:
         c = pj.compile_project(p)
     except pj.ProjectError as e:

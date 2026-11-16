@@ -11,16 +11,16 @@ import { fileURLToPath } from "node:url";
 
 import type * as BlocklyT from "blockly/core";
 
-import { inTick, lockedStep, register, syncDefAbout, syncStepPlace, takeOutAlone, tickDragOf } from "../../components/flows/blockly-register.ts";
+import { inTick, register, syncDefAbout, syncStepPlace, takeOutAlone, tickDragOf } from "../../components/flows/blockly-register.ts";
 import { warningText } from "./api.ts";
 import { ABOUT_FIELDS, argsRowShown, categoryOf, DEF_ABOUT_WORDS, defAbout, defTooltip, DEF_BY_TYPE, TICK_CATEGORY, toolbox, toolboxBlocks, toolboxCatalogue, varTooltip, WHY_FIELDS } from "./blockdefs.ts";
-import { tabToWorkspace } from "./blocks.ts";
+import { tabFromWorkspace, tabToWorkspace, type Workspace } from "./blocks.ts";
 import { rowsOf } from "./layout.ts";
 import { playsHunt, refChoices, type PickerData, type PickSpec } from "./pickers.ts";
 import { HUNT_TAB, nodeById, tabOf, xmasFunctionsProject } from "./project.ts";
 import { SETTING_ROW_BUDGET } from "./settings.ts";
 import { BLOCK_STYLES, contrast } from "./theme.ts";
-import { HUNT_CALL, isLockedClass, PADLOCK, placeWords, STEP_BLOCKS, STEP_STYLE, stepBlock, stepType, TICK_FN, TICK_STEPS, TICK_TAB, tickPlaces } from "./tick.ts";
+import { HUNT_CALL, isNeededClass, NEED_WORDS, placeWords, STEP_BLOCKS, STEP_STYLE, stepBlock, stepType, TICK_FN, TICK_STEPS, TICK_TAB, tickPlaces } from "./tick.ts";
 
 const require = createRequire(import.meta.url);
 const lib = (p: string) => fileURLToPath(new URL(`../../../node_modules/blockly/${p}`, import.meta.url));
@@ -48,24 +48,42 @@ function tickTab(): { ws: BlocklyT.Workspace; def: BlocklyT.Block; steps: () => 
   return { ws, def, steps, step };
 }
 
-test("round 26: a SAFETY or REQUIRED step in hunt_tick() cannot be deleted; an optional one can; out of the tick, any can", () => {
+test("round 29: every step -- SAFETY and REQUIRED too -- can be deleted and dragged, in the tick and out of it (Batt: it must be editable)", () => {
   const { ws, def, step } = tickTab();
   assert.equal(def.getFieldValue("NAME"), TICK_FN);
   for (const t of TICK_STEPS) {
     const b = step(t.name);
     assert.ok(inTick(b), t.name);
-    assert.equal(lockedStep(b), isLockedClass(t.klass), t.name);
-    assert.equal(b.isDeletable(), !isLockedClass(t.klass), `${t.name}: deletable`);
-    assert.equal(b.isMovable(), true, `${t.name}: Blockly-movable (the lock is the drag's, never setMovable)`);
+    assert.ok(b.isDeletable(), `${t.name}: deletable`);
+    assert.equal(b.isMovable(), true, `${t.name}: movable (no step is ever setMovable(false))`);
   }
-  // a locked class outside the tick (a block from the toolbox, not placed yet) is deletable
   const loose = B.serialization.blocks.append({ type: stepType(TICK_STEPS.find((t) => t.name === "survive")!) }, ws);
-  assert.ok(!inTick(loose) && !lockedStep(loose) && loose.isDeletable());
+  assert.ok(!inTick(loose) && loose.isDeletable());
   assert.ok(!inTick(def)); // the function itself: not "in" the tick
   ws.dispose();
 });
 
-test("round 26: deleting an optional step HEALS the tick and keeps the locked one under it (why the lock is never setMovable)", () => {
+test("round 29: a SAFETY step deleted leaves a tick the converter keeps -- the lint and the Run refuse it in its words (test_routes_flowrun.py), Undo puts it back", async () => {
+  const { ws, step, steps } = tickTab();
+  await new Promise((r) => setTimeout(r, 0));
+  ws.clearUndo();
+  B.Events.setGroup(true); // as the context menu's Delete does: one undo step
+  step("survive").dispose(true); // Delete: the tick heals, survive gone
+  B.Events.setGroup(false);
+  assert.deepEqual(steps(), TICK_STEPS.map(stepType).filter((t) => t !== "pl_step_survive"));
+  const p = xmasFunctionsProject();
+  const r = tabFromWorkspace(p, { node: NODE, tab: TICK_TAB }, B.serialization.workspaces.save(ws) as unknown as Workspace);
+  assert.ok(r.ok, r.ok ? "" : r.errors.join(" | ")); // the design is kept: the engine says why it cannot run
+  const body = tabOf(nodeById(r.project, NODE)!, TICK_TAB)!.defs[0].body;
+  assert.ok(!body.some((s) => s.kind === "action" && s.block === "step_survive"));
+  await new Promise((r) => setTimeout(r, 5));
+  ws.undo(false); // Ctrl+Z
+  await new Promise((r) => setTimeout(r, 5));
+  assert.deepEqual(steps(), TICK_STEPS.map(stepType));
+  ws.dispose();
+});
+
+test("round 26: deleting a step HEALS the tick and keeps the step under it (why no step is ever setMovable(false))", () => {
   const { ws, step, steps } = tickTab();
   const want = TICK_STEPS.map(stepType).filter((t) => t !== "pl_step_loot");
   step("loot").dispose(true); // Delete (Blockly heals the stack)
@@ -80,24 +98,19 @@ test("round 26: deleting an optional step HEALS the tick and keeps the locked on
   t2.ws.dispose();
 });
 
-test("round 26: a step is dragged out ALONE -- the steps under it close up, whatever they are; a locked step's drag moves nothing", () => {
+test("round 26: a step is dragged out ALONE -- the steps under it close up, whatever they are (round 29: a SAFETY step too)", () => {
   const { ws, step, steps } = tickTab();
   const loot = step("loot");
   takeOutAlone(loot); // what the tick's drag does before Blockly drags it
   assert.equal(loot.getParent(), null);
   assert.equal(loot.getNextBlock(), null, "loot alone (it took no step with it)");
   assert.deepEqual(steps(), TICK_STEPS.map(stepType).filter((t) => t !== "pl_step_loot"));
-  // the tick's drag strategy (Blockly's BlockDragStrategy): a locked step's drag is a no-op
-  const Drag = tickDragOf(B);
-  assert.ok(Drag);
+  // round 29: a SAFETY step comes out alone too (no lock)
   const survive = step("survive");
-  const before = steps();
-  const d = new Drag(survive as unknown as BlocklyT.BlockSvg);
-  assert.equal(d.startDrag(), survive); // no disconnect, nothing dragged out
-  d.endDrag(undefined, 0 as unknown as Parameters<BlocklyT.IDragStrategy["endDrag"]>[1]);
-  d.revertDrag();
-  assert.deepEqual(steps(), before);
-  assert.ok(inTick(survive));
+  takeOutAlone(survive);
+  assert.equal(survive.getParent(), null);
+  assert.deepEqual(steps(), TICK_STEPS.map(stepType).filter((t) => t !== "pl_step_loot" && t !== "pl_step_survive"));
+  assert.ok(tickDragOf(B), "the tick's one-step drag (Blockly's BlockDragStrategy)");
   // Blockly's own pointer drag would take the stack (heal only with Ctrl / Meta): why ours heals
   const g = globalThis as { PointerEvent?: unknown };
   const had = g.PointerEvent;
@@ -112,15 +125,19 @@ test("round 26: a step is dragged out ALONE -- the steps under it close up, what
   ws.dispose();
 });
 
-test("round 26: each class its padlock and colour -- SAFETY red, REQUIRED blue (locked, 🔒), optional green; white words readable", () => {
+test("round 29: each class its mark and colour -- SAFETY red, REQUIRED blue ('needed to run', no padlock), optional green; white words readable", () => {
   for (const t of TICK_STEPS) {
     const d = DEF_BY_TYPE[stepType(t)];
     assert.equal(d.style, STEP_STYLE[t.klass]);
     const head = rowsOf({ type: stepType(t), id: "x" }, {}, 20)[0].what;
-    // (round 28: the padlock is the head row's own label, LOCK, emptied on a copy not locked)
-    const lock = (d.args0 ?? []).find((a) => "name" in a && a.name === "LOCK") as { text?: string } | undefined;
-    assert.equal(lock?.text === PADLOCK, isLockedClass(t.klass), `${t.name}: ${head}`);
-    assert.ok(head.endsWith(`${stepBlock(t)}()`));
+    // (the mark is the class line's words, true wherever a copy stands; no padlock label any more)
+    const line1 = rowsOf({ type: stepType(t), id: "x" }, {}, 20)[1].what;
+    if (isNeededClass(t.klass)) assert.equal(line1, `${stepType(t)}: ${t.klass.toUpperCase()} · ${NEED_WORDS}`);
+    else assert.ok(line1.startsWith(`${stepType(t)}: optional ·`), line1);
+    assert.ok(!(d.args0 ?? []).some((a) => "name" in a && (a.name === "LOCK" || a.name === "NEED")), "no padlock any more");
+    assert.ok(!String(d.message0).includes("🔒"));
+    assert.ok(head.endsWith(`${stepBlock(t)}()`), head);
+    assert.match(String(d.tooltip), isNeededClass(t.klass) ? /NEEDED TO RUN: a Run of a tick without it is refused/ : /OPTIONAL/);
     for (const r of rowsOf({ type: stepType(t), id: "x" }, {}, 20)) assert.ok(r.w <= SETTING_ROW_BUDGET, `${t.name}: ${r.what}`);
   }
   const colours = Object.values(STEP_STYLE).map((s) => BLOCK_STYLES[s].colourPrimary);
@@ -225,7 +242,7 @@ test("round 27: the tab tick offers its 20 step blocks in a 'Tick steps' categor
   assert.equal(categoryOf(toolbox(cat, { node: "global", main: false, tab: TICK_TAB }), TICK_CATEGORY), undefined);
 });
 
-test("round 27: the flyout's step blocks are the real ones -- each found by its name and its words; locked only once inside hunt_tick()", () => {
+test("round 27: the flyout's step blocks are the real ones -- each found by its name and its words", () => {
   const tb = toolbox(toolboxCatalogue(ENGINE_CAT), { node: "map", main: false, tab: TICK_TAB });
   const ws = new B.Workspace();
   const words = new Map<string, string>();
@@ -234,7 +251,7 @@ test("round 27: the flyout's step blocks are the real ones -- each found by its 
     void _k;
     const b = B.serialization.blocks.append(state as unknown as BlocklyT.serialization.blocks.State, ws); // as the flyout and the search make them
     words.set(b.type, b.toString());
-    assert.ok(!lockedStep(b) && b.isDeletable(), `${b.type}: free in the flyout / out of the tick`);
+    assert.ok(b.isDeletable(), `${b.type}: deletable`);
   }
   assert.equal(words.size, 20);
   const find = (q: string) => [...words].filter(([, w]) => w.toLowerCase().includes(q)).map(([t]) => t);
@@ -309,7 +326,7 @@ test("round 28: which copy the tick accepts -- the lint's rule (the same cases p
   assert.equal(placeWords({ kind: "ok", where: "" }), "");
 });
 
-test("round 28: a SECOND step_survive dropped after step_pace is deletable and says why; the original stays locked; deleting the copy leaves a tick the lint takes", () => {
+test("round 28: a SECOND step_survive dropped after step_pace says why; deleting the copy leaves a tick the lint takes (round 29: every copy deletable)", () => {
   const { ws, step, steps } = tickTab(); // the page's path: a tab LOADED with events off
   const original = step("survive");
   // a person drops step_survive from the toolbox after step_pace (Blockly makes it from the item)
@@ -319,38 +336,41 @@ test("round 28: a SECOND step_survive dropped after step_pace is deletable and s
   const copy = B.serialization.blocks.append(state as unknown as BlocklyT.serialization.blocks.State, ws);
   step("pace").nextConnection!.connect(copy.previousConnection!);
   assert.equal(steps().length, 21);
-  assert.ok(inTick(copy));
-  assert.ok(!lockedStep(copy) && copy.isDeletable(), "the copy: deletable");
-  assert.ok(lockedStep(original) && !original.isDeletable(), "the original: locked");
-  // its rows say why, and it shows no padlock (the editor's paint: syncStepPlace)
+  assert.ok(inTick(copy) && copy.isDeletable() && original.isDeletable());
   syncStepPlace(B, copy);
   syncStepPlace(B, original);
   assert.equal(WHY_FIELDS.map((f) => copy.getFieldValue(f)).filter(Boolean).join(" "), "an extra copy: delete it (each step plays once a tick)");
   assert.ok(copy.getInput("ROW_WHY")!.isVisible());
-  assert.equal(copy.getFieldValue("LOCK"), "");
-  assert.equal(original.getFieldValue("LOCK"), PADLOCK);
   assert.ok(!original.getInput("ROW_WHY")!.isVisible());
-  // delete the copy: the tick is the 20 steps in order again, every place "ok", the original locked
   copy.dispose(true);
   assert.deepEqual(steps(), TICK_STEPS.map(stepType));
   const names = steps().map((t) => stepBlock(TICK_STEPS.find((s) => stepType(s) === t)!));
   assert.ok(tickPlaces(names).every((p) => p.kind === "ok"));
-  assert.ok(lockedStep(original));
   ws.dispose();
 });
 
-test("round 28: a misplaced copy of a SAFETY step is not locked and says where it goes; moved back, it locks", () => {
+test("round 28: a misplaced copy of a SAFETY step says where it goes; moved back, its rows clear", () => {
   const { ws, step } = tickTab();
   const survive = step("survive");
   takeOutAlone(survive);
   step("pace").nextConnection!.connect(survive.previousConnection!); // survive, the only copy, last
-  assert.ok(!lockedStep(survive) && survive.isDeletable());
   syncStepPlace(B, survive);
   assert.equal(WHY_FIELDS.map((f) => survive.getFieldValue(f)).filter(Boolean).join(" "), "out of its place: it goes after step_battle_log() and before step_engage()");
   takeOutAlone(survive);
   step("battle_log").nextConnection!.connect(survive.previousConnection!); // back in its place
-  assert.ok(lockedStep(survive) && !survive.isDeletable());
   syncStepPlace(B, survive);
   assert.ok(!survive.getInput("ROW_WHY")!.isVisible());
   ws.dispose();
+});
+
+test("round 29: a box whose main holds the old one-block runner loads but is no real Run -- the Run button's words are the engine's", async () => {
+  const { OLD_RUNNER_WORDS, oldRunnerOn, sampleProject, xmasCookieNoSwapProject, xmasFunctionsCookieNoSwapProject, xmasHuntProject, xmasProject } = await import("./project.ts");
+  const mapOf = (p: ReturnType<typeof xmasProject>) => p.nodes.find((n) => n.kind === "map");
+  for (const p of [xmasProject(), xmasHuntProject(), xmasCookieNoSwapProject()]) assert.ok(oldRunnerOn(mapOf(p)), p.name);
+  assert.ok(!oldRunnerOn(mapOf(xmasFunctionsProject())), "the functions box runs");
+  assert.ok(!oldRunnerOn(mapOf(xmasFunctionsCookieNoSwapProject())), "the no-swap example (functions shape) runs");
+  assert.ok(!sampleProject().nodes.some((n) => oldRunnerOn(n)));
+  assert.ok(!oldRunnerOn(undefined));
+  // (test_routes_flowrun.py pins these words to poring_flow.project.OLD_RUNNER_WORDS)
+  assert.equal(OLD_RUNNER_WORDS, "this box uses the old one-block runner; real runs use hunt_loop() (load xmas_dun02)");
 });
