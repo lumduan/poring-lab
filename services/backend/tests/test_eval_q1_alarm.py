@@ -53,6 +53,17 @@ def test_fire_rule_solo_or_two_in_a_row() -> None:
     assert [f[k] for k in order] == [None, "confirm", None, "solo", None, None]
 
 
+def test_a_pair_never_spans_two_sessions() -> None:
+    """The Goblin-free held-outs pool sessions: frames of two sessions 1 s apart on their own clocks
+    are not a two-in-a-row pair, and a visit never spans two sessions."""
+    units = {"A.000000001": {"t": 10**9, "units": [u(KNIGHT)]},
+             "B.000000001": {"t": 2 * 10**9, "units": [u(KNIGHT)]}}  # fmt: skip
+    frames = {"A.000000001": [box("g", 0.3)], "B.000000001": [box("g", 0.3)]}
+    f = q.alarm_fires(sorted(units), units, frames, ACLS)
+    assert f == {"A.000000001": None, "B.000000001": None}
+    assert q.alarm_view(units, frames, ACLS)["n_visits"] == 2
+
+
 def test_visits_detection_and_false_fires() -> None:
     """Visit 1 (t 10-13): the knight first, a solo fire at 12 (2 s: detected). Visit 2 (t 30-34):
     Goblins, the first fire at 33 (3 s: NOT detected), its Goblin-led delay 1 s from the Goblin's

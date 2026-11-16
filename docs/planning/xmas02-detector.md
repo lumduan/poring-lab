@@ -4856,7 +4856,8 @@ Item 6 adds: "A boss on the screen, at ANY distance: press the Fly Wing first, n
   - an alarm-class box at conf >= **0.7** (`--alarm-solo`), or
   - one at conf >= **0.25** (predict_dir's conf, which `--garm-confirm 2` takes) when the previous
     frame (<= 1.5 s earlier) held one too.
-  The classes combine freely: a Goblin box then a knight box is a pair. The runner reads ~4 times a
+  The classes combine freely: a Goblin box then a knight box is a pair. A pair is never formed
+  across two sessions, and neither is a visit. The runner reads ~4 times a
   second (the HUD twin); at 1 fps the two-in-a-row branch can only fire later, never earlier, so
   this rule is conservative.
 - **A VISIT, from the packets** (S5's units and party definition): a run of frames with a PARTY unit

@@ -761,24 +761,29 @@ S6_MIN_FREE = 50  # fewer alarm-free frames in a set: its false-fire line is INC
 S6_FALSE = (1, 100)  # <= 1 / 100 of the alarm-free frames fire (100 false <= 1 free)
 
 
+def session_of(fk: str) -> str:
+    """PURE: a frame key's session (``frame_key``: <session>.<frame id>); "" for a bare key."""
+    return fk.rsplit(".", 1)[0] if "." in fk else ""
+
+
 def alarm_fires(order: Sequence[str], units: Mapping[str, Mapping[str, Any]],
                 frames: Mapping[str, Sequence[Mapping[str, Any]]], alarm_cls: Iterable[str]
                 ) -> dict[str, str | None]:  # fmt: skip
-    """PURE (S6): per frame (``order``: by time), how the runner fires there: "solo" (an
-    alarm-class box >= ALARM_SOLO), "confirm" (one >= ALARM_CONF here and in the previous frame,
-    <= CONFIRM_GAP_S earlier), else None."""
+    """PURE (S6): per frame (``order``: by session, then time), how the runner fires there: "solo"
+    (an alarm-class box >= ALARM_SOLO), "confirm" (one >= ALARM_CONF here and in the previous frame
+    of the SAME session, <= CONFIRM_GAP_S earlier), else None."""
     cls = set(alarm_cls)
     out: dict[str, str | None] = {}
-    prev_t: int | None = None
+    prev: tuple[str, int] | None = None
     prev_hit = False
     for fk in order:
-        t = int(units[fk]["t"])
+        t, sess = int(units[fk]["t"]), session_of(fk)
         confs = [float(d["conf"]) for d in frames[fk] if d["cls"] in cls]
         hit = any(c >= ALARM_CONF for c in confs)
-        near = prev_t is not None and (t - prev_t) / 1e9 <= CONFIRM_GAP_S
+        near = prev is not None and prev[0] == sess and (t - prev[1]) / 1e9 <= CONFIRM_GAP_S
         out[fk] = ("solo" if any(c >= ALARM_SOLO for c in confs)
                    else "confirm" if hit and prev_hit and near else None)  # fmt: skip
-        prev_t, prev_hit = t, hit
+        prev, prev_hit = (sess, t), hit
     return out
 
 
@@ -793,20 +798,21 @@ def alarm_view(units: Mapping[str, Mapping[str, Any]],
     if lacking:
         raise SystemExit(f"PRED.json lacks {len(lacking)} units frames: {lacking[:5]}")
     acls = set(alarm_cls)
-    order = sorted(units, key=lambda fk: int(units[fk]["t"]))
+    order = sorted(units, key=lambda fk: (session_of(fk), int(units[fk]["t"])))
     fire = alarm_fires(order, units, frames, acls)
     visits: list[list[str]] = []
     last_t: int | None = None
+    last_s: str | None = None
     free = false = any_box = 0
     false_keys: list[str] = []
     for fk in order:
         mobs = {int(u["mob"]) for u in units[fk]["units"]}
-        t = int(units[fk]["t"])
+        t, sess = int(units[fk]["t"]), session_of(fk)
         if mobs & set(party):
-            if last_t is None or (t - last_t) / 1e9 > VISIT_GAP_S or not visits:
+            if last_t is None or sess != last_s or (t - last_t) / 1e9 > VISIT_GAP_S:
                 visits.append([])
             visits[-1].append(fk)
-            last_t = t
+            last_t, last_s = t, sess
         if not mobs & set(species):
             free += 1
             any_box += any(d["cls"] in acls for d in frames[fk])
