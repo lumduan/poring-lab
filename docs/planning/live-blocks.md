@@ -4282,3 +4282,44 @@ dagger either, so an armed HP Fly Wing is the same program in both arms.
    ruff and mypy clean, ruff format clean but main's two files; the frontend's 550 tests 549 passed,
    0 failed (1 skipped), tsc and eslint clean; stage8_ab's, stage7_ab's and stage5c_ab's plans pass
    in process (no input).
+
+
+### 18.13 Result of s8ab (run 2026-11-16 21:36 - 2026-11-17 00:23 ICT, scored 00:25): PASS on every line
+
+`stage8_ab.py score --label s8ab`: 4 pairs, all 8 runs valid, 0 deaths. A = the functions box with
+fly_first ON and fly_first_hp OFF; B = both ON.
+- Run ends: r02B ended by bag_full's home at 13.7 min, still valid; every other run by its time box.
+
+    run       arm  kills/h loot/h open/h  tick median  z/h (with steals)
+    r01A      A    111.7   141.9  114.7    202.3       31,978
+    r02B      B    145.0   153.7  136.2    201.7          524
+    r03B      B    126.9   181.3  117.9    201.8       62,710
+    r04A      A    139.0   175.2  126.9    201.8       57,125
+    r05A      A    129.8   153.9  108.6    201.8       40,190
+    r06B      B    141.7   168.8  108.5    201.8       74,671
+    r07B      B    136.0   154.1   90.6    201.9       42,371
+    r08A      A    136.0   175.3  117.8    202.5       42,786
+
+The bar (18.11):
+- **the HP fly-first line:** B made 1 HP Fly Wing while alive, and it was BARE (she wore the Knife),
+  so the line is judgeable. No F4 / F5 key came between its press and its F8, and the request
+  followed in 0.072 s (bar 0.35 s) -> PASS.
+  - Judged at 4 pairs; the pre-registered extension (s8ab-x2) is not needed.
+- the boss fly-first line in both arms: every one alone -> PASS;
+- kills/h: paired +33.2, -12.1, +11.9, 0.0; mean +8.3, SE 9.7 -> PASS;
+- loot/h: paired +11.8, +6.1, +14.9, -21.2; mean +2.9, SE 8.2 -> PASS;
+- openers/h: A 117.0, B 111.4 -> PASS;
+- pace: median A 202.1, B 201.8 ms -> PASS;
+- kinds, errors and drive: PASS.
+**VERDICT: PASS.**
+
+Report only:
+- deaths 0 / 0;
+- potions/h A 6.0, B 3.3; Fly Wings/h A 15.9, B 11.5; steals/h A 77.0, B 82.7; lowest HP A 41 %,
+  B 48 %;
+- the economy with steals (18.10 #4's totals; 137 runs in the file), valid runs pooled:
+  - gross / cost / net z/h A 51,255 / 8,238 / 43,017;
+  - B 63,214 / 4,688 / 58,526;
+  - B nets more, from fewer potions and wings and more steals, within the run-to-run noise
+    (r02B's 524 z/h short run among them). It is reported, not a claim.
+- **Next:** fly_first_hp goes ON in the ready-made boxes, as 18.10 #2 decided once the A/B passes.
