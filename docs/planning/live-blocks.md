@@ -4142,7 +4142,7 @@ the Fly Wing alone and at once. Whether fly_first becomes ON in the ready-made b
 question 1; Batt's own 17 #6 asks for this behaviour.
 
 
-### 18.10 Batt's decisions on 18.9 (2026-11-16 ~17:xx ICT, Thai, translated)
+### 18.10 Batt's decisions on 18.9 (2026-11-16 ~20:3x ICT, Thai, translated)
 
 1. **fly_first ON by default** in the ready-made boxes: "On." The functions box and its cookie twin
    get the block at ON. The old one-box, hunt-box and frozen A/B fixtures keep their pinned argv
