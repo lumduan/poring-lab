@@ -4095,3 +4095,48 @@ pairs are valid or the fly-first line was not exercised, and nothing failed; els
   passed, 0 failed (1 skipped), tsc and eslint clean; stage7_ab's plan passes in process (no input).
 - **Not built:** fly_first ON in the ready-made boxes (Batt's, after s7ab: 18.6); a Fly Wing first for
   the HP Fly Wing (18.6 #2); leaving the map after the escape (17 #6: not chosen).
+
+
+### 18.9 Result of s7ab (run 2026-11-16 14:05-16:52 ICT, scored 16:52): PASS on every line
+
+`stage7_ab.py score --label s7ab`: 4 pairs, all 8 runs valid, 0 deaths. A = the functions box with
+fly_first OFF; B = the same box with it ON.
+- Run ends: r06B ended by bag_full's home at 16.4 min, still valid; every other run by its time box.
+
+    run       arm  kills/h loot/h open/h  tick median  fly-first flies (ok)
+    r01A      A    163.2   178.3  139.0    201.5        -
+    r02B      B    172.3   181.4  145.1    201.9        0
+    r03B      B    117.8   142.0  105.7    202.6        3 (3)
+    r04A      A    132.8   157.0  120.8    202.1        -
+    r05A      A    150.8   159.9  123.7    201.8        -
+    r06B      B    157.5   179.5  135.6    201.5        0
+    r07B      B    123.9   151.1  114.8    201.8        8 (8)
+    r08A      A    142.0   178.2  126.9    202.0        -
+
+The bar (18.7):
+- **fly first:** 11 fly-first Fly Wings in B, all judged, 0 after a death. No F4 / F5 key came between
+  the read and the F8, and the use_item_request followed in 0.083 s median, 0.089 s max (bar 0.35 s)
+  -> PASS;
+- kills/h: paired +9.2, -15.0, +6.7, -18.1; mean -4.3, SE 7.1 -> PASS;
+- loot/h: paired +3.1, -15.0, +19.6, -27.1; mean -4.9, SE 10.3 -> PASS;
+- openers/h: A 127.6, B 124.8 -> PASS;
+- pace: median A 201.8, B 202.0 ms -> PASS;
+- kinds, errors: PASS;
+- drive: all 8 drove -> PASS.
+**VERDICT: PASS.**
+
+Report only:
+- deaths 0 / 0;
+- potions/h A 5.3, B 7.9; Fly Wings/h A 9.8, B 11.1; steals/h A 87.6, B 89.3; lowest HP A 39 %, B 47 %.
+- **The economy** (the first series recorded by round 29's hook: every run "economy record done";
+  dashboard xmas02-1116-s7ab-flyfirst), gross / cost / net z/h with steals:
+  - A 50,207 / 6,998 / 43,209;
+  - B 54,117 / 10,212 / 43,905.
+  - Equal net; B spends more on potions and wings.
+- **A reporting bug found (not a data bug):** the tool's per-run "z/h" column and its econ report
+  (gross_h 14,312, net_h 4,408) read econ_row's net_h, which leaves Steal / Snatcher income out
+  (17.1). The database holds the steals; the A/B tools' z/h must use the dashboard totals. To fix.
+
+**What it means:** Batt's rule plays live without costing kills or loot. A boss sighting now sends
+the Fly Wing alone and at once. Whether fly_first becomes ON in the ready-made boxes is 18.6's open
+question 1; Batt's own 17 #6 asks for this behaviour.
