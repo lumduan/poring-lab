@@ -848,3 +848,23 @@ def test_the_run_helper_and_the_ab_series_record_each_run_and_never_fail_for_it(
     )
     monkeypatch.setattr(edb, "record_after_run", lambda *a, **k: 1 / 0)
     assert series.econ("s2-p1B") == "failed"
+
+
+def test_the_ab_tools_totals_are_the_dashboards_with_steals(lab: SimpleNamespace) -> None:
+    """live-blocks 18.10 #4 (Batt: "count the steal income too"): econ_db.totals_of gives each run's
+    and the pool's totals exactly as the dashboard (econ_dash.totals over entry_of / pool_runs):
+    the gross counts the stolen items, econ_row's picked-only net does not; read-only."""
+    con = built(lab, lab.s1, lab.s2)
+    want = edb.dashboard(con, [lab.s1.name, lab.s2.name], "pair", lab.data)
+    con.close()
+    got = edb.totals_of([lab.s1.name, str(lab.s2), "no-such-run"], db=lab.db, data=lab.data)
+    assert got["runs"][lab.s1.name] == want["runs"][0]["totals"]
+    assert got["runs"][lab.s2.name] == want["runs"][1]["totals"]
+    assert got["pooled"] == want["pooled"]["totals"] and got["missing"] == ["no-such-run"]
+    t1 = got["runs"][lab.s1.name]
+    assert t1["stolen_units"] >= 1 and t1["net_h"] == round((t1["gross"] - t1["cost"]) / 0.5, 1)
+    only = edb.totals_of([lab.s1.name, lab.s2.name], db=lab.db, data=lab.data,
+                         pooled_only=[lab.s1.name])  # fmt: skip
+    assert only["pooled"]["gross"] == t1["gross"]
+    assert edb.totals_of([lab.s1.name], db=lab.db.with_name("none.sqlite"), data=lab.data) == {
+        "runs": {}, "pooled": None, "missing": [lab.s1.name], "problems": {}}  # fmt: skip

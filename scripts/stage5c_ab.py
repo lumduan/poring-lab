@@ -8,7 +8,10 @@ lab's own Rogue on the lab rAthena's xmas_dun02 (player mode; the MVP alive).
 THE ARMS differ ONLY in the box's shape: both play the checkout's runner through `flow_play.py
 play`, with the same runner settings (stage2_ab.same_vals):
 - A (B5b-2): services/frontend/src/lib/flow/fixtures/project_xmas_dun02_hunt.json;
-- B (B5c): fixtures/project_xmas_dun02_functions.json.
+- B (B5c): fixtures/project_xmas_dun02_functions.json, its safety tab's fly_first set OFF
+  (arm_doc). ➡️ Since live-blocks 18.10 #1 the ready-made functions box holds fly_first ON; this A/B
+  measures the SHAPE alone (s5c-ab and s5c-ab2 ran with fly_first off in both arms), so B is built
+  with it off, explicitly, and every refusal below still means what it meant.
 `plan` refuses before any input unless: the two boxes take the same runner settings and keys, and
 the Run config has the fast alarm on (section 11); both give the same runner argv and run()
 arguments; both drive the canonical loop and B's tick leaves no step out; B is A but for main's
@@ -128,6 +131,60 @@ def box_difference(a: Mapping[str, Any], b: Mapping[str, Any]) -> str | None:
     return None
 
 
+# live-blocks 18.10 #1: the block B is built with as the hunt box holds it (the shape alone differs)
+B_SAME_AS_A = (("safety", "fly_first"),)
+
+
+def arm_doc(arm: str, minutes: float | None = None) -> dict[str, Any]:
+    """PURE but for the read: an arm's box -- its fixture, its time box set to the run's length
+    when ``minutes`` is given; B's B_SAME_AS_A blocks set to A's values (18.10 #1: the ready-made
+    functions box holds fly_first ON; the hunt box, A, holds it off)."""
+    d = json.loads(PROJECTS[arm].read_text())
+    if minutes is not None:
+        d["max_runtime_s"] = int(round(minutes * 60))
+    if arm == "B":
+        a = json.loads(PROJECTS["A"].read_text())
+        for tab_name, var in B_SAME_AS_A:
+            ta = next(t for t in a["nodes"][0]["tabs"] if t["name"] == tab_name)
+            tb = next(t for t in d["nodes"][0]["tabs"] if t["name"] == tab_name)
+            tb["vars"][var] = ta["vars"][var]
+    return d
+
+
+def arm_text(arm: str, minutes: float) -> str:
+    from poring_flow import project as pj
+
+    return pj.to_json(pj.validate(arm_doc(arm, minutes)))
+
+
+def vals_of(text: str) -> dict[str, Any] | str:
+    """The runner settings a box text's hunt core takes (stage2_ab.box_vals' rule, from the text):
+    its setting blocks over the defaults, its keys over them. A refusal: its words."""
+    from poring_flow import project as pj
+
+    rk = pj.runner_keys(pj.from_json(text), NODE)
+    if rk.keys is None:
+        return f"the box's keys: {'; '.join(rk.problems)}"
+    vals, _src, _ks, why = fr.project_values(json.loads(text), NODE, rk.keys)
+    return why if why else vals
+
+
+def same_vals(texts: Mapping[str, str]) -> dict[str, Any] | str:
+    """stage2_ab.same_vals' rule on the arms' texts: the same settings and keys, or refused."""
+    got: dict[str, dict[str, Any]] = {}
+    for arm, text in texts.items():
+        v = vals_of(text)
+        if isinstance(v, str):
+            return f"{arm}: {v}"
+        got[arm] = v
+    diff = sorted(k for k in set(got["A"]) | set(got["B"]) if got["A"].get(k) != got["B"].get(k))
+    if diff:
+        k = diff[0]
+        return (f"the boxes' runner settings differ: {k} is {got['A'].get(k)!r} in A, "
+                f"{got['B'].get(k)!r} in B (an A/B changes the box, not the settings)")  # fmt: skip
+    return got["A"]
+
+
 def plan_doc(label: str, pairs: int, minutes: float, order: str, folder: Path,
              runner_text: str | None = None, base_text: str | None = None,
              seeds: int = SEEDS) -> dict[str, Any] | str:  # fmt: skip
@@ -137,12 +194,13 @@ def plan_doc(label: str, pairs: int, minutes: float, order: str, folder: Path,
 
     from poring_flow import project as pj
 
-    vals = s2.same_vals(PROJECTS, minutes)
+    texts = {arm: arm_text(arm, minutes) for arm in ("A", "B")}
+    vals = same_vals(texts)
     if isinstance(vals, str):
         return f"refused before any input: {vals}"
     if not vals.get("alarm_fast"):
         return "refused before any input: the Run config has alarm_fast off (section 11's runs)"
-    raw = {arm: json.loads(path.read_text()) for arm, path in PROJECTS.items()}
+    raw = {arm: arm_doc(arm) for arm in ("A", "B")}
     why = box_difference(raw["A"], raw["B"])
     if why is not None:
         return f"refused before any input: {why}"
@@ -156,7 +214,7 @@ def plan_doc(label: str, pairs: int, minutes: float, order: str, folder: Path,
     hashes: dict[str, str] = {}
     arms: dict[str, Any] = {}
     for arm, path in PROJECTS.items():
-        text = s2.project_text(minutes, path)
+        text = texts[arm]
         h = pj.project_hash(pj.from_json(text))
         prep = fp.prepare(text, NODE, int(round(minutes * 60)), runner_vals={NODE: vals},
                           want_hash=h)  # fmt: skip
@@ -176,7 +234,7 @@ def plan_doc(label: str, pairs: int, minutes: float, order: str, folder: Path,
             return f"refused before any input: the boxes give the runner different {k}"
     scns = [*ht.hand_scenarios(), *ht.random_scenarios(seeds)]
     for arm in ("A", "B"):
-        text = s2.project_text(minutes, PROJECTS[arm])
+        text = texts[arm]
         diff = [f"{s.name}: {r.first_diff}" for s in scns if not (r := ht.compare(s, text)).same]
         if diff:
             return (f"refused before any input: {arm}'s hunt loop's step trace is not the driver's "
@@ -283,8 +341,8 @@ def main(argv: Sequence[str] | None = None) -> int:
     folder.mkdir(parents=True, exist_ok=False)  # a series' folder is never reused
     (folder / "series.json").write_text(json.dumps(got, indent=1) + "\n")
     (folder / "runner-5b1.py").write_text(base_text)  # the score's base kinds
-    for arm, path in PROJECTS.items():
-        s4.project_file(arm, folder).write_text(s2.project_text(a.minutes, path))
+    for arm in PROJECTS:
+        s4.project_file(arm, folder).write_text(arm_text(arm, a.minutes))
     (folder / "runner-config.json").write_text(json.dumps({NODE: got["vals"]}) + "\n")
     return Series5c(got, folder).run()
 

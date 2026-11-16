@@ -457,6 +457,25 @@ def ff_sighting(seen: Any, now: float, after: float,
     return seen if now - t <= latch_s and t > after else None
 
 
+# --fly-first-hp (dungeon@9.58, live-blocks.md 18.11; Batt 2026-11-16 ~20:3x, 18.10 #2, translated:
+# "Agree, do it" -- the HP Fly Wing first too): with --fly-first, a Fly Wing HP calls for with no
+# boss in sight -- the runner's own (sustain: under fly_below, the HP-rate fly) or the box's
+# fly_away on HP -- sends F8 alone, as a boss one: no dagger key before it, the dagger back
+# FF_REARM_S after the landing (9.57's re-arm). Every change is a branch `if fly_first_hp:` / `if
+# FLY_FIRST_HP:` whose else is 9.57's code (huntstate_check flag: the module is then 8a091a72's,
+# the runner s7ab measured).
+FLY_FIRST_HP = True  # this module's fly-first-hp branches (taken; run() sets what they change)
+FLY_FIRST_HP_VERSION = "9.58"
+
+
+def ff_hp_why(why: str) -> bool:
+    """PURE (9.58): a Fly Wing HP called for -- sustain's ("hp ..." under fly_below, "rate ... at
+    hp ..." the HP-rate fly) or the box's on HP (a box Fly Wing whose why names hp_percent; on a
+    tick with a boss line it is a boss Fly Wing already)."""
+    w = str(why)
+    return w.startswith(("hp ", "rate ")) or (w.startswith("box ") and "hp_percent" in w)
+
+
 # --far-single (dungeon@9.8, rogue-xmas02.md 4Z, pilot p18; Amendment J item 2a, "why far strikes
 # miss"): on p16 the strikes 2-6 cells away missed 5 of 41, 7-8 cells 19 of 30, 9-12 cells 33 of
 # 35. The packets: a click on a monster out of reach makes the CLIENT walk to it first (a walk
@@ -3808,6 +3827,9 @@ def fixes_of(a: argparse.Namespace) -> dict[str, Any]:
     if FLY_FIRST:  # noqa: SIM102 -- a fly-first branch (huntstate_check)
         if getattr(a, "fly_first", False):  # dungeon@9.57 (live-blocks.md 18)
             out["fly_first"] = [FF_LATCH_S, FF_REARM_S, FLY_FIRST_VERSION]
+    if FLY_FIRST_HP:  # noqa: SIM102 -- a fly-first-hp branch (huntstate_check flag)
+        if getattr(a, "fly_first_hp", False) and getattr(a, "fly_first", False):  # 9.58 (18.11)
+            out["fly_first_hp"] = [FF_REARM_S, FLY_FIRST_HP_VERSION]
     if getattr(a, "boss_walk", False):  # dungeon@9.18 (rogue-xmas02.md 4AZ)
         out["boss_walk"] = [BOSS_WALK_R, BOSS_WALK_MIN, BOSS_WALK_GRACE_S, BOSS_WALK_MAX,
                             BOSS_WALK_WINDOW_S, "9.18"]  # fmt: skip
@@ -7666,6 +7688,8 @@ def run(a: argparse.Namespace, *, hook: Any = None, session: tuple[Any, Any] | N
             # its state: the dagger's re-arm time, this tick's boss line, the record of the press
             ff: dict[str, Any] = {"after": None, "boss": False, "read_ns": None, "src": None,
                                   "sight": None}  # fmt: skip
+            if FLY_FIRST_HP:  # dungeon@9.58 (18.11): the HP Fly Wing first too (with fly_first)
+                fly_first_hp = fly_first and bool(getattr(a, "fly_first_hp", False))
             if fly_first and boxes is not None and getattr(a, "garm_fly", False):
                 boxes.alarm_cls = alarm_classes(box_model_)  # 18.3's hook (else garm_baby)
                 if getattr(boxes, "hud_th", None) is not None:
@@ -7848,6 +7872,13 @@ def run(a: argparse.Namespace, *, hook: Any = None, session: tuple[Any, Any] | N
                 unread_end("fly", why=why)  # 9.22: a teleport ends an escape (no-op without one)
             if fly_first:
                 ff_now = what == "fly" and (why in FF_BOSS_WHYS or bool(ff["boss"]))
+                if fly_first_hp:  # noqa: SIM102 -- a fly-first-hp branch (huntstate_check flag)
+                    if not ff_now and what == "fly" and ff_hp_why(why):  # 9.58: an HP Fly Wing
+                        ff_now = True  # first too: no dagger key before it (18.11)
+                        ff["src"] = "box_hp" if why.startswith("box ") else "hp"
+                        ff["read_ns"] = r.ns()
+                        bare_f = hs.bare is not None and not hs.bare.st.armed
+                        ff["sight"] = {"hp": True, "bare": bare_f}
                 if ff_now:  # dungeon@9.57: a boss Fly Wing FIRST -- no dagger key before it; the
                     ff["after"] = time.monotonic()  # dagger back on FF_REARM_S after (step_survive)
                 elif what == "fly" and hs.bare is not None:  # an HP Fly Wing: 9.27's order
@@ -11911,6 +11942,16 @@ def build_parser() -> argparse.ArgumentParser:
             "the tick, a Garm Baby alarm sighting latched 3 s and read inside the box target's "
             "waits, the Fly Wing with no dagger key before it (the dagger back 1 s after), the "
             "HUD twin's boxes fed to the alarm, --boss-walk off",
+        )
+    if FLY_FIRST_HP:
+        t.add_argument(
+            "--fly-first-hp",
+            action=argparse.BooleanOptionalAction,
+            default=False,
+            help="dungeon@9.58 (live-blocks.md 18.11; OFF by default; with --fly-first; Batt "
+            "2026-11-16: 'the HP Fly Wing first too'): a Fly Wing HP calls for with no boss in "
+            "sight (the runner's HP fly, the box's fly_away on HP) goes alone, no dagger key "
+            "before it, the dagger back 1 s after",
         )
     t.add_argument(
         "--boss-walk",

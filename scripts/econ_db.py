@@ -707,6 +707,50 @@ def dashboard(con: sqlite3.Connection, sids: Sequence[str], name: str, data: Pat
     return ed.document(runs, name, tpath, tdoc, names, mobs)
 
 
+def totals_of(sids: Sequence[str], db: Path | None = None, data: Path = DATA,
+              pooled_only: Sequence[str] | None = None) -> dict[str, Any]:  # fmt: skip
+    """THE A/B TOOLS' ECONOMY (live-blocks.md 18.10 #4; Batt 2026-11-16: "count the steal income
+    too, since stealing is our main income"): the DASHBOARD's totals of these runs -- each run's
+    entry (econ_dash.entry_of from the stored counts, the item table and names of today) and the
+    runs pooled (econ_dash.pool_runs), each through econ_dash.totals: gross = (picked + stolen by
+    Steal and Snatcher) x NPC sell, cost = the consumables used x NPC buy, net = gross - cost, each
+    an hour (gross_h, cost_h, net_h) -- NOT econ_row's net_h, which counts the picked drops only.
+    The file is opened READ-ONLY (a series never writes it here). A run not in the file is in
+    "missing"; an entry its judges disagree with (econ_dash.check) in "problems" (its figures are
+    still given). {"runs": {sid: totals}, "pooled": totals | None, "missing": [sid],
+    "problems": {sid: [...]}}."""
+    import econ_dash as ed
+
+    path = db if db is not None else default_db(data)
+    out: dict[str, Any] = {"runs": {}, "pooled": None, "missing": [], "problems": {}}
+    if not path.is_file():
+        out["missing"] = [Path(str(s)).name for s in sids]
+        return out
+    tpath, tdoc, names, mobs = ed.sources(data)
+    con = sqlite3.connect(f"file:{path}?mode=ro", uri=True)
+    try:
+        entries: dict[str, dict[str, Any]] = {}
+        for s in sids:
+            sid = Path(str(s)).name  # an id or a session directory (no lookup: read-only)
+            try:
+                rows = stored(con, sid)
+            except DbError:
+                out["missing"].append(sid)
+                continue
+            entry = ed.entry_of(judged_of(rows), tdoc["items"], names, mobs)
+            bad = ed.check(entry)
+            if bad:
+                out["problems"][sid] = bad
+            entries[sid] = entry
+            out["runs"][sid] = entry["totals"]
+    finally:
+        con.close()
+    pool = [e for sid, e in entries.items() if pooled_only is None or sid in set(pooled_only)]
+    if pool:
+        out["pooled"] = ed.pool_runs(pool)["totals"]
+    return out
+
+
 # --- exports for sharing --------------------------------------------------------------------------
 
 

@@ -116,7 +116,7 @@ test("every setting block in every tab, safety switches off, -> the real Blockly
   const n = nodeById(p, "xmas_dun02")!;
   const off = Object.fromEntries(SETTING_BLOCKS.filter((f) => f.warn).map((f) => [f.name, false]));
   n.tabs = withSettingTabs(n.tabs, off);
-  assert.equal(n.tabs.reduce((k, t) => k + Object.keys(t.vars).length, 0), 122); // + fly_first (live-blocks 18)
+  assert.equal(n.tabs.reduce((k, t) => k + Object.keys(t.vars).length, 0), 123); // + fly_first, fly_first_hp (18, 18.11)
   for (const t of n.tabs) {
     const scope = { node: n.id, tab: t.name };
     const ws = new B.Workspace();
