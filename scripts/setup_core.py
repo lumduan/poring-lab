@@ -1420,9 +1420,9 @@ S2_LIMIT = (
     "S2 path's set (data/ui_anchors/s2) is not cut or proven anywhere yet "
     "(docs/operations/s2-gate-templates.md). It fails closed: nothing is typed. The typing-only "
     "foreground gate also refuses every bot key until its stream template is cut on this path.",
-    "The bot's PROGRAMS (the dungeon runner, hunt, farm, agent_play): they do not run here. They "
-    "refuse a console lock (their cursor references exist for RDP only) or stop at the UI gate "
-    "at their start.",
+    "The bot's PROGRAMS (the dungeon runner, hunt, farm, the competition player): they do not "
+    "run here. They refuse a console lock (their cursor references exist for RDP only) or stop "
+    "at the UI gate at their start.",
     "A single bot click (e.g. `ro_agent.py click`): the mux passes it only in ASSIST or BOT (a "
     "person switches the mode) AND while the safety interlock is green (the servers confirmed on "
     "the Settings page, and today a game PC at 192.168.1.169), or in ASSIST during a short "
