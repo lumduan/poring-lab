@@ -78,7 +78,7 @@ def test_every_setting_has_a_valid_default_and_the_run_flows_are_todays() -> Non
         "explore_cover": False, "walk_through": False, "walk_pick": True, "walk_pick_step": True,
         "walk_trust": True, "npc_guard": True, "garm_fly": True, "garm_confirm": 2,
         "alarm_fast": True, "alarm_solo": 0.7, "fly_first": False, "fly_first_hp": False,
-        "boss_walk": False,
+        "fly_first_land": False, "boss_walk": False,
         "unread_step": False,
         "box_detector": "gpu", "hud": True, "hud_fast": 0.2,
     }  # fmt: skip

@@ -282,6 +282,16 @@ test("the ready-made functions boxes hold fly_first and fly_first_hp ON, the ref
   }
 });
 
+// live-blocks 18.17 (dungeon@9.60): the land floor's switch is OFF in every box until s10ab passes
+// (the ready-made box as it is now is s10ab's A), its window at our derived 0.75 s
+test("every box holds fly_first_land OFF and FF_LAND_S at 0.75 s", () => {
+  const safety = (p: ReturnType<typeof xmasFunctionsProject>) => mapNodes(p)[0].tabs.find((t) => t.name === "safety")!.vars;
+  for (const p of [xmasFunctionsProject(), xmasFunctionsCookieNoSwapProject(), xmasProject(), xmasHuntProject(), xmasCookieNoSwapProject()]) {
+    assert.equal(safety(p).fly_first_land?.value, false, p.name);
+    assert.equal(safety(p).FF_LAND_S?.value, 0.75, p.name);
+  }
+});
+
 // live-blocks 18.15 (Batt 18.14, 2026-11-17: "use it for real"): the ready-made functions boxes
 // name the deployed xmas02sk in use_model; the reference boxes keep xmas02 (xmas02-gb)
 test("the ready-made functions boxes name xmas02sk, the reference boxes xmas02", () => {

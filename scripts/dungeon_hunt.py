@@ -486,6 +486,27 @@ def ff_hp_why(why: str) -> bool:
 MODEL_PICK = True  # this module's model-pick branches (taken; the box's use_model decides)
 MODEL_PICK_VERSION = "9.59"
 
+# --fly-first-land (dungeon@9.60, live-blocks.md 18.16 / 18.17): the STALE RE-FIRE. After a Fly
+# Wing the frames still show the OLD place for a while (they trail her teleport): an alarm sighting
+# grabbed then is latched (FF_LATCH_S) and passed ff_sighting's "grabbed after the last Fly Wing",
+# so the loop flew again on it ~2.3 s later (s9ab: 9 of 31 boss Fly Wings, 0 alarm units on screen
+# at every one). With the setting, every Fly Wing's key moves a LAND FLOOR to its send time +
+# FF_LAND_S, and a sighting counts only when grabbed after it (and after the last Fly Wing, as
+# before). FF_LAND_S = 0.75 s, derived from banked teleports (18.17): the last frame still showing
+# the old place was grabbed <= 0.452 s after the key (51 keyed Fly Wings) and <= 0.58 s after the
+# map_change packet (68 teleports; key -> map_change <= 0.123 s), p99 0.475 s after the key; + one
+# HUD frame interval (0.25 s), rounded up. Every change is a branch `if FLY_LAND:` whose else is
+# 9.59's code (huntstate_check land: the module is then LAND_BASE's, the runner s9ab measured).
+FLY_LAND = True  # this module's fly-land branches (taken; run() sets what they change)
+FLY_LAND_VERSION = "9.60"
+FF_LAND_S = 0.75  # a sighting counts only when grabbed this long after a Fly Wing's key (--tune)
+
+
+def ff_floor(fly_at: float, land: float | None) -> float:
+    """PURE (9.60): the grab time a latched sighting must be after -- the last Fly Wing
+    (hs.fly_at) or, with --fly-first-land, its key + FF_LAND_S when that is later."""
+    return fly_at if land is None else max(fly_at, float(land))
+
 
 # --far-single (dungeon@9.8, rogue-xmas02.md 4Z, pilot p18; Amendment J item 2a, "why far strikes
 # miss"): on p16 the strikes 2-6 cells away missed 5 of 41, 7-8 cells 19 of 30, 9-12 cells 33 of
@@ -3841,6 +3862,9 @@ def fixes_of(a: argparse.Namespace) -> dict[str, Any]:
     if FLY_FIRST_HP:  # noqa: SIM102 -- a fly-first-hp branch (huntstate_check flag)
         if getattr(a, "fly_first_hp", False) and getattr(a, "fly_first", False):  # 9.58 (18.11)
             out["fly_first_hp"] = [FF_REARM_S, FLY_FIRST_HP_VERSION]
+    if FLY_LAND:  # noqa: SIM102 -- a fly-land branch (huntstate_check land)
+        if getattr(a, "fly_first_land", False) and getattr(a, "fly_first", False):  # 9.60
+            out["fly_first_land"] = [FF_LAND_S, FLY_LAND_VERSION]
     if getattr(a, "boss_walk", False):  # dungeon@9.18 (rogue-xmas02.md 4AZ)
         out["boss_walk"] = [BOSS_WALK_R, BOSS_WALK_MIN, BOSS_WALK_GRACE_S, BOSS_WALK_MAX,
                             BOSS_WALK_WINDOW_S, "9.18"]  # fmt: skip
@@ -7726,6 +7750,9 @@ def run(a: argparse.Namespace, *, hook: Any = None, session: tuple[Any, Any] | N
                                   "sight": None}  # fmt: skip
             if FLY_FIRST_HP:  # dungeon@9.58 (18.11): the HP Fly Wing first too (with fly_first)
                 fly_first_hp = fly_first and bool(getattr(a, "fly_first_hp", False))
+            if FLY_LAND:  # dungeon@9.60 (18.17): a sighting only after the landing (with fly_first)
+                fly_first_land = fly_first and bool(getattr(a, "fly_first_land", False))
+                ff["land"] = None  # the last Fly Wing's key + FF_LAND_S (press); None: no floor
             if fly_first and boxes is not None and getattr(a, "garm_fly", False):
                 boxes.alarm_cls = alarm_classes(box_model_)  # 18.3's hook (else garm_baby)
                 if getattr(boxes, "hud_th", None) is not None:
@@ -7925,6 +7952,9 @@ def run(a: argparse.Namespace, *, hook: Any = None, session: tuple[Any, Any] | N
                 what = heal_pick(heal_left)
             if fly_first:
                 t_key_f = r.ns()  # 9.57: the F8's send time (s7ab's fly-first line, 18.7)
+            if FLY_LAND:  # noqa: SIM102 -- a fly-land branch (huntstate_check land)
+                if fly_first_land and what == "fly":  # 9.60: every Fly Wing moves the land floor
+                    ff["land"] = t_key_f / 1e9 + FF_LAND_S
             agent_raw.keys(keys_[what])
             counts[what] += 1
             ev({"kind": "press", "what": what, "key": keys_[what], "why": why})
@@ -7934,6 +7964,10 @@ def run(a: argparse.Namespace, *, hook: Any = None, session: tuple[Any, Any] | N
                         "t_read_ns": ff["read_ns"], "t_key_ns": t_key_f,
                         "sight": ff["sight"]})  # fmt: skip
                     ff["src"], ff["read_ns"], ff["sight"] = None, None, None
+            if FLY_LAND:  # noqa: SIM102 -- a fly-land branch (huntstate_check land)
+                if fly_first_land and what == "fly":  # 9.60: the floor's record (s10ab's line)
+                    ev({"kind": "fly_first", "what": "land", "t_key_ns": t_key_f,
+                        "floor_ns": round(float(ff["land"]) * 1e9)})  # fmt: skip
             if stock_watch is not None and what in STOCK_ITEMS:  # dungeon@8.4
                 stock_due[STOCK_ITEMS[what]] = time.monotonic() + STOCK_READ_S
                 stock_tries[STOCK_ITEMS[what]] = 0
@@ -8290,7 +8324,11 @@ def run(a: argparse.Namespace, *, hook: Any = None, session: tuple[Any, Any] | N
                 landing), never twice in one action."""
                 if boxes is None or escaped[0] or now_ - hs.fly_at <= 2.0:
                     return False
-                seen_i = ff_sighting(getattr(boxes, "ff_seen", None), now_, hs.fly_at)
+                if FLY_LAND:  # 9.60: a sighting grabbed after the landing (ff_floor)
+                    seen_i = ff_sighting(getattr(boxes, "ff_seen", None), now_,
+                                         ff_floor(hs.fly_at, ff["land"]))  # fmt: skip
+                else:
+                    seen_i = ff_sighting(getattr(boxes, "ff_seen", None), now_, hs.fly_at)
                 if seen_i is None:
                     return False
                 ff_fly(seen_i, now_, "alarm", True)
@@ -10469,8 +10507,13 @@ def run(a: argparse.Namespace, *, hook: Any = None, session: tuple[Any, Any] | N
                     if boss_hit is not None:
                         hs.boss_until = tick + BOSS_AVOID_S  # no box engagement meanwhile
                         ff["read_ns"] = r.ns()
-                    seen_t = (None if boxes is None else ff_sighting(
-                        getattr(boxes, "ff_seen", None), tick, hs.fly_at))  # fmt: skip
+                    if FLY_LAND:  # 9.60: a sighting grabbed after the landing (ff_floor)
+                        seen_t = (None if boxes is None else ff_sighting(
+                            getattr(boxes, "ff_seen", None), tick,
+                            ff_floor(hs.fly_at, ff["land"])))  # fmt: skip
+                    else:
+                        seen_t = (None if boxes is None else ff_sighting(
+                            getattr(boxes, "ff_seen", None), tick, hs.fly_at))  # fmt: skip
                     if seen_t is not None:
                         hs.boss_until = tick + BOSS_AVOID_S
                     # the alarm's sighting is the runner's; a boss line is the box's when it plays
@@ -11988,6 +12031,15 @@ def build_parser() -> argparse.ArgumentParser:
             "2026-11-16: 'the HP Fly Wing first too'): a Fly Wing HP calls for with no boss in "
             "sight (the runner's HP fly, the box's fly_away on HP) goes alone, no dagger key "
             "before it, the dagger back 1 s after",
+        )
+    if FLY_LAND:
+        t.add_argument(
+            "--fly-first-land",
+            action=argparse.BooleanOptionalAction,
+            default=False,
+            help="dungeon@9.60 (live-blocks.md 18.17; OFF by default; with --fly-first): a boss "
+            "sighting counts only when grabbed FF_LAND_S after the last Fly Wing's key (the "
+            "frames still show the old place before): no Fly Wing again on the old place's alarm",
         )
     t.add_argument(
         "--boss-walk",
