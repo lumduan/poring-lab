@@ -65,7 +65,8 @@ def test_read_only_and_stop_pass_through(
 ) -> None:
     res = run(fake_docker, *args)
     assert res.returncode == 0, res
-    assert res.stdout.startswith("DOCKER compose -f compose.yaml -f compose.dev.yaml")
+    # the project name first (ADR-0026: .env's COMPOSE_PROJECT_NAME, else poring-lab)
+    assert res.stdout.startswith("DOCKER compose -p poring-lab -f compose.yaml -f compose.dev.yaml")
     assert res.stdout.rstrip().endswith(" ".join(args))
 
 
@@ -86,3 +87,11 @@ def test_the_guard_as_parent_may_create_and_recreate(
     )  # fmt: skip
     assert res.returncode == 0, res
     assert "up -d --no-build --force-recreate desktop" in res.stdout
+
+
+def test_the_project_name_follows_the_environment(fake_docker: dict[str, str]) -> None:
+    """ADR-0026: two copies on one host need two names; dev.sh passes the same one as lab_env."""
+    res = run({**fake_docker, "COMPOSE_PROJECT_NAME": "lab2"}, "ps")
+    assert res.returncode == 0 and res.stdout.startswith("DOCKER compose -p lab2 -f compose.yaml")
+    bad = run({**fake_docker, "COMPOSE_PROJECT_NAME": "Lab 2"}, "ps")
+    assert bad.returncode == 64 and "COMPOSE_PROJECT_NAME" in bad.stderr

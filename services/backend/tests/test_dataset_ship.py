@@ -71,9 +71,11 @@ def test_the_free_space_floor_is_batts_100_gb(
 ) -> None:
     """Batt 2026-11-06 (ADR-0010 Amendment 2026-11-06): 100 GB stays free on VM 103's shared root
     disk (120 GB since 11-05, 140 GB before); Batt 2026-11-08: 30 GB on bot-server (dedicated).
-    2026-11-12: every DEDICATED profile takes the dedicated floor (dedicated-nvidia too)."""
+    2026-11-12: every DEDICATED profile takes the dedicated floor (dedicated-nvidia too; 2026-11-17
+    dedicated-cpu too)."""
     assert ds.MIN_FREE_BY_PROFILE == {"shared-nvidia": 100 * 10**9, "dedicated-intel": 30 * 10**9,
-                                      "dedicated-nvidia": 30 * 10**9}  # fmt: skip
+                                      "dedicated-nvidia": 30 * 10**9,
+                                      "dedicated-cpu": 30 * 10**9}  # fmt: skip
     assert ds.min_free_bytes("shared-nvidia") == 100 * 10**9
     assert ds.min_free_bytes("dedicated-intel") == 30 * 10**9
     assert ds.min_free_bytes("dedicated-nvidia") == 30 * 10**9
@@ -252,8 +254,11 @@ def test_set_hours(ds: ModuleType, when: dt.datetime, inside: bool) -> None:
     assert ds.in_set_hours(when) is inside
 
 
-def test_ship_refuses_an_unmounted_or_missing_nas(ds: ModuleType, dirs: SimpleNamespace) -> None:
+def test_ship_refuses_an_unmounted_or_missing_nas(
+    ds: ModuleType, dirs: SimpleNamespace, monkeypatch: pytest.MonkeyPatch
+) -> None:
     make_session(dirs.root, SID)
+    monkeypatch.setattr(ds, "configured_mount", lambda dest: True)  # an fstab mount point
     plain = ["ship", "--root", str(dirs.root), "--dest", str(dirs.dest), "--no-io-guard"]
     assert ds.main(plain) == 2  # a tmp dir is not a mount point: the NAS is "down"
     missing = ["ship", "--root", str(dirs.root), "--dest", str(dirs.dest / "nope"),
@@ -324,7 +329,10 @@ def test_free_bytes_walks_up_to_an_existing_parent(ds: ModuleType, tmp_path: Pat
 
 
 def test_status_lists_both_sides(
-    ds: ModuleType, dirs: SimpleNamespace, capsys: pytest.CaptureFixture[str]
+    ds: ModuleType,
+    dirs: SimpleNamespace,
+    capsys: pytest.CaptureFixture[str],
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     make_session(dirs.root, SID)
     make_session(dirs.root, "20261003T120000-rdp-live").joinpath("manifest.json").unlink()
@@ -334,7 +342,8 @@ def test_status_lists_both_sides(
     out = capsys.readouterr().out
     assert f"{SID}" in out and "unshipped" in out
     assert "recording/incomplete" in out and "UNVERIFIED" in out
-    assert f"nas {dirs.dest}: mounted" in out
+    assert f"storage folder {dirs.dest}: a plain folder" in out
+    monkeypatch.setattr(ds, "configured_mount", lambda dest: True)  # the lab's NAS mount point
     assert ds.main(["status", "--root", str(dirs.root), "--dest", str(dirs.dest)]) == 0
     assert "NOT mounted" in capsys.readouterr().out
 
@@ -572,3 +581,20 @@ def test_the_ram_rule_lets_a_ship_ride_out_the_10_28_spike_and_stops_on_sustaine
     assert run(ds.RAM_RULE, spike) is None
     hit = run(ds.RAM_RULE, sustained)
     assert hit is not None and hit[0] == "quant-postgres" and "above 30.0% for" in hit[2]
+
+
+def test_only_a_configured_mount_must_be_mounted(ds: ModuleType, tmp_path: Path) -> None:
+    """ADR-0026 (Batt 2026-11-17, "most users have no NAS"): a plain storage folder ships as it is;
+    a folder MEANT to be a mount (fstab, or an autofs trigger) must be mounted, or the ship is
+    refused (an empty mount point would fill the local disk)."""
+    plain = tmp_path / "store"
+    plain.mkdir()
+    fstab, mounts = tmp_path / "fstab", tmp_path / "mounts"
+    fstab.write_text(f"# comment\n192.168.1.6:/x {tmp_path / 'nas'} nfs _netdev,nofail 0 0\n")
+    mounts.write_text(f"systemd-1 {tmp_path / 'auto'} autofs rw 0 0\nproc /proc proc rw 0 0\n")
+    assert not ds.configured_mount(plain, fstab, mounts)
+    assert ds.configured_mount(tmp_path / "nas", fstab, mounts)
+    assert ds.configured_mount(tmp_path / "auto/", fstab, mounts)
+    ds.check_dest(plain, allow_plain_dir=False)  # a plain folder: no mount needed
+    with pytest.raises(ds.Refused, match="create the storage folder"):
+        ds.check_dest(tmp_path / "missing", allow_plain_dir=False)
