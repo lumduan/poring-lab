@@ -476,7 +476,7 @@ def preflight(
     checks.append(Check("gpu", "GPU", state, rec.summary(), "; ".join(rec.fixes + rec.notes)))
     # ADR-0026: this copy's Docker name and subnets (a name another folder's containers use stops)
     checks.append(check_project(runner, repo))
-    checks.append(check_subnets(runner, env_baseline(repo))[0])
+    checks.append(check_subnets(runner, env_baseline(repo), repo=repo)[0])
     return checks, gpu
 
 
@@ -574,12 +574,14 @@ def used_subnets(runner: Runner) -> list[tuple[ipaddress.IPv4Network, str]]:
 
 
 def check_subnets(
-    runner: Runner, env: Mapping[str, str], name: str | None = None
+    runner: Runner, env: Mapping[str, str], name: str | None = None, repo: Path = REPO
 ) -> tuple[Check, dict[str, str]]:
     """The two pinned /24s must be free on this host (rule 6), or this copy's own. Taken: the
-    proposal is the first free pair inside 10.210.0.0/16 (from 10.210.96 up)."""
+    proposal is the first free pair inside 10.210.0.0/16 (from 10.210.96 up). The networks of
+    ``name`` are this copy's only when no OTHER folder's containers use that name."""
     name = name or project()
-    own = {f"Docker network {name}_default", f"Docker network {name}_agent"}
+    mine = check_project(runner, repo, name).status == "ok"
+    own = {f"Docker network {name}_default", f"Docker network {name}_agent"} if mine else set()
     used = [(n, o) for n, o in used_subnets(runner) if o not in own]
     want = {k: env.get(k, "").strip() or lab_env.NETS[k] for k in lab_env.NETS}
 
@@ -787,8 +789,11 @@ def port_verdict(
     *,
     binder: Callable[[str, int], str] | None = None,
     fetch: Callable[[str], bool] | None = None,
+    held: set[int] | None = None,
 ) -> tuple[bool, str]:
-    """(usable, message). A port already serving THIS lab's console (a re-run) is fine."""
+    """(usable, message). A port already serving THIS copy's console (a re-run) is fine: one
+    this copy's own containers publish (``held``, our_ports), or -- when that is not known -- a
+    console answering there. A console of ANOTHER copy on this host (ADR-0026) is not ours."""
     binder, fetch = binder or bind_state, fetch or http_ok  # resolved late: patchable
     why = port_problem(port)
     if why:
@@ -797,7 +802,8 @@ def port_verdict(
     if state == "free":
         return True, f"{ip}:{port} is free"
     if state == "in-use":
-        if fetch(f"{console_url(ip, port)}/api/health"):
+        mine = port in held if held is not None else fetch(f"{console_url(ip, port)}/api/health")
+        if mine:
             return True, f"{ip}:{port} already serves this lab's console"
         return False, f"{ip}:{port} is in use by another program (`ss -ltnp | grep :{port}`)"
     return False, f"cannot test {ip}:{port}: {state}"

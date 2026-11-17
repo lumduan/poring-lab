@@ -22,21 +22,27 @@ from __future__ import annotations
 
 import argparse
 import os
+import shutil
 import sys
 import time
 from collections.abc import Sequence
+from dataclasses import asdict
 from pathlib import Path
 from typing import Any
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import setup_core as core  # noqa: E402
 
-SCREENS = ("preflight", "server", "port", "windows", "review", "install", "pair", "stream", "done")
+SCREENS = (
+    "preflight", "server", "port", "windows", "storage", "review", "install", "pair", "stream",
+    "done",
+)  # fmt: skip
 TITLES = {
     "preflight": "Pre-flight checks and the host profile",
     "server": "This server's address",
     "port": "The console port",
     "windows": "The Windows PC and Sunshine",
+    "storage": "Where long-term files go",
     "review": "Review, then write .env",
     "install": "Install: build and start every service",
     "pair": "Pair with Sunshine",
@@ -86,8 +92,35 @@ def guessed_answers(progress: dict[str, Any]) -> core.Answers:
 
 def plain_dry_run(progress: dict[str, Any]) -> int:
     a = guessed_answers(progress)
+    if a.project:
+        os.environ["COMPOSE_PROJECT_NAME"] = a.project
     env = core.read_env(core.REPO / ".env")
     print("DRY RUN: nothing below runs; values from the saved progress, .env or detection.")
+    # ADR-0026: the wizard refuses a name another folder's containers use and asks for one; the
+    # plan must not show (or check against) THAT copy's containers
+    taken = core.check_project(core.run_process, core.REPO)
+    if taken.status != "ok":
+        free = core.free_project_name(core.run_process, core.project())
+        print(f"  NOTE: {taken.detail}: the wizard will ask for another name; this plan uses "
+              f"'{free}'.")  # fmt: skip
+        a.project = free
+        os.environ["COMPOSE_PROJECT_NAME"] = free
+    _, nets = core.check_subnets(core.run_process, env)
+    if nets and not a.nets:
+        a.nets = nets
+        print(f"  NOTE: the default subnets are taken: this plan uses {', '.join(nets.values())}.")
+    if not a.server_ip.startswith("<"):
+        moves = core.port_moves(a.server_ip, env, core.our_ports(core.run_process))
+        for key, (_old, new) in moves.items():
+            if new:
+                a.ports.setdefault(key, new)
+        if moves:
+            shown = ", ".join(f"{k} {old}->{new or '?'}" for k, (old, new) in moves.items())
+            print(f"  NOTE: ports another program holds; the wizard proposes: {shown}")
+        held = core.our_ports(core.run_process)
+        if not core.port_verdict(a.server_ip, a.console_port, held=held)[0]:
+            print(f"  NOTE: the console port {a.console_port} is in use: the wizard asks for "
+                  "another.")  # fmt: skip
     print(
         f"  server {a.server_ip}, console {core.console_url(a.server_ip, a.console_port)}, "
         f"Windows PC {a.win_ip}, profile {a.profile}, vision image {a.build_vision}"
@@ -258,17 +291,13 @@ class Wizard:
         self.a = core.Answers.from_dict(progress.get("answers", {}))
         self.gpu: core.Gpu | None = None
         self.addrs: list[core.Addr] = []
+        if self.a.project:  # ADR-0026: every step this run starts uses this copy's own name
+            os.environ["COMPOSE_PROJECT_NAME"] = self.a.project
 
     # -- bookkeeping --
 
     def save(self) -> None:
-        self.progress["answers"] = {
-            "server_ip": self.a.server_ip,
-            "console_port": self.a.console_port,
-            "win_ip": self.a.win_ip,
-            "profile": self.a.profile,
-            "build_vision": self.a.build_vision,
-        }
+        self.progress["answers"] = asdict(self.a)
         core.save_progress(self.progress)
 
     def steps_state(self) -> dict[str, Any]:
@@ -325,36 +354,77 @@ class Wizard:
                 )
             ui.checks(checks)
             stops = core.blocking(checks)
+            if any(c.key == "project" for c in stops):
+                self.choose_project()
+                continue
             if stops:
                 ui.err("The wizard cannot go on until the FAIL lines above are fixed.")
                 ui.menu([("r", "Check again")], back=False, default="r")
                 continue
             if ui.menu([("1", "Continue"), ("r", "Check again")], back=False, default="1") == "1":
                 break
+        _, nets = core.check_subnets(core.run_process, core.env_baseline(core.REPO))
+        self.a.nets = nets  # ADR-0026: a taken pinned /24 -> the first free pair (shown above)
         self.choose_profile()
 
+    def choose_project(self) -> None:
+        """Batt 2026-11-17: the name is another folder's -> this copy takes another (ADR-0026)."""
+        ui = self.ui
+        base = core.project()
+        free = core.free_project_name(core.run_process, base)
+        ui.p(f"The Docker name [bold]{base}[/] belongs to another poring-lab copy on this host. "
+             "This copy needs its own (COMPOSE_PROJECT_NAME): its containers, networks, volumes "
+             "and images all start with it; the other copy is never touched.")  # fmt: skip
+        while True:
+            got = ui.menu([("1", f"Use {free}"), ("t", "Type a name")], back=False, default="1")
+            name = free if got == "1" else ui.ask("The name (lowercase letters, digits, - and _)")
+            if not core.lab_env.PROJECT_RE.match(name):
+                ui.err(f"{name!r}: lowercase letters, digits, - and _ only, starting with a letter "
+                       "or digit")  # fmt: skip
+                continue
+            check = core.check_project(core.run_process, core.REPO, name)
+            if check.status != "ok":
+                ui.err(check.detail)
+                continue
+            self.a.project = name
+            os.environ["COMPOSE_PROJECT_NAME"] = name
+            self.save()
+            return
+
     def choose_profile(self) -> None:
+        """ADR-0022 Amendment 2026-11-17 (Batt: "detect the GPU and recommend it; no GPU -> the
+        CPU"): the recommendation from what a container cannot bring (gpu_ready), the person
+        decides; shared-nvidia only behind its warning."""
         ui = self.ui
         assert self.gpu is not None
-        best = core.default_profile(self.gpu)
-        other = "dedicated-intel" if best == "dedicated-nvidia" else "dedicated-nvidia"
+        rec = core.gpu_recommendation(self.gpu, core.run_process)
         ui.p()
         ui.p(
-            f"[bold]The host profile[/] (LAB_HOST_PROFILE; manual section 5). Detected: "
-            f"{self.gpu.label}."
+            f"[bold]The host profile[/] (LAB_HOST_PROFILE; manual section 5). Found: "
+            f"{esc(rec.summary())}."
         )
-        current = self.a.profile or best
-        options = [
-            ("1", f"{best}  (recommended for {self.gpu.label})"),
-            ("2", f"{other}"),
-            (
-                "3",
-                "shared-nvidia  (ONLY a host shared with live capture services: read the warning)",
-            ),
+        if rec.fixes:
+            ui.fixes(
+                "[yellow]To use this GPU, fix on the host (then re-run ./setup.sh):[/]", rec.fixes
+            )
+        for note in rec.notes:
+            ui.p(f"Note: {esc(note)}")
+        others = [
+            x for x in ("dedicated-nvidia", "dedicated-intel", "dedicated-cpu") if x != rec.profile
         ]
-        default = {best: "1", other: "2", "shared-nvidia": "3"}.get(current, "1")
+        options = [("1", f"{rec.profile}  (recommended)")]
+        options += [(str(n), name) for n, name in enumerate(others, 2)]
+        options.append(
+            (
+                "s",
+                "shared-nvidia  (ONLY a host shared with live capture services: read the warning)",
+            )
+        )
+        by_key = {"1": rec.profile, **{str(n): name for n, name in enumerate(others, 2)}}
+        current = self.a.profile or rec.profile
+        default = next((k for k, v in by_key.items() if v == current), "1")
         got = ui.menu(options, default=default)
-        if got == "3":
+        if got == "s":
             ui.warn(
                 "shared-nvidia is the old lab VM's profile: GPU sharing rules R1-R3 need a "
                 "Frigate NVR on the same host and REFUSE every GPU step without one; it adds "
@@ -365,20 +435,26 @@ class Wizard:
                 raise Back
             self.a.profile = "shared-nvidia"
         else:
-            self.a.profile = best if got == "1" else other
-        gpu_ok = self.gpu.vendor == "nvidia" or (
-            self.gpu.vendor == "intel" and self.gpu.render_node
-        )
+            self.a.profile = by_key[got]
         self.a.build_vision = False
-        if gpu_ok:
+        self.a.worker_mem = ""
+        if self.a.profile != "dedicated-cpu":
+            ready = rec.ready and self.a.profile == rec.profile
+            if not ready:
+                ui.warn(
+                    "This GPU profile is not the recommendation: the vision steps may fail "
+                    "until the fixes above are done; the CPU detector runs meanwhile."
+                )
             ui.p(
                 "The GPU vision image (~12 GB, 20-60 min) is needed only for the GPU detector "
                 "(manual section 9); without it the CPU detector runs."
             )
             got = ui.menu(
-                [("1", "Skip it for now"), ("2", "Build it during the install")], default="1"
+                [("1", "Skip it for now"), ("2", "Build it during the install")],
+                default="2" if ready else "1",
             )
             self.a.build_vision = got == "2"
+            self.a.worker_mem = rec.worker_mem if ready else ""
         self.save()
 
     # -- 1 --
@@ -401,6 +477,7 @@ class Wizard:
                     == "1"
                 ):
                     self.a.server_ip = current
+                    self.a.viewer_net = self.viewer_net(current)
                     return
             elif current:
                 ui.err(core.server_ip_problem(current, self.addrs))
@@ -410,6 +487,21 @@ class Wizard:
             options.append(("t", "Type an address"))
             got = ui.menu(options)
             current = ui.ask("The address") if got == "t" else self.addrs[int(got) - 1].ip
+
+    def viewer_net(self, ip: str) -> str:
+        """VIEWER_NETWORKS for the browsers on this server's LAN, when the current list (default
+        192.168.0.0/16) does not cover it (Batt 2026-11-17: no LAN assumed; ADR-0026)."""
+        import ipaddress
+
+        where = next((a for a in self.addrs if a.ip == ip), None)
+        listed = self.env().get("VIEWER_NETWORKS", "").strip() or "192.168.0.0/16"
+        try:
+            nets = [ipaddress.ip_network(n.strip(), strict=False) for n in listed.split(",") if n]
+            if any(ipaddress.ip_address(ip) in n for n in nets):
+                return ""
+        except ValueError:
+            pass
+        return str(where.network) if where else ""
 
     # -- 2 --
 
@@ -429,9 +521,13 @@ class Wizard:
             if port is None or why:
                 ui.err(why)
                 continue
-            ok, msg = core.port_verdict(self.a.server_ip, port)
+            held = core.our_ports(core.run_process)  # this copy's own containers
+            ok, msg = core.port_verdict(self.a.server_ip, port, held=held)
             if not ok:
                 ui.err(msg)
+                continue
+            if port in self.a.ports.values():
+                ui.err(f"{port} is one of this install's own ports: pick another")
                 continue
             ui.ok(msg)
             url = core.console_url(self.a.server_ip, port)
@@ -441,8 +537,44 @@ class Wizard:
                 == "1"
             ):
                 self.a.console_port = port
+                self.move_busy_ports()
                 return
             default = str(port)
+
+    def move_busy_ports(self) -> None:
+        """ADR-0026: the game, backend and noVNC ports another program holds on this address
+        move to a free one (this copy's own running containers hold theirs: not counted)."""
+        ui = self.ui
+        env = {**self.env(), **{k: str(v) for k, v in self.a.ports.items()}}
+        held = core.our_ports(core.run_process)
+        moves = core.port_moves(self.a.server_ip, env, held)
+        moves = {k: v for k, v in moves.items() if v[1] != self.a.console_port}
+        if not moves:
+            ui.ok("This install's other ports are free (or this copy's own).")
+            return
+        ui.rows(
+            [
+                (k, f"{old} is in use -> {new or '(none free: type one)'}")
+                for k, (old, new) in moves.items()
+            ],
+            title="Ports another program holds",
+        )
+        for key, (old, new) in moves.items():
+            while not new:
+                port, why = core.parse_port(ui.ask(f"{key} (instead of {old})"))
+                if port is None or why:
+                    ui.err(why)
+                    continue
+                if core.bind_state(self.a.server_ip, port) != "free":
+                    ui.err(f"{port} is in use too")
+                    continue
+                new = port
+            self.a.ports[key] = new
+        ui.warn(
+            "rAthena's ports changed: your game client's clientinfo.xml must name the new "
+            "login port (manual 7.1); rAthena advertises the char and map ports itself."
+        )
+        self.save()
 
     # -- 3 --
 
@@ -503,6 +635,42 @@ class Wizard:
                 self.a.win_ip = ip
                 return
 
+    # -- 3b --
+
+    def s_storage(self) -> None:
+        """Batt 2026-11-17: "most users have no NAS: just set where the files are stored in the
+        setup" (ADR-0026). One folder (LAB_STORE_DIR); a NAS is a folder mounted there."""
+        ui = self.ui
+        home = Path.home()
+        default = (
+            self.a.store_dir
+            or self.env().get("LAB_STORE_DIR", "").strip()
+            or str(home / core.lab_env.STORE_DEFAULT)
+        )
+        ui.p(
+            "Long-term files (datasets, archives, recordings, the deployed models) go to ONE "
+            "folder. No NAS is needed; with a NAS, mount it and give that folder. Recordings "
+            "take 0.84 GB/h (video) or 7-8 GB/h (PNG)."
+        )
+        while True:
+            raw = ui.ask("The storage folder", default)
+            path = Path(raw).expanduser()
+            if not path.is_absolute():
+                ui.err("Give an absolute folder, e.g. /srv/poring-lab-store")
+                continue
+            probe = path
+            while not probe.exists() and probe != probe.parent:
+                probe = probe.parent
+            free = shutil.disk_usage(probe).free / 1e9
+            later = "" if path.exists() else " (created at the next step)"
+            say = ui.ok if free >= 50 else ui.warn
+            say(f"{path}: {free:.0f} GB free on its disk{later}")
+            if ui.menu([("1", f"Use {path}"), ("2", "Another folder")], default="1") == "1":
+                self.a.store_dir = str(path)
+                self.save()
+                return
+            default = str(path)
+
     # -- 4 --
 
     def s_review(self) -> None:
@@ -519,6 +687,14 @@ class Wizard:
                 ("Windows PC", self.a.win_ip),
                 ("Host profile", self.a.profile),
                 ("GPU vision image", "build it" if self.a.build_vision else "skip (CPU detector)"),
+                ("Docker name", core.project()),
+                ("Storage folder", self.a.store_dir or "(default)"),
+                ("Moved ports", ", ".join(f"{k}={v}" for k, v in self.a.ports.items()) or "none"),
+                (
+                    "Docker subnets",
+                    ", ".join(f"{v}.0/24" for v in self.a.nets.values())
+                    or "the defaults (10.210.96/97)",
+                ),
                 (
                     "Display path",
                     "RDP credentials are set in .env (see the warning below)"

@@ -174,6 +174,11 @@ def test_port_verdict_binds_and_recognises_our_own_console(core: ModuleType) -> 
     other = core.port_verdict(ip, 3000, binder=lambda i, p: "in-use", fetch=lambda u: False)
     assert not other[0] and "another program" in other[1]
     assert not core.port_verdict(ip, 8000, binder=lambda i, p: "free")[0]  # never even bound
+    # ADR-0026: with this copy's own ports known, ANOTHER copy's console is not ours
+    other_copy = core.port_verdict(ip, 3000, binder=lambda i, p: "in-use", fetch=lambda u: True,
+                                   held=set())  # fmt: skip
+    assert not other_copy[0] and "another program" in other_copy[1]
+    assert core.port_verdict(ip, 3000, binder=lambda i, p: "in-use", held={3000})[0]
 
 
 def test_bind_state_is_a_real_bind(core: ModuleType) -> None:
@@ -856,6 +861,7 @@ def test_the_wizard_imports_and_dry_runs_without_rich(
         "server",
         "port",
         "windows",
+        "storage",  # ADR-0026: where long-term files go (no NAS assumed)
         "review",
         "install",
         "pair",
@@ -951,3 +957,14 @@ def test_the_gpu_recommendation_comes_from_gpu_ready(core: ModuleType, tmp_path:
     rec = core.gpu_recommendation(core.Gpu("none", False), Fake(), root)
     assert (rec.profile, rec.build_vision) == ("dedicated-cpu", False)
     assert "dedicated-cpu" in core.PROFILES
+
+
+def test_another_folders_networks_are_never_this_copys(core: ModuleType, tmp_path: Path) -> None:
+    """A second folder whose default name belongs to the live lab: the lab's networks are TAKEN
+    (found live 2026-11-17 by --check from a worktree, which called them free)."""
+    fake = nets_fake("poring-lab_default 10.210.96.0/24\nporing-lab_agent 10.210.97.0/24\n")
+    fake.answers[("docker", "ps", "-a")] = (0, "/home/bot/docker/poring-lab\n")
+    check, proposal = core.check_subnets(fake, {}, "poring-lab", repo=tmp_path)
+    assert check.status == "warn" and proposal["LAB_NET_PREFIX"] == "10.210.98"
+    check, _ = core.check_subnets(fake, {}, "poring-lab", repo=Path("/home/bot/docker/poring-lab"))
+    assert check.status == "ok"  # the lab's own folder
