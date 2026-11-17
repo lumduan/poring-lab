@@ -12,6 +12,9 @@
 #     systemctl daemon-reload && systemctl enable --now poring-lab-vram.service
 # Undo: systemctl disable --now poring-lab-vram.service; rm -f /dev/shm/poring-lab-hwshm/vram.json
 # Check: cat /dev/shm/poring-lab-hwshm/vram.json (t_mono_ns advances every 2 s)
+# A copy with another COMPOSE_PROJECT_NAME (Batt 2026-11-17): its backend mounts
+# /dev/shm/<project>-hwshm, so give the helper that name (uncomment the Environment= line below);
+# unset, it writes /dev/shm/poring-lab-hwshm (the lab's).
 [Unit]
 Description=poring-lab: the Intel GPU's VRAM use for /hardware (reads i915 debugfs as root)
 After=systemd-modules-load.service
@@ -19,6 +22,7 @@ After=systemd-modules-load.service
 [Service]
 Type=simple
 ExecStart=/usr/bin/python3 /usr/local/libexec/poring-lab-vram.py
+#Environment=COMPOSE_PROJECT_NAME=poring-lab
 Restart=on-failure
 RestartSec=10
 Nice=10

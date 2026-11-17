@@ -55,6 +55,7 @@ import numpy as np
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import detector_worker as dw  # noqa: E402 -- the CPU worker's own letterbox / decode / NMS
+import lab_env  # noqa: E402 -- stdlib only: this copy's per-copy RAM paths
 
 ENV = Path("/dev/shm/poring-lab-detector")
 PYTHON = ENV / ".venv/bin/python"
@@ -289,7 +290,9 @@ def for_map(map_name: str | None, *, env: Path = ENV, onnx: str | None = None,
 
 
 # --- THE GPU PATH (gpu-live-detector.md option A; ADR-0005 Amendment 2026-11-07) ---------------
-GPU_DIR = Path("/dev/shm/poring-lab-detect")  # the worker's /detect; guarded_build creates it 0700
+# The worker's /detect, PER COPY (/dev/shm/<project>-detect; compose.vision-worker.yaml mounts the
+# same path); guarded_build creates it 0700.
+GPU_DIR = lab_env.shm("detect")
 GPU_SOCKET = GPU_DIR / "detect.sock"
 SERVER_SOCKET = "/detect/detect.sock"  # the same socket, inside the worker
 IMGSZ = (736, 1280)  # every deployed model's input (h, w), as the ONNX files' names say

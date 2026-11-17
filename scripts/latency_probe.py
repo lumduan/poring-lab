@@ -1,9 +1,10 @@
 """Phase 0 latency probe: decompose web-console latency on the host clock (docs/phase0-latency.md).
 
-Runs INSIDE the backend container (it needs the X socket, and /debug/* answers loopback only):
+Runs INSIDE the backend container (it needs the X socket, and /debug/* answers loopback only;
+scripts/lab_project.sh names this copy's compose project, poring-lab by default):
 
     E=PYTHONPATH=/dev-src/poring_env:/dev-src/backend
-    P="docker exec -i -e $E poring-lab-backend-1 python -"
+    P="docker exec -i -e $E $(scripts/lab_project.sh)-backend-1 python -"
     $P passive --seconds 30 --region 0,0,1280,720        < scripts/latency_probe.py   # no input
     $P cursor --a 1000,560 --b 1180,640 --trials 60      < scripts/latency_probe.py   # MOVES ONLY
     $P cursor --k1 ControlLeft+KeyA --k2 ArrowRight --via agent < scripts/latency_probe.py  # bot

@@ -39,9 +39,12 @@ import tempfile
 from collections.abc import Callable
 from pathlib import Path
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import lab_env  # noqa: E402  (stdlib only: this copy's compose project names)
+
 ROOT = Path(__file__).resolve().parents[1]
 ENV = ROOT / ".env"
-DB = "poring-lab-db-1"
+DB = lab_env.container("db")
 ALNUM = string.ascii_letters + string.digits
 
 
@@ -80,7 +83,7 @@ GENERATORS: dict[str, Callable[[], str]] = {
     "RATHENA_TH_GM_PASSWORD": lambda: _alnum(16),
 }
 TH_FIRST_TIME = frozenset(n for n in GENERATORS if n.startswith(("DB_TH_", "RATHENA_TH_")))
-DB_TH = "poring-lab-db-th-1"
+DB_TH = lab_env.container("db-th")
 
 
 def container_exists(name: str) -> bool:

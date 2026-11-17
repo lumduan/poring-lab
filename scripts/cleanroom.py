@@ -48,12 +48,17 @@ from pathlib import Path
 from typing import Any
 
 REPO = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(REPO / "scripts"))
+import lab_env  # noqa: E402  (stdlib only: this copy's compose project names)
+
 STATE = Path(os.environ.get("CLEANROOM_DIR", "/dev/shm/poring-lab-cleanroom"))
 STATUS = STATE / "status.json"
 HEARTBEAT = STATE / "heartbeat"
 PY = str(REPO / ".venv" / "bin" / "python")
 CB = [PY, str(REPO / "scripts" / "capture_backend.py")]
-GAMESTREAM = "poring-lab-gamestream-1"
+GAMESTREAM = lab_env.container("gamestream")
+BACKEND = lab_env.container("backend")
+DESKTOP = lab_env.container("desktop")
 UNIT = "poring-cleanroom-watchdog"
 BOXES_MIN = {"V1": 20, "V1gdb": 10, "V2": 30, "V3": 60, "V3b": 60, "S2": 60, "checks": 45}
 S2_CLIENTS = ("V3", "V3b", "S2")  # the s2spike variants (v3-stats.json, its diagnostics)
@@ -482,7 +487,7 @@ def cmd_preflight() -> int:
     # V3b (PAINT=bus) needs the frame bus: gamestream writes it, the backend reads it (compose).
     mounts = {
         GAMESTREAM: "test -d /framebus && test -w /framebus",
-        "poring-lab-backend-1": "test -d /framebus && ! test -w /framebus",
+        BACKEND: "test -d /framebus && ! test -w /framebus",
     }
     for container, test in mounts.items():
         res = subprocess.run(["docker", "exec", container, "sh", "-c", test],
@@ -676,7 +681,7 @@ def exit_checks() -> dict[str, bool]:
                          'for p in /proc/[0-9]*; do [ "$(cat $p/comm 2>/dev/null)" = openbox ] '
                          "&& echo wm; done; true"], capture_output=True, text=True,
                         check=False).stdout  # fmt: skip
-    prop = subprocess.run(["docker", "exec", "poring-lab-desktop-1", "xprop", "-root",
+    prop = subprocess.run(["docker", "exec", DESKTOP, "xprop", "-root",
                            "_NET_SUPPORTING_WM_CHECK"], capture_output=True, text=True,
                           check=False).stdout  # fmt: skip
     backend, phase, _ = lock_state()

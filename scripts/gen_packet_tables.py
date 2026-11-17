@@ -10,8 +10,9 @@ derived table (`_generated/lengths.json`) is not. Inputs are pinned and SHA-256-
 
 How the rAthena side is read (no hand-copied numbers):
   1. `g++ -E` over the packet headers, with the exact flags of the map-server build, inside a
-     throwaway container of the cached rathena build stage (`poring-lab/rathena-build:local`, which
-     has the toolchain). Everything runs in a tmpfs.
+     throwaway container of the cached rathena build stage (`<project>/rathena-build:local`, which
+     has the toolchain; <project> is COMPOSE_PROJECT_NAME, default poring-lab: scripts/lab_env.py).
+     Everything runs in a tmpfs.
   2. The host pairs every active `HEADER_<NAME> = id` with an active `struct PACKET_<NAME>` and
      writes a C++ dumper printing `sizeof` for each (-1 if the struct has a PacketLength field),
      plus a replay of the map-server's packet_db (clif_packetdb.hpp + clif_shuffle.hpp, last write
@@ -31,9 +32,10 @@ Merge rule (Batt 2026-10-01: rAthena first, OpenKore fills gaps):
     python3 scripts/gen_packet_tables.py            # verify inputs, generate, compare with the lock
     python3 scripts/gen_packet_tables.py --update-lock
 
-The build-stage image must exist; build it through the IO guard, never directly:
+The build-stage image must exist; build it through the IO guard, never directly (P is this copy's
+compose project: P="$(scripts/lab_project.sh)", poring-lab by default):
     python3 scripts/guarded_build.py --sustain 30 --spike 25 \
-        target:rathena:build:poring-lab/rathena-build:local
+        "target:rathena:build:$P/rathena-build:local"
 """
 
 import argparse
@@ -47,11 +49,14 @@ import tarfile
 import urllib.request
 from pathlib import Path
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import lab_env  # noqa: E402  (stdlib only: this copy's compose project names)
+
 REPO = Path(__file__).resolve().parents[1]
 PKG = REPO / "packages" / "poring_packets"
 LOCK = PKG / "src" / "poring_packets" / "tables.lock.json"
 OUT = PKG / "src" / "poring_packets" / "_generated" / "lengths.json"
-IMAGE = "poring-lab/rathena-build:local"
+IMAGE = lab_env.image("rathena-build")  # <project>/rathena-build:local
 WORK = Path(os.environ.get("POR_GEN_DIR", "/dev/shm/poring-lab-pktgen"))
 
 # Ids the decoder interprets (docs/phase1-plan.md section 4; then Phase 3 M3, the ZC_NOTIFY_ACT

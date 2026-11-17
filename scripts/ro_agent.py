@@ -66,12 +66,16 @@ from websockets.sync.client import ClientConnection, connect
 from poring_backend.capture_lock import read_lock, read_window
 from poring_backend.signature import SIG_MATCH, grey_thumb
 
+if str(Path(__file__).resolve().parent) not in sys.path:
+    sys.path.insert(0, str(Path(__file__).resolve().parent))
+import lab_env  # noqa: E402  (a sibling, stdlib only: this copy's compose project names)
+
 ROOT = Path(__file__).resolve().parents[1]
 STATE_DIR = ROOT / "data" / "ro_agent"  # gitignored (rule 4): signatures + GM command log
 SHOTS = Path("/dev/shm/poring-lab-tmp/shots")
 LAB_STATE = ROOT / "state"  # the capture-backend lock + the interlock window, read FRESH
-BACKEND = "poring-lab-backend-1"
-DB = "poring-lab-db-1"
+BACKEND = lab_env.container("backend")
+DB = lab_env.container("db")
 HOLD_S = 0.05  # 50 ms holds: 20 ms registers 6/6 in the client (docs/client/rathena-client.md)
 # A chord's steps, paced: one instantaneous batch (down,down,up,up) is ignored by the client --
 # Alt+F4 first (2026-10-01), then Alt+E/Q/S in game (2026-10-05, Batt). 60 ms closed it at once.
@@ -98,11 +102,11 @@ class Profile:
 
 
 PROFILES = {
-    "kro": Profile("kro", CLIENT, "poring-lab-db-1", "RATHENA", "RO_SHORTCUT", None),
+    "kro": Profile("kro", CLIENT, DB, "RATHENA", "RO_SHORTCUT", None),
     # INTENTIONALLY INERT since 2026-10-06 (ADR-0019, Batt: "the Thai-data decision is final"):
     # the copy and its shortcut were removed from the Dell, so its shortcut position now points
     # at nothing (or at whatever icon moves there). rathena-th stays a stopped server-side option.
-    "th": Profile("th", r"C:\RO-rAthena-th\client", "poring-lab-db-th-1", "RATHENA_TH",
+    "th": Profile("th", r"C:\RO-rAthena-th\client", lab_env.container("db-th"), "RATHENA_TH",
                   "RO_SHORTCUT_TH", "thdata",
                   removed="its client copy C:\\RO-rAthena-th and its desktop shortcut were "
                           "REMOVED from the Dell on 2026-10-06 (ADR-0019; the Thai-data decision "

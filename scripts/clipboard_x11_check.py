@@ -8,13 +8,15 @@ for TARGETS, and asks for UTF8_STRING when "Ctrl+V" happens -- the sequence Free
 
 Runs from test_clipboard_x11.py when Xvfb is installed. On this host (no Xvfb) run it inside the
 backend container against a throwaway display in the desktop container (both share the X socket
-directory, and the backend's dev mount already has the current source):
+directory, and the backend's dev mount already has the current source). $P is this copy's compose
+project (scripts/lab_project.sh; poring-lab by default):
 
-    docker exec poring-lab-desktop-1 sh -c \
+    P="$(scripts/lab_project.sh)"
+    docker exec "$P-desktop-1" sh -c \
         'Xvfb :97 -nolisten tcp -nolock -ac -screen 0 64x64x24 & echo $! >/dev/shm/xvfb97.pid'
-    docker exec -i -e PYTHONPATH=/dev-src/poring_env:/dev-src/backend poring-lab-backend-1 \
+    docker exec -i -e PYTHONPATH=/dev-src/poring_env:/dev-src/backend "$P-backend-1" \
         python - :97 < scripts/clipboard_x11_check.py
-    docker exec poring-lab-desktop-1 sh -c 'kill "$(cat /dev/shm/xvfb97.pid)"'
+    docker exec "$P-desktop-1" sh -c 'kill "$(cat /dev/shm/xvfb97.pid)"'
 """
 
 import asyncio

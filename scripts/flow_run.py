@@ -80,12 +80,13 @@ from pathlib import Path
 from typing import Any
 
 import flow_config as fc  # the settings' registry (same directory: scripts/)
+import lab_env  # this copy's compose project names (same directory, stdlib only)
 
 ROOT = Path(__file__).resolve().parents[1]
 DIR = ROOT / "settings" / "flowrun"
 SCRATCH = Path("/dev/shm/poring-lab-tmp")
 SERVE_LOG = SCRATCH / "poring-guarded-execdev-vision.log"
-WORKER = "poring-lab-vision-worker-1"
+WORKER = lab_env.container("vision-worker")
 PY = str(ROOT / ".venv" / "bin" / "python")
 STATUS_EVERY_S = 2.0
 POLL_S = 1.0

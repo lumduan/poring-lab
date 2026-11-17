@@ -26,7 +26,10 @@ import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-BACKEND = "poring-lab-backend-1"
+sys.path.insert(0, str(ROOT / "scripts"))
+import lab_env  # noqa: E402  (stdlib only: this copy's compose project names)
+
+BACKEND = lab_env.container("backend")
 # Runs INSIDE the backend container: reads {"since": s, "needles": {label: hex}} on stdin, prints
 # only per-label booleans and file counts.
 INNER = r"""
