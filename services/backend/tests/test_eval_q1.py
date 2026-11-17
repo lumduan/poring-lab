@@ -22,6 +22,7 @@ ROOT = Path(__file__).resolve().parents[3]
 sys.path.insert(0, str(ROOT / "scripts"))
 
 import eval_q1 as q  # noqa: E402
+import lab_env  # noqa: E402
 
 LADY, WARRIOR, LORD, ARCHER = 1273, 1023, 1190, 1189
 MANIFEST: dict[str, Any] = {
@@ -74,8 +75,9 @@ def test_frame_key_is_the_cache_member_naming() -> None:
     assert q.frame_key("S", 123456789) == "S.123456789"
 
 
-def test_container_path_maps_the_nas_and_refuses_anything_else() -> None:
-    p = Path("/mnt/poring-lab-datasets/S/shard-000001.tar")
+def test_container_path_maps_the_storage_folder_and_refuses_anything_else() -> None:
+    assert lab_env.store_dir() == q.HOST_ROOT  # LAB_STORE_DIR: the container's /datasets
+    p = lab_env.store("S", "shard-000001.tar")
     assert q.to_container(p) == "/datasets/S/shard-000001.tar"
     with pytest.raises(SystemExit, match="not under"):
         q.to_container(Path("/dev/shm/S/shard-000001.tar"))
@@ -215,9 +217,7 @@ def test_class_map_ids_of_the_committed_gef10_list() -> None:
         "c21", "c22", "c23", "c24", "c25", "c19", "c20"]  # fmt: skip
 
 
-GEF10_MANIFEST = Path(
-    "/mnt/poring-lab-datasets/.framecache/v2orc-payf07-gef10-20261026/manifest.json"
-)
+GEF10_MANIFEST = lab_env.store(".framecache", "v2orc-payf07-gef10-20261026", "manifest.json")
 
 
 @pytest.mark.skipif(not GEF10_MANIFEST.exists(), reason="the NAS cache is not mounted")
@@ -652,10 +652,10 @@ def test_score_cli_reports_q1c(tmp_path: Path, capsys: pytest.CaptureFixture[str
 
 # --- the POSITIVE CASE on real data: gef10 round 2's EVALUATION, re-scored (T-9 "unchanged") ----
 
-R2 = Path("/mnt/poring-lab-datasets/scratch-archive/2026-10-29/gef10-eval-r2")
+R2 = lab_env.store("scratch-archive", "2026-10-29", "gef10-eval-r2")  # in the storage folder
 R2_KEY, R2_A, R2_B = (R2 / "eval-r2-key/answer_key.json", R2 / "eval-r2-answers/A.json",
                       R2 / "eval-r2-answers/B.json")  # fmt: skip
-R2_DIR = Path("/mnt/poring-lab-datasets/archive/train/eval/gef10-r2")
+R2_DIR = lab_env.store("archive", "train", "eval", "gef10-r2")
 R2_PRED, R2_SCORE = R2_DIR / "q1-pred-gef10r2.json", R2_DIR / "q1-score.json"
 R2_REAL = all(p.exists() for p in (R2_KEY, R2_A, R2_B, R2_PRED, R2_SCORE, GEF10_MANIFEST))
 

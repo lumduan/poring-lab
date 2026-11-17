@@ -10,9 +10,10 @@ inference ms.
 
 REFS.json is predict_dir's --refs input ({key: {path, offset, size}}, e.g. ``eval_q1.py refs
 --latency-200 35``): each frame is read IN PLACE from its tar shard; container paths
-(/datasets/...) are read from the host's NAS mount. The models run INTERLEAVED, frame by frame
-(model order rotating each frame), so a background load change hits them alike. A model's class
-names come from UnitDetector's own rule (its ``<stem>.names.json`` sidecar, else v1's three).
+(/datasets/...) are read from the host's storage folder (LAB_STORE_DIR). The models run
+INTERLEAVED, frame by frame (model order rotating each frame), so a background load change hits
+them alike. A model's class names come from UnitDetector's own rule (its ``<stem>.names.json``
+sidecar, else v1's three).
 The process lowers its own priority to nice 10 first. No GPU, no client, no input.
 """
 
@@ -32,13 +33,15 @@ from typing import Any
 import numpy as np
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
+import lab_env  # noqa: E402
 
 NICE = 10
-CONTAINER, HOST = "/datasets/", "/mnt/poring-lab-datasets/"
+# the vision container sees the storage folder (LAB_STORE_DIR) at /datasets (compose datasets-nas)
+CONTAINER, HOST = "/datasets/", f"{lab_env.store_dir()}/"
 
 
 def host_path(path: str) -> str:
-    """PURE: a container path (/datasets/...) -> the host's NAS mount; any other path as it is."""
+    """PURE: a container path (/datasets/...) -> the host's storage folder; any other as it is."""
     return HOST + path[len(CONTAINER) :] if path.startswith(CONTAINER) else path
 
 

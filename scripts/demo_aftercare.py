@@ -25,6 +25,7 @@ from pathlib import Path
 from typing import Any
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
+import lab_env  # noqa: E402
 
 ROOT = Path(__file__).resolve().parents[1]
 STANDS = {
@@ -85,7 +86,7 @@ def rescue(character: str, label: str = "demo-aftercare") -> dict[str, Any]:
 
 
 def manifest_of(sid: str) -> dict[str, Any]:
-    for d in (Path("/dev/shm/poring-lab-demo") / sid, Path("/mnt/poring-lab-datasets") / sid):
+    for d in (Path("/dev/shm/poring-lab-demo") / sid, lab_env.store(sid)):
         if (d / "manifest.json").exists():
             return json.loads((d / "manifest.json").read_text())  # type: ignore[no-any-return]
     raise SystemExit(f"no manifest for {sid}")

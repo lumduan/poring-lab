@@ -47,6 +47,7 @@ import numpy as np
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "scripts"))
+import lab_env  # noqa: E402
 
 MAP = "orcsdun01"
 K = 0.140  # the v1 labels' k (M4); orc_camera_check.K_V1
@@ -58,8 +59,8 @@ DEFAULT_TOL = 40.0
 CELL_GRID = 20  # foot -> cell: the projected cells within this many of the GM
 SPECIES = (1153, 1005, 1042, 1152, 1084, 1111, 1082)  # orcsdun01's 7 (orcsdun01-detector.md 1)
 AGGRESSIVE = (1153, 1005, 1152, 1111)
-NAS_RSM = Path(
-    "/mnt/poring-lab-datasets/scratch-archive/2026-10-21/poring-lab-tmp/orc-labels-fix/grf/data/model"
+NAS_RSM = lab_env.store(  # in the storage folder (LAB_STORE_DIR)
+    "scratch-archive", "2026-10-21", "poring-lab-tmp", "orc-labels-fix", "grf", "data", "model"
 )
 
 Rect = tuple[float, float, float, float]

@@ -45,11 +45,12 @@ from typing import Any
 import numpy as np
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
+import lab_env  # noqa: E402
 
 ROOT = Path(__file__).resolve().parents[1]
 # read-only fallbacks: data/, the generated map cache (the main checkout, its owner's home)
 MAIN = Path.home() / "docker" / "poring-lab"
-DATASETS = Path("/mnt/poring-lab-datasets")
+DATASETS = lab_env.store_dir()  # the storage folder (LAB_STORE_DIR)
 OUT = Path("/dev/shm/poring-lab-tmp/item-r1")
 NS = 10**9
 

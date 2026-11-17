@@ -121,6 +121,7 @@ import numpy.typing as npt
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "scripts"))
 
+import lab_env  # noqa: E402
 import orc_camera_check as occ  # noqa: E402
 import orc_labels_fix as olf  # noqa: E402
 import qa_export  # noqa: E402
@@ -2496,7 +2497,11 @@ def main(argv: Sequence[str] | None = None) -> int:
     p.add_argument("--key-dir", type=Path, required=True)
     p.add_argument("--instructions", type=Path, required=True)
     p.add_argument("--instructions-sha256", required=True)
-    p.add_argument("--session-root", default="/mnt/poring-lab-datasets")
+    p.add_argument(
+        "--session-root",
+        default=str(lab_env.store_dir()),
+        help="the storage folder (LAB_STORE_DIR)",
+    )
     p.add_argument("--min-fit", type=float, default=None,
                    help="11: the frozen T_h on labels NOT under a model (weak_fit)")  # fmt: skip
     p.add_argument("--exclude-key", type=Path, action="append", default=None,

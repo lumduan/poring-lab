@@ -5,10 +5,11 @@
 
 BENCH.json is ``poring_vision.bench_gpu``'s output (its runs keep each frame's boxes, keyed like
 its --refs). The same frames are read in place from their tar shards (container paths /datasets/...
-map to the host's NAS mount) and run through the CPU path, ``unit_detector.UnitDetector`` with the
-model's own ONNX and per-class NMS (no collapse: ultralytics' predict NMS is per class too). Per
-run (model x precision): the MONSTER boxes (every class but player / npc / warp) matched one to one
-at IoU >= ``--iou`` (0.7), greedy by IoU; reported as matched / CPU boxes and matched / GPU boxes.
+map to the host's storage folder, LAB_STORE_DIR) and run through the CPU path,
+``unit_detector.UnitDetector`` with the model's own ONNX and per-class NMS (no collapse:
+ultralytics' predict NMS is per class too). Per run (model x precision): the MONSTER boxes (every
+class but player / npc / warp) matched one to one at IoU >= ``--iou`` (0.7), greedy by IoU;
+reported as matched / CPU boxes and matched / GPU boxes.
 Offline; no client, no input.
 """
 
@@ -23,9 +24,11 @@ from pathlib import Path
 from typing import Any
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
+import lab_env  # noqa: E402
 
 NOT_MONSTER = frozenset({"player", "npc", "warp"})
-CONTAINER, HOST = "/datasets/", "/mnt/poring-lab-datasets/"
+# the vision container sees the storage folder (LAB_STORE_DIR) at /datasets (compose datasets-nas)
+CONTAINER, HOST = "/datasets/", f"{lab_env.store_dir()}/"
 
 
 def iou(a: Sequence[float], b: Sequence[float]) -> float:

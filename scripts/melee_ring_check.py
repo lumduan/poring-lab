@@ -28,6 +28,9 @@ from collections.abc import Mapping, Sequence
 from pathlib import Path
 from typing import Any
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import lab_env  # noqa: E402
+
 NS = 1_000_000_000
 AID = 2000002
 ACT_GAP_S = 1.5  # an attack every 730 ms (ASPD 163): 2 missed swings = stopped
@@ -156,7 +159,7 @@ def judge(events: Sequence[Mapping[str, Any]], packets: Sequence[Mapping[str, An
 
 
 def load(sid: str) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
-    for root in (Path("/dev/shm/poring-lab-demo"), Path("/mnt/poring-lab-datasets")):
+    for root in (Path("/dev/shm/poring-lab-demo"), lab_env.store_dir()):
         d = root / sid
         if (d / "packets.jsonl.gz").exists():
             ev = [json.loads(x) for x in (d / "events.jsonl").read_text().splitlines() if x]

@@ -29,6 +29,9 @@ from poring_dataset.timeline import FrameWorld
 
 ROOT = Path(__file__).resolve().parents[3]
 SCRIPTS = ROOT / "scripts"
+sys.path.insert(0, str(SCRIPTS))
+import lab_env  # noqa: E402
+
 SID = "20990101T000000-demo-synthetic"
 HELD = "gat_unverified"
 
@@ -597,8 +600,8 @@ def test_one_build_two_label_modes_and_the_fix(
     assert sorted(p.name for p in setup["out"].iterdir()) == ["c"]  # the dry run wrote nothing
 
 
-# the round-3 labels' block (orc_label_sheets.py --fix --rule fix2): local / NAS data only
-COL1 = Path("/mnt/poring-lab-datasets/detector-collection/orcsdun01/20261021T103231-orcsdun01-col1")
+# the round-3 labels' block (orc_label_sheets.py --fix --rule fix2): local / stored data only
+COL1 = lab_env.store("detector-collection", "orcsdun01", "20261021T103231-orcsdun01-col1")
 KB = Path(os.environ.get("PORING_KB", str(ROOT / "data" / "kb")))
 FIX_PARAMS = Path(os.environ.get("PORING_FIX_PARAMS",
                                  "/dev/shm/poring-lab-tmp/orc-cache/params.json"))  # fmt: skip

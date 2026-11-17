@@ -31,6 +31,7 @@ from pathlib import Path
 from typing import Any
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
+import lab_env  # noqa: E402
 
 NS = 1_000_000_000
 FIGHT_GAP_S = 8.0
@@ -119,7 +120,7 @@ def judge(packets: Sequence[Mapping[str, Any]]) -> dict[str, Any]:
 
 
 def load(sid: str) -> list[dict[str, Any]]:
-    for root in (Path("/dev/shm/poring-lab-demo"), Path("/mnt/poring-lab-datasets")):
+    for root in (Path("/dev/shm/poring-lab-demo"), lab_env.store_dir()):
         p = root / sid / "packets.jsonl.gz"
         if p.exists():
             with gzip.open(p, "rt") as fh:

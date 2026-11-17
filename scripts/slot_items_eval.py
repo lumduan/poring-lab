@@ -4,7 +4,8 @@ recorded sessions' hotbars, every slot read by the SAME read_slot the check and 
 
     slot_items.py eval SESSION... [--shards first,last] [--refs NPZ] [--out JSON]
 
-SESSION: a recorder session's name under /mnt/poring-lab-datasets (or an absolute path): its PNG
+SESSION: a recorder session's name under the storage folder (LAB_STORE_DIR) (or an absolute
+path): its PNG
 shards are read in place, read-only (tar members are seeked, never extracted to disk), EVERY frame
 of the listed shards ("first", "last", "mid" or an index), so consecutive frames are 1 s apart.
 
@@ -32,6 +33,7 @@ from __future__ import annotations
 
 import io
 import json
+import sys
 import tarfile
 import time
 from collections import Counter
@@ -41,7 +43,10 @@ from typing import Any
 
 import numpy as np
 
-NAS = Path("/mnt/poring-lab-datasets")
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import lab_env  # noqa: E402
+
+NAS = lab_env.store_dir()  # the storage folder (LAB_STORE_DIR)
 ROWS = 40  # the hotbar's rows of the game region (its counts end at row 33)
 COLS = 520  # ... and its nine slots' columns (slot 8's count ends at column 504)
 LABEL_MIN = 3  # a slot's true item: named in at least this many frames of the recording

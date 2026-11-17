@@ -31,6 +31,7 @@ import numpy as np
 import numpy.typing as npt
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
+import lab_env  # noqa: E402
 
 from poring_dataset.render import SpritePrediction, SpriteSheet  # noqa: E402
 from poring_dataset.sprites import compose_frame  # noqa: E402
@@ -173,7 +174,12 @@ def main() -> int:
     c.add_argument("--tau", type=float, required=True)
     c.add_argument("--k", type=float, default=None)
     c.add_argument("--every", type=int, default=15)
-    c.add_argument("--datasets", type=Path, default=Path("/mnt/poring-lab-datasets"))
+    c.add_argument(
+        "--datasets",
+        type=Path,
+        default=lab_env.store_dir(),
+        help="the storage folder (LAB_STORE_DIR)",
+    )
     c.add_argument("--out", type=Path, default=None)
     a = ap.parse_args()
     return cmd_check(a)

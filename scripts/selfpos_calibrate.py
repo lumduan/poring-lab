@@ -6,7 +6,8 @@ labelled by packet truth (offline ground truth, ADR-0007 -- it labels, it never 
                          [--guard-ms 300] [--load-ms 3000] [--mapcache DIR] [--cache DIR]
                          [--out data/ui_anchors/minimap_digits.npz] [--report OUT.json]
 
-* Sessions: names under /mnt/poring-lab-datasets (or paths). Default: the TRAINING subset
+* Sessions: names under the storage folder (LAB_STORE_DIR; PORING_DATASETS overrides it) (or
+  paths). Default: the TRAINING subset
   outdoor-a, outdoor-b and indoor-b. outdoor-c, outdoor-d and indoor-c are held out for
   scripts/selfpos_eval.py and are refused here.
 * Truth, per frame (SessionTruth, shared with the evaluation): the packet timeline at (frame time
@@ -56,6 +57,7 @@ import numpy as np
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "scripts"))
+import lab_env  # noqa: E402
 import qa_export  # noqa: E402
 
 from poring_dataset import mapcache  # noqa: E402
@@ -71,7 +73,7 @@ from poring_env import selfpos  # noqa: E402
 from poring_env import ui_anchors as ua  # noqa: E402
 from poring_packets.world import MOVE_COST, MOVE_DIAGONAL_COST, TICK_MOD, World  # noqa: E402
 
-DATASETS = Path(os.environ.get("PORING_DATASETS", "/mnt/poring-lab-datasets"))
+DATASETS = Path(os.environ.get("PORING_DATASETS", str(lab_env.store_dir())))
 SCRATCH = Path(os.environ.get("SCRATCH", "/dev/shm/poring-lab-tmp"))
 OUT = ROOT / "data" / "ui_anchors" / "minimap_digits.npz"
 TRAIN = (

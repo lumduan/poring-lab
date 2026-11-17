@@ -16,7 +16,8 @@ Where things live:
   and 120 GB until Batt's 2026-11-06 decision; 30 GB on bot-server since 2026-11-08. Since
   2026-11-09 (ADR-0024) an RDP recording is GPU video by default: ~0.84 GB/h at 1 fps (video.hevc
   + video.idx.csv, no shards; shipped and verified like any other data file).
-* NAS root: /mnt/poring-lab-datasets (NFS, docs/operations/nas-sink.md). Written host-side only.
+* The session root: the storage folder (LAB_STORE_DIR, scripts/lab_env.py; the lab: its NAS, NFS,
+  docs/operations/nas-sink.md). Written host-side only.
   It was never mounted into a container (an NFS hang must not freeze a lab service) until Batt's
   decision 4 (2026-10-04): vision alone mounts it READ-ONLY, soft (compose `datasets-nas`), for
   training; no lab service writes through it.
@@ -69,11 +70,14 @@ from pathlib import Path
 from typing import Any
 from zoneinfo import ZoneInfo
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import lab_env  # noqa: E402
+
 ROOT = Path(__file__).resolve().parents[1]
 # The user's home: /home/batt on VM 103 (as before), /home/bot on bot-server (2026-11-08: the old
 # literal path does not exist there).
 LOCAL_ROOT = Path.home() / "poring-lab-rec"
-NAS_ROOT = Path("/mnt/poring-lab-datasets")
+NAS_ROOT = lab_env.store_dir()  # the storage folder (LAB_STORE_DIR; the lab: its NAS mount)
 # Batt 2026-11-06 (was 120 GB since 11-05, 140 GB before; ADR-0010 Amendment 2026-11-06): 100 GB
 # stays free for the other tenants of the root disk, "so we don't bother HA often"; a 1-fps PNG
 # recording takes 7.0-8.4 GB/h and is shipped after. That is VM 103's (shared-nvidia) floor.
@@ -589,7 +593,12 @@ def parser() -> argparse.ArgumentParser:
     sub = ap.add_subparsers(dest="cmd", required=True)
     common = argparse.ArgumentParser(add_help=False)
     common.add_argument("--root", type=Path, default=LOCAL_ROOT, help="local session root")
-    common.add_argument("--dest", type=Path, default=NAS_ROOT, help="NAS session root")
+    common.add_argument(
+        "--dest",
+        type=Path,
+        default=NAS_ROOT,
+        help="session root: the storage folder (LAB_STORE_DIR)",
+    )
     common.add_argument("--dest-is-dir-for-tests", action="store_true", help=argparse.SUPPRESS)
     ship = sub.add_parser("ship", parents=[common])
     ship.add_argument("sessions", nargs="*", help="session ids or paths (default: all finished)")

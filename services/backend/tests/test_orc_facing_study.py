@@ -19,6 +19,7 @@ from poring_dataset.sprites import Act, Layer, Motion, Spr
 
 ROOT = Path(__file__).resolve().parents[3]
 sys.path.insert(0, str(ROOT / "scripts"))
+import lab_env  # noqa: E402
 import orc_facing_study as fs  # noqa: E402
 
 N, NW, W, SW, S, SE, E, NE = range(8)
@@ -137,7 +138,7 @@ def test_the_held_out_blocks_are_refused() -> None:
 
 # --- REAL positive case (local data only: skipped elsewhere) ------------------------------------
 
-COL3_NAS = "/mnt/poring-lab-datasets/detector-collection/orcsdun01/20261021T142100-orcsdun01-col3"
+COL3_NAS = str(lab_env.store("detector-collection", "orcsdun01", "20261021T142100-orcsdun01-col3"))
 COL3 = Path(os.environ.get("PORING_COL3", COL3_NAS))
 KB = Path(os.environ.get("PORING_KB", str(ROOT / "data" / "kb")))
 PARAMS = {

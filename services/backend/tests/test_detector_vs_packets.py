@@ -12,6 +12,7 @@ import pytest
 ROOT = Path(__file__).resolve().parents[3]
 sys.path.insert(0, str(ROOT / "scripts"))
 import detector_vs_packets as dv  # noqa: E402
+import lab_env  # noqa: E402
 
 S = 1_000_000_000
 
@@ -416,7 +417,7 @@ def test_score_session_collapses_a_map_models_species_and_v1_is_unchanged(
     assert pre["preflight"] == "ok" and pre["class_collapse"]["to_monster"] == sorted(names[1:])
 
 
-GEF10R2 = Path("/mnt/poring-lab-datasets/archive/train/eval/gef10-r2")
+GEF10R2 = lab_env.store("archive", "train", "eval", "gef10-r2")  # in the storage folder
 GEF10R2_NAMES = Path("/dev/shm/poring-lab-detector/model/gef10r2-last-736x1280.names.json")
 
 

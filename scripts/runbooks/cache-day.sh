@@ -14,8 +14,14 @@ D=${1:?OUT_DIR}; ID=${2:?CACHE_ID}; shift 2
 mkdir -p "$D"
 log() { echo "$(TZ=Asia/Bangkok date '+%F %T') ICT $*" | tee -a "$D/cache.log"; }
 s2_active() { grep -q '^BACKEND=console' state/capture-backend 2>/dev/null || [ -e state/cleanroom ]; }
+# the storage folder (LAB_STORE_DIR: the environment, else .env, else ~/poring-lab-store), read by
+# scripts/lab_env.py itself so this script and build_frame_cache.py (--out <store>/.framecache)
+# can never disagree; a bad value stops here
+STORE=$(python3 -c 'import sys; sys.path.insert(0, "scripts"); import lab_env; print(lab_env.store_dir())') \
+  || exit 1
+[ -n "$STORE" ] || exit 1
 extra=""
-[ -e "/mnt/poring-lab-datasets/.framecache/$ID/progress.json" ] && extra="--resume"
+[ -e "$STORE/.framecache/$ID/progress.json" ] && extra="--resume"
 attempt=0
 while :; do
   while s2_active; do log "S2 session/clean room active: waiting 5 min"; sleep 300; done

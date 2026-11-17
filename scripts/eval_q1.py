@@ -3,8 +3,8 @@
 evaluation pack's crops, scored by the POSITION metric (label_iou.match_position's pairs).
 
     eval_q1.py refs  KEY.json --out REFS.json [--latency-200 SEED [--latency-out PATH]]
-                     [--labels-dir DIR] [--session-root /mnt/poring-lab-datasets]
-                     [--host-root /mnt/poring-lab-datasets] [--container-root /datasets]
+                     [--labels-dir DIR] [--session-root STORE]
+                     [--host-root STORE] [--container-root /datasets]
                      [--no-verify]
     eval_q1.py score KEY.json A.json B.json PRED.json --cache-manifest MANIFEST.json
                      --out SCORE.json [--any-settings]
@@ -12,10 +12,11 @@ evaluation pack's crops, scored by the POSITION metric (label_iou.match_position
 refs: predict_dir's ``--refs`` input for EXACTLY the frames that carry a pack crop (the key's
 crops, evaluated or not: the detections do not depend on the answers). Each frame's bytes are
 found through the label files the pack drew from (the key's ``sources``: their sha256 is checked,
-fail closed) and named ``frame_key(session, frame_id)``; the host path under the NAS
-(/mnt/poring-lab-datasets) becomes the vision container's (/datasets). The refs are verified on
-the host (unless ``--no-verify``): each frame's first 8 bytes are a PNG / JPEG signature, and the
-tar member's own name states the same frame id (when it states one), or a refusal.
+fail closed) and named ``frame_key(session, frame_id)``; the host path under the storage folder
+(STORE: LAB_STORE_DIR, scripts/lab_env.py) becomes the vision container's (/datasets). The refs
+are verified on the host (unless ``--no-verify``): each frame's first 8 bytes are a PNG / JPEG
+signature, and the tar member's own name states the same frame id (when it states one), or a
+refusal.
 ``--latency-200 SEED``: a second refs file, the first 200 of those frames by
 ``random.Random(SEED).shuffle`` of the frame keys in sorted order (R2-2's latency frames; seed 35).
 
@@ -65,7 +66,7 @@ REPORTED beside it: ``frame_wide`` (every unmatched class-s detection of the eva
 inside an evaluated box or not, judged the same way). The bar as Q1's.
 
     eval_q1.py units KEY.json --params PARAMS(FROZEN) --out UNITS.json [--all-frames]
-                     [--labels-dir DIR] [--session-root /mnt/poring-lab-datasets]
+                     [--labels-dir DIR] [--session-root STORE]
     eval_q1.py party UNITS.json PRED.json --cache-manifest MANIFEST.json --out PARTY.json
 
 units: per frame of the key's crops (``--all-frames``: every candidate frame of its source label
@@ -126,11 +127,12 @@ from typing import Any
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "scripts"))
 import blind_score  # noqa: E402
+import lab_env  # noqa: E402
 import label_iou  # noqa: E402
 
 from poring_dataset.metrics import Box  # noqa: E402
 
-HOST_ROOT = Path("/mnt/poring-lab-datasets")
+HOST_ROOT = lab_env.store_dir()  # the storage folder (LAB_STORE_DIR): the container's /datasets
 CONTAINER_ROOT = Path("/datasets")
 LATENCY_N = 200
 BAR_MIN_CROPS = 50
@@ -172,12 +174,13 @@ def frame_key(session: str, frame_id: int) -> str:
 
 def to_container(path: Path, host_root: Path = HOST_ROOT,
                  container_root: Path = CONTAINER_ROOT) -> str:  # fmt: skip
-    """PURE: a host path under the NAS -> the vision container's path (fail closed elsewhere)."""
+    """PURE: a host path under the storage folder -> the vision container's path (fail closed
+    elsewhere)."""
     try:
         rel = Path(path).relative_to(host_root)
     except ValueError:
-        raise SystemExit(f"{path}: not under {host_root}; the vision container reads only the NAS "
-                         f"(as {container_root})") from None  # fmt: skip
+        raise SystemExit(f"{path}: not under {host_root}; the vision container reads only the "
+                         f"storage folder (as {container_root})") from None  # fmt: skip
     return str(container_root / rel)
 
 

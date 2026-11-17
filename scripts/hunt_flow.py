@@ -46,6 +46,7 @@ import farm0 as f0  # noqa: E402
 import farm1 as f1  # noqa: E402
 import hunt_config as hcfg  # noqa: E402
 import hunt_core as hc  # noqa: E402
+import lab_env  # noqa: E402
 import map_zones as mz  # noqa: E402
 import ro_agent as r  # noqa: E402
 
@@ -58,7 +59,7 @@ MAP = "prt_fild08"  # `run --map` replaces it (the HELD-OUT map test, Batt 2026-
 UNTRAINED_SPECIES = {"prt_fild08": False, "prt_fild06": True}
 START = (268, 107)
 OUT = Path("/dev/shm/poring-lab-tmp/hunt-flow")  # logs (small)
-REC_ROOT = Path("/mnt/poring-lab-datasets/hunt-recordings")  # the 5 Hz frames (NAS, q80)
+REC_ROOT = lab_env.store("hunt-recordings")  # the 5 Hz frames (the storage folder, q80)
 REC_QUALITY = 80
 REC_HZ = 5.0
 CHECK_EVERY_S = 30.0

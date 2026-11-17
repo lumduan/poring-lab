@@ -4,7 +4,9 @@ defaults, so a host tool and a container never disagree about a name, a port or 
 
 from __future__ import annotations
 
+import os
 import re
+import subprocess
 import sys
 from pathlib import Path
 
@@ -144,3 +146,64 @@ def test_env_example_lists_every_install_key() -> None:
     example = (ROOT / ".env.example").read_text()
     for key in [le.PROJECT_KEY, le.STORE_KEY, *le.PORTS, *le.NETS, "VISION_WORKER_MEM"]:
         assert re.search(rf"^{key}=", example, re.M), key
+
+
+# --- the storage folder in the host code (Batt 2026-11-17: "most users have no NAS") -------------
+
+LAB_NAS = "/mnt/poring-lab-datasets"  # the lab's own LAB_STORE_DIR (its NAS automount)
+CODE_ROOTS = (("scripts", "*.py"), ("scripts", "*.sh"), ("services", "*/src/**/*.py"),
+              ("packages", "*/src/**/*.py"))  # fmt: skip
+
+
+def test_no_host_code_hard_codes_the_labs_nas() -> None:
+    """Every host-side path into long-term storage comes from LAB_STORE_DIR (lab_env.store_dir /
+    store). The lab keeps its folder by setting LAB_STORE_DIR to its NAS mount in .env; the code
+    names it nowhere, not even in a comment or a help string."""
+    hits = []
+    for top, pattern in CODE_ROOTS:
+        for path in sorted((ROOT / top).rglob(pattern)):
+            if "__pycache__" in path.parts or not path.is_file():
+                continue
+            for n, line in enumerate(path.read_text(errors="replace").splitlines(), 1):
+                if LAB_NAS in line:
+                    hits.append(f"{path.relative_to(ROOT)}:{n}")
+    assert hits == []
+
+
+def test_the_host_scripts_follow_the_storage_folder(tmp_path: Path) -> None:
+    """A positive case through the real import path: with LAB_STORE_DIR set, the converted
+    scripts' roots (module constants, argparse defaults) all land in that folder, subpaths kept."""
+    store = tmp_path / "store"
+    probe = (
+        "import sys; sys.path.insert(0, 'scripts');"
+        "import battle_log, dataset_ship, drop_blobs, eval_latency, migration_check, mvp_profiles,"
+        " warp_watch;"
+        "print(dataset_ship.NAS_ROOT); print(battle_log.RECORDINGS); print(drop_blobs.REC_ROOT);"
+        "print(warp_watch.NAS_ROOT); print(mvp_profiles._X1); print(eval_latency.HOST);"
+        "print(migration_check.NAS_MOUNTS[0]);"
+        "print(dataset_ship.parser().parse_args(['status']).dest)"
+    )
+    env = {**os.environ, "LAB_STORE_DIR": str(store), "PYTHONDONTWRITEBYTECODE": "1"}
+    out = subprocess.run([sys.executable, "-c", probe], cwd=ROOT, env=env, capture_output=True,
+                         text=True, timeout=120, check=True).stdout.split()  # fmt: skip
+    assert out == [str(store), f"{store}/hunt-recordings", f"{store}/hunt-recordings",
+                   f"{store}/detector-collection", f"{store}/scratch-archive/2026-11-05/x1",
+                   f"{store}/", str(store), str(store)]  # fmt: skip
+
+
+def test_the_cache_runbook_reads_the_store_through_lab_env(tmp_path: Path) -> None:
+    """scripts/runbooks/cache-day.sh's resume check reads the same folder as build_frame_cache's
+    --out default (<store>/.framecache): lab_env itself resolves it; a bad value stops the run."""
+    text = (ROOT / "scripts" / "runbooks" / "cache-day.sh").read_text()
+    lines = text.splitlines()
+    start = next(i for i, x in enumerate(lines) if x.startswith("STORE=$(python3 "))
+    snippet = "\n".join([*lines[start : start + 3], 'echo "$STORE"'])
+    assert '[ -e "$STORE/.framecache/$ID/progress.json" ] && extra="--resume"' in text
+    run = {**os.environ, "LAB_STORE_DIR": str(tmp_path / "s"), "PYTHONDONTWRITEBYTECODE": "1"}
+    got = subprocess.run(["bash", "-c", snippet], cwd=ROOT, env=run, capture_output=True,
+                         text=True, timeout=60)  # fmt: skip
+    assert (got.returncode, got.stdout.strip()) == (0, str(tmp_path / "s"))
+    run["LAB_STORE_DIR"] = "relative/s"
+    got = subprocess.run(["bash", "-c", snippet], cwd=ROOT, env=run, capture_output=True,
+                         text=True, timeout=60)  # fmt: skip
+    assert got.returncode == 1 and "absolute" in got.stderr

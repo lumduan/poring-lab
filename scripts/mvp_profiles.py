@@ -22,10 +22,14 @@ local KB is there). No client data here: the sprite paths are local defaults (cl
 
 from __future__ import annotations
 
+import sys
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import lab_env  # noqa: E402
 
 Ring = tuple[float, float, float, float]  # the aura's elliptical ring: outer a, b; inner a, b
 
@@ -93,8 +97,9 @@ ORCLORD = BossProfile(
 )  # fmt: skip
 
 _XMAS_NEG = {1249: "Myst Case", 1248: "Cruiser", 1265: "Cookie", 1246: "Christmas Cookie"}
-# xmas_dun02's decoded sprites, the X1 archive on the NAS, read in place (xmas02-prep.md)
-_X1 = Path("/mnt/poring-lab-datasets/scratch-archive/2026-11-05/x1")
+# xmas_dun02's decoded sprites, the X1 archive in the storage folder (LAB_STORE_DIR), read in
+# place (xmas02-prep.md)
+_X1 = lab_env.store("scratch-archive", "2026-11-05", "x1")
 STORMY = BossProfile(
     name="stormy", boss=1251, summons=(1515, 1607),
     # 1515 is "Garm Baby" in the spawns, "Baby Hatii" in the mob table (dungeon_hunt.boss_names)

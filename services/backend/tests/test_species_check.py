@@ -16,6 +16,8 @@ import numpy as np
 import pytest
 
 SCRIPTS = Path(__file__).resolve().parents[3] / "scripts"
+sys.path.insert(0, str(SCRIPTS))
+import lab_env  # noqa: E402
 
 GRASS = np.array([70, 140, 60])
 PINK = np.array([240, 130, 170])
@@ -289,7 +291,7 @@ def test_recentre_is_fast(sc: ModuleType) -> None:
     assert per_call_ms < 25  # measured ~3 ms p50 on the loaded host; generous
 
 
-REC = Path("/mnt/poring-lab-datasets/hunt-recordings/20261017T202927-demo-hunt-flow31/frames")
+REC = lab_env.store("hunt-recordings", "20261017T202927-demo-hunt-flow31", "frames")
 REAL_CASES = [  # (frame, frame ~0.6 s later, the detector's box on the first, its label, the
     # detector's own box of the same monster on the later frame minus the first: hunt-flow31,
     # labelled from packets by species_check.label_session)

@@ -43,6 +43,9 @@ from collections.abc import Callable, Iterable, Mapping, Sequence
 from pathlib import Path
 from typing import Any
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import lab_env  # noqa: E402
+
 REPO = Path(__file__).resolve().parents[1]
 HOME = Path.home()
 SOURCE_HOST, TARGET_HOST, TARGET_IP = "ubuntu-docker", "bot-server", "192.168.1.228"
@@ -56,7 +59,8 @@ SKIP_STATE = ("state/train-duty",)  # the duty level: written by the running gua
 DB_TABLES = ("login", "char", "inventory", "cart_inventory", "storage", "skill", "party",
              "guild", "global_acc_reg_num", "global_acc_reg_str", "char_reg_num", "char_reg_str",
              "acc_reg_num", "acc_reg_str", "mail", "hotkey", "quest", "chatlog")  # fmt: skip
-NAS_MOUNTS = ("/mnt/poring-lab-datasets", "/mnt/poring-locale-packs", "/mnt/poring-thai-src")
+# the storage folder (LAB_STORE_DIR; the lab: its NAS mount) and the two locale shares
+NAS_MOUNTS = (str(lab_env.store_dir()), "/mnt/poring-locale-packs", "/mnt/poring-thai-src")
 # The RAM run-time inputs (CLAUDE.md rule 7: the GAT maps, sprites, calibrations, the chat guard;
 # the KB, the rathena source it reads, the detector's models), file by file with sha256 (RAM).
 # scripts/runtime_sync.py pushes them RAM to RAM. Not here: scratch, logs, locks, test leftovers,

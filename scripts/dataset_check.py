@@ -2,7 +2,9 @@
 """Full determinism pass on H.264 dataset sessions, on the HOST (Batt 2026-10-04: H.264 is the
 default dataset format; the check moved off the live stream).
 
-    dataset_check.py SESSION [SESSION ...] [--datasets /mnt/poring-lab-datasets]
+    dataset_check.py SESSION [SESSION ...] [--datasets STORE]
+
+STORE: the session root, by default the storage folder (LAB_STORE_DIR; the lab: its NAS).
 
 Per session:
   * the decoder build must be the recording's (stream.done.json "versions": PyAV, libavcodec,

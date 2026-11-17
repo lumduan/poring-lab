@@ -32,6 +32,7 @@ SCRIPTS = ROOT / "scripts"
 sys.path.insert(0, str(SCRIPTS))
 
 import client_layout  # noqa: E402
+import lab_env  # noqa: E402
 import label_check  # noqa: E402
 import orc_camera_check as occ  # noqa: E402
 import orc_label_sheets as ols  # noqa: E402
@@ -533,7 +534,7 @@ def test_dwell_spans_pair_by_ref() -> None:
 
 # --- a REAL positive case (memory: a scorer needs one from a real session) -------------------
 
-COL1 = Path("/mnt/poring-lab-datasets/detector-collection/orcsdun01/20261021T103231-orcsdun01-col1")
+COL1 = lab_env.store("detector-collection", "orcsdun01", "20261021T103231-orcsdun01-col1")
 KB = Path(os.environ.get("PORING_KB", str(ROOT / "data" / "kb")))
 
 
