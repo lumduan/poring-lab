@@ -1,5 +1,9 @@
 """The environment interlock (ADR-0016, rewritten 2026-10-04): the per-failure table, expiry, the
-operator windows, the mux gate, and that the agent can neither claim nor see green."""
+operator windows, the mux gate, and that the agent can neither claim nor see green.
+
+➡️ amendment 11-17 (Batt 2026-11-17, "the sniffer only reads; it never decides whether the bot
+plays"): every PACKET failure leaves the session green, labelled ``unverified:<why>``; only the
+other signals (the config, the servers, a steady lock, the Windows host) can make it red."""
 
 import json
 import time
@@ -74,13 +78,6 @@ def verdict(cfg: EnvironmentsConfig | None = CFG, *, mode: Mode = Mode.BOT, lock
         ({"lock": CaptureBackend(backend="hold", reason="x")}, "lock_not_steady"),
         ({"lock": CaptureBackend(backend="console", seq=7, phase="switching")}, "lock_not_steady"),
         ({"win_host": "192.168.1.170"}, "host_mismatch"),
-        ({"age": None}, "no_attestation"),
-        ({"age": 10.5}, "attestation_stale"),
-        ({"att": attest(client_ip="192.168.1.50")}, "client_ip_mismatch"),
-        ({"att": attest(session_live=False, aid=None)}, "no_session"),
-        ({"att": attest(aid=1234567)}, "account_not_lab"),
-        ({"att": attest(server="lab-rathena-th")}, "server_mismatch"),  # another server's sniffer
-        ({"att": attest(server=None)}, "server_mismatch"),  # an unnamed sniffer: never green
         # "allowed" means connected to one of ITS servers: none confirmed yet -> red (2026-10-06)
         ({"cfg": CFG.model_copy(update={"environments": [CFG.environments[0].model_copy(
             update={"servers": []})]})}, "no_servers"),
@@ -91,6 +88,38 @@ def test_every_failure_is_red_for_the_bot(kwargs: dict[str, Any], reason: str) -
         v = verdict(mode=mode, **kwargs)
         assert (v.green, v.bot_allowed, v.reason) == (False, False, reason)
         assert v.status().state == "red"
+
+
+@pytest.mark.parametrize(
+    ("kwargs", "why"),
+    [
+        ({"age": None}, "no_attestation"),
+        ({"age": 10.5}, "attestation_stale"),
+        ({"att": attest(client_ip="192.168.1.50")}, "client_ip_mismatch"),
+        ({"att": attest(session_live=False, aid=None)}, "no_session"),
+        ({"att": attest(aid=1234567)}, "account_not_lab"),
+        ({"att": attest(server="lab-rathena-th")}, "server_mismatch"),  # another server's sniffer
+        ({"att": attest(server=None)}, "server_mismatch"),  # an unnamed sniffer
+    ],
+)  # fmt: skip
+def test_every_packet_failure_is_green_but_unverified(kwargs: dict[str, Any], why: str) -> None:
+    """Amendment 11-17: the packets label the session, they never stop the bot."""
+    for mode in (Mode.BOT, Mode.ASSIST):
+        v = verdict(mode=mode, **kwargs)
+        assert (v.green, v.bot_allowed, v.reason, v.env_id, v.verified) == (
+            True, True, f"unverified:{why}", "lab-rathena", False)  # fmt: skip
+        status = v.status()
+        assert (status.state, status.reason, status.verified) == (
+            "green", f"unverified:{why}", False)  # fmt: skip
+
+
+def test_a_packet_failure_never_hides_a_red_signal() -> None:
+    """A red non-packet signal stays red whatever the packets say (none, or a good attestation)."""
+    for age in (None, 1.0):
+        v = verdict(win_host="192.168.1.170", age=age)
+        assert (v.green, v.bot_allowed, v.reason) == (False, False, "host_mismatch")
+        v = verdict(lock=CaptureBackend(backend="hold", reason="x"), age=age)
+        assert (v.green, v.reason) == (False, "lock_not_steady")
 
 
 def test_an_attested_lab_session_is_green_for_both_lab_accounts() -> None:
@@ -111,8 +140,9 @@ def test_a_pending_or_forbidden_environment_is_never_green() -> None:
 
 
 def test_the_attestation_expires() -> None:
-    assert verdict(age=9.9).green
-    assert verdict(age=10.1).reason == "attestation_stale"
+    assert verdict(age=9.9).verified
+    late = verdict(age=10.1)  # amendment 11-17: still green, no longer verified
+    assert (late.green, late.verified, late.reason) == (True, False, "unverified:attestation_stale")
 
 
 # --- operator windows -----------------------------------------------------------------------------
@@ -121,12 +151,12 @@ WIN = Window("login", time.time() + 60, 60.0, "login")
 
 
 def test_a_window_lets_assist_through_and_never_bot_mode() -> None:
-    red = {"age": None}
+    red = {"win_host": "192.168.1.170"}  # a non-packet red (amendment 11-17: packets never are)
     v = verdict(mode=Mode.ASSIST, window=WIN, **red)
     assert (v.green, v.bot_allowed, v.reason, v.status().state) == (
         False, True, "window:login", "window")  # fmt: skip
     v = verdict(mode=Mode.BOT, window=WIN, **red)
-    assert (v.bot_allowed, v.reason) == (False, "no_attestation")
+    assert (v.bot_allowed, v.reason) == (False, "host_mismatch")
 
 
 def test_the_window_file_is_bounded_tied_to_the_lock_and_expires() -> None:
@@ -314,15 +344,17 @@ def test_no_config_file_fails_closed_and_the_committed_one_is_valid(app_client: 
     assert official.server is not None and official.server.host.endswith(".gnjoy.in.th")
 
 
-def test_attested_green_then_expiry_releases_what_the_bot_holds(
+def test_an_expired_attestation_only_relabels_and_a_red_lock_releases(
     app_client: Any, tmp_path: Path
 ) -> None:
+    """Amendment 11-17: an attestation's expiry turns verified off and the bot keeps what it
+    holds; a red signal (the lock taken away) releases everything the bot holds."""
     write_config(tmp_path / "environments.yaml")
     client = app_client()
     set_mode(client, Mode.BOT)
     with client.websocket_connect("/ingest/packets") as ingest:  # the sniffer's channel
         ingest.send_text(attest().model_dump_json())
-    wait(lambda: client.get("/health").json()["environment"]["state"] == "green")
+    wait(lambda: client.get("/health").json()["environment"]["verified"] is True)
     with client.websocket_connect("/internal/agent") as ws:  # held open: a disconnect releases too
         ws.send_text(AgentHello(t_mono_ns=1, agent_id="t", version="0").model_dump_json())
         down = Key(t_mono_ns=1, code="KeyW", action="down")
@@ -332,21 +364,29 @@ def test_attested_green_then_expiry_releases_what_the_bot_holds(
         assert (ack["accepted"], ack["dropped"]) == (1, 0)
         assert state(client).mux.holds_anything(Source.BOT)
         state(client).interlock.attest_at_ns -= 11_000_000_000  # 11 s without a refresh
+        wait(lambda: client.get("/health").json()["environment"]["reason"]
+             == "unverified:attestation_stale")  # fmt: skip
+        env = client.get("/health").json()["environment"]
+        assert (env["state"], env["verified"]) == ("green", False)
+        assert state(client).mux.holds_anything(Source.BOT)  # the packets never release
+        lab = tmp_path / "lab-state"
+        (lab / cl.LOCK_NAME).write_text(
+            cl.format_lock("console", 9, "switching", owner="test", since=1, reason="test")
+        )  # a handover
         wait(lambda: not state(client).mux.holds_anything(Source.BOT))
-    released = [r for r in client.get("/health").json()["environment"].items()]
-    assert released
     ups = [e for e in client.fake.events if isinstance(e, Key) and e.code == "KeyW"]  # type: ignore[attr-defined]
     assert [e.action for e in ups] == ["down", "up"]
     health = client.get("/health").json()
     assert (health["environment"]["state"], health["environment"]["reason"]) == (
-        "red", "attestation_stale")  # fmt: skip
+        "red", "lock_not_steady")  # fmt: skip
     ack = bot(client, Key(t_mono_ns=1, code="KeyW", action="down"))
     assert ack["reasons"] == ["environment_unattested"]
 
 
 def test_an_operator_window_opens_assist_only(app_client: Any, tmp_path: Path) -> None:
     write_config(tmp_path / "environments.yaml")
-    client = app_client(assist_lease_s=0.01)  # the mode switch's own release takes no lease
+    # red for a non-packet reason (amendment 11-17): the backend drives another Windows host
+    client = app_client(assist_lease_s=0.01, win_host="192.168.1.170")
     lab = tmp_path / "lab-state"
     now = int(time.time())
     lock = state(client).capture
@@ -390,7 +430,12 @@ def test_the_agent_can_neither_claim_nor_see_green(app_client: Any, tmp_path: Pa
             raw = ws.receive()
             if raw.get("text") and (msg := json.loads(raw["text"]))["type"] == "status":
                 break
-        assert msg["environment"]["state"] == "red"
+        # the human sees it: green by the other signals, labelled NOT verified (amendment 11-17)
+        assert (
+            msg["environment"]["state"],
+            msg["environment"]["reason"],
+            msg["environment"]["verified"],
+        ) == ("green", "unverified:no_attestation", False)
 
 
 def test_human_input_passes_while_red(app_client: Any) -> None:
@@ -441,13 +486,24 @@ def test_an_attested_environment_wins_over_a_declared_one() -> None:
     assert (verdict(cfg).reason, verdict(cfg).env_id) == ("ok", "lab-rathena")
 
 
-def test_the_lab_environment_without_a_declaration_behaves_as_before() -> None:
+def test_the_lab_environment_without_a_declaration_is_verified_by_its_packets_only() -> None:
     v = verdict()
     assert (v.green, v.reason, v.verified, v.status().verified) == (True, "ok", True, True)
     assert all(not e.declared for e in CFG.environments)
-    red = verdict(age=None)
-    assert (red.green, red.reason, red.verified, red.status().verified) == (
-        False, "no_attestation", False, None)  # fmt: skip
+    bare = verdict(age=None)  # amendment 11-17: green, labelled not verified
+    assert (bare.green, bare.reason, bare.verified, bare.status().verified) == (
+        True, "unverified:no_attestation", False, False)  # fmt: skip
+
+
+def test_the_order_verified_then_declared_then_unverified() -> None:
+    """Amendment 11-17: a packet-verified environment first, then a person's declaration, then an
+    allowed environment whose signals hold but for the packets."""
+    cfg = with_envs(CLASS)
+    assert (verdict(cfg).reason, verdict(cfg).env_id) == ("ok", "lab-rathena")
+    assert (verdict(cfg, age=None).reason, verdict(cfg, age=None).env_id) == (
+        "declared", "class-server")  # fmt: skip
+    assert (verdict(age=None).reason, verdict(age=None).env_id) == (
+        "unverified:no_attestation", "lab-rathena")  # fmt: skip
 
 
 @pytest.mark.parametrize(

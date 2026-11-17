@@ -1,14 +1,19 @@
 """The environment interlock (ADR-0016, rewritten 2026-10-04; ADR-0006 rule 2): the mux accepts a
-BOT press only while the session is verifiably on an allowed environment. A LOGIC interlock
-driven by config/environments.yaml (Batt, 2026-10-04: the lab stays flexible; OS-level locks are
-for production/teaching distributions).
+BOT press only while an allowed environment's signals hold. A LOGIC interlock driven by the
+user-managed environment set (Batt, 2026-10-04: the lab stays flexible; OS-level locks are for
+production/teaching distributions). ➡️ amendment 11-17 (Batt 2026-11-17): the packets LABEL a green
+session verified or not; they never decide it (below).
 
 Inputs, none of them reachable by the agent:
   * the allowlist (/lab-config/environments.yaml, read-only mount; missing/invalid => fail closed);
   * the capture-backend lock (state/, written only by capture_backend.py);
   * the sniffer's ATTESTATION (/ingest/packets: internal port + rathena's pinned IP only) --
     "a map session from <client_ip> is live, account <aid>, last packet <age> ago", never world
-    data;
+    data. ➡️ Since 2026-11-17 (Batt, ADR-0016 amendment 11-17: "the sniffer only reads; it never
+    decides whether the bot plays") it is a LABEL, never a gate: it makes a green ``verified``;
+    without it
+    (no sniffer data, another PC, another server or account) an allowed environment whose other
+    signals hold is still green, labelled reason "unverified:<why>", ``verified`` False;
   * an operator WINDOW (state/interlock-window, written only by capture_backend.py window; <= 120 s,
     tied to the lock's SEQ). It counts in ASSIST only -- never in BOT mode -- for the phases before
     a session exists (login) and desktop work (the agent's own shell);
@@ -20,7 +25,10 @@ Inputs, none of them reachable by the agent:
     unchanged.
 
 The verdict is pure (``evaluate``): tests drive it with explicit times. Reasons are short words for
-/health, the Status line and the refusal counters.
+/health, the Status line and the refusal counters. The order (amendment 11-17): a packet-VERIFIED
+environment first ("ok"), then a person's declaration ("declared"), then an allowed environment
+whose signals hold but for the packets ("unverified:<the packet reason>"); else red, or an
+operator window in ASSIST.
 """
 
 import logging
@@ -118,13 +126,14 @@ class Window:
 
 @dataclass(frozen=True)
 class Verdict:
-    green: bool  # an allowed environment's signals all hold, or its declaration (ADR-0023)
+    green: bool  # an allowed environment's signals hold (packets aside), or its declaration
     bot_allowed: bool  # what the mux uses (green, or a window in ASSIST)
-    reason: str  # "ok" (attested), "declared", "window:<kind>", or why not
+    reason: str  # "ok" (attested), "declared", "unverified:<why>", "window:<kind>", or why not
     env_id: str | None
     window: Window | None
     attest_age_s: float | None
-    verified: bool = False  # green by packet attestation (True) or by a declaration (False)
+    # green by packet attestation (True); by a declaration or without the packets (False)
+    verified: bool = False
 
     def status(self) -> EnvironmentStatus:
         state: Literal["green", "window", "red"] = (
@@ -149,7 +158,8 @@ def _env_signals(
     *,
     declared: bool = False,
 ) -> str:
-    """ "" when every required signal of ``env`` holds, else the first failing reason.
+    """ "" when every required signal of ``env`` holds, packets included, else the first failing
+    reason (the VERIFIED path; ``_base_reason`` + ``_packet_reason``).
 
     ``declared``: judge the DECLARED path instead (ADR-0023 decision 1): a person declared the
     owner's permission, so no packet attestation and no signals list are needed -- but the
@@ -162,35 +172,56 @@ def _env_signals(
             return "not_declared"
         if not env.servers:
             return "no_servers"
-        if lock.backend not in ("rdp", "console") or lock.phase != "steady":
+        if not _lock_steady(lock):
             return "lock_not_steady"
         if env.windows_host and win_host != env.windows_host:
             return "host_mismatch"
         return ""
+    return _base_reason(env, lock, win_host) or _packet_reason(env, cfg, attest, attest_age_s)
+
+
+def _lock_steady(lock: CaptureBackend) -> bool:
+    return lock.backend in ("rdp", "console") and lock.phase == "steady"
+
+
+def _base_reason(env: Environment, lock: CaptureBackend, win_host: str) -> str:
+    """Every signal of an ALLOWED environment but the packets: its signals configured, its servers
+    confirmed, and for ``lab_host`` the capture lock steady and the Windows host the one this
+    backend drives. "" when they hold."""
+    if env.status != "allowed":
+        return f"env_{env.status}"
     if not env.signals:
         return "no_signals_configured"
     if not env.servers:
         return "no_servers"  # confirm the environment's servers on the Settings page
     if "lab_host" in env.signals:
-        if lock.backend not in ("rdp", "console") or lock.phase != "steady":
+        if not _lock_steady(lock):
             return "lock_not_steady"
         if not env.windows_host or win_host != env.windows_host:
             return "host_mismatch"
-    if "session" in env.signals:
-        if attest is None or attest_age_s is None:
-            return "no_attestation"
-        if attest_age_s > cfg.attestation_max_age_s:
-            return "attestation_stale"
-        if attest.client_ip != env.windows_host:
-            return "client_ip_mismatch"
-        # WHICH server (2026-10-05, Batt): the attesting sniffer names its rathena; a session on
-        # another server (or an unnamed one) never makes this environment green.
-        if attest.server != env.id:
-            return "server_mismatch"
-        if not attest.session_live:
-            return "no_session"
-        if attest.aid not in env.accounts:
-            return "account_not_lab"
+    return ""
+
+
+def _packet_reason(env: Environment, cfg: EnvironmentsConfig, attest: Attestation | None,
+                   attest_age_s: float | None) -> str:  # fmt: skip
+    """The ``session`` signal, the sniffer's attestation: "" when it holds (or the environment
+    does not use packets). Since amendment 11-17 it decides only ``verified``, never green."""
+    if "session" not in env.signals:
+        return ""
+    if attest is None or attest_age_s is None:
+        return "no_attestation"
+    if attest_age_s > cfg.attestation_max_age_s:
+        return "attestation_stale"
+    if attest.client_ip != env.windows_host:
+        return "client_ip_mismatch"
+    # WHICH server (2026-10-05, Batt): the attesting sniffer names its rathena; a session on
+    # another server (or an unnamed one) never makes this environment verified.
+    if attest.server != env.id:
+        return "server_mismatch"
+    if not attest.session_live:
+        return "no_session"
+    if attest.aid not in env.accounts:
+        return "account_not_lab"
     return ""
 
 
@@ -208,10 +239,14 @@ def evaluate(
     if cfg is None:
         return Verdict(False, False, cfg_error or "config_missing", None, None, attest_age_s)
     reasons = []
+    unverified: list[tuple[str, str]] = []  # (env id, its packet reason): green but not verified
     for env in cfg.environments:  # packet-attested (verified) environments FIRST
-        why = _env_signals(env, cfg, lock, win_host, attest, attest_age_s)
+        why = _base_reason(env, lock, win_host)
         if not why:
-            return Verdict(True, True, "ok", env.id, window, attest_age_s, verified=True)
+            why = _packet_reason(env, cfg, attest, attest_age_s)
+            if not why:
+                return Verdict(True, True, "ok", env.id, window, attest_age_s, verified=True)
+            unverified.append((env.id, why))
         reasons.append(why)
     for i, env in enumerate(cfg.environments):  # then a person's declaration (ADR-0023)
         if not env.declared:
@@ -220,6 +255,10 @@ def evaluate(
         if not why:
             return Verdict(True, True, "declared", env.id, window, attest_age_s, verified=False)
         reasons[i] = why  # a declared environment's own refusal says more than "no signals"
+    if unverified:  # amendment 11-17 (Batt 2026-11-17): the packets only read, they never decide
+        env_id, why = unverified[0]
+        return Verdict(True, True, f"unverified:{why}", env_id, window, attest_age_s,
+                       verified=False)  # fmt: skip
     # the most informative refusal: the allowed environments' (a pending one always says so)
     allowed = [r for r in reasons if not r.startswith("env_")]
     reason = allowed[0] if allowed else (reasons[0] if reasons else "no_environment")

@@ -59,14 +59,23 @@ export function bannerAlarms(status: Status | null, statusAgeS: number | null = 
 
 /** ADR-0016 (rewritten 2026-10-04): the environment interlock, while the bot could act (BOT or
  * ASSIST). A packet-verified green says nothing; a green by a person's DECLARATION (ADR-0023) says
- * so, never as verified; an operator window and a refusal are shown with their reason. */
+ * so, never as verified; a green the packets do not confirm (amendment 11-17, Batt 2026-11-17: the
+ * packets only label, they never stop the bot) says so with the packets' reason; an operator window
+ * and a refusal are shown with their reason. */
 export function describeEnvironment(status: Status | null): string | null {
   const env = status?.environment;
   if (!env || !status || status.mode === "HUMAN") return null;
-  if (env.state === "green" && env.verified === false) {
+  if (env.state === "green" && env.verified === false && env.reason === "declared") {
     return (
       `Interlock: bot input allowed on "${env.env_id ?? "?"}" by a person's DECLARATION, not ` +
       "verified (the lab cannot check this server)."
+    );
+  }
+  if (env.state === "green" && env.verified === false) {
+    const why = env.reason.startsWith("unverified:") ? env.reason.slice("unverified:".length) : env.reason;
+    return (
+      `Interlock: bot input allowed on "${env.env_id ?? "?"}", NOT verified by packets (${why}): ` +
+      "the lab cannot confirm which server the game is connected to."
     );
   }
   if (env.state === "window") {
@@ -74,7 +83,7 @@ export function describeEnvironment(status: Status | null): string | null {
     return `Interlock: operator window open (${env.window}${left}) -- bot input allowed in ASSIST only.`;
   }
   if (env.state === "red") {
-    return `Interlock: bot input REFUSED (${env.reason}) -- no attested lab session (config/environments.yaml).`;
+    return `Interlock: bot input REFUSED (${env.reason}) -- check the environment's servers (Settings), the capture lock and the Windows host.`;
   }
   return null;
 }

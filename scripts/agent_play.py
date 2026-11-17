@@ -266,9 +266,13 @@ def serve(a: argparse.Namespace) -> int:  # noqa: PLR0915
     # Amendment D's scope, checked before anything moves
     h = r.backend_health()
     env = h.get("environment") or {}
-    if env.get("server") != "lab-rathena" or env.get("state") != "green":
+    # ADR-0016 amendment 11-17: green no longer means attested -- this mode READS the packets
+    # during play, so it needs the packet-VERIFIED lab session itself (verified true)
+    if (env.get("server") != "lab-rathena" or env.get("state") != "green"
+            or env.get("verified") is not True):  # fmt: skip
         raise SystemExit("agent-demo refused: packets are read only on the attested lab rAthena "
-                         f"({env.get('server')} / {env.get('state')})")  # fmt: skip
+                         f"({env.get('server')} / {env.get('state')} / verified "
+                         f"{env.get('verified')} / {env.get('reason')})")  # fmt: skip
     if h.get("mode") != "ASSIST" or h.get("lease_active"):
         raise SystemExit(f"agent-demo refused: mux {h.get('mode')}, lease {h.get('lease_active')}")
     ok_imm, why_imm = f0.immunity_confirmed()

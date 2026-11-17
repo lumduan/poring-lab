@@ -45,3 +45,24 @@ def test_only_human_lines_of_the_window_are_kept() -> None:
     got = hd.human_lines(lines, 10, 20)
     assert [json.loads(x)["t_mono_ns"] for x in got] == [15]
     assert all(json.loads(x)["source"] == "human" for x in got)
+
+
+def test_arm_refuses_a_green_the_packets_do_not_verify(monkeypatch: object) -> None:
+    """ADR-0016 amendment 11-17: green no longer means packet-verified; a human demo (research data,
+    judged from the packets) still needs the verified session."""
+    from types import SimpleNamespace
+
+    import pytest
+    import record_session
+    import ro_agent as r
+
+    mp = monkeypatch  # pytest.MonkeyPatch
+    mp.setattr(record_session, "read_lock", lambda d: SimpleNamespace(backend="rdp"))  # type: ignore[attr-defined]
+    health = {
+        "mode": "ASSIST",
+        "bot_agents": [],
+        "environment": {"state": "green", "verified": False, "reason": "unverified:no_session"},
+    }
+    mp.setattr(r, "backend_health", lambda: health)  # type: ignore[attr-defined]
+    with pytest.raises(SystemExit, match="not packet-verified"):
+        hd.arm(1.0, 1.0)

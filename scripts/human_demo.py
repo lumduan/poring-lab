@@ -151,6 +151,11 @@ def arm(
                          f"{h.get('bot_agents')} (needs rdp, ASSIST, no bot)")  # fmt: skip
     if env.get("state") != "green":
         raise SystemExit(f"refused: the interlock is {env.get('state')} ({env.get('reason')})")
+    # ADR-0016 amendment 11-17: a human demo is research data, judged from the packets (its
+    # safety, its outcome), so it needs the packet-VERIFIED session, not just green
+    if env.get("verified") is not True:
+        raise SystemExit(f"refused: the session is not packet-verified ({env.get('reason')}): a "
+                         "human demo is judged from the packets")  # fmt: skip
     STOP_FILE.unlink(missing_ok=True)
     sid = new_session_id(tag)
     log = DemoLog(sid)
