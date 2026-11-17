@@ -390,6 +390,10 @@ services:
       # WHICH server this sniffer watches (2026-10-05): the interlock requires the attested
       # server to equal the environment id (config/environments.yaml). Required at start.
       SNIFFER_SERVER_ID: lab-rathena
+      # WHICH game PC it listens to (Batt 2026-11-17): this host's WIN_HOST, the address the kernel
+      # filter is built for (capture.bpf_program). The packets only label sessions verified or
+      # not; the bot never waits on them (ADR-0016 amendment 2026-11-17).
+      CLIENT_IP: ${WIN_HOST:-}
       # The login port(s) whose client payloads the pcap scrubs (pcapng.LoginScrub; Batt
       # 2026-10-09): = rathena's published login port. Unset/invalid = shape-only, fail closed.
       SNIFF_LOGIN_PORTS: "6900"
@@ -507,6 +511,10 @@ services:
       INGEST_URL: ws://backend:8001/ingest/packets
       VALIDATION_USERIDS: ${RATHENA_TH_GM_USER:-}
       SNIFFER_SERVER_ID: lab-rathena-th
+      # WHICH game PC it listens to (Batt 2026-11-17): this host's WIN_HOST, the address the kernel
+      # filter is built for (capture.bpf_program). The packets only label sessions verified or
+      # not; the bot never waits on them (ADR-0016 amendment 2026-11-17).
+      CLIENT_IP: ${WIN_HOST:-}
       # The login port(s) whose client payloads the pcap scrubs (pcapng.LoginScrub; Batt
       # 2026-10-09): = rathena's published login port. Unset/invalid = shape-only, fail closed.
       SNIFF_LOGIN_PORTS: "6900"
