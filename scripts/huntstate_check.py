@@ -66,6 +66,12 @@ and without the keyword (MODEL_PICK_*) besides.
         with ONLY the model-pick branches read as their else, F's whole module equals REV's
         (default PICK_BASE: the 9.58 runner s8ab measured)
 
+live-blocks 18.17 (dungeon@9.60 --fly-first-land, the stale re-fire): every change a branch `if
+FLY_LAND:` whose else is 9.59's code; check, drive, flag and pick read the family as its else too.
+    huntstate_check.py land [--base REV] [--file F]
+        with ONLY the fly-land branches read as their else, F's whole module equals REV's (default
+        LAND_BASE: the 9.59 runner s9ab measured)
+
 The text it derives is formatted by `ruff format` afterwards (formatting is AST-neutral); `check`
 reads the committed file, never trusts `derive`'s output.
 """
@@ -121,6 +127,13 @@ MODEL_PICK_ADDED = ("MODEL_PICK", "MODEL_PICK_VERSION")
 MODEL_PICK_PARAMS = ("model_file",)
 # main when 9.59 began (2026-11-17 06:2x ICT): the 9.58 runner s8ab measured (18.13)
 PICK_BASE = "f8e27d21"
+# live-blocks 18.17 (dungeon@9.60 --fly-first-land, the stale re-fire): its branches' condition and
+# the module names it adds; `land` reads them alone against LAND_BASE, and check, drive, flag and
+# pick read them as their else besides
+FLY_LAND_TESTS = ("FLY_LAND",)
+FLY_LAND_ADDED = ("FLY_LAND", "FLY_LAND_VERSION", "FF_LAND_S", "ff_floor")
+# main when 9.60 began (2026-11-17 10:2x ICT): the 9.59 runner s9ab measured (18.16)
+LAND_BASE = "c694f0f4"
 # the mode steps the cursor calls whoever plays when their mode is another (STEP_GUARD): each one's
 # body acts only in that mode (the proof: its statements are ifs on that mode, nothing else)
 GUARDED = {"fight": "fight", "loot": "after"}
@@ -1111,6 +1124,12 @@ def unpick(src: str) -> tuple[str, int]:
     return unflag(src, MODEL_PICK_TESTS, MODEL_PICK_ADDED, MODEL_PICK_PARAMS)
 
 
+def unland(src: str) -> tuple[str, int]:
+    """PURE (live-blocks 18.17): ``src`` with the fly-land family read as its else (unflag with
+    FLY_LAND_TESTS / _ADDED: 9.59's program); how many branches it read."""
+    return unflag(src, FLY_LAND_TESTS, FLY_LAND_ADDED)
+
+
 def flag_check(base_src: str, new_src: str, tests: Sequence[str] = FLY_FIRST_HP_TESTS,
                added: Sequence[str] = FLY_FIRST_HP_ADDED, *,
                pick: bool = True) -> int:  # fmt: skip
@@ -1119,6 +1138,9 @@ def flag_check(base_src: str, new_src: str, tests: Sequence[str] = FLY_FIRST_HP_
     docstrings included. Prints each fact; rc 0 when it holds. 18.15: the model-pick family (a
     runner newer than FLAG_BASE's) is read as its else first (``pick``; `pick` proves it alone)."""
     if pick:
+        new_src, n_ld = unland(new_src)
+        print(f"fly-land branches read as their else (live-blocks 18.17): {n_ld}; left out "
+              f"{list(FLY_LAND_ADDED)}")  # fmt: skip
         new_src, n_mp = unpick(new_src)
         print(f"model-pick branches read as their else (live-blocks 18.15): {n_mp}; left out "
               f"{list(MODEL_PICK_ADDED)} and the keyword {list(MODEL_PICK_PARAMS)}")  # fmt: skip
@@ -1139,10 +1161,32 @@ def flag_check(base_src: str, new_src: str, tests: Sequence[str] = FLY_FIRST_HP_
 def pick_check(base_src: str, new_src: str) -> int:
     """live-blocks 18.15: with ONLY the model-pick branches read as their else, its module names
     and BoxWatch's keyword left out, the WHOLE module is ``base_src``'s (PICK_BASE: the 9.58 runner
-    s8ab measured), as ASTs, docstrings included. Prints each fact; rc 0 when it holds."""
+    s8ab measured), as ASTs, docstrings included. Prints each fact; rc 0 when it holds. 18.17:
+    the fly-land family (a runner newer than PICK_BASE's) is read as its else first."""
+    new_src, n_ld = unland(new_src)
+    print(f"fly-land branches read as their else (live-blocks 18.17): {n_ld}")
     got, n = unpick(new_src)
     print(f"{'/'.join(MODEL_PICK_TESTS)} branches read as their else: {n}; left out "
           f"{list(MODEL_PICK_ADDED)} and the keyword {list(MODEL_PICK_PARAMS)}")  # fmt: skip
+    a, b = ast.parse(base_src), ast.parse(got)
+    same = dump(a) == dump(b)
+    print(f"the module == the base's (as ASTs): {'YES' if same else 'NO'}")
+    if not same:
+        import difflib
+
+        ua, ub = ast.unparse(a).splitlines(), ast.unparse(b).splitlines()
+        for ln in list(difflib.unified_diff(ua, ub, "base", "committed", lineterm="", n=2))[:60]:
+            print("   ", ln)
+    return 0 if same and n > 0 else 1
+
+
+def land_check(base_src: str, new_src: str) -> int:
+    """live-blocks 18.17: with ONLY the fly-land branches read as their else and its module names
+    left out, the WHOLE module is ``base_src``'s (LAND_BASE: the 9.59 runner s9ab measured), as
+    ASTs, docstrings included. Prints each fact; rc 0 when it holds."""
+    got, n = unland(new_src)
+    print(f"{'/'.join(FLY_LAND_TESTS)} branches read as their else: {n}; left out "
+          f"{list(FLY_LAND_ADDED)}")  # fmt: skip
     a, b = ast.parse(base_src), ast.parse(got)
     same = dump(a) == dump(b)
     print(f"the module == the base's (as ASTs): {'YES' if same else 'NO'}")
@@ -1163,6 +1207,8 @@ def drive_check(base_src: str, new_src: str) -> int:
     print(f"fly-first branches read as their else (live-blocks 18): {n_ff}")
     new_src, n_mp = unpick(new_src)
     print(f"model-pick branches read as their else (live-blocks 18.15): {n_mp}")
+    new_src, n_ld = unland(new_src)
+    print(f"fly-land branches read as their else (live-blocks 18.17): {n_ld}")
     base_tree, new_tree = ast.parse(base_src), ast.parse(new_src)
 
     def run_of(t: ast.Module) -> ast.FunctionDef:
@@ -1341,6 +1387,8 @@ def check(
     print(f"fly-first branches read as their else (live-blocks 18): {n_ff}")
     new_src, n_mp = unpick(new_src)
     print(f"model-pick branches read as their else (live-blocks 18.15): {n_mp}")
+    new_src, n_ld = unland(new_src)
+    print(f"fly-land branches read as their else (live-blocks 18.17): {n_ld}")
     ri = parse_run(base_src)
     lifted = lifted_names(ri, not_lifted, extra)
     cond = conditions(ri, lifted, aliased)
@@ -1445,6 +1493,9 @@ def main(argv: Sequence[str] | None = None) -> int:
     pk = sub.add_parser("pick", help="18.15: with the model-pick branches as else, PICK_BASE")
     pk.add_argument("--base", default=PICK_BASE)
     pk.add_argument("--file", default=str(TARGET))
+    ld = sub.add_parser("land", help="18.17: with the fly-land branches as else, LAND_BASE")
+    ld.add_argument("--base", default=LAND_BASE)
+    ld.add_argument("--file", default=str(TARGET))
     a = ap.parse_args(argv)
     if a.cmd == "drive":
         return drive_check(git_show(a.base, TARGET), Path(a.file).read_text())
@@ -1452,6 +1503,8 @@ def main(argv: Sequence[str] | None = None) -> int:
         return flag_check(git_show(a.base, TARGET), Path(a.file).read_text())
     if a.cmd == "pick":
         return pick_check(git_show(a.base, TARGET), Path(a.file).read_text())
+    if a.cmd == "land":
+        return land_check(git_show(a.base, TARGET), Path(a.file).read_text())
     if a.cmd == "derive":
         src = Path(a.base).read_text()
         if a.steps:

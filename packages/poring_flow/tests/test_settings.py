@@ -72,8 +72,9 @@ def test_the_one_box_holds_every_setting_block_it_uses_at_its_default_in_its_gro
     (x,) = p.nodes
     got = {k: (t.name, v.value) for t in x.tabs for k, v in t.vars.items()}
     assert got == {f.var: (f.group, f.default) for f in st.BLOCKS if f.name not in BOX_PLAYS_THEM}
-    # 117 since live-blocks 18 (fly_first, dungeon@9.57); 118 since 18.11 (fly_first_hp, 9.58)
-    assert len(got) == 118 and not any(f.var in got for f in st.FIELDS if not f.block)
+    # 117 since live-blocks 18 (fly_first, dungeon@9.57); 118 since 18.11 (fly_first_hp, 9.58);
+    # 120 since 18.17 (fly_first_land and FF_LAND_S, 9.60)
+    assert len(got) == 120 and not any(f.var in got for f in st.FIELDS if not f.block)
     # the five are exactly what the engine's takeovers say this box plays itself (live.takeovers)
     c = P.compile_project(p)
     assert c.flow is not None
@@ -195,10 +196,14 @@ def test_the_clash_rule_is_an_error_and_unused_settings_are_info() -> None:
         "xmas_dun02/aim/near_single_still": {"unused": "not used while near_single is off"},
         # 18.11: the one box (a reference arm) keeps fly_first off, so fly_first_hp is not in use
         "xmas_dun02/safety/fly_first_hp": {"unused": "not used while fly_first is off"},
+        # 18.17: nor fly_first_land, nor its window (needs fly_first_land, which needs fly_first)
+        "xmas_dun02/safety/fly_first_land": {"unused": "not used while fly_first is off"},
+        "xmas_dun02/safety/FF_LAND_S": {"unused": "not used while fly_first is off"},
     }
     assert sorted(w for _s, w, _t in rules(shipped, "settings_use")) == [
         "xmas_dun02/aim/near_single_still", "xmas_dun02/fight/quick_drop_scaled",
-        "xmas_dun02/safety/fly_first_hp"]  # fmt: skip
+        "xmas_dun02/safety/FF_LAND_S", "xmas_dun02/safety/fly_first_hp",
+        "xmas_dun02/safety/fly_first_land"]  # fmt: skip
 
 
 def test_a_block_the_box_plays_itself_is_marked_not_used_here_by_lint_block_and_python() -> None:

@@ -1418,6 +1418,11 @@ def params(cmd: dict[str, Any]) -> list[Param]:
         const("JUMP_CELLS", "a jump this large without our Fly Wing = a map change"),
         const("GARM_FRESH_S", "an alarm box at most this old (s)"),
         const("BOSS_AVOID_S", "after a boss escape, no box fights for this long (s)"),
+        const(
+            "FF_LAND_S",
+            "--fly-first-land: a boss sighting counts only when grabbed this "
+            "long after a Fly Wing's key (s)",
+        ),  # dungeon@9.60 (live-blocks.md 18.17)
         const("UI_EVERY_S", "the UI watch's rhythm (s)"),
         const("REGEN_STOP", "the weight share with no natural regen"),
         const("POS_FLY_S", "no position read for this long = a Fly Wing (s)"),

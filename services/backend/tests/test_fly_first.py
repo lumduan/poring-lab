@@ -123,8 +123,11 @@ def _press_ns(fly_first: bool, keys: list[str], evs: list[dict[str, Any]],
         "counts": Counter(), "ev": evs.append, "stock_watch": None, "STOCK_ITEMS": {},
         "stock_due": {}, "stock_tries": {}, "stock_items": {}, "STOCK_READ_S": 1.0, "time": time,
         "fly_first": fly_first, "fly_first_hp": fly_first_hp, "ff_hp_why": dh.ff_hp_why,
-        "ff": {"after": None, "boss": False, "read_ns": None, "src": None, "sight": None},
+        "ff": {"after": None, "boss": False, "read_ns": None, "src": None, "sight": None,
+               "land": None},
         "FF_BOSS_WHYS": dh.FF_BOSS_WHYS, "r": SimpleNamespace(ns=time.monotonic_ns),
+        # 9.60 (live-blocks.md 18.17): the land floor's switch off here (test_fly_land.py: on)
+        "FLY_LAND": dh.FLY_LAND, "fly_first_land": False, "FF_LAND_S": dh.FF_LAND_S,
     }  # fmt: skip
 
 
@@ -162,7 +165,9 @@ def test_a_boss_fly_wing_goes_first_and_an_hp_one_keeps_the_dagger_first() -> No
 def _read_ns(seen: Any, fly_at: float, presses: list[tuple[str, str]],
              evs: list[dict[str, Any]]) -> dict[str, Any]:  # fmt: skip
     ns: dict[str, Any] = {
-        "ff": {"after": None, "boss": False, "read_ns": None, "src": None, "sight": None},
+        "ff": {"after": None, "boss": False, "read_ns": None, "src": None, "sight": None,
+               "land": None},
+        "FLY_LAND": dh.FLY_LAND, "ff_floor": dh.ff_floor,  # 9.60: no floor set (None)
         "r": SimpleNamespace(ns=time.monotonic_ns), "ev": evs.append, "counts": Counter(),
         "hs": SimpleNamespace(sitting=False, fly_at=fly_at, mode="fight"),
         "press": lambda w, y: presses.append((w, y)), "time": time,
@@ -233,7 +238,9 @@ def _tick_ns(*, seen: Any, line: str | None, box_boss: bool, fly_at: float,
     tick = time.monotonic()
     return {
         "fly_first": True,
-        "ff": {"after": after, "boss": False, "read_ns": None, "src": None, "sight": None},
+        "ff": {"after": after, "boss": False, "read_ns": None, "src": None, "sight": None,
+               "land": None},
+        "FLY_LAND": dh.FLY_LAND, "ff_floor": dh.ff_floor,  # 9.60: no floor set (None)
         "boss_hit": line, "tick": tick, "r": SimpleNamespace(ns=time.monotonic_ns),
         "boxes": SimpleNamespace(ff_seen=seen), "ff_sighting": dh.ff_sighting,
         "box_boss": box_boss, "ff_fly": lambda s, n, src, inside: flies.append((s, src)),
@@ -349,7 +356,9 @@ def _bases() -> tuple[str, str]:
 
 def test_every_fly_first_change_is_a_branch_whose_else_is_todays_code() -> None:
     text, n = hc.unflag(SRC)
-    assert n >= 15 and "fly_first" not in text and "ff_latch" not in text
+    # 18.17: the fly-land family's own branches (fixes_of names fly_first there) read as theirs
+    no_land = hc.unland(text)[0]
+    assert n >= 15 and "fly_first" not in no_land and "ff_latch" not in text
     assert all(f"def {x}(" not in text and f"{x} =" not in text for x in hc.FLY_FIRST_ADDED)
     drive_base, check_base = _bases()
     rc_d, out_d = _quiet(hc.drive_check, drive_base, SRC)

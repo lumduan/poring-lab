@@ -473,6 +473,16 @@ FIELDS: tuple[Field, ...] = (
         unit="s",
     ),  # fmt: skip
     Field(
+        "FF_LAND_S",
+        "safety",
+        "number",
+        "after a Fly Wing, ignore boss sightings in the pictures of the first",
+        0.2,
+        2.0,
+        _S,
+        unit="s",
+    ),  # fmt: skip  # dungeon@9.60 (live-blocks.md 18.17): with fly_first_land; 0.75 derived
+    Field(
         "UI_EVERY_S", "safety", "number", "check the screen's windows every", 1, 120, _S, unit="s"
     ),  # fmt: skip
     Field(
@@ -913,6 +923,14 @@ SWITCHES: tuple[Field, ...] = (
         needs=(("fly_first", _ON),),
     ),  # fmt: skip  # dungeon@9.58 (18.10 #2; live-blocks.md 18.11): OFF until s8ab
     Field(
+        "fly_first_land",
+        "safety",
+        "switch",
+        "after a Fly Wing: no Fly Wing again on what the picture showed before the landing",
+        flag="--fly-first-land",
+        needs=(("fly_first", _ON),),
+    ),  # fmt: skip  # dungeon@9.60 (live-blocks.md 18.16 / 18.17): OFF until s10ab
+    Field(
         "boss_walk",
         "safety",
         "switch",
@@ -974,6 +992,7 @@ _NEEDS: dict[str, tuple[tuple[str, Any], ...]] = {
     "EXPLORE_LEG_MAX_S": (("explore", _ON),),
     "NPC_NO_FIGHT": (("npc_guard", _ON),),
     "GARM_FRESH_S": (("garm_fly", _ON),),
+    "FF_LAND_S": (("fly_first_land", _ON),),  # dungeon@9.60 (live-blocks.md 18.17)
 }
 # OUR VALUES (2026-11-14, live-blocks.md 12): every setting's default. The keys, the Run settings
 # and the techniques are what the Run button played on xmas_dun02 (flow_run.FLOWS' defaults before
@@ -1049,6 +1068,7 @@ DEFAULTS: dict[str, Any] = {
     "JUMP_CELLS": 20,
     "GARM_FRESH_S": 1.5,
     "BOSS_AVOID_S": 30.0,
+    "FF_LAND_S": 0.75,  # dungeon@9.60 (live-blocks.md 18.17): derived from 79 banked teleports
     "UI_EVERY_S": 10.0,
     "REGEN_STOP": 0.5,
     "POS_FLY_S": 20.0,
@@ -1113,6 +1133,7 @@ DEFAULTS: dict[str, Any] = {
     # block ON since 18.10 #1 (Batt: "On")
     "fly_first": False,
     "fly_first_hp": False,  # dungeon@9.58 (18.11): off until s8ab passes
+    "fly_first_land": False,  # dungeon@9.60 (18.17): off until s10ab passes
     "boss_walk": False,
     "unread_step": False,
     "box_detector": "gpu",
@@ -1163,6 +1184,8 @@ FIND: dict[str, tuple[str, ...]] = {
     "alarm_solo": ("garm", "alarm"),
     "fly_first": ("boss", "knight", "fly", "wing", "first"),
     "fly_first_hp": ("hp", "fly", "wing", "first"),
+    "fly_first_land": ("boss", "fly", "wing", "land", "stale", "teleport"),
+    "FF_LAND_S": ("boss", "fly", "wing", "land", "teleport"),
     "GARM_FRESH_S": ("garm", "alarm"),
     "npc_guard": ("npc",),
     "NPC_NO_FIGHT": ("npc",),

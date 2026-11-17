@@ -91,7 +91,8 @@ def test_the_one_box_with_its_blocks_at_their_defaults_plays_todays_argv() -> No
     d = one_box()
     held = {k for t in d["nodes"][0]["tabs"] for k in t["vars"]}
     assert held == {f.var for f in fc.BLOCKS if f.name not in BOX_PLAYS_THEM}
-    assert len(held) == len(fc.BLOCKS) - 5 == 118  # + fly_first (18), + fly_first_hp (18.11)
+    # 120: + fly_first (18), + fly_first_hp (18.11), + fly_first_land and FF_LAND_S (18.17)
+    assert len(held) == len(fc.BLOCKS) - 5 == 120
     assert hunt_argv(json.dumps(d)) == TODAY
 
 
