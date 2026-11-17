@@ -4,7 +4,8 @@ real"): the ready-made functions box naming the old model (A, use_model("xmas02"
 alarm flies on the Garm Baby) against the same box naming the deployed one (B,
 use_model("xmas02sk"): the alarm flies on the Garm Baby, the Christmas Goblin and the Stormy
 Knight), alternating runs on the lab's own Rogue on the lab rAthena's xmas_dun02 (player mode; the
-MVP alive). Both arms hold fly_first and fly_first_hp ON (the ready-made box's, 18.10 #1 / 18.13),
+MVP alive). Both arms hold fly_first and fly_first_hp ON (the ready-made box's, 18.10 #1 / 18.13)
+and fly_first_land OFF (s9ab measured 9.59's program; the ready-made box holds it ON since 18.18),
 set explicitly.
 
 THE ARMS differ ONLY in the box's model: each arm plays a copy of
@@ -77,6 +78,10 @@ ARMS = {"A": "use_model xmas02 (xmas02-gb, the map's reference): the alarm on th
         "B": "use_model xmas02sk (the deployed model): the alarm on the Garm Baby, the Christmas "
              "Goblin and the Stormy Knight"}  # fmt: skip
 WEIGHTS = {"A": "xmas02gb", "B": "xmas02sk"}  # unit_detector GPU_WEIGHTS: the detect server's
+# live-blocks 18.18: the block both arms hold OFF -- s9ab measured dungeon@9.59's program, without
+# the land floor (the ready-made box holds fly_first_land ON since s10ab passed)
+OFF_IN_BOTH = ("fly_first_land",)
+LAND_FLAG = "--fly-first-land"
 SCRATCH = Path("/dev/shm/poring-lab-tmp/stage9-ab")
 SEEDS = s7.SEEDS
 # the model's own facts in the box's run() argument (recipes.BlockPlan.model_doc), and the alarm's
@@ -129,8 +134,9 @@ def _quiet(f: Any, *a: Any, **k: Any) -> tuple[int, str]:
 
 # --- the arms ------------------------------------------------------------------------------------
 def arm_doc(arm: str, minutes: float, path: Path = PROJECT) -> dict[str, Any]:
-    """PURE but for the read: the box with its time box set, fly_first and fly_first_hp ON and its
-    use_model MODELS[arm] -- each explicitly, whatever the fixture holds."""
+    """PURE but for the read: the box with its time box set, fly_first and fly_first_hp ON,
+    OFF_IN_BOTH off (18.18) and its use_model MODELS[arm] -- each explicitly, whatever the fixture
+    holds."""
     d = json.loads(path.read_text())
     d["max_runtime_s"] = int(round(minutes * 60))
     tab = next((t for t in d["nodes"][0]["tabs"] if t["name"] == s7.FLY_TAB), None)
@@ -138,6 +144,8 @@ def arm_doc(arm: str, minutes: float, path: Path = PROJECT) -> dict[str, Any]:
         raise ValueError(f"the box has no tab {s7.FLY_TAB}")
     for var in (s7.FLY_VAR, s8.VAR):
         tab["vars"][var] = {"kind": "lit", "value": True}
+    for var in OFF_IN_BOTH:
+        tab["vars"][var] = {"kind": "lit", "value": False}
     s5c.set_box_model(d, MODELS[arm])
     return d
 
@@ -159,6 +167,10 @@ def box_difference(a: Mapping[str, Any], b: Mapping[str, Any]) -> str | None:
             lit = None if tab is None else tab["vars"].get(var)
             if not isinstance(lit, Mapping) or lit.get("value") is not True:
                 return f"{arm}'s {s7.FLY_TAB} tab does not hold {var} = True (both arms)"
+        for var in OFF_IN_BOTH:  # 18.18: s9ab's arms hold the land floor off
+            off = None if tab is None else tab["vars"].get(var)
+            if not isinstance(off, Mapping) or off.get("value") is not False:
+                return f"{arm}'s {s7.FLY_TAB} tab does not hold {var} = False (s9ab's arms)"
         s5c.set_box_model(d, "-")
     if a != b:
         return "B differs from A in more than its use_model (an A/B changes one thing)"
@@ -267,6 +279,8 @@ def plan_doc(label: str, pairs: int, minutes: float, order: str, folder: Path,
         return "refused before any input: the arms' runner argv differ (the model is the box's)"
     if "--fly-first" not in argv["A"] or "--fly-first-hp" not in argv["A"]:
         return "refused before any input: the runner argv lacks --fly-first / --fly-first-hp"
+    if LAND_FLAG in argv["A"]:  # 18.18: the arms' argv are equal (above)
+        return f"refused before any input: {LAND_FLAG} in the runner argv (s9ab measured 9.59's)"
     for k in ("keys", "loop", "left_out"):
         if arms["A"][k] != arms["B"][k]:
             return f"refused before any input: the arms give the runner different {k}"

@@ -41,6 +41,7 @@ def test_the_plan_alternates_two_copies_differing_in_fly_first_hp_alone(tmp_path
     va, vb = doc["vals"]["A"], doc["vals"]["B"]
     assert va["fly_first"] is True and vb["fly_first"] is True
     assert va["fly_first_hp"] is False and vb["fly_first_hp"] is True
+    assert va["fly_first_land"] is False and vb["fly_first_land"] is False  # 18.18: s8ab's arms
     assert {k for k in va if va[k] != vb[k]} == {"fly_first_hp"}
     assert doc["flag_base"] == hc.FLAG_BASE and doc["bar"] is ab.BAR
     for r in doc["runs"]:
@@ -64,6 +65,21 @@ def test_the_arms_differ_in_their_fly_first_hp_block_alone() -> None:
     assert s5c.box_model_of(a) == "xmas02" and "use_model is not xmas02" in str(
         ab.box_difference(a, sk)
     )
+    # 18.18: the ready-made box holds fly_first_land ON; s8ab's arms hold it OFF, both, explicitly
+    raw = json.loads(ab.PROJECT.read_text())
+    assert next(t for t in raw["nodes"][0]["tabs"] if t["name"] == "safety")["vars"][
+        "fly_first_land"]["value"] is True  # fmt: skip
+    for d in (a, b):
+        tab = next(t for t in d["nodes"][0]["tabs"] if t["name"] == "safety")
+        assert tab["vars"]["fly_first_land"]["value"] is False
+    land_on = json.loads(json.dumps(b))
+    next(t for t in land_on["nodes"][0]["tabs"] if t["name"] == "safety")["vars"][
+        "fly_first_land"] = {"kind": "lit", "value": True}  # fmt: skip
+    assert "fly_first_land = False (s8ab's arms)" in str(ab.box_difference(a, land_on))
+    both_on = json.loads(json.dumps(a))
+    next(t for t in both_on["nodes"][0]["tabs"] if t["name"] == "safety")["vars"][
+        "fly_first_land"] = {"kind": "lit", "value": True}  # fmt: skip
+    assert "fly_first_land = False (s8ab's arms)" in str(ab.box_difference(both_on, land_on))
 
 
 def test_the_plan_refuses_a_runner_that_is_not_9_58_or_whose_flag_proof_fails(

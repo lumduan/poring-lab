@@ -6,14 +6,15 @@ runs on the lab's own Rogue on the lab rAthena's xmas_dun02 (player mode; the MV
 
 THE ARMS differ ONLY in one setting block: each arm plays a copy of
 services/frontend/src/lib/flow/fixtures/project_xmas_dun02_functions.json whose safety tab holds
-fly_first ON and fly_first_hp OFF (A) or ON (B) -- both set explicitly -- through `flow_play.py
-play` with that copy's own runner settings (runner-config-A.json / -B.json). `plan` refuses before
-any input unless: the copies differ in that block alone; their settings in fly_first_hp alone,
-with the fast alarm and fly_first on; their runner argv by `--fly-first-hp` alone, their run()
-arguments, keys and loop not at all; the checkout's runner is 9.58 and huntstate_check's `drive`,
-`check` and `flag` hold (`flag`: with fly_first_hp's branches as their else, the WHOLE module is
-FLAG_BASE's, the runner s7ab measured -- so A plays s7ab's B program); and the box's step traces
-equal the driver's.
+fly_first ON, fly_first_land OFF (s8ab measured without it; the fixture holds it ON since
+live-blocks 18.18) and fly_first_hp OFF (A) or ON (B) -- each set explicitly -- through
+`flow_play.py play` with that copy's own runner settings (runner-config-A.json / -B.json). `plan`
+refuses before any input unless: the copies differ in that block alone; their settings in
+fly_first_hp alone, with the fast alarm and fly_first on; their runner argv by `--fly-first-hp`
+alone (and `--fly-first-land` in neither), their run() arguments, keys and loop not at all; the
+checkout's runner is 9.58 and huntstate_check's `drive`, `check` and `flag` hold (`flag`: with
+fly_first_hp's branches as their else, the WHOLE module is FLAG_BASE's, the runner s7ab measured --
+so A plays s7ab's B program); and the box's step traces equal the driver's.
 
 THE SCORE per run: stage7_ab's (its records, packets and the backend's input log) -- the HP line
 judges B's HP fly-first Fly Wings (the fly_first records whose sight says hp), and is judgeable only
@@ -57,6 +58,10 @@ PROJECT = s7.PROJECT  # the ready-made functions box (fly_first ON since 18.10 #
 ARMS = {"A": "fly_first on, fly_first_hp off: s7ab's B (the boss Fly Wing first)",
         "B": "fly_first and fly_first_hp on: the HP Fly Wing first too (18.11)"}  # fmt: skip
 TAB, VAR, FLAG = "safety", "fly_first_hp", "--fly-first-hp"
+# live-blocks 18.18: the block both arms hold OFF -- s8ab measured without the land floor (the
+# ready-made box holds fly_first_land ON since s10ab passed); its runner flag in neither argv
+OFF_IN_BOTH = ("fly_first_land",)
+LAND_FLAG = "--fly-first-land"
 SCRATCH = Path("/dev/shm/poring-lab-tmp/stage8-ab")
 SEEDS = s7.SEEDS
 HP_SRCS = ("hp", "box_hp")  # the fly_first records of an HP Fly Wing (dungeon_hunt 9.58)
@@ -86,8 +91,9 @@ def _quiet(f: Any, *a: Any, **k: Any) -> tuple[int, str]:
 # --- the arms ------------------------------------------------------------------------------------
 def arm_doc(arm: str, minutes: float, path: Path = PROJECT) -> dict[str, Any]:
     """PURE but for the read: the box with its time box set, fly_first ON and fly_first_hp set for
-    the arm (A off, B on), its use_model s7ab's (xmas02; 18.15: the ready-made box names xmas02sk)
-    -- each explicitly, whatever the fixture holds."""
+    the arm (A off, B on), OFF_IN_BOTH off in both (18.18: the ready-made box holds fly_first_land
+    ON), its use_model s7ab's (xmas02; 18.15: the ready-made box names xmas02sk) -- each
+    explicitly, whatever the fixture holds."""
     d = json.loads(path.read_text())
     d["max_runtime_s"] = int(round(minutes * 60))
     s5c.set_box_model(d, s7.MEASURED_MODEL)
@@ -96,6 +102,8 @@ def arm_doc(arm: str, minutes: float, path: Path = PROJECT) -> dict[str, Any]:
         raise ValueError(f"the box has no tab {TAB}")
     tab["vars"]["fly_first"] = {"kind": "lit", "value": True}
     tab["vars"][VAR] = {"kind": "lit", "value": arm == "B"}
+    for var in OFF_IN_BOTH:
+        tab["vars"][var] = {"kind": "lit", "value": False}
     return d
 
 
@@ -118,6 +126,10 @@ def box_difference(a: Mapping[str, Any], b: Mapping[str, Any]) -> str | None:
             return f"{arm}'s {TAB} tab does not hold {VAR} = {arm == 'B'}"
         if not isinstance(ff, Mapping) or ff.get("value") is not True:
             return f"{arm}'s {TAB} tab does not hold fly_first = True (18.10 #1)"
+        for var in OFF_IN_BOTH:  # 18.18: s8ab's arms hold the land floor off
+            off = tab["vars"].get(var)
+            if not isinstance(off, Mapping) or off.get("value") is not False:
+                return f"{arm}'s {TAB} tab does not hold {var} = False (s8ab's arms)"
         tab["vars"].pop(VAR)
     if a != b:
         return "B differs from A in more than its fly_first_hp block (an A/B changes one thing)"
@@ -195,6 +207,8 @@ def plan_doc(label: str, pairs: int, minutes: float, order: str, folder: Path,
                      "keys": rp.keys}  # fmt: skip
     if "--fly-first" not in argv["A"]:
         return "refused before any input: A's runner argv has no --fly-first (18.10 #1)"
+    if LAND_FLAG in argv["A"] or LAND_FLAG in argv["B"]:
+        return f"refused before any input: {LAND_FLAG} in a runner argv (s8ab measured without it)"
     if FLAG in argv["A"] or argv["B"].count(FLAG) != 1:
         return f"refused before any input: {FLAG} must be in B's runner argv alone"
     if [x for x in argv["B"] if x != FLAG] != argv["A"]:

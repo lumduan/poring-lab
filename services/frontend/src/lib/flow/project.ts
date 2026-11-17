@@ -610,10 +610,12 @@ export function xmasHuntProject(): Project {
  * run()'s order (tick.ts; the engine's poring_flow.tick). */
 export const tickDef = (steps: readonly string[] = STEP_BLOCKS): Def => def(TICK_FN, steps.map((block) => ({ kind: "action", block, concept: "core.tick_step", params: {}, timeout_s: 1, ...rest })));
 /** Live-blocks 18.10 #1: the setting block the ready-made functions box holds ON (fly_first); 18.13
- * (s8ab passed, Batt 18.10 #2): fly_first_hp too. */
+ * (s8ab passed, Batt 18.10 #2): fly_first_hp too; 18.18 (s10ab passed, Batt 2026-11-17: "turn it
+ * on"): fly_first_land too. */
 export const FLY_FIRST_TAB = "safety";
 export const FLY_FIRST_VAR = "fly_first";
 export const FLY_FIRST_HP_VAR = "fly_first_hp";
+export const FLY_FIRST_LAND_VAR = "fly_first_land";
 /** Live-blocks 18.15 (Batt 18.14, 2026-11-17: "use it for real"): the model the ready-made functions
  * box names in use_model -- xmas02sk, xmas_dun02's deployed detector (its alarm flies on the
  * Christmas Goblin and the Stormy Knight as well as the Garm Baby). The reference arms -- the one
@@ -633,7 +635,11 @@ export const FUNCTIONS_MODEL = "xmas02sk";
  * --fly-first; the one box, the hunt box and the frozen A/B arms keep it off (reference arms).
  * Live-blocks 18.13 (s8ab passed): fly_first_hp ON too (the HP Fly Wing first, dungeon@9.58), its
  * argv + --fly-first-hp; the reference arms keep it off. Live-blocks 18.15: its use_model names
- * xmas02sk (FUNCTIONS_MODEL), the reference arms "xmas02". */
+ * xmas02sk (FUNCTIONS_MODEL), the reference arms "xmas02". Live-blocks 18.18 (s10ab passed; Batt
+ * 2026-11-17: "turn it on"): fly_first_land ON too (no Fly Wing again on a boss sighting grabbed
+ * before the landing, dungeon@9.60), its argv + --fly-first-land after --fly-first-hp, FF_LAND_S at
+ * its default 0.75 s (a runner constant at its default passes no --tune); the reference arms keep
+ * it off. */
 export function xmasFunctionsProject(): Project {
   const p = xmasHuntProject();
   const n = p.nodes[0];
@@ -652,6 +658,8 @@ export function xmasFunctionsProject(): Project {
   safety.vars[FLY_FIRST_VAR] = lit(true); // 18.10 #1
   if (!(FLY_FIRST_HP_VAR in safety.vars)) throw new Error("the ready-made box's safety tab holds fly_first_hp");
   safety.vars[FLY_FIRST_HP_VAR] = lit(true); // 18.13: s8ab passed
+  if (!(FLY_FIRST_LAND_VAR in safety.vars)) throw new Error("the ready-made box's safety tab holds fly_first_land");
+  safety.vars[FLY_FIRST_LAND_VAR] = lit(true); // 18.18: s10ab passed
   const model = main.main!.find((s) => s.kind === "action" && s.block === "use_model");
   if (!model || model.kind !== "action") throw new Error("the ready-made box's main names its model");
   model.params = { ...model.params, model: lit(FUNCTIONS_MODEL) }; // 18.15: the deployed xmas02sk
