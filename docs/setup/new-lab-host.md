@@ -174,11 +174,18 @@ printf '[Login]\nRemoveIPC=no\n' | sudo tee /etc/systemd/logind.conf.d/poring-la
 Check: `loginctl show-user "$USER" -p Linger` prints `Linger=yes`. The drop-in takes effect at
 the next logind start (a reboot). A reboot still empties `/dev/shm`: section 8 rebuilds it.
 
-### 1.4 The NAS (optional)
+### 1.4 The storage folder, and a NAS (optional)
 
-Batt's NAS exports admit bot-server ONLY (since 2026-11-07). A new host needs its own export rule
-on the NAS (Batt's decision, made on the NAS) or no NAS at all. bot-server's mount line, for the
-shape of yours **(unverified for another NAS)**:
+**You need no NAS** (Batt 2026-11-17: "most users have no NAS: just set where the files are stored in
+the setup"; ADR-0026). Long-term files (datasets, archives, recordings, the deployed models) go to
+ONE folder, `LAB_STORE_DIR` in `.env`: `~/poring-lab-store` by default, created by the wizard. The
+vision worker reads the same folder at `/datasets` (read-only). Give it a disk with room: recordings
+are 0.84 GB/h (video) or 7-8 GB/h (PNG).
+
+**With a NAS,** mount it at a folder and point `LAB_STORE_DIR` there; nothing else needs to know it
+is a NAS. Batt's NAS exports admit bot-server ONLY (since 2026-11-07): a new host needs its own
+export rule on the NAS (made on the NAS by its owner). bot-server's mount line, for the shape of
+yours **(unverified for another NAS)**:
 
 ```bash
 sudo apt-get install -y nfs-common
@@ -188,7 +195,9 @@ sudo systemctl daemon-reload
 ls /mnt/poring-lab-datasets
 ```
 
-The vision worker mounts the NAS separately, as a Docker volume (section 4.1).
+Then `uv run python scripts/rotate_secrets.py set LAB_STORE_DIR=/mnt/poring-lab-datasets` (or let
+the wizard ask). The vision worker reads the folder through a bind of it by default; the lab itself
+mounts it into the worker as an NFS volume instead (section 4.1, Example 1).
 
 ## 2. The code
 
@@ -270,14 +279,20 @@ The vision worker mounts the NAS separately, as a Docker volume (section 4.1).
 | Variable | Set by | Note |
 |---|---|---|
 | `HOST_LAN_IP` | init_env.sh | rathena ADVERTISES it to clients as the char/map address. Never put it in rAthena's `bind_ip` |
-| `CONSOLE_PORT` | `.env.example` (3000), the wizard | the web console's port on `HOST_LAN_IP` (the container side stays 3000). Not one of the lab's own ports (6900, 6121, 5121, 8888, 8000, 6080). Recreate the console and the backend after a change |
-| `LAB_HOST_PROFILE`, `RENDER_GID`, `VISION_MAX_VRAM_FRACTION` | you (`set`) | section 5 |
+| `CONSOLE_PORT` | `.env.example` (3000), the wizard | the web console's port on `HOST_LAN_IP` (the container side stays 3000). Not one of the other ports below. Recreate the console and the backend after a change |
+| `COMPOSE_PROJECT_NAME` | empty = `poring-lab`; the wizard when that name is taken | every container, network, volume and image name starts with it. Two copies on ONE host need two names: the wizard refuses a name whose containers another folder created (ADR-0026) |
+| `LAB_STORE_DIR` | init_env.sh (`~/poring-lab-store`), the wizard | the long-term storage folder (datasets, archives, recordings, deployed models; the vision worker reads it at `/datasets`). A NAS is just a folder you mount there (section 1.4) |
+| `RATHENA_LOGIN_PORT`, `RATHENA_CHAR_PORT`, `RATHENA_MAP_PORT`, `RATHENA_WEB_PORT`, `NOVNC_PORT`, `BACKEND_PORT` | empty = 6900, 6121, 5121, 8888, 6080, 8000; the wizard when one is busy | the published ports. rAthena listens on the same numbers (char and map are advertised to the client); the sniffer and the environment set follow them. Your client's `clientinfo.xml` names the login port (section 7.1). A new rAthena port needs the rathena image built from this tree (its conf templates) |
+| `LAB_NET_PREFIX`, `LAB_AGENT_NET_PREFIX` | empty = 10.210.96, 10.210.97; the wizard when one is taken | the two pinned /24s (first three octets), always inside 10.210.0.0/16 (section 1.1) |
+| `LAB_HOST_PROFILE`, `RENDER_GID`, `VISION_MAX_VRAM_FRACTION`, `VISION_WORKER_MEM` | the wizard's recommendation, or you (`set`) | section 5 |
+| `DETECTOR_DIR` | empty = `~/.local/share/<project>/detector` | the CPU detector's environment and models (section 9) |
 | `WIN_HOST`, `RDP_CERT_SHA256`, `GAME_REGION`, `RO_SHORTCUT`, `SHELL_SHORTCUT`, `RO_TRAY_LANG` | you (`set`), section 7 | non-secret |
 | `WIN_LAB_USER`, `RDP_USER`, `RDP_PASSWORD`, `RDP_DOMAIN` | you, in a text editor | `set` refuses names that look secret (`_USER`, `PASSWORD`) |
 | `WIN_LAB_PASSWORD` | `rotate_secrets.py rotate WIN_LAB_PASSWORD` | generated; the Windows account gets the same password (section 7.2) |
 | `RATHENA_SERVER_USER` / `_PASSWORD` | init_env.sh | at most 23 characters: char and map truncate to 24-byte buffers |
 | `RATHENA_WEB_SERVER` | you (`set`) | `true` for the client's account settings |
 | `S2_REC_DIR` | you (`set`) or the wizard, console path only | empty means `/home/batt/poring-lab-rec/.s2-h264`: set it to your own home's path (the wizard sets `~/poring-lab-rec/.s2-h264` and creates it) |
+| `VIEWER_NETWORKS` | the wizard (the server's own LAN), else `192.168.0.0/16` | the browsers' LAN(s): Settings-page writes and the packet viewer accept only these |
 | `FRONTEND_ORIGINS` | leave empty | empty means `http://<BOT_HOST_IP>:<CONSOLE_PORT>` |
 
 **Rules:**
@@ -327,7 +342,9 @@ It is gitignored. Docker loads it last by itself when no `-f` is given, and `scr
 `scripts/guarded_build.py` (`local_override()`) and `scripts/verify_mount.py` add it LAST to their
 `-f` lists (merged on main as 30ee5a4e). Values that `.env.example` already lists stay in `.env`.
 
-**Example 1, the NAS volume** (another NAS than Batt's; checked by the maintainer with
+**Example 1, the NAS volume** (optional since 2026-11-17: by default the volume is a bind of
+`LAB_STORE_DIR`, so a NAS mounted at that folder needs nothing here. This is the lab's own way, a
+volume dockerd mounts over NFS itself; checked by the maintainer with
 `docker compose ... config --no-interpolate`):
 
 ```yaml
@@ -348,17 +365,9 @@ services:
       - /dev/dri/renderD129:/dev/dri/renderD128
 ```
 
-**No NAS at all, a local folder instead** (standard Docker local-volume bind options;
-**(unverified)** here):
-
-```yaml
-volumes:
-  datasets-nas:
-    driver_opts:
-      type: none
-      o: bind
-      device: /srv/poring-lab-datasets
-```
+**No NAS at all, a local folder instead:** ➡️ since 2026-11-17 this is the DEFAULT (compose.yaml's
+`datasets-nas` is a bind of `${LAB_STORE_DIR:-${HOME}/poring-lab-store}`): set `LAB_STORE_DIR` in
+`.env`, no override needed.
 
 **A LAN outside 192.168.0.0/16:** set `VIEWER_NETWORKS` in your `.env` (since 2026-11-12;
 `.env.example` lists it), e.g. `VIEWER_NETWORKS=10.0.1.0/24`. Settings-page writes and the packet
@@ -376,18 +385,24 @@ Notes:
 A host profile tells the guards what this machine has (`scripts/host_profile.py`, chosen by
 `LAB_HOST_PROFILE` in `.env`). Unset means `shared-nvidia`, the strict one.
 
+**The wizard chooses for you (since 2026-11-17, ADR-0022 Amendment 2026-11-17):** it finds the GPU,
+checks what a container cannot bring (the NVIDIA driver's release and the Container Toolkit; the
+Intel kernel driver and your render group) and RECOMMENDS a profile, the vision image and the
+worker's memory. Anything not ready, an AMD card, or no GPU -> `dedicated-cpu` (the CPU detector),
+together with the fixes that would make the GPU usable. You may still choose otherwise.
+
 | Profile | For | What it switches |
 |---|---|---|
 | `shared-nvidia` | the old VM 103: an NVIDIA GPU beside Frigate and Ollama, a disk beside live quant capture | GPU sharing rules R1-R3 (they need Frigate's stats), the IO guard on capture cgroups, SET-hour gates for shipping, a 100 GB recorder floor; the CUDA vision image |
 | `dedicated-intel` | bot-server: an Intel Arc card, nothing else on the machine | no R1-R3, the IO guard watches nothing, no market gates, a 30 GB recorder floor; the Intel vision image (`compose.intel.yaml`, `compose.vision-worker.intel.yaml`: the render node, `PORING_ACCEL=xpu`, the worker capped at 11 GB) |
+| `dedicated-cpu` | a machine with no usable GPU (ADR-0022 Amendment 2026-11-17) | the dedicated rules; no vision image, no vision worker (guarded_build refuses vision steps); the CPU detector serves alone (section 9) |
 | `dedicated-nvidia` | a new machine whose NVIDIA card is the lab's alone (ADR-0022 Amendment 2026-11-12). Never VM 103 | the same dedicated rules as `dedicated-intel` (no R1-R3, the IO guard watches nothing, no market gates, a 30 GB recorder floor); the CUDA vision image and the NVIDIA reservation of `shared-nvidia`, GPU processes listed with `nvidia-smi`. Its overlays (`compose.nvidia.yaml`, `compose.vision-worker.nvidia.yaml`) change only the VRAM cap's default, 0.25 -> 1.0; the worker stays capped at 6 GB |
 
 **Which to choose:**
 - **An Intel Arc machine used only by the lab:** `dedicated-intel`.
-- **A machine with no GPU, used only by the lab:** `dedicated-intel` too, and never start vision
-  or the worker there (they need the render node). There is no CPU-only profile yet
-  (docs/planning/second-install-gaps.md D); the default `shared-nvidia` would apply the old VM's
-  market gates and its 100 GB floor.
+- **A machine with no usable GPU:** `dedicated-cpu` (since 2026-11-17; before it, such a host had
+  to declare `dedicated-intel` and never start vision). Never leave it unset: the default
+  `shared-nvidia` would apply the old VM's market gates and its 100 GB floor.
 - **An NVIDIA machine used only by the lab:** `dedicated-nvidia` (since 2026-11-12). Set
   `VISION_MAX_VRAM_FRACTION=1.0` in `.env` too (section 3): a value there wins over the overlay's
   default, and `.env.example` carries the old VM's 0.25. Never `shared-nvidia` on a new machine:
@@ -752,16 +767,32 @@ The bot's box watcher asks a unit detector for monster boxes several times a sec
 file is the same on every backend (ADR-0022): the deployed ONNX, loaded only by its pinned sha256.
 What changes is where the forward pass runs.
 
+**Every install gets the CPU detector and a starter model** (since 2026-11-17; Batt: "no GPU -> use
+the CPU", the starter model v1 from the teaching-kit branch). The wizard's install step runs
+
+    python3 scripts/detector_setup.py          # --check: read-only, exit 0 when ready
+
+which makes the CPU detector's own environment (numpy + onnxruntime, about 140 MB, in
+`DETECTOR_DIR`, default `~/.local/share/<project>/detector`) and installs **v1** (player / monster
+/ npc; `v1.onnx` of the `teaching-kit` branch, sha256 `32b448a1...`, the lab's own v1 file) there
+and in the storage folder's `archive/models/` for the GPU detect server. A file whose sha256 is not
+the pin is never installed. The lab's map-scoped models (xmas_dun02's) are trained on the lab's
+own data and are not published: a new install runs v1 everywhere, or trains its own (development.md).
+
 | Hardware | Profile | Path | `--box-detector` | Measured | Status |
 |---|---|---|---|---|---|
-| no GPU | `dedicated-intel` (section 5) | the CPU detector: onnxruntime, 16 threads, in `/dev/shm/poring-lab-detector` | `cpu` | bot-server's CPU, quiet, 8 threads: 122-126 ms p50 a call; VM 103, 16 threads: 110 ms quiet, 194-339 ms under load | works |
+| no GPU | `dedicated-cpu` (section 5; `dedicated-intel` before 2026-11-17) | the CPU detector: onnxruntime, 16 threads, in `DETECTOR_DIR` (the lab: `/dev/shm/poring-lab-detector`) | `cpu` | bot-server's CPU, quiet, 8 threads: 122-126 ms p50 a call; VM 103, 16 threads: 110 ms quiet, 194-339 ms under load | works |
 | Intel Arc | `dedicated-intel` | OpenVINO detect server IN the Intel vision worker, the CPU detector behind it | `gpu` (the default) | decision detections p95 22.2 ms on the lab's entry-level Arc card (pilot p78, 2026-11-12, rogue-xmas02.md 4CN); bare forward ~16 ms with the clock floor | the lab's live path |
-| NVIDIA | `dedicated-nvidia` (section 5) | the torch CUDA (cu130) detect server IN the CUDA vision worker, `.pt` weights, the CPU detector behind it | `gpu` (the default) | 49-52 ms a call on the old host's NVIDIA card, on a SHARED host (VM 103, paused half the time while R3 measured) | usable on a new host with `dedicated-nvidia` (2026-11-12); not yet run on a dedicated host (unverified) |
+| NVIDIA | `dedicated-nvidia` (section 5) | the torch CUDA (cu130) detect server IN the CUDA vision worker, `.pt` weights, the CPU detector behind it | `gpu` (the default) | 49-52 ms a call on the old host's NVIDIA card, on a SHARED host (VM 103, paused half the time while R3 measured) | usable on a new host with `dedicated-nvidia` (2026-11-12); not yet run on a dedicated host (unverified). ⚠️ torch loads each model's `.pt`: a new install has v1's ONNX only, so its GPU server has no model until it has a `.pt`; the CPU detector serves v1 meanwhile (second-install-gaps.md U) |
 | AMD | - | designed (ADR-0022), never built | - | - | not built |
 
 OpenVINO on the CPU measured ~10 % faster than onnxruntime on bot-server's CPU
 (bot-server-migration.md 2), but it runs only inside the Intel worker, which needs a render node:
 a GPU-less host uses the onnxruntime CPU detector.
+
+The detect server registers only the models whose pinned files are in the storage folder (a new
+install: v1; the lab: all of `unit_detector.GPU_WEIGHTS`), and the /flows Run helper starts the
+backend of this host's profile (OpenVINO on Intel, torch on NVIDIA, none on `dedicated-cpu`).
 
 **Recommendation for a new machine: an Intel Arc with `dedicated-intel`.** It is the only GPU path
 proven end to end on a dedicated host (the cutover smoke: 302 / 302 detections served by the Arc),
