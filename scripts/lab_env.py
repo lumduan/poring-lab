@@ -138,6 +138,26 @@ def store(*parts: str, env: Mapping[str, str] | None = None, dotenv: Path = DOTE
     return store_dir(env, dotenv).joinpath(*parts)
 
 
+# --- the CPU detector's environment ---------------------------------------------------------------
+
+DETECTOR_KEY = "DETECTOR_DIR"
+
+
+def detector_dir(env: Mapping[str, str] | None = None, dotenv: Path = DOTENV,
+                 home: Path | None = None) -> Path:  # fmt: skip
+    """The CPU detector's environment (its .venv and model/): DETECTOR_DIR, else
+    ~/.local/share/<project>/detector (on disk, so it survives a reboot). The lab keeps it in RAM
+    (/dev/shm/poring-lab-detector, its .env)."""
+    raw = value(DETECTOR_KEY, None, env, dotenv)
+    if raw is None:
+        base = Path.home() if home is None else home
+        return base / ".local" / "share" / project(env, dotenv) / "detector"
+    p = Path(raw).expanduser()
+    if not p.is_absolute():
+        raise SystemExit(f"{DETECTOR_KEY}={raw!r}: give an absolute folder")
+    return p
+
+
 # --- ports and subnets ----------------------------------------------------------------------------
 
 
