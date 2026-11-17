@@ -34,9 +34,14 @@ How to read it:
 - `db` + `rathena` + `sniffer`: your own rAthena game server (pre-renewal, PACKETVER 20211103)
   and its packet ground truth (offline only);
 - `backend` (the input mux, the stream, the safety interlock), `desktop` (the ONE RDP session
-  into Windows), `frontend-dev` (the web console on port 3000);
+  into Windows), `frontend-dev` (the web console on port `CONSOLE_PORT`, default 3000);
 - `vision-worker` + the detect server (only with a GPU, section 9);
 - optional: `gamestream` (the Sunshine console path), `media-rec` (GPU video recordings).
+
+**The quick way (2026-11-17):** after section 1 (Docker, its address pool, `/dev/shm`) and the
+Windows guide [sunshine-windows.md](sunshine-windows.md), `git clone`, `cd poring-lab` and
+`./setup.sh` do sections 2, 3, 5 and 6 plus the Sunshine pairing for you: section 6.1. The rest of
+this manual is the same work by hand, and what to do after it (sections 7 to 12).
 
 **Hardware** (the lab's own host is the reference; it runs everything below at once):
 
@@ -255,20 +260,25 @@ The vision worker mounts the NAS separately, as a Docker volume (section 4.1).
    `uv run python scripts/rotate_secrets.py set RATHENA_WEB_SERVER=true`.
 5. The Windows side comes later (section 7.3): `WIN_HOST` stays EMPTY until the game PC is ready.
    With `WIN_HOST` empty the desktop runs Xvfb only and never connects.
+   - RDP connects only when `WIN_HOST`, `RDP_USER` and `RDP_PASSWORD` are ALL set
+     (`rdp-loop.sh`). A **Sunshine-only** host (section 6.1, 7.5) sets `WIN_HOST` to the PC and
+     leaves `RDP_USER` / `RDP_PASSWORD` empty: no RDP connection is ever attempted, and `WIN_HOST`
+     is the address gamestream, `capture_backend.py pair` and the interlock use.
 
 **The variables a new host must look at:**
 
 | Variable | Set by | Note |
 |---|---|---|
 | `HOST_LAN_IP` | init_env.sh | rathena ADVERTISES it to clients as the char/map address. Never put it in rAthena's `bind_ip` |
+| `CONSOLE_PORT` | `.env.example` (3000), the wizard | the web console's port on `HOST_LAN_IP` (the container side stays 3000). Not one of the lab's own ports (6900, 6121, 5121, 8888, 8000, 6080). Recreate the console and the backend after a change |
 | `LAB_HOST_PROFILE`, `RENDER_GID`, `VISION_MAX_VRAM_FRACTION` | you (`set`) | section 5 |
 | `WIN_HOST`, `RDP_CERT_SHA256`, `GAME_REGION`, `RO_SHORTCUT`, `SHELL_SHORTCUT`, `RO_TRAY_LANG` | you (`set`), section 7 | non-secret |
 | `WIN_LAB_USER`, `RDP_USER`, `RDP_PASSWORD`, `RDP_DOMAIN` | you, in a text editor | `set` refuses names that look secret (`_USER`, `PASSWORD`) |
 | `WIN_LAB_PASSWORD` | `rotate_secrets.py rotate WIN_LAB_PASSWORD` | generated; the Windows account gets the same password (section 7.2) |
 | `RATHENA_SERVER_USER` / `_PASSWORD` | init_env.sh | at most 23 characters: char and map truncate to 24-byte buffers |
 | `RATHENA_WEB_SERVER` | you (`set`) | `true` for the client's account settings |
-| `S2_REC_DIR` | you (`set`), console path only | empty means `/home/batt/poring-lab-rec/.s2-h264`: set it to your own home's path |
-| `FRONTEND_ORIGINS` | leave empty | empty means `http://<BOT_HOST_IP>:3000` |
+| `S2_REC_DIR` | you (`set`) or the wizard, console path only | empty means `/home/batt/poring-lab-rec/.s2-h264`: set it to your own home's path (the wizard sets `~/poring-lab-rec/.s2-h264` and creates it) |
+| `FRONTEND_ORIGINS` | leave empty | empty means `http://<BOT_HOST_IP>:<CONSOLE_PORT>` |
 
 **Rules:**
 - Never commit `.env`; never paste a password on a command line or into chat.
@@ -475,7 +485,8 @@ Exit 0 only when every step completed.
    python3 scripts/guarded_build.py build:sniffer
    ```
 
-4. **Optional images:** `build:gamestream` (the console path, section 7.5) and, with a GPU,
+4. **Optional images:** `build:gamestream` (the console path, section 7.5; the wizard always builds
+   it) and, with a GPU,
    `build:vision`: the Intel image with `dedicated-intel` (the profile adds its overlay), the CUDA
    image with `dedicated-nvidia`.
 5. **The game server first:**
@@ -501,12 +512,46 @@ Exit 0 only when every step completed.
 7. **Check:**
    - `scripts/dev.sh ps`: every started service up (healthy where it has a check).
    - `curl -s http://<BOT_HOST_IP>:8000/health`: answers JSON.
-   - Open `http://<BOT_HOST_IP>:3000` from your laptop: the console, mode badge HUMAN. The mux
+   - Open `http://<BOT_HOST_IP>:<CONSOLE_PORT>` (3000 by default) from your laptop: the console,
+     mode badge HUMAN. The mux
      always boots HUMAN; only a person sets ASSIST or BOT.
    - `ip route get 192.168.110.55`: still `via <ROUTER_IP>`.
    - `uv run python scripts/capture_backend.py status`: host file, containers and `/health` agree.
 8. **If it fails:** `scripts/dev.sh logs <svc>`, then section 13. The rathena build's rapidyaml
    race: `RATHENA_MAKE_JOBS=1` in `.env`, rebuild.
+
+### 6.1 The setup wizard (`./setup.sh`)
+
+`./setup.sh` (repo root) runs sections 2, 3, 5 and 6 and the Sunshine pairing for a **Sunshine-only**
+host (no RDP). Before it: section 1 (Docker after its address pool, `/dev/shm`) and the Windows
+guide [sunshine-windows.md](sunshine-windows.md). Built 2026-11-17 (Batt: students should not have
+to edit `.env` in an editor).
+
+- `setup.sh` checks Linux, git and uv (a missing uv: the installer command of section 2 is shown and
+  run only after a Y/n question), then `uv sync`, `git config core.hooksPath .githooks`, and starts
+  `scripts/setup_wizard.py`. It is safe to re-run.
+- **The screens** (each with Back and Quit; Ctrl+C saves; a re-run resumes from
+  `.setup/progress.json`, gitignored):
+
+  | # | Screen | What it does |
+  |---|---|---|
+  | 0 | Pre-flight | read-only: Linux, Docker without sudo, the address pool (`null` STOPS with section 1.1), no Docker bridge on 192.168.x, disk, RAM, `/dev/shm` at logout (1.3), the user id, the GPU. Then the host profile (section 5): the detected default, `shared-nvidia` only behind a warning; and, with a GPU, whether to build the vision image |
+  | 1 | This server's address | the default route's source (init_env.sh's method), or another of the host's IPv4 addresses; must be a private LAN address of this machine |
+  | 2 | The console port | default 3000, any of 1024-65535 except the lab's own ports; a bind test on that address (a port already serving this lab's console is fine) |
+  | 3 | The Windows PC | its address (warns when it is not 192.168.1.169: the bot limit of section 7), then a TCP test of Sunshine's 47984, 47989, 48010 with fixes |
+  | 4 | Review, `.env` | no `.env`: `scripts/init_env.sh` (random secrets); then ONLY the changed settings through `rotate_secrets.py set` (read back): `HOST_LAN_IP`, `CONSOLE_PORT`, `WIN_HOST`, `LAB_HOST_PROFILE`, `RENDER_GID`, `VISION_MAX_VRAM_FRACTION=1.0` (dedicated), `RATHENA_WEB_SERVER=true`, `S2_REC_DIR`. A secret is never regenerated or shown; RDP_* are never written |
+  | 5 | Install | the steps of this section in order, one guarded step each, plus `build:gamestream` and `start:gamestream@60`; per step a status line, the elapsed time and the full log (`/dev/shm/poring-lab-tmp/setup/logs/`); a failure shows the last lines and this manual's fix: Retry, Skip (optional steps only), or Quit and resume. A finished step is checked (the image, the container, the file), not redone |
+  | 6 | Pairing | skipped when `capture_backend.py paired` says so; else a random 4-digit PIN, `capture_backend.py pair <PIN>` (it waits), and you type the PIN on the PC's Sunshine page (sunshine-windows.md step 8) |
+  | 7 | The stream test | `capture_backend.py to-console --sunshine-only` (section 7.5), then `scripts/stream_frame.py`: one fresh frame from the S2 frame bus, saved as a PNG in `/dev/shm/poring-lab-tmp/setup/`, with its size and age |
+  | 8 | Summary | the console's address, the settings, the paths, the next steps and the known limit (section 7.5) |
+
+- `./setup.sh --check`: read-only (the pre-flight, `.env` with secrets hidden, Sunshine's ports,
+  the services, `/health`, the console, the lock, the pairing; `--no-exec` skips the one check that
+  runs inside a container). Safe on a running lab host.
+- `./setup.sh --dry-run`: every write and command the wizard would run, in order (steps already done
+  are marked); nothing runs.
+- On a host whose `.env` has RDP credentials, the wizard skips the pairing and the stream test (rule
+  2: one display path) and says so.
 
 **Game accounts:** at every rathena start the entrypoint upserts the test, agent and GM accounts
 from `.env`, in that order. On a fresh database that gives them 2000000, 2000001, 2000002
@@ -611,7 +656,7 @@ Today's xmas_dun02 pilots run on the RDP path (their recordings are named `...-r
 ### 7.4 The Settings page and ASSIST (a person's acts)
 
 1. From your **laptop** (not the bot host, not the game PC), open
-   `http://<BOT_HOST_IP>:3000/settings`.
+   `http://<BOT_HOST_IP>:<CONSOLE_PORT>/settings` (3000 by default).
 2. Lab rAthena: add your servers `<BOT_HOST_IP>` ports 6900, 6121 and 5121 and confirm them (the
    shipped suggestions name bot-server's address; do not confirm those). "Saved and checked" means
    the store was written and read back.
@@ -621,16 +666,42 @@ Today's xmas_dun02 pilots run on the RDP path (their recordings are named `...-r
    sniffer attestation of a lab account's live session from the game PC (and the known limit
    above).
 
-### 7.5 Sunshine and the console path (optional)
+### 7.5 Sunshine and the console path (optional; the wizard's path)
 
 The S2 console stream (Sunshine on the PC, the `gamestream` client here) is designed as the bot's
-primary path (ADR-0014). Today the UI gate's S2 template set is NOT proven
-(docs/operations/s2-gate-templates.md: one attempt, nothing cut), so on that path every typed line
-is refused. Use RDP until it is proven. If you set it up anyway:
-- the signed Sunshine MSI (docs/operations/sunshine-msi-replace.md); pair ONLY this bot host:
-  `uv run python scripts/capture_backend.py pair <PIN>`;
-- Sunshine's inbound firewall rules admit only `<BOT_HOST_IP>`; its web UI stays PC-only;
-- a VDD-only display layout (docs/operations/console-display.md).
+primary path (ADR-0014). The Windows side, step by step: [sunshine-windows.md](sunshine-windows.md)
+(the signed MSI, its own login, the web UI PC-only, the firewall scoped to `<BOT_HOST_IP>`, a
+display, no sleep or lock).
+
+**A Sunshine-only host** (what `./setup.sh` sets up, section 6.1; no RDP at all):
+- `.env`: `WIN_HOST=<WIN_PC_IP>`, `RDP_USER` / `RDP_PASSWORD` empty (section 3 step 5), and
+  `S2_REC_DIR` set to an existing directory of yours.
+- `capture_backend.py init` writes rdp/steady, as on every host: with RDP off nothing connects and
+  gamestream holds, so the pairing runs with no stream beside it.
+- Pair ONLY this bot host: `uv run python scripts/capture_backend.py pair <PIN>`, then type the PIN
+  on the PC (sunshine-windows.md step 8). `capture_backend.py paired` checks it (read-only).
+- Then `uv run python scripts/capture_backend.py to-console --sunshine-only`: it refuses while RDP
+  is configured in `.env` or in the running desktop or an xfreerdp runs (rule 2), writes the S2
+  variant, then console/steady (REASON `sunshine-only`), and waits for the S2 client's first
+  decoded frame. That is the host's steady state from then on (it survives restarts: `init` keeps
+  it). `to-rdp --sunshine-only` ends the stream through Sunshine and goes back to rdp/steady
+  (nothing streams; e.g. to pair again). A plain `to-rdp` is refused on such a host: it would wait
+  for an RDP client that never comes.
+
+**The known limit, TODAY** (on this path):
+- Viewing the PC in the console and a person playing through it: work.
+- Paste and file transfer: not available (RDP only).
+- The UI gate's S2 template set is NOT proven (docs/operations/s2-gate-templates.md: one attempt,
+  nothing cut), so **every bot-typed line is refused** (chat, GM commands), and the typing-only
+  foreground gate refuses bot keys until its stream template is cut.
+- The bot programs (the dungeon runner, hunt, farm, agent_play) refuse a console lock or stop at the
+  UI gate at their start.
+- A single bot click passes only in ASSIST or BOT with the interlock green (and the game PC at
+  192.168.1.169, section 7), or in ASSIST during an operator window.
+
+The lab itself runs RDP; use RDP (section 7.3) until the S2 set is proven if the bot must type. On an
+RDP host, Sunshine is reached with the RDP handovers (`capture_backend.py to-console --yes-tscon`,
+`to-rdp`) instead, and its layout is VDD-only (docs/operations/console-display.md).
 
 ## 8. Client-derived data, rebuilt locally per client
 
@@ -1076,6 +1147,11 @@ docs/thai-data-experiment.md section 3):
 | `permission denied` on the Docker socket | the docker group needs a new login |
 | `/dev/shm` files vanish | logind RemoveIPC: section 1.3. After a reboot: section 8 |
 | `REFUSED` from `scripts/dev.sh` | create/start/build go through `guarded_build.py` |
+| `./setup.sh` stops at the pre-flight | each FAIL line names its fix: the address pool (1.1), the docker group (1.2), Docker not running |
+| the wizard's install step failed | the screen shows the last lines and the fix; the full log is in `/dev/shm/poring-lab-tmp/setup/logs/`; Retry, or Quit and `./setup.sh` resumes there |
+| the console does not open at the new port | `CONSOLE_PORT` changed but the containers were not recreated: a guarded `recreate:frontend-dev@120` and `recreate:backend@30` (the Origin list follows the port) |
+| `to-console --sunshine-only` refused | it says why: RDP configured in `.env` or in the running desktop (recreate it), not paired, Sunshine unreachable (sunshine-windows.md step 9) |
+| the stream test's frame is black | the PC's display is off or asleep, or nobody is logged in at the PC (sunshine-windows.md steps 5 and 7) |
 | guarded_build refuses everything on a dedicated host | a capture service runs there: fix `LAB_HOST_PROFILE` |
 | GPU steps refused with an R3 / Frigate reason | the host runs `shared-nvidia`: section 5 |
 | `worker:vision` fails to start | no render node, wrong `RENDER_GID` (`getent group render`), or an unreachable NAS volume (section 4.1) |
