@@ -32,8 +32,22 @@ for _tag in ("!reset", "!override"):
     )
 
 
+# The install keys (scripts/lab_env.py, Batt 2026-11-17: nothing locked): compose interpolates
+# each as ${KEY:-default}. These guards check the DEFAULTS, the lab's own values;
+# test_lab_env.py checks the keys and that lab_env shares the defaults.
+INSTALL_KEYS = ("COMPOSE_PROJECT_NAME", "LAB_NET_PREFIX", "LAB_AGENT_NET_PREFIX",
+                "RATHENA_LOGIN_PORT", "RATHENA_CHAR_PORT", "RATHENA_MAP_PORT", "RATHENA_WEB_PORT",
+                "NOVNC_PORT", "BACKEND_PORT", "VISION_WORKER_MEM")  # fmt: skip
+_INSTALL_DEFAULT = re.compile(r"\$\{(" + "|".join(INSTALL_KEYS) + r"):-([^}$]*)\}")
+
+
+def with_defaults(text: str) -> str:
+    return _INSTALL_DEFAULT.sub(lambda m: m.group(2), text)
+
+
 def compose(name: str) -> dict[str, Any]:
-    data: dict[str, Any] = yaml.load((ROOT / name).read_text(), Loader=_ComposeLoader)
+    text = with_defaults((ROOT / name).read_text())
+    data: dict[str, Any] = yaml.load(text, Loader=_ComposeLoader)
     return data
 
 
@@ -813,9 +827,12 @@ def test_the_nas_datasets_are_mounted_read_only_in_vision_only(name: str) -> Non
         else:
             assert mounts == [], f"{name}: {svc} mounts the NAS datasets"
     if name == "compose.yaml":
+        # Batt 2026-11-17 ("most users have no NAS"): the volume is a bind of the storage folder
+        # (LAB_STORE_DIR). Read-only comes from every mount above (":ro"); the lab's NFS options
+        # live in its own compose.override.yaml (new-lab-host.md 4.1), outside the repo.
         opts = compose(name)["volumes"]["datasets-nas"]["driver_opts"]
-        assert opts["type"] == "nfs" and opts["device"] == ":/mnt/tank-main/poring-lab/datasets"
-        assert {"ro", "soft"} <= set(opts["o"].split(","))
+        assert opts == {"type": "none", "o": "bind",
+                        "device": "${LAB_STORE_DIR:-${HOME}/poring-lab-store}"}  # fmt: skip
 
 
 def test_the_vision_dev_overlay_adds_only_the_source() -> None:

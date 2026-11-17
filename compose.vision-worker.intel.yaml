@@ -6,7 +6,7 @@
 # cap (Batt 2026-11-08, a dedicated host).
 services:
   vision-worker:
-    image: poring-lab/vision-intel:local
+    image: ${COMPOSE_PROJECT_NAME:-poring-lab}/vision-intel:local
     deploy: !reset {}
     devices:
       # the render node only (Batt 2026-11-08): compute needs no KMS node (card0/card1)
@@ -19,5 +19,5 @@ services:
     # Batt 2026-11-08 ("raise it"): bot-server is dedicated (15 GiB), so the worker's cap goes
     # 6g -> 11g: the trainer holds ~5.2 GB itself, and its data-loader workers OOM-killed at
     # 6 GB (bot-server-migration.md 17a). mem == memswap, as everywhere.
-    mem_limit: 11g
-    memswap_limit: 11g
+    mem_limit: ${VISION_WORKER_MEM:-11g}
+    memswap_limit: ${VISION_WORKER_MEM:-11g}

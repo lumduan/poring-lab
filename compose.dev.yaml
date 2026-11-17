@@ -125,7 +125,7 @@ services:
     working_dir: /app
     command: ["node", "/src/dev/run-dev.mjs"]
     environment:
-      BACKEND_PUBLIC_URL: http://${HOST_LAN_IP:?}:8000
+      BACKEND_PUBLIC_URL: http://${HOST_LAN_IP:?}:${BACKEND_PORT:-8000}
       HOST_LAN_IP: ${HOST_LAN_IP:?}
       HOME: /app/.home
       COREPACK_HOME: /app/.corepack
