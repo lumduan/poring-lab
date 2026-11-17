@@ -52,6 +52,10 @@ def test_b_is_the_ready_made_box_with_fly_first_off_and_the_fixture_alone_differ
     tab = next(t for t in b["nodes"][0]["tabs"] if t["name"] == "safety")
     assert tab["vars"]["fly_first"]["value"] is False
     assert tab["vars"]["fly_first_hp"]["value"] is False  # 18.13: the hunt box's value too
+    # 18.15: the fixture names xmas02sk; B names A's model (xmas02), as s5c measured
+    assert (
+        ab.box_model_of(raw) == "xmas02sk" and ab.box_model_of(b) == ab.box_model_of(a) == "xmas02"
+    )
 
 
 def _tab(d: dict[str, Any], name: str) -> dict[str, Any]:

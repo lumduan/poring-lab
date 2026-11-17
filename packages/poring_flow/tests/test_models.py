@@ -46,27 +46,56 @@ def scripts() -> object:
 def test_the_detectors_match_unit_detector(scripts: object) -> None:
     ud = scripts.ud  # type: ignore[attr-defined]
     cat = models().models
-    v1, xmas = cat["v1"], cat["xmas02"]
+    v1, sk, xmas = cat["v1"], cat["xmas02sk"], cat["xmas02"]
     assert v1.classes == list(ud.NAMES) and not v1.maps and v1.status == "live"
     assert v1.file == ud.GPU_WEIGHTS["v1"].onnx == ud.MODEL.name
     assert v1.sha256 == ud.GPU_WEIGHTS["v1"].onnx_sha256[:12]
+    # live-blocks 18.15 (2026-11-17): the catalogue's `xmas02sk` is the map's DEPLOYED model, and
+    # `xmas02` (xmas02-gb, deployed 2026-11-10, M12) its REFERENCE model, loadable by use_model
     mm = ud.MAP_MODELS["xmas_dun02"]
-    assert xmas.maps == ["xmas_dun02"] and xmas.status == "live"
-    # the catalogue's `xmas02` is the map's DEPLOYED model (xmas02-gb since 2026-11-10, M12)
-    assert mm.gpu == "xmas02gb"
-    assert xmas.file == mm.onnx == ud.GPU_WEIGHTS[mm.gpu].onnx
-    assert xmas.sha256 == mm.sha256[:12] == ud.GPU_WEIGHTS[mm.gpu].onnx_sha256[:12]
-    # the model's own class order: the fixed classes by id, the collapsed species, then the
-    # alarm class garm_baby (class 7, never collapsed: unit_detector / dungeon_hunt.ALARM_CLASSES)
-    classes = json.loads((REPO / "config/detector/classes-xmas02-gb.json").read_text())
-    fixed = sorted(classes["fixed"], key=classes["fixed"].get)
-    species = [*mm.collapse, "garm_baby"]
-    assert "garm_baby" not in mm.collapse
-    order = [*fixed, *species]
-    assert [c for c in order if c in xmas.classes] == xmas.classes
-    assert sorted(xmas.classes + xmas.untrained) == sorted(order)
-    assert xmas.untrained == ["npc", "warp"]  # EMPTY fixed classes (xmas02-detector.md H)
-    assert [xmas.mobs[s] for s in species] == [[m] for m in classes["monsters"]]
+    (ref,) = ud.MAP_REFERENCES["xmas_dun02"]
+    assert mm.gpu == "xmas02sk" and ref.gpu == "xmas02gb"
+    for spec, m in ((sk, mm), (xmas, ref)):
+        assert spec.maps == ["xmas_dun02"] and spec.status == "live" and spec.kind == "detector"
+        assert spec.file == m.onnx == ud.GPU_WEIGHTS[m.gpu].onnx
+        assert spec.sha256 == m.sha256[:12] == ud.GPU_WEIGHTS[m.gpu].onnx_sha256[:12]
+        assert spec.strikes == list(m.collapse)  # the species collapse to "monster"
+    assert not sk.reference and xmas.reference
+    assert [k for k, s in cat.items() if s.reference] == ["xmas02"]
+    # the models' own class order: the fixed classes by id, the collapsed species, then the alarm
+    # classes (never collapsed: the runner never strikes them; dungeon_hunt.alarm_classes)
+    sk_alarm = ["garm_baby", "g_gobline_xmas", "knight_of_windstorm"]
+    for spec, m, cfg, alarm in ((xmas, ref, "classes-xmas02-gb.json", ["garm_baby"]),
+                                (sk, mm, "classes-xmas02-sk.json", sk_alarm)):  # fmt: skip
+        classes = json.loads((REPO / "config/detector" / cfg).read_text())
+        fixed = sorted(classes["fixed"], key=classes["fixed"].get)
+        species = [*m.collapse, *alarm]
+        assert not set(alarm) & set(m.collapse)
+        order = [*fixed, *species]
+        assert [c for c in order if c in spec.classes] == spec.classes
+        assert sorted(spec.classes + spec.untrained) == sorted(order)
+        assert spec.untrained == ["npc", "warp"]  # EMPTY fixed classes (xmas02-detector.md H)
+        assert [spec.mobs[s] for s in species] == [[mob] for mob in classes["monsters"]]
+    assert sk.alarm == ["garm_baby", "g_gobline_xmas", "knight_of_windstorm"]  # 18.14 / 18.15
+    assert xmas.alarm == []  # garm_baby alone (dungeon_hunt.ALARM_CLASSES)
+
+
+def test_the_alarm_and_reference_fields_refuse_what_cannot_be() -> None:
+    from poring_flow.models import ModelSpec
+
+    base = {"kind": "detector", "status": "live", "file": "a.onnx", "sha256": "0" * 12,
+            "maps": ["m"], "classes": ["player", "a", "b"], "strikes": ["a"],
+            "why": "w"}  # fmt: skip
+    assert ModelSpec(**{**base, "alarm": ["b"], "reference": True}).alarm == ["b"]
+    for bad in (
+        {"alarm": ["c"]},
+        {"alarm": ["a"]},
+        {"alarm": ["b", "player"]},
+        {"reference": True, "maps": []},
+        {"reference": True, "status": "not_adopted"},
+    ):
+        with pytest.raises(ValidationError):
+            ModelSpec(**{**base, **bad})
 
 
 def test_the_boss_recognizers_match_their_profiles(scripts: object) -> None:

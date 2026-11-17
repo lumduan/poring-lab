@@ -42,7 +42,8 @@ def test_the_functions_box_plays_the_hunt_boxs_runner_exactly() -> None:
     """The hunt box's runner exactly, but for live-blocks 18.10 #1 and 18.13: the ready-made
     functions box holds fly_first and fly_first_hp ON (the one box and the hunt box, the reference
     arms, keep them off), so its argv carries --fly-first and --fly-first-hp and its settings
-    differ in those two alone."""
+    differ in those two alone; and for 18.15: its use_model names xmas02sk (the map's deployed
+    model, with its alarm), the reference arms' xmas02 -- the box's run() model argument alone."""
     flags = ("--fly-first", "--fly-first-hp")
     one, hunt, fun = _plan(ONE), _plan(HUNT), _plan(FUN)
     for a in (one, hunt):
@@ -55,7 +56,13 @@ def test_the_functions_box_plays_the_hunt_boxs_runner_exactly() -> None:
         }
         assert fun.vals["fly_first"] is True and fun.vals["fly_first_hp"] is True
         assert a.vals["fly_first"] is False and a.vals["fly_first_hp"] is False
-        assert fun.keys == a.keys and fun.box_kwargs() == a.box_kwargs()
+        fb, ab = fun.box_kwargs(), a.box_kwargs()
+        assert fun.keys == a.keys and {k: v for k, v in fb.items() if k != "box_model"} == {
+            k: v for k, v in ab.items() if k != "box_model"
+        }
+        assert ab["box_model"]["id"] == "xmas02" and fb["box_model"]["id"] == "xmas02sk"
+        assert fb["box_model"]["alarm"] == ["garm_baby", "g_gobline_xmas", "knight_of_windstorm"]
+        assert "alarm" not in ab["box_model"]  # the reference arms' run() argument as before
     assert fun.loop == hunt.loop == "hunt_loop" and fun.tick_left_out == ()
     assert fun.skill_keys == hunt.skill_keys == ("F1",)
     assert fr.has_hunt_core(json.loads(FUN)) and fr.has_hunt_core(json.loads(HUNT))

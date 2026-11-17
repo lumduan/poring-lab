@@ -158,6 +158,10 @@ test("the monsters a node's recipes name: its use_model's strikes, else the firs
   const m: Models = { ...MODELS, xmas02: { ...MODELS.xmas02, strikes: ["mystcase", "cookie_xmas"], mobs: { mystcase: [1249] } } };
   assert.deepEqual(monstersOf(m, "xmas02"), { model: "xmas02", strikes: ["mystcase", "cookie_xmas"], mobs: { mystcase: [1249] } });
   assert.deepEqual(monstersOf(m, null)?.model, "xmas02"); // v1 strikes none named
+  // live-blocks 18.15: a REFERENCE model is never the default, only what a use_model names
+  const r: Models = { ...m, xmas02: { ...m.xmas02, reference: true }, xmas02sk: { ...m.xmas02, file: "s.onnx", alarm: ["garm_baby"] } };
+  assert.equal(monstersOf(r, null)?.model, "xmas02sk");
+  assert.equal(monstersOf(r, "xmas02")?.model, "xmas02");
   assert.equal(monstersOf(m, "v1"), null);
   assert.equal(monstersOf(m, "stormy-v1"), null); // not adopted
   assert.equal(monstersOf(m, "v9"), null);

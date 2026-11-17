@@ -476,6 +476,17 @@ def ff_hp_why(why: str) -> bool:
     return w.startswith(("hp ", "rate ")) or (w.startswith("box ") and "hp_percent" in w)
 
 
+# The box's model among the map's (dungeon@9.59, live-blocks.md 18.15; Batt 2026-11-17, 18.14: "use
+# it for real" -- xmas02sk is xmas_dun02's model, xmas02gb its reference): a box whose use_model
+# names a MAP_REFERENCES model of the map (unit_detector, by its file) gets THAT model in its box
+# watcher, the CPU's and the GPU's (the detect server serves every GPU_WEIGHTS entry: no restart);
+# no use_model, or the map's own: the map's MAP_MODELS one, as before. Every change is a branch `if
+# MODEL_PICK:` whose else is 9.58's code (huntstate_check pick: the module is then PICK_BASE's,
+# the runner s8ab measured; BoxWatch's keyword `model_file` is the family's own).
+MODEL_PICK = True  # this module's model-pick branches (taken; the box's use_model decides)
+MODEL_PICK_VERSION = "9.59"
+
+
 # --far-single (dungeon@9.8, rogue-xmas02.md 4Z, pilot p18; Amendment J item 2a, "why far strikes
 # miss"): on p16 the strikes 2-6 cells away missed 5 of 41, 7-8 cells 19 of 30, 9-12 cells 33 of
 # 35. The packets: a click on a monster out of reach makes the CLIENT walk to it first (a walk
@@ -4488,7 +4499,8 @@ class BoxWatch:
 
     def __init__(self, screen: Any, region: tuple[int, int, int, int], r: Any,
                  map_name: str | None = None, detector: str = "cpu",
-                 every_s: float | None = None) -> None:  # fmt: skip
+                 every_s: float | None = None, *,
+                 model_file: str | None = None) -> None:  # fmt: skip
         every_s = BOX_EVERY_S if every_s is None else every_s  # 9.44: at call time (--tune)
         import threading
 
@@ -4497,10 +4509,16 @@ class BoxWatch:
         # Batt 2026-11-07 (T-11, xmas02-detector.md): a map with its own model gets it, its
         # species collapsed to "monster" before NMS (unit_detector.for_map); else v1 as before
         if detector == "cpu":
-            self.det: Any = unit_detector.for_map(map_name)
+            if MODEL_PICK:  # 9.59 (18.15): the box's use_model's file (model_file), else the map's
+                self.det: Any = unit_detector.for_map(map_name, onnx=model_file)
+            else:
+                self.det: Any = unit_detector.for_map(map_name)
         else:  # dungeon@8.9 (gpu-live-detector.md option A; Batt 2026-11-07): the SAME model's
             # forward pass on the GPU's detect server, the CPU detector behind it (any failure)
-            self.det = unit_detector.for_map_gpu(map_name)
+            if MODEL_PICK:  # 9.59: that model's GPU weights too (unit_detector.map_model)
+                self.det = unit_detector.for_map_gpu(map_name, onnx=model_file)
+            else:
+                self.det = unit_detector.for_map_gpu(map_name)
         self.gpu = detector != "cpu"
         self.last_pick: dict[str, Any] | None = None  # dungeon@9.28: --value-target's choice
         self.last_species: str | None = None  # dungeon@9.51: the box near() returned, its species
@@ -6253,10 +6271,20 @@ def box_model_refused(model: Mapping[str, Any] | None, map_: str, *, boxes: bool
         return (f"the box names the model {mid}, but this run's --box-model is {choice} (the "
                 "rollback): one choice, not two")  # fmt: skip
     spec = ud.MAP_MODELS.get(map_)
+    if MODEL_PICK:  # 9.59 (18.15): or one of the map's reference models, by the box's file
+        spec = next((m for m in ud.MAP_REFERENCES.get(map_, ())
+                     if m.onnx == model.get("file")), spec)  # fmt: skip
     file_, sha = (ud.MODEL.name, ud.GPU_WEIGHTS["v1"].onnx_sha256) if spec is None else (
         spec.onnx, spec.sha256)  # fmt: skip
     pre = str(model.get("sha256") or "")
     if model.get("file") != file_ or len(pre) < 12 or not sha.startswith(pre):
+        if MODEL_PICK:  # 9.59: the map's own and its references load; nothing else does
+            names = [m.onnx for m in (ud.MAP_MODELS.get(map_), *ud.MAP_REFERENCES.get(map_, ()))
+                     if m is not None]  # fmt: skip
+            return (f"the box's use_model({mid!r}) ({model.get('file')}, {pre}) is not a model "
+                    f"the runner's box detector loads on {map_} ({', '.join(names) or file_}, "
+                    f"{sha[:12]}): the map's own or one of its references (unit_detector "
+                    "MAP_MODELS / MAP_REFERENCES), each by its pinned file")  # fmt: skip
         return (f"the box's use_model({mid!r}) ({model.get('file')}, {pre}) is not the model the "
                 f"runner's box detector loads on {map_} ({file_}, {sha[:12]}): another model than "
                 "the map's own is a follow-up (the detect server serves the map's; a run never "
@@ -7649,10 +7677,18 @@ def run(a: argparse.Namespace, *, hook: Any = None, session: tuple[Any, Any] | N
         boxes = None
         item_det: Any = None  # dungeon@9.33 (--loot-items MODEL): the floor-item model's client
         if a.boxes and not mr:
-            boxes = BoxWatch(screen, (gx0, gy0, gw, gh), r,
-                             None if a.box_model == "v1" else a.map,
-                             "cpu" if a.box_detector == "cpu" else "gpu",
-                             getattr(a, "box_every", BOX_EVERY_S))  # fmt: skip
+            if MODEL_PICK:  # 9.59 (18.15): the box's use_model's file picks the map's model
+                boxes = BoxWatch(screen, (gx0, gy0, gw, gh), r,
+                                 None if a.box_model == "v1" else a.map,
+                                 "cpu" if a.box_detector == "cpu" else "gpu",
+                                 getattr(a, "box_every", BOX_EVERY_S),
+                                 model_file=(None if box_model_ is None or a.box_model == "v1"
+                                             else str(box_model_["file"])))  # fmt: skip
+            else:
+                boxes = BoxWatch(screen, (gx0, gy0, gw, gh), r,
+                                 None if a.box_model == "v1" else a.map,
+                                 "cpu" if a.box_detector == "cpu" else "gpu",
+                                 getattr(a, "box_every", BOX_EVERY_S))  # fmt: skip
             ev({"kind": "box_model", "choice": a.box_model if box_model_ is None else "box",
                 **boxes.model, "every_s": boxes.every_s,
                 **({"box_model": box_model_["id"]} if box_model_ is not None else {})})  # fmt: skip

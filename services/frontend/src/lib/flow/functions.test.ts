@@ -14,7 +14,7 @@ import { canonical } from "./ir.ts";
 import { layoutKey, overlaps, rowsOf, shelfWidth, STACK_GAP } from "./layout.ts";
 import { reachable } from "./liveready.ts";
 import { skillKeysOn } from "./pickers.ts";
-import { engineKey, homeFunctionOn, HUNT_TAB, huntCoreCallOn, mainOf, mapNodes, MONSTERS_TAB, nodeById, rolesOn, runnerBlockOn, runnerKeysOn, tabOf, tickDef, xmasFunctionsCookieNoSwapProject, xmasFunctionsProject, xmasHuntProject, xmasProject } from "./project.ts";
+import { engineKey, FUNCTIONS_MODEL, homeFunctionOn, HUNT_TAB, huntCoreCallOn, mainOf, mapNodes, MONSTERS_TAB, nodeById, rolesOn, runnerBlockOn, runnerKeysOn, tabOf, tickDef, xmasCookieNoSwapProject, xmasFunctionsCookieNoSwapProject, xmasFunctionsProject, xmasHuntProject, xmasProject } from "./project.ts";
 import { SETTING_ROW_BUDGET } from "./settings.ts";
 import { sessionProject } from "./testkit.ts";
 import { HUNT_CALL, HUNT_ROLES, LOWERED_NOTE, OPTIONAL_STEPS, REQUIRED_ROLES, ROLE_PREFIX, STEP_BLOCKS, STEP_OF_TYPE, stepBlock, stepType, TICK_FN, TICK_STEPS, TICK_TAB } from "./tick.ts";
@@ -53,7 +53,9 @@ test("the ready-made box as functions is the engine's fixture, byte for byte: th
   const now = mainOf(n)!.main!;
   const at = old.findIndex((s) => s.kind === "action" && s.block === "dungeon_hunt");
   assert.deepEqual(now[at], { kind: "call", proc: HUNT_CALL, args: [], kwargs: {} });
-  assert.equal(canonical(now.filter((_, i) => i !== at)), canonical(old.filter((_, i) => i !== at)));
+  // the rest of main is the hunt box's, but its use_model names FUNCTIONS_MODEL (live-blocks 18.15)
+  const named = old.map((s) => (s.kind === "action" && s.block === "use_model" ? { ...s, params: { ...s.params, model: { kind: "lit" as const, value: FUNCTIONS_MODEL } } } : s));
+  assert.equal(canonical(now.filter((_, i) => i !== at)), canonical(named.filter((_, i) => i !== at)));
   // the role blocks name exactly the runner block's functions; the loop takes t=False
   const runner = old[at];
   assert.ok(runner.kind === "action");
@@ -278,4 +280,17 @@ test("the ready-made functions boxes hold fly_first and fly_first_hp ON, the ref
     assert.equal(safety(p).fly_first?.value, false, p.name);
     assert.equal(safety(p).fly_first_hp?.value, false, p.name);
   }
+});
+
+// live-blocks 18.15 (Batt 18.14, 2026-11-17: "use it for real"): the ready-made functions boxes
+// name the deployed xmas02sk in use_model; the reference boxes keep xmas02 (xmas02-gb)
+test("the ready-made functions boxes name xmas02sk, the reference boxes xmas02", () => {
+  const model = (p: ReturnType<typeof xmasFunctionsProject>) => {
+    const s = mainOf(mapNodes(p)[0])!.main!.find((x) => x.kind === "action" && x.block === "use_model");
+    return s?.kind === "action" ? s.params.model : null;
+  };
+  assert.equal(FUNCTIONS_MODEL, "xmas02sk");
+  for (const p of [xmasFunctionsProject(), xmasFunctionsCookieNoSwapProject()]) assert.deepEqual(model(p), { kind: "lit", value: FUNCTIONS_MODEL }, p.name);
+  for (const p of [xmasProject(), xmasHuntProject(), xmasCookieNoSwapProject()]) assert.deepEqual(model(p), { kind: "lit", value: "xmas02" }, p.name);
+  assert.equal(fixture().nodes[0].tabs[0].main[1].params.model.value, FUNCTIONS_MODEL);
 });

@@ -17,6 +17,7 @@ ROOT = Path(__file__).resolve().parents[3]
 sys.path.insert(0, str(ROOT / "scripts"))
 
 import huntstate_check as hc  # noqa: E402
+import stage5c_ab as s5c  # noqa: E402
 import stage7_ab as s7  # noqa: E402
 import stage8_ab as ab  # noqa: E402
 
@@ -57,6 +58,12 @@ def test_the_arms_differ_in_their_fly_first_hp_block_alone() -> None:
     other = json.loads(json.dumps(b))
     other["max_runtime_s"] = 60
     assert "more than its fly_first_hp block" in str(ab.box_difference(a, other))
+    # 18.15: s8ab's arms name xmas02 (the ready-made box names xmas02sk since)
+    sk = json.loads(json.dumps(b))
+    s5c.set_box_model(sk, "xmas02sk")
+    assert s5c.box_model_of(a) == "xmas02" and "use_model is not xmas02" in str(
+        ab.box_difference(a, sk)
+    )
 
 
 def test_the_plan_refuses_a_runner_that_is_not_9_58_or_whose_flag_proof_fails(

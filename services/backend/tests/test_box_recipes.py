@@ -52,6 +52,7 @@ FIX = TBF.FIX
 B4 = FIX / "project_xmas_dun02_stage4.json"
 B3 = FIX / "project_xmas_dun02_stage3.json"  # the box as stage 3 left it
 B2 = FIX / "project_xmas_dun02_stage2.json"
+FUNCTIONS = FIX / "project_xmas_dun02_functions.json"  # the ready-made box (18.15: xmas02sk)
 TODAY = list(rc.KNIFE_SHAPE)
 PLAIN = list(rc.PLAIN_SHAPE)
 SPECIES = ["mystcase", "cruiser", "cookie", "cookie_xmas"]
@@ -359,24 +360,40 @@ def test_box_model_refused_takes_only_the_model_the_detector_loads_on_the_map() 
     ).model_doc  # type: ignore[arg-type]
     assert xmas is not None
     assert dh.box_model_refused(None, "xmas_dun02") is None  # no use_model: nothing to check
-    assert dh.box_model_refused(xmas, "xmas_dun02") is None  # the map's own model
+    # live-blocks 18.15 (dungeon@9.59): xmas02 (xmas02-gb) is the map's REFERENCE model now, loaded
+    # because the box names its file; xmas02sk is the map's own (the ready-made functions box)
+    assert dh.box_model_refused(xmas, "xmas_dun02") is None
     assert dh.box_model_refused(xmas, "xmas_dun02", detector="cpu") is None
+    (ref,) = ud.MAP_REFERENCES["xmas_dun02"]
+    assert xmas["file"] == ref.onnx and ref.sha256.startswith(xmas["sha256"])
+    sk = live.hunt_plan(
+        pj.compile_project(pj.from_json(FUNCTIONS.read_text())).flow, "xmas_dun02"
+    ).model_doc  # type: ignore[arg-type]
     mm = ud.MAP_MODELS["xmas_dun02"]
-    assert xmas["file"] == mm.onnx and mm.sha256.startswith(xmas["sha256"])
-    cases = [
-        ({**xmas, "status": "not_adopted"}, {}, "not a live model"),
-        ({**xmas, "kind": "boss_recognizer"}, {}, "not a detector"),
-        ({**xmas, "maps": ["gef_fild10"]}, {}, "trained for gef_fild10, not xmas_dun02"),
-        (xmas, {"boxes": False}, "no box watcher"),
-        (xmas, {"choice": "v1"}, "--box-model is v1"),
-        ({**xmas, "sha256": "000000000000"}, {}, "another model than the map's own is a follow-up"),
-        ({**xmas, "file": "v1png-last-736x1280.onnx"}, {}, "is not the model the runner's box"),
-        ({**xmas, "sha256": "b22d"}, {}, "is not the model"),  # a prefix too short to pin
-    ]
-    for m, kw, words in cases:
-        got = dh.box_model_refused(m, "xmas_dun02", **kw)
-        assert got is not None and words in got, (words, got)
-    # v1 names every map: on xmas_dun02 it is not the file the runner loads there (follow-up)
+    assert sk is not None and sk["id"] == "xmas02sk"
+    assert sk["file"] == mm.onnx and mm.sha256.startswith(sk["sha256"])
+    assert sk["alarm"] == ["garm_baby", "g_gobline_xmas", "knight_of_windstorm"]
+    assert dh.alarm_classes(sk) == ("garm_baby", "g_gobline_xmas", "knight_of_windstorm")
+    assert dh.alarm_classes(xmas) == dh.ALARM_CLASSES == ("garm_baby",)  # the reference's
+    assert "alarm" not in xmas and "classes" not in xmas  # its run() argument as before 18.15
+    assert dh.box_model_refused(sk, "xmas_dun02") is None
+    assert dh.box_model_refused(sk, "xmas_dun02", detector="cpu") is None
+    for m in (xmas, sk):
+        cases = [
+            ({**m, "status": "not_adopted"}, {}, "not a live model"),
+            ({**m, "kind": "boss_recognizer"}, {}, "not a detector"),
+            ({**m, "maps": ["gef_fild10"]}, {}, "trained for gef_fild10, not xmas_dun02"),
+            (m, {"boxes": False}, "no box watcher"),
+            (m, {"choice": "v1"}, "--box-model is v1"),
+            ({**m, "sha256": "000000000000"}, {}, "the map's own or one of its references"),
+            ({**m, "file": "v1png-last-736x1280.onnx"}, {}, "is not a model the runner's box"),
+            ({**m, "file": "xmas02-last-736x1280.onnx"}, {}, "is not a model"),  # 11-07: rollback
+            ({**m, "sha256": m["sha256"][:4]}, {}, "is not a model"),  # a prefix too short to pin
+        ]
+        for bad, kw, words in cases:
+            got = dh.box_model_refused(bad, "xmas_dun02", **kw)
+            assert got is not None and words in got, (words, got)
+    # v1 names every map: on xmas_dun02 it is not a file the runner loads there
     v1 = {
         "id": "v1",
         "file": "v1png-last-736x1280.onnx",
@@ -386,7 +403,8 @@ def test_box_model_refused_takes_only_the_model_the_detector_loads_on_the_map() 
         "kind": "detector",
         "strikes": [],
     }
-    assert "follow-up" in str(dh.box_model_refused(v1, "xmas_dun02"))
+    got_v1 = str(dh.box_model_refused(v1, "xmas_dun02"))
+    assert "xmas02sk-last-736x1280.onnx, xmas02gb-last-736x1280.onnx" in got_v1, got_v1
     assert dh.box_model_refused(v1, "prt_fild08") is None  # a map without its own: v1 IS it
 
 

@@ -105,14 +105,19 @@ def _quiet(f: Any, *a: Any, **k: Any) -> tuple[int, str]:
 # live-blocks 18.13: the block both arms hold OFF -- s7ab measured the boss Fly Wing first alone
 # (the ready-made box holds fly_first_hp ON since s8ab passed)
 OFF_IN_BOTH = ("fly_first_hp",)
+# live-blocks 18.15: the model both arms name -- s7ab (and s8ab) measured xmas02 (xmas02-gb); the
+# ready-made box names xmas02sk since 2026-11-17
+MEASURED_MODEL = "xmas02"
 
 
 def arm_doc(arm: str, minutes: float, path: Path = PROJECT) -> dict[str, Any]:
     """PURE but for the read: the box with its time box set to the run's length, its safety tab's
-    fly_first block set for the arm (A off, B on) and OFF_IN_BOTH off in both -- every one
-    explicitly, whatever the fixture holds (18.10 #1, 18.13)."""
+    fly_first block set for the arm (A off, B on), OFF_IN_BOTH off in both and its use_model
+    MEASURED_MODEL in both -- every one explicitly, whatever the fixture holds (18.10 #1, 18.13,
+    18.15)."""
     d = json.loads(path.read_text())
     d["max_runtime_s"] = int(round(minutes * 60))
+    s5c.set_box_model(d, MEASURED_MODEL)
     tab = next((t for t in d["nodes"][0]["tabs"] if t["name"] == FLY_TAB), None)
     if tab is None:
         raise ValueError(f"the box has no tab {FLY_TAB}")
@@ -133,6 +138,8 @@ def box_difference(a: Mapping[str, Any], b: Mapping[str, Any]) -> str | None:
     a, b = json.loads(json.dumps(a)), json.loads(json.dumps(b))
     got: dict[str, Any] = {}
     for arm, d in (("A", a), ("B", b)):
+        if s5c.box_model_of(d) != MEASURED_MODEL:  # 18.15: s7ab's arms name xmas02
+            return f"{arm}'s use_model is not {MEASURED_MODEL} (s7ab's arms)"
         tab = next((t for t in d["nodes"][0]["tabs"] if t["name"] == FLY_TAB), None)
         lit = None if tab is None else tab["vars"].get(FLY_VAR)
         if not isinstance(lit, Mapping) or lit.get("value") is not (arm == "B"):

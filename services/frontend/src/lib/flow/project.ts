@@ -614,6 +614,12 @@ export const tickDef = (steps: readonly string[] = STEP_BLOCKS): Def => def(TICK
 export const FLY_FIRST_TAB = "safety";
 export const FLY_FIRST_VAR = "fly_first";
 export const FLY_FIRST_HP_VAR = "fly_first_hp";
+/** Live-blocks 18.15 (Batt 18.14, 2026-11-17: "use it for real"): the model the ready-made functions
+ * box names in use_model -- xmas02sk, xmas_dun02's deployed detector (its alarm flies on the
+ * Christmas Goblin and the Stormy Knight as well as the Garm Baby). The reference arms -- the one
+ * box, the hunt box, the one-box cookie box, the frozen stage-4 fixture -- keep "xmas02" (xmas02-gb,
+ * the map's reference model); a box naming no model gets the map's own, xmas02sk. */
+export const FUNCTIONS_MODEL = "xmas02sk";
 
 /** The ready-made box as FUNCTIONS IN TABS (fixtures/project_xmas_dun02_functions.json, 5c's live
  * A/B arm B5c; what /flows and /maps open first): the hunt box (xmasHuntProject) with its runner
@@ -626,7 +632,8 @@ export const FLY_FIRST_HP_VAR = "fly_first_hp";
  * first on a boss, dungeon@9.57, proven live by s7ab), so its runner argv is the hunt box's plus
  * --fly-first; the one box, the hunt box and the frozen A/B arms keep it off (reference arms).
  * Live-blocks 18.13 (s8ab passed): fly_first_hp ON too (the HP Fly Wing first, dungeon@9.58), its
- * argv + --fly-first-hp; the reference arms keep it off. */
+ * argv + --fly-first-hp; the reference arms keep it off. Live-blocks 18.15: its use_model names
+ * xmas02sk (FUNCTIONS_MODEL), the reference arms "xmas02". */
 export function xmasFunctionsProject(): Project {
   const p = xmasHuntProject();
   const n = p.nodes[0];
@@ -645,6 +652,9 @@ export function xmasFunctionsProject(): Project {
   safety.vars[FLY_FIRST_VAR] = lit(true); // 18.10 #1
   if (!(FLY_FIRST_HP_VAR in safety.vars)) throw new Error("the ready-made box's safety tab holds fly_first_hp");
   safety.vars[FLY_FIRST_HP_VAR] = lit(true); // 18.13: s8ab passed
+  const model = main.main!.find((s) => s.kind === "action" && s.block === "use_model");
+  if (!model || model.kind !== "action") throw new Error("the ready-made box's main names its model");
+  model.params = { ...model.params, model: lit(FUNCTIONS_MODEL) }; // 18.15: the deployed xmas02sk
   return {
     ...p,
     name: "xmas_dun02",

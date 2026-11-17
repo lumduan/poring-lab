@@ -18,6 +18,7 @@ ROOT = Path(__file__).resolve().parents[3]
 sys.path.insert(0, str(ROOT / "scripts"))
 
 import huntstate_check as hc  # noqa: E402
+import stage5c_ab as s5c  # noqa: E402
 import stage7_ab as ab  # noqa: E402
 
 S = 1_000_000_000
@@ -62,6 +63,11 @@ def test_the_arms_differ_in_their_fly_first_block_alone() -> None:
     v = {arm: ab.vals_of(ab.arm_text(arm, 20)) for arm in "AB"}
     assert isinstance(v["A"], dict) and isinstance(v["B"], dict)
     assert v["A"]["fly_first"] is False and v["B"]["fly_first"] is True
+    # 18.15: the ready-made box names xmas02sk; s7ab's arms name xmas02, both, explicitly
+    assert s5c.box_model_of(a) == s5c.box_model_of(b) == ab.MEASURED_MODEL == "xmas02"
+    sk = json.loads(json.dumps(b))
+    s5c.set_box_model(sk, "xmas02sk")
+    assert "use_model is not xmas02" in str(ab.box_difference(a, sk))
 
     # 18.13: the ready-made box holds fly_first_hp ON; s7ab's arms hold it OFF, both, explicitly
     for d in (a, b):

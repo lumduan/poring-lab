@@ -58,6 +58,14 @@ change anywhere else is refused as before.
         live-blocks 18.11 (dungeon@9.58 --fly-first-hp): with ONLY the fly_first_hp branches read
         as their else, F's whole module equals REV's (default FLAG_BASE: the runner s7ab measured)
 
+live-blocks 18.15 (dungeon@9.59, the box's model among the map's: xmas02sk deployed, xmas02gb the
+reference arm's): every change a branch `if MODEL_PICK:` whose else is 9.58's code, plus BoxWatch's
+keyword-only `model_file` (default None). `check`, `drive` and `flag` read the family as its else
+and without the keyword (MODEL_PICK_*) besides.
+    huntstate_check.py pick [--base REV] [--file F]
+        with ONLY the model-pick branches read as their else, F's whole module equals REV's
+        (default PICK_BASE: the 9.58 runner s8ab measured)
+
 The text it derives is formatted by `ruff format` afterwards (formatting is AST-neutral); `check`
 reads the committed file, never trusts `derive`'s output.
 """
@@ -105,6 +113,14 @@ FLY_FIRST_ADDED = (
 )  # fmt: skip
 # 18.11: main when 9.58 began (2026-11-16 20:3x ICT): the 9.57 runner s7ab measured (18.9)
 FLAG_BASE = "8a091a72"
+# live-blocks 18.15 (dungeon@9.59, the box's model among the map's): its branches' condition, the
+# module names it adds and BoxWatch's keyword it adds; `pick` reads them alone against PICK_BASE,
+# and `check`, `drive` and `flag` read them as their else (and without the keyword) besides
+MODEL_PICK_TESTS = ("MODEL_PICK",)
+MODEL_PICK_ADDED = ("MODEL_PICK", "MODEL_PICK_VERSION")
+MODEL_PICK_PARAMS = ("model_file",)
+# main when 9.59 began (2026-11-17 06:2x ICT): the 9.58 runner s8ab measured (18.13)
+PICK_BASE = "f8e27d21"
 # the mode steps the cursor calls whoever plays when their mode is another (STEP_GUARD): each one's
 # body acts only in that mode (the proof: its statements are ifs on that mode, nothing else)
 GUARDED = {"fight": "fight", "loot": "after"}
@@ -1046,16 +1062,32 @@ class _Unflag(ast.NodeTransformer):
 
 
 def unflag(src: str, tests: Sequence[str] = FLY_FIRST_TESTS,
-           added: Sequence[str] = FLY_FIRST_ADDED) -> tuple[str, int]:  # fmt: skip
+           added: Sequence[str] = FLY_FIRST_ADDED,
+           params: Sequence[str] = ()) -> tuple[str, int]:  # fmt: skip
     """PURE (live-blocks 18): ``src`` with every fly-first branch (``if <tests>:``, anywhere) read
     as its else, and without the top-level statements named in ``added``; and how many branches it
     read. Unchanged text when there are none. Raises ValueError when a branch's removal leaves a
-    body empty (a branch must REPLACE code or add to it)."""
+    body empty (a branch must REPLACE code or add to it). 18.15: ``params``, keyword-only
+    parameters the family adds (default None), are dropped from every function's signature -- the
+    comparison with the base then proves no use of them is left outside a branch."""
     tree = ast.parse(src)
     u = _Unflag(tests=tests)
     tree = u.visit(tree)
     if u.empty:
         raise ValueError(f"a fly-first branch leaves a body empty (line {u.empty[0]})")
+    dropped = 0
+    for fn in ast.walk(tree):
+        if not isinstance(fn, ast.FunctionDef | ast.AsyncFunctionDef):
+            continue
+        keep = [(x, d) for x, d in zip(fn.args.kwonlyargs, fn.args.kw_defaults, strict=True)
+                if x.arg not in params]  # fmt: skip
+        if len(keep) != len(fn.args.kwonlyargs):
+            for x, d in zip(fn.args.kwonlyargs, fn.args.kw_defaults, strict=True):
+                if x.arg in params and not (isinstance(d, ast.Constant) and d.value is None):
+                    raise ValueError(f"{fn.name}: the family's keyword {x.arg} has no None default")
+            dropped += len(fn.args.kwonlyargs) - len(keep)
+            fn.args.kwonlyargs = [x for x, _d in keep]
+            fn.args.kw_defaults = [d for _x, d in keep]
 
     def name_of(n: ast.stmt) -> str | None:
         if isinstance(n, ast.FunctionDef | ast.ClassDef | ast.AsyncFunctionDef):
@@ -1067,17 +1099,29 @@ def unflag(src: str, tests: Sequence[str] = FLY_FIRST_TESTS,
         return None
 
     kept = [n for n in tree.body if name_of(n) not in added]
-    if u.n == 0 and len(kept) == len(tree.body):
+    if u.n == 0 and len(kept) == len(tree.body) and not dropped:
         return src, 0
     tree.body = kept
     return ast.unparse(tree), u.n
 
 
+def unpick(src: str) -> tuple[str, int]:
+    """PURE (live-blocks 18.15): ``src`` with the model-pick family read as its else (unflag with
+    MODEL_PICK_TESTS / _ADDED / _PARAMS: 9.58's program); how many branches it read."""
+    return unflag(src, MODEL_PICK_TESTS, MODEL_PICK_ADDED, MODEL_PICK_PARAMS)
+
+
 def flag_check(base_src: str, new_src: str, tests: Sequence[str] = FLY_FIRST_HP_TESTS,
-               added: Sequence[str] = FLY_FIRST_HP_ADDED) -> int:  # fmt: skip
+               added: Sequence[str] = FLY_FIRST_HP_ADDED, *,
+               pick: bool = True) -> int:  # fmt: skip
     """live-blocks 18.11: with ONLY the ``tests`` branches read as their else and ``added`` left
     out, the WHOLE module is ``base_src``'s (FLAG_BASE: the runner s7ab measured), as ASTs,
-    docstrings included. Prints each fact; rc 0 when it holds."""
+    docstrings included. Prints each fact; rc 0 when it holds. 18.15: the model-pick family (a
+    runner newer than FLAG_BASE's) is read as its else first (``pick``; `pick` proves it alone)."""
+    if pick:
+        new_src, n_mp = unpick(new_src)
+        print(f"model-pick branches read as their else (live-blocks 18.15): {n_mp}; left out "
+              f"{list(MODEL_PICK_ADDED)} and the keyword {list(MODEL_PICK_PARAMS)}")  # fmt: skip
     got, n = unflag(new_src, tests, added)
     print(f"{'/'.join(tests)} branches read as their else: {n}; left out {list(added)}")
     a, b = ast.parse(base_src), ast.parse(got)
@@ -1092,11 +1136,33 @@ def flag_check(base_src: str, new_src: str, tests: Sequence[str] = FLY_FIRST_HP_
     return 0 if same and n > 0 else 1
 
 
+def pick_check(base_src: str, new_src: str) -> int:
+    """live-blocks 18.15: with ONLY the model-pick branches read as their else, its module names
+    and BoxWatch's keyword left out, the WHOLE module is ``base_src``'s (PICK_BASE: the 9.58 runner
+    s8ab measured), as ASTs, docstrings included. Prints each fact; rc 0 when it holds."""
+    got, n = unpick(new_src)
+    print(f"{'/'.join(MODEL_PICK_TESTS)} branches read as their else: {n}; left out "
+          f"{list(MODEL_PICK_ADDED)} and the keyword {list(MODEL_PICK_PARAMS)}")  # fmt: skip
+    a, b = ast.parse(base_src), ast.parse(got)
+    same = dump(a) == dump(b)
+    print(f"the module == the base's (as ASTs): {'YES' if same else 'NO'}")
+    if not same:
+        import difflib
+
+        ua, ub = ast.unparse(a).splitlines(), ast.unparse(b).splitlines()
+        for ln in list(difflib.unified_diff(ua, ub, "base", "committed", lineterm="", n=2))[:60]:
+            print("   ", ln)
+    return 0 if same and n > 0 else 1
+
+
 def drive_check(base_src: str, new_src: str) -> int:
     """5b-2's proof (live-blocks.md 14): with no drive the program is 5b-1's. Prints each fact,
-    rc 0 when all hold. live-blocks 18: the file's fly-first branches are read as their else."""
+    rc 0 when all hold. live-blocks 18: the file's fly-first branches are read as their else
+    (18.15: and its model-pick family)."""
     new_src, n_ff = unflag(new_src)
     print(f"fly-first branches read as their else (live-blocks 18): {n_ff}")
+    new_src, n_mp = unpick(new_src)
+    print(f"model-pick branches read as their else (live-blocks 18.15): {n_mp}")
     base_tree, new_tree = ast.parse(base_src), ast.parse(new_src)
 
     def run_of(t: ast.Module) -> ast.FunctionDef:
@@ -1269,9 +1335,12 @@ def check(
     drive_ok: bool = False,
 ) -> int:
     """``drive_ok`` (the CLI's): a 5b-2 drive branch is read as its else (inline_steps).
-    live-blocks 18: the file's fly-first branches are read as their else (unflag)."""
+    live-blocks 18: the file's fly-first branches are read as their else (unflag; 18.15: and its
+    model-pick family, unpick)."""
     new_src, n_ff = unflag(new_src)
     print(f"fly-first branches read as their else (live-blocks 18): {n_ff}")
+    new_src, n_mp = unpick(new_src)
+    print(f"model-pick branches read as their else (live-blocks 18.15): {n_mp}")
     ri = parse_run(base_src)
     lifted = lifted_names(ri, not_lifted, extra)
     cond = conditions(ri, lifted, aliased)
@@ -1373,11 +1442,16 @@ def main(argv: Sequence[str] | None = None) -> int:
     fl = sub.add_parser("flag", help="18.11: with fly_first_hp's branches as else, FLAG_BASE")
     fl.add_argument("--base", default=FLAG_BASE)
     fl.add_argument("--file", default=str(TARGET))
+    pk = sub.add_parser("pick", help="18.15: with the model-pick branches as else, PICK_BASE")
+    pk.add_argument("--base", default=PICK_BASE)
+    pk.add_argument("--file", default=str(TARGET))
     a = ap.parse_args(argv)
     if a.cmd == "drive":
         return drive_check(git_show(a.base, TARGET), Path(a.file).read_text())
     if a.cmd == "flag":
         return flag_check(git_show(a.base, TARGET), Path(a.file).read_text())
+    if a.cmd == "pick":
+        return pick_check(git_show(a.base, TARGET), Path(a.file).read_text())
     if a.cmd == "derive":
         src = Path(a.base).read_text()
         if a.steps:
