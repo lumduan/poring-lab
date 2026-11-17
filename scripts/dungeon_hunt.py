@@ -7725,7 +7725,7 @@ def run(a: argparse.Namespace, *, hook: Any = None, session: tuple[Any, Any] | N
         if getattr(a, "loot_items", None):
             import unit_detector as ud_i
 
-            onnx_i = Path("/dev/shm/poring-lab-detector/model") / f"{a.loot_items}{ONNX_TAIL}"
+            onnx_i = ud_i.ENV / "model" / f"{a.loot_items}{ONNX_TAIL}"  # DETECTOR_DIR (ADR-0026)
             if not onnx_i.exists():
                 raise r.Stop(f"dungeon@9.33: no CPU fallback for --loot-items ({onnx_i})")
             item_det = ud_i.GpuDetector(ud_i.UnitDetector(model=onnx_i), weights=a.loot_items)
@@ -12468,7 +12468,7 @@ def build_parser() -> argparse.ArgumentParser:
         metavar="MODEL",
         help="dungeon@9.33 (Batt 2026-11-12: the bot spends time looking for items every time; OFF "
         "by default; with --loot trim): the loot step asks the floor-item MODEL (a GPU_WEIGHTS "
-        "name, e.g. xmas02fi4; its ONNX in /dev/shm/poring-lab-detector/model as the CPU "
+        "name, e.g. xmas02fi4; its ONNX in the detector folder's model/ (DETECTOR_DIR) as the CPU "
         "fallback) once on a fresh frame; it hovers only the seen items' cells (+ neighbours, at "
         "most 3 an item) near the kills, and SKIPS the sweep when none is seen; a failed "
         "detection -> today's sweep",

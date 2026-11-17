@@ -480,3 +480,38 @@ def test_the_checks_output_is_its_result_or_the_runners_refusal() -> None:
     crash = fr.parse_check_output("Traceback (most recent call last):\nKeyError: 'x'\n")
     assert crash["state"] == "failed" and crash["ok"] is None and crash["detail"] == "KeyError: 'x'"
     assert fr.parse_check_output("")["detail"] == "the check ended without a result"
+
+
+def test_the_detect_server_follows_the_host_profile(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """ADR-0022 Amendment 2026-11-17: the Run helper starts the profile's detect backend (it was
+    always OpenVINO); no GPU (dedicated-cpu) or no model of the server's -> the CPU detector alone,
+    the run goes on; nothing is started."""
+    import types
+
+    import host_profile as hp
+
+    h, made = _helper(tmp_path, monkeypatch, None, "")
+    h.run_dir = tmp_path / "run"
+    h.run_dir.mkdir()
+    h.cap_s = 600.0
+    calls: list[list[str]] = []
+
+    def run(argv: list[str], **kw: Any) -> Any:
+        calls.append(list(argv))
+        if "serve-cmd" in argv:
+            return types.SimpleNamespace(stdout="", stderr="no model", returncode=rc["serve"])
+        return types.SimpleNamespace(stdout="true", stderr="", returncode=0)
+
+    rc = {"serve": 3}
+    monkeypatch.setattr(fr.subprocess, "run", run)
+    monkeypatch.setattr(hp, "current", lambda: hp.PROFILES["dedicated-cpu"])
+    assert h.detect_up() is True and calls == [] and made == []
+    for name, backend in (("dedicated-intel", "openvino"), ("dedicated-nvidia", "torch")):
+        calls.clear()
+        monkeypatch.setattr(hp, "current", lambda n=name: hp.PROFILES[n])
+        assert h.detect_up() is True and made == []  # rc 3: no model -> CPU only
+        serve = next(c for c in calls if "serve-cmd" in c)
+        assert serve[serve.index("--backend") + 1] == backend, name
+        assert not any("worker:vision@60" in " ".join(c) for c in calls)  # no worker started
