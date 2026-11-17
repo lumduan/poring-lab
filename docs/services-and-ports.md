@@ -38,13 +38,14 @@ To switch to the Thai-data server and back (stop needs no guard; start does):
 | `HOST_LAN_IP:6121` | rathena | char server (advertises `HOST_LAN_IP`) | LAN |
 | `HOST_LAN_IP:5121` | rathena | map server (advertises `HOST_LAN_IP`) | LAN |
 | `HOST_LAN_IP:8888` | rathena | web-server (`RATHENA_WEB_SERVER=true`): the client's account / character UI settings and emblems over HTTP, at its `AssistAddr` (2026-11-05). Its load routes are **unauthenticated** upstream | LAN |
-| `HOST_LAN_IP:3000` | frontend **or** frontend-dev | web console (run one of them) | LAN |
+| `HOST_LAN_IP:CONSOLE_PORT` (3000) | frontend **or** frontend-dev | web console (run one of them). `CONSOLE_PORT` in `.env` (default 3000; `./setup.sh` asks); inside the container it stays 3000, and the backend's `FRONTEND_ORIGINS` default follows it | LAN |
 | `HOST_LAN_IP:8000` | backend | `/health`, `/hardware` (the host's CPU/RAM/GPU/temps/power; this listener only), `/economy/*` (the economy dashboard's exports, read-only; this listener only), `/ws/stream`, `/ws/input`, `/transfer/*` (ADR-0004), `/ws/packets` (ADR-0007: LAN viewers only, `VIEWER_NETWORKS`; receive-only) | LAN |
 | `HOST_LAN_IP:6080` | desktop | noVNC — **no authentication** | LAN |
 | — (`:8001`) | backend | `/internal/agent`; `/ingest/packets` (only from rathena's pinned `10.210.96.6`, the sniffer's namespace) | compose networks only (`default` + the internal `agent` network) |
 | — (`:3306`) | db | MariaDB | compose network only |
 | — (`:5900`) | desktop | x11vnc | inside the container only |
-| outbound → `WIN_HOST:3389` | desktop | the single RDP session | LAN |
+| outbound → `WIN_HOST:3389` | desktop | the single RDP session (only when `RDP_USER` and `RDP_PASSWORD` are set) | LAN |
+| outbound → `WIN_HOST` TCP 47984, 47989, 48010 + UDP 47998-48000 | gamestream | Sunshine on the PC: pairing, stream setup, video / control / audio (while the capture lock says console) | LAN |
 
 **Security:**
 - Everything published binds to `HOST_LAN_IP`, never `0.0.0.0`.

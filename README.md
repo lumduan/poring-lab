@@ -29,46 +29,65 @@ The full steps, with a check and a fix for each, are in the
 [setup manual](docs/setup/new-lab-host.md). In short:
 
 1. **Set Docker's address pool BEFORE installing Docker**, so Docker never takes a 192.168.x range
-   from your LAN, then install Docker (manual, section 1).
-2. **Get the code** (manual, section 2):
+   from your LAN, then install Docker and keep `/dev/shm` across logouts (manual, sections 1.1 to
+   1.3). These are the only steps that need `sudo`; the wizard never runs it.
+2. **Set up the Windows PC with Sunshine** first: [docs/setup/sunshine-windows.md](docs/setup/sunshine-windows.md)
+   (the signed installer, its own login, the firewall scoped to the bot server, a display, a fixed
+   address). The wizard needs Sunshine running and the PC's address.
+3. **Get the code and run the setup wizard** on the bot server:
 
    ```bash
    git clone https://github.com/lumduan/poring-lab.git
    cd poring-lab
-   uv sync
-   git config core.hooksPath .githooks
+   ./setup.sh
    ```
 
-3. **Create `.env`** (manual, sections 3 and 5): random secrets, and `HOST_LAN_IP` from the
-   default route. Then set your host profile: `dedicated-intel` for an Intel Arc card or no GPU,
-   `dedicated-nvidia` for an NVIDIA card.
+   `./setup.sh` checks Linux, git and uv (a missing uv is installed only after you say yes), runs
+   `uv sync` and enables the commit guard, then opens the wizard (manual, section 6.1). Its screens:
+   pre-flight checks and the host profile; this server's address (detected); the console port
+   (default 3000, changeable); the Windows PC's address and a Sunshine test; a review, then `.env`
+   (random secrets on a new one, nothing regenerated on an existing one); the install, every build
+   and start through `scripts/guarded_build.py`; the Sunshine pairing (you type its PIN on the PC);
+   a stream test; and a summary with the console's address. It resumes where it stopped.
+   `./setup.sh --check` shows the status without changing anything; `./setup.sh --dry-run` prints
+   every step.
+4. **Open the console** at `http://HOST_LAN_IP:CONSOLE_PORT` (3000 unless you changed it) from a
+   third computer. It always starts in HUMAN mode; only a person switches it to ASSIST or BOT.
+5. **Set up the game client** on the PC ([docs/windows-setup.md](docs/windows-setup.md) sections
+   1 and 2), then choose the detector (manual, section 9).
 
-   ```bash
-   scripts/init_env.sh
-   getent group render                 # the third field is the gid
-   uv run python scripts/rotate_secrets.py set LAB_HOST_PROFILE=dedicated-intel RENDER_GID=<gid> VISION_MAX_VRAM_FRACTION=1.0
-   ```
+> **Known limit of the Sunshine-only setup.** You can watch the PC and play through the console.
+> The bot cannot type on this path yet: its UI-gate templates for the console stream are not cut
+> or proven, so every typed game line is refused, and the bot programs do not run there
+> ([sunshine-windows.md](docs/setup/sunshine-windows.md) section 11). The lab itself runs on RDP.
 
-4. **Build and start** (manual, section 6). Every build and start goes through
-   `scripts/guarded_build.py`:
+### Without the wizard (advanced)
 
-   ```bash
-   python3 scripts/guarded_build.py build:rathena pull:db build:backend build:desktop
-   python3 scripts/guarded_build.py target:rathena:build:poring-lab/rathena-build:local
-   python3 scripts/guarded_build.py tables && uv run python scripts/gen_mapcache.py
-   python3 scripts/guarded_build.py build:sniffer
-   python3 scripts/guarded_build.py start:db@120 start:rathena@240
-   scripts/smoke_test.sh --core        # must print: SMOKE TEST (--core) PASSED
-   uv run python scripts/capture_backend.py init
-   python3 scripts/guarded_build.py start:backend,desktop@90
-   python3 scripts/guarded_build.py start:sniffer@120
-   python3 scripts/guarded_build.py start:frontend-dev@120
-   ```
+The same steps by hand (manual, sections 2 to 6):
 
-5. **Open the console** at `http://HOST_LAN_IP:3000` from your third computer. It always starts in
-   HUMAN mode; only a person switches it to ASSIST or BOT.
-6. **Set up the Windows PC and its game client** (manual, section 7), then choose the detector
-   (section 9).
+```bash
+git clone https://github.com/lumduan/poring-lab.git
+cd poring-lab
+uv sync
+git config core.hooksPath .githooks
+scripts/init_env.sh                 # .env: random secrets, HOST_LAN_IP from the default route
+getent group render                 # the third field is the gid
+uv run python scripts/rotate_secrets.py set LAB_HOST_PROFILE=dedicated-intel RENDER_GID=<gid> VISION_MAX_VRAM_FRACTION=1.0
+python3 scripts/guarded_build.py build:rathena pull:db build:backend build:desktop
+python3 scripts/guarded_build.py target:rathena:build:poring-lab/rathena-build:local
+python3 scripts/guarded_build.py tables && uv run python scripts/gen_mapcache.py
+python3 scripts/guarded_build.py build:sniffer
+python3 scripts/guarded_build.py start:db@120 start:rathena@240
+scripts/smoke_test.sh --core        # must print: SMOKE TEST (--core) PASSED
+uv run python scripts/capture_backend.py init
+python3 scripts/guarded_build.py start:backend,desktop@90
+python3 scripts/guarded_build.py start:sniffer@120
+python3 scripts/guarded_build.py start:frontend-dev@120
+```
+
+Use `dedicated-nvidia` instead of `dedicated-intel` for an NVIDIA card (manual, section 5). For the
+Sunshine path add `build:gamestream`, `start:gamestream@60` and the pairing (manual, section 7.5);
+for RDP, section 7.3.
 
 ## Configuration
 
@@ -84,7 +103,7 @@ Everything binds to `HOST_LAN_IP`. Keep it on a trusted LAN.
 
 | Port | What |
 |---|---|
-| 3000 | the web console |
+| `CONSOLE_PORT` (3000) | the web console (`.env`; the wizard asks for it) |
 | 8000 | the backend (stream, input, health) |
 | 6900, 6121, 5121 | the rAthena login, char and map servers |
 | 8888 | the rAthena web server (the client's account settings) |

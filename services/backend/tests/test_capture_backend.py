@@ -17,6 +17,7 @@ def cb(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> ModuleType:
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     monkeypatch.setattr(module, "verify_everywhere", lambda body: None)  # no docker in tests
+    monkeypatch.setattr(module, "ENV_FILE", tmp_path / ".env")  # never the host's real .env
     return module
 
 

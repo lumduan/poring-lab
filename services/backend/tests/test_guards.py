@@ -1410,3 +1410,26 @@ def test_the_input_writer_never_holds_a_gpu_node() -> None:
         for svc in ("backend", "desktop", "gamestream"):
             spec = (compose(name).get("services") or {}).get(svc) or {}
             assert "/dev/dri" not in str(spec.get("devices", [])), (name, svc)
+
+
+# --- The console's host port (2026-11-17, Batt: "default 3000, changeable; never fixed") ---------
+@pytest.mark.parametrize(("name", "service"), [("compose.yaml", "frontend"),
+                                               ("compose.dev.yaml", "frontend-dev")])  # fmt: skip
+def test_the_console_port_is_a_setting_on_the_lan_address(name: str, service: str) -> None:
+    """HOST side ${CONSOLE_PORT:-3000} on HOST_LAN_IP (never 0.0.0.0); the container side stays
+    3000 (the image's PORT, its HEALTHCHECK and next dev)."""
+    assert compose(name)["services"][service]["ports"] == [
+        "${HOST_LAN_IP:?}:${CONSOLE_PORT:-3000}:3000"
+    ]
+
+
+def test_the_origin_allowlist_default_follows_the_console_port() -> None:
+    """The backend's Origin checks (WebSockets, /transfer, Settings writes) read FRONTEND_ORIGINS;
+    its default must name the console's actual host port, or a moved console is refused."""
+    env = compose("compose.yaml")["services"]["backend"]["environment"]
+    want = "${FRONTEND_ORIGINS:-http://${HOST_LAN_IP:?}:${CONSOLE_PORT:-3000}}"
+    assert env["FRONTEND_ORIGINS"] == want
+    example = (ROOT / ".env.example").read_text()
+    assert re.search(r"^CONSOLE_PORT=3000$", example, re.M), "the lab's default stays 3000"
+    smoke = (ROOT / "scripts" / "smoke_test.sh").read_text()
+    assert "${CONSOLE_PORT}/api/health" in smoke and ":3000/api/health" not in smoke

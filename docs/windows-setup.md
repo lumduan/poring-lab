@@ -68,8 +68,11 @@ standard Windows account, and no sleep or screen lock. See "Optional" below.
 
 ## 3. Sunshine
 
-- Install the signed MSI: the lab runs LizardByte's 2026.914. The steps, backup and rollback are in
-  [docs/operations/sunshine-msi-replace.md](operations/sunshine-msi-replace.md).
+- **Step by step, for `./setup.sh`: [docs/setup/sunshine-windows.md](setup/sunshine-windows.md)**
+  (the install, its own login, the web UI PC-only, the firewall, a display, a fixed address, no
+  sleep, the PIN tab during the wizard, check-and-fix, and what works on this path today).
+- Install the signed MSI: the lab runs LizardByte's 2026.914. The lab's own replacement, with its
+  backup and rollback: [docs/operations/sunshine-msi-replace.md](operations/sunshine-msi-replace.md).
 - **Pair only the bot server's stream client.** To remove another pairing, use that row's own
   delete button, never "Unpair All".
 - **Firewall:** Sunshine's inbound rules admit only the bot server's address.

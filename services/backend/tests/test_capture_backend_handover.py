@@ -22,6 +22,9 @@ def cb(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> ModuleType:
     assert spec and spec.loader
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
+    # never the host's real .env: a Sunshine-only host's (RDP off) would refuse every to-rdp here
+    monkeypatch.setattr(module, "ENV_FILE", tmp_path / "rdp.env")
+    (tmp_path / "rdp.env").write_text("WIN_HOST=win.test\nRDP_USER=u\nRDP_PASSWORD=p\n")
     return module
 
 
