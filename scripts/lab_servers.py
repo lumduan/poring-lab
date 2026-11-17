@@ -7,8 +7,16 @@ pick it from $PORING_SERVER (default lab-rathena); `--server` on those scripts s
 from __future__ import annotations
 
 import os
+import sys
+from pathlib import Path
 
-SNIFFERS = {"lab-rathena": "poring-lab-sniffer-1", "lab-rathena-th": "poring-lab-sniffer-th-1"}
+_HERE = str(Path(__file__).resolve().parent)
+if _HERE not in sys.path:
+    sys.path.insert(0, _HERE)
+import lab_env  # noqa: E402  (a sibling, stdlib only: this copy's compose project names)
+
+SNIFFERS = {"lab-rathena": lab_env.container("sniffer"),
+            "lab-rathena-th": lab_env.container("sniffer-th")}  # fmt: skip
 DEFAULT = "lab-rathena"
 ENV = "PORING_SERVER"
 

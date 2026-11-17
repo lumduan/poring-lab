@@ -26,6 +26,10 @@ from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta, timezone
 from pathlib import Path
 
+if str(Path(__file__).resolve().parent) not in sys.path:
+    sys.path.insert(0, str(Path(__file__).resolve().parent))
+import lab_env  # noqa: E402  (a sibling, stdlib only: this copy's compose project names)
+
 REPO = Path(__file__).resolve().parents[1]
 ICT = timezone(timedelta(hours=7))
 PG = "quant-postgres.full"
@@ -102,7 +106,7 @@ def lab_events(path: Path | None) -> list[tuple[datetime, str]]:
         except ValueError:
             continue
         attrs = e.get("Actor", {}).get("Attributes", {})
-        if attrs.get("com.docker.compose.project") != "poring-lab":
+        if attrs.get("com.docker.compose.project") != lab_env.project():
             continue
         t = datetime.fromtimestamp(e["timeNano"] / 1e9, tz=UTC)
         out.append((t, f"{attrs.get('com.docker.compose.service', '?')} {e.get('Action')}"))

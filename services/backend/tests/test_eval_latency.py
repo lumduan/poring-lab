@@ -14,14 +14,14 @@ import numpy as np
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[3] / "scripts"))
 import eval_latency as el  # noqa: E402
+import lab_env  # noqa: E402
 
 
 def test_host_path_maps_the_container_mount_only() -> None:
-    assert (
-        el.host_path("/datasets/x/shard-000000.tar")
-        == "/mnt/poring-lab-datasets/x/shard-000000.tar"
-    )
-    assert el.host_path("/mnt/poring-lab-datasets/y.tar") == "/mnt/poring-lab-datasets/y.tar"
+    host = f"{lab_env.store_dir()}/"  # the storage folder (LAB_STORE_DIR): container /datasets
+    assert host == el.HOST
+    assert el.host_path("/datasets/x/shard-000000.tar") == host + "x/shard-000000.tar"
+    assert el.host_path(host + "y.tar") == host + "y.tar"
     assert el.host_path("/datasetsX/z") == "/datasetsX/z"
 
 

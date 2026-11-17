@@ -392,7 +392,8 @@ class AppState:
         self.flows_lock = asyncio.Lock()
         # ADR-0016: the environment interlock (the user-managed set + attestation + window).
         self.interlock = Interlock(settings.environments_file, settings.win_host,
-                                   source=self._envset_source)  # fmt: skip
+                                   source=self._envset_source,
+                                   values=settings.install_values())  # fmt: skip
         # The typing-only foreground gate (2026-10-06): bot TYPING needs the client in front.
         self.foreground = ForegroundGate(
             settings.settings_dir,
@@ -514,7 +515,9 @@ class AppState:
         directory = self.settings.settings_dir
         state = envstore.state_of(directory)
         if state == "unseeded":
-            defaults, error = load_config(self.settings.environments_file)
+            defaults, error = load_config(
+                self.settings.environments_file, self.settings.install_values()
+            )
             if defaults is None:
                 return ("no_defaults", error), None, error or "config_missing"
             sha = envstore.file_sha(self.settings.environments_file)

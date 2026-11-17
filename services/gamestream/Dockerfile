@@ -21,6 +21,9 @@
 #     stage: only /opt/s2spike reaches the image. moonlight-common-c is GPLv3: fetched at build
 #     time, never vendored in this repo.
 ARG MLCC_SHA=8599b6042a4ba27749b0f94134dd614b4328a9bc
+# The desktop image this builds on is THIS copy's, <project>/desktop:local (Batt 2026-11-17: two
+# copies on one host need two compose project names). LAB_PROJECT defaults to the lab's.
+ARG LAB_PROJECT=poring-lab
 
 FROM debian:trixie-20260918-slim AS s2build
 ARG MLCC_SHA
@@ -54,7 +57,7 @@ RUN --mount=type=cache,target=/root/.cache/uv \
     uv pip install -q --python /usr/bin/python3 --target /opt/s2spike/site --require-hashes \
       --only-binary :all: --no-deps -r /src/requirements.txt
 
-FROM poring-lab/desktop:local
+FROM ${LAB_PROJECT}/desktop:local
 
 USER root
 RUN apt-get update \

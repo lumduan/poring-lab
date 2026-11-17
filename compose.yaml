@@ -12,7 +12,7 @@
 # (desktop, backend) carry a low cpu_shares weight so the quant stack wins CPU contention, and
 # desktop also a hard `cpus` ceiling.
 
-name: poring-lab
+name: ${COMPOSE_PROJECT_NAME:-poring-lab}
 
 x-logging: &logging
   driver: json-file
@@ -63,7 +63,7 @@ services:
         PRERE: ${RATHENA_PRERE:-no}
         VIP: ${RATHENA_VIP:-no}
         MAKE_JOBS: ${RATHENA_MAKE_JOBS:-4}
-    image: poring-lab/rathena:pv${PACKETVER:-20211103}-prere-${RATHENA_PRERE:-no}
+    image: ${COMPOSE_PROJECT_NAME:-poring-lab}/rathena:pv${PACKETVER:-20211103}-prere-${RATHENA_PRERE:-no}
     depends_on:
       db:
         condition: service_healthy
@@ -82,6 +82,12 @@ services:
       RATHENA_NEW_ACCOUNT: ${RATHENA_NEW_ACCOUNT:-yes}
       RATHENA_PINCODE: ${RATHENA_PINCODE:-no}
       RATHENA_WEB_SERVER: ${RATHENA_WEB_SERVER:-false}
+      # The game ports (Batt 2026-11-17, nothing fixed): char and map are ADVERTISED to the
+      # client, so the servers listen on the same numbers as published (conf templates).
+      RATHENA_LOGIN_PORT: ${RATHENA_LOGIN_PORT:-6900}
+      RATHENA_CHAR_PORT: ${RATHENA_CHAR_PORT:-6121}
+      RATHENA_MAP_PORT: ${RATHENA_MAP_PORT:-5121}
+      RATHENA_WEB_PORT: ${RATHENA_WEB_PORT:-8888}
       # Optional test player account, upserted at every start (credentials only in .env).
       RATHENA_TEST_USER: ${RATHENA_TEST_USER:-}
       RATHENA_TEST_PASSWORD: ${RATHENA_TEST_PASSWORD:-}
@@ -100,17 +106,17 @@ services:
       default:
         # PINNED (ADR-0007): the sniffer shares this namespace, and the backend accepts
         # /ingest/packets ONLY from this address (INGEST_PEER).
-        ipv4_address: 10.210.96.6
+        ipv4_address: ${LAB_NET_PREFIX:-10.210.96}.6
     ports:
-      - "${HOST_LAN_IP:?}:6900:6900" # login
-      - "${HOST_LAN_IP:?}:6121:6121" # char
-      - "${HOST_LAN_IP:?}:5121:5121" # map
+      - "${HOST_LAN_IP:?}:${RATHENA_LOGIN_PORT:-6900}:${RATHENA_LOGIN_PORT:-6900}" # login
+      - "${HOST_LAN_IP:?}:${RATHENA_CHAR_PORT:-6121}:${RATHENA_CHAR_PORT:-6121}" # char
+      - "${HOST_LAN_IP:?}:${RATHENA_MAP_PORT:-5121}:${RATHENA_MAP_PORT:-5121}" # map
       # rAthena's web-server (RATHENA_WEB_SERVER=true, Batt 2026-11-05: fix the client's "error
       # when loading the data account settings"): the 2021 client loads / saves its account and
       # character UI settings (and emblems) over HTTP at its AssistAddr = HOST_LAN_IP:8888 (the
       # client's externalsettings lubs; the lab set 192.168.1.13:8888 on VM 103, 2026-11-05).
       # LAN only, like the game ports; its load routes are unauthenticated upstream.
-      - "${HOST_LAN_IP:?}:8888:8888" # web
+      - "${HOST_LAN_IP:?}:${RATHENA_WEB_PORT:-8888}:${RATHENA_WEB_PORT:-8888}" # web
     mem_limit: 1536m
     memswap_limit: 1536m
 
@@ -118,7 +124,7 @@ services:
     <<: *lab
     profiles: [remote]
     build: services/desktop
-    image: poring-lab/desktop:local
+    image: ${COMPOSE_PROJECT_NAME:-poring-lab}/desktop:local
     environment:
       DISPLAY: ":99"
       # The canvas is larger than the Windows session: xfreerdp draws the session 1:1 at its top-left
@@ -146,7 +152,7 @@ services:
       # scripts/capture_backend.py on the host, read-only everywhere (tests/test_guards.py).
       - ./state:/lab-state:ro
     ports:
-      - "${HOST_LAN_IP:?}:6080:6080" # noVNC -- NO AUTHENTICATION, LAN only
+      - "${HOST_LAN_IP:?}:${NOVNC_PORT:-6080}:6080" # noVNC -- NO AUTHENTICATION, LAN only
     # 1.5 GiB: the 512 MiB transfer tmpfs is charged to whichever container WRITES a file, and
     # Windows -> Linux copies are written by xfreerdp here. With no swap, overflowing the limit
     # would OOM-kill the RDP session (peak without transfers: ~220 MiB).
@@ -165,7 +171,7 @@ services:
     build:
       context: .
       dockerfile: services/backend/Dockerfile
-    image: poring-lab/backend:local
+    image: ${COMPOSE_PROJECT_NAME:-poring-lab}/backend:local
     depends_on:
       desktop:
         condition: service_healthy
@@ -192,7 +198,16 @@ services:
       RDP_DRIVES: ${RDP_DRIVES:-}
       TRANSFER_DIR: /transfer
       # ADR-0007: /ingest/packets accepts only rathena's pinned address (the sniffer's namespace).
-      INGEST_PEER: 10.210.96.6
+      INGEST_PEER: ${LAB_NET_PREFIX:-10.210.96}.6
+      # The two pinned /24s (LAB_NET_PREFIX / LAB_AGENT_NET_PREFIX, networks below): the viewer
+      # channel refuses the compose subnet, every public listener the agent network.
+      COMPOSE_SUBNET: ${LAB_NET_PREFIX:-10.210.96}.0/24
+      # This install's game ports: the shipped environment set names them by token (Batt
+      # 2026-11-17: nothing fixed; interlock.load_config).
+      RATHENA_LOGIN_PORT: ${RATHENA_LOGIN_PORT:-6900}
+      RATHENA_CHAR_PORT: ${RATHENA_CHAR_PORT:-6121}
+      RATHENA_MAP_PORT: ${RATHENA_MAP_PORT:-5121}
+      AGENT_NETWORKS: ${LAB_AGENT_NET_PREFIX:-10.210.97}.0/24
       # Black-screen detector: the RO client area "x,y,w,h" in desktop pixels ("" = whole frame).
       GAME_REGION: ${GAME_REGION:-}
       BLACK_HOLD_S: ${BLACK_HOLD_S:-5}
@@ -230,9 +245,9 @@ services:
       # The hardware page's /dev/shm use (Batt 2026-11-08): an EMPTY directory on the host's
       # /dev/shm, read-only. statvfs reads the whole tmpfs through it; no file of /dev/shm is
       # exposed. After a reboot Docker creates it root-owned and empty: statvfs still works.
-      - /dev/shm/poring-lab-hwshm:/host-shm:ro
+      - /dev/shm/${COMPOSE_PROJECT_NAME:-poring-lab}-hwshm:/host-shm:ro
     ports:
-      - "${HOST_LAN_IP:?}:8000:8000" # /health, /ws/stream, /ws/input
+      - "${HOST_LAN_IP:?}:${BACKEND_PORT:-8000}:8000" # /health, /ws/stream, /ws/input
     # 8001 (/internal/agent) is deliberately NOT published: compose network only.
     expose: ["8001"]
     # default (LAN publishing, the other services) + agent (vision only; ADR-0005 option c2). Host
@@ -248,13 +263,13 @@ services:
     <<: *lab
     profiles: [remote]
     build: services/frontend
-    image: poring-lab/frontend:local
+    image: ${COMPOSE_PROJECT_NAME:-poring-lab}/frontend:local
     depends_on:
       backend:
         condition: service_healthy
     environment:
       # Read at request time by the server component -- not baked in at build time.
-      BACKEND_PUBLIC_URL: http://${HOST_LAN_IP:?}:8000
+      BACKEND_PUBLIC_URL: http://${HOST_LAN_IP:?}:${BACKEND_PORT:-8000}
     ports:
       # the console's HOST port is CONSOLE_PORT (.env, default 3000); inside it is always 3000
       - "${HOST_LAN_IP:?}:${CONSOLE_PORT:-3000}:3000"
@@ -267,7 +282,7 @@ services:
     build:
       context: .
       dockerfile: services/vision/Dockerfile
-    image: poring-lab/vision:local
+    image: ${COMPOSE_PROJECT_NAME:-poring-lab}/vision:local
     depends_on:
       backend:
         condition: service_healthy
@@ -319,7 +334,10 @@ services:
     profiles: [gamestream]
     build:
       context: services/gamestream
-    image: poring-lab/gamestream:local
+      # its last stage is FROM <project>/desktop:local: THIS copy's desktop image (ADR-0026)
+      args:
+        LAB_PROJECT: ${COMPOSE_PROJECT_NAME:-poring-lab}
+    image: ${COMPOSE_PROJECT_NAME:-poring-lab}/gamestream:local
     # NO depends_on: a guarded `up -d gamestream` must never recreate desktop as a dependency.
     environment:
       DISPLAY: ":99"
@@ -369,7 +387,7 @@ services:
     build:
       context: .
       dockerfile: services/sniffer/Dockerfile
-    image: poring-lab/sniffer:local
+    image: ${COMPOSE_PROJECT_NAME:-poring-lab}/sniffer:local
     network_mode: "service:rathena"
     depends_on:
       rathena:
@@ -396,7 +414,9 @@ services:
       CLIENT_IP: ${WIN_HOST:-}
       # The login port(s) whose client payloads the pcap scrubs (pcapng.LoginScrub; Batt
       # 2026-10-09): = rathena's published login port. Unset/invalid = shape-only, fail closed.
-      SNIFF_LOGIN_PORTS: "6900"
+      SNIFF_LOGIN_PORTS: "${RATHENA_LOGIN_PORT:-6900}"
+      # The three game ports the kernel filter and the decoder follow (capture.bpf_program).
+      SNIFF_SERVER_PORTS: "${RATHENA_LOGIN_PORT:-6900},${RATHENA_CHAR_PORT:-6121},${RATHENA_MAP_PORT:-5121}"
       PYTHONDONTWRITEBYTECODE: "1"
     # pcapng + events (hourly / 256 MB; 7 days or 20 GB). NEVER ./data: RO login packets carry
     # credentials (the sniffer zeroes the password bytes, and captures still stay out of git).
@@ -435,7 +455,7 @@ services:
         # PINNED high (2026-10-05): the default network has no ip_range, so a container created
         # while rathena is down got the lowest free address -- rathena's 10.210.96.6 -- and
         # rathena-th then failed with "Address already in use".
-        ipv4_address: 10.210.96.250
+        ipv4_address: ${LAB_NET_PREFIX:-10.210.96}.250
     volumes:
       - db-th-data:/var/lib/mysql
     healthcheck:
@@ -450,7 +470,7 @@ services:
   rathena-th:
     <<: *lab
     profiles: [th]
-    image: poring-lab/rathena:pv${PACKETVER:-20211103}-prere-${RATHENA_PRERE:-no}
+    image: ${COMPOSE_PROJECT_NAME:-poring-lab}/rathena:pv${PACKETVER:-20211103}-prere-${RATHENA_PRERE:-no}
     pull_policy: never
     depends_on:
       db-th:
@@ -468,6 +488,12 @@ services:
       RATHENA_NEW_ACCOUNT: ${RATHENA_NEW_ACCOUNT:-yes}
       RATHENA_PINCODE: ${RATHENA_PINCODE:-no}
       RATHENA_WEB_SERVER: ${RATHENA_WEB_SERVER:-false}
+      # The game ports (Batt 2026-11-17, nothing fixed): char and map are ADVERTISED to the
+      # client, so the servers listen on the same numbers as published (conf templates).
+      RATHENA_LOGIN_PORT: ${RATHENA_LOGIN_PORT:-6900}
+      RATHENA_CHAR_PORT: ${RATHENA_CHAR_PORT:-6121}
+      RATHENA_MAP_PORT: ${RATHENA_MAP_PORT:-5121}
+      RATHENA_WEB_PORT: ${RATHENA_WEB_PORT:-8888}
       RATHENA_TEST_USER: ${RATHENA_TH_TEST_USER:-}
       RATHENA_TEST_PASSWORD: ${RATHENA_TH_TEST_PASSWORD:-}
       RATHENA_AGENT_USER: ${RATHENA_TH_AGENT_USER:-}
@@ -482,18 +508,18 @@ services:
       - ./data/mapcache-th:/opt/rathena-mapcache:ro
     networks:
       default:
-        ipv4_address: 10.210.96.6 # = rathena's: the backend's only ingest peer, and the exclusion
+        ipv4_address: ${LAB_NET_PREFIX:-10.210.96}.6 # = rathena's: the backend's only ingest peer, and the exclusion
     ports:
-      - "${HOST_LAN_IP:-}:6900:6900" # login
-      - "${HOST_LAN_IP:-}:6121:6121" # char
-      - "${HOST_LAN_IP:-}:5121:5121" # map
+      - "${HOST_LAN_IP:-}:${RATHENA_LOGIN_PORT:-6900}:${RATHENA_LOGIN_PORT:-6900}" # login
+      - "${HOST_LAN_IP:-}:${RATHENA_CHAR_PORT:-6121}:${RATHENA_CHAR_PORT:-6121}" # char
+      - "${HOST_LAN_IP:-}:${RATHENA_MAP_PORT:-5121}:${RATHENA_MAP_PORT:-5121}" # map
     mem_limit: 1536m
     memswap_limit: 1536m
 
   sniffer-th:
     <<: *lab
     profiles: [th]
-    image: poring-lab/sniffer:local
+    image: ${COMPOSE_PROJECT_NAME:-poring-lab}/sniffer:local
     pull_policy: never
     network_mode: "service:rathena-th"
     depends_on:
@@ -517,7 +543,9 @@ services:
       CLIENT_IP: ${WIN_HOST:-}
       # The login port(s) whose client payloads the pcap scrubs (pcapng.LoginScrub; Batt
       # 2026-10-09): = rathena's published login port. Unset/invalid = shape-only, fail closed.
-      SNIFF_LOGIN_PORTS: "6900"
+      SNIFF_LOGIN_PORTS: "${RATHENA_LOGIN_PORT:-6900}"
+      # The three game ports the kernel filter and the decoder follow (capture.bpf_program).
+      SNIFF_SERVER_PORTS: "${RATHENA_LOGIN_PORT:-6900},${RATHENA_CHAR_PORT:-6121},${RATHENA_MAP_PORT:-5121}"
       PYTHONDONTWRITEBYTECODE: "1"
     # Its own captures (own retention: a shared directory would let one sniffer delete the other's
     # files). Never ./data, never vision (test_guards.py).
@@ -537,7 +565,7 @@ services:
     profiles: [probe]
     build:
       context: services/media-probe
-    image: poring-lab/media-probe:local
+    image: ${COMPOSE_PROJECT_NAME:-poring-lab}/media-probe:local
     pull_policy: never
     restart: "no"
     init: true
@@ -569,7 +597,7 @@ services:
   # swap), and recbench.sh stops encoding past 1.2 GB there (RECBENCH_OUT_CAP).
   media-recbench:
     profiles: [recbench]
-    image: poring-lab/media-probe:local
+    image: ${COMPOSE_PROJECT_NAME:-poring-lab}/media-probe:local
     pull_policy: never
     restart: "no"
     init: true
@@ -584,13 +612,13 @@ services:
     volumes:
       - ./services/media-probe/recbench.sh:/opt/recbench.sh:ro
       - type: bind
-        source: /dev/shm/poring-lab-recbench/in
+        source: /dev/shm/${COMPOSE_PROJECT_NAME:-poring-lab}-recbench/in
         target: /in
         read_only: true
         bind:
           create_host_path: false
       - type: bind
-        source: /dev/shm/poring-lab-recbench/out
+        source: /dev/shm/${COMPOSE_PROJECT_NAME:-poring-lab}-recbench/out
         target: /out
         bind:
           create_host_path: false
@@ -622,7 +650,7 @@ services:
   # writes is charged here (mem == memswap, reclaimable); cpus 2 caps a runaway encode.
   media-rec:
     profiles: [mediarec]
-    image: poring-lab/media-probe:local
+    image: ${COMPOSE_PROJECT_NAME:-poring-lab}/media-probe:local
     pull_policy: never
     restart: "no"
     init: true
@@ -635,7 +663,7 @@ services:
     volumes:
       - ./services/media-probe/mediarec.sh:/opt/mediarec.sh:ro
       - type: bind
-        source: /dev/shm/poring-lab-mediarec
+        source: /dev/shm/${COMPOSE_PROJECT_NAME:-poring-lab}-mediarec
         target: /ctl
         bind:
           create_host_path: false
@@ -683,15 +711,19 @@ volumes:
       type: tmpfs
       device: tmpfs
       o: size=512m,uid=1000,gid=1000,mode=0770
-  # The NAS datasets export (docs/operations/nas-sink.md), mounted by dockerd from the host (the
-  # export admits only this VM), READ-ONLY and soft. Batt 2026-10-04: mounted in vision ONLY, for
-  # training (tests/test_guards.py); the host's own mount stays the only writer.
+  # The STORAGE folder (LAB_STORE_DIR: datasets, archives, the deployed models), READ-ONLY in
+  # vision. Batt 2026-10-04: mounted in vision ONLY, for training (tests/test_guards.py); the
+  # host's own folder stays the only writer. Batt 2026-11-17 ("most users have no NAS: just set
+  # where the files go in setup"): by default a plain bind of that folder, created by ./setup.sh.
+  # A NAS is the user's own mount at that folder, or (like the lab) an NFS volume in the machine's
+  # own compose.override.yaml (docs/setup/new-lab-host.md 4.1). Docker fixes a volume's options
+  # when it is FIRST created: change them later only after removing the volume.
   datasets-nas:
     driver: local
     driver_opts:
-      type: nfs
-      o: addr=192.168.1.6,nfsvers=4.2,ro,soft,timeo=150,retrans=3,noatime
-      device: ":/mnt/tank-main/poring-lab/datasets"
+      type: none
+      o: bind
+      device: ${LAB_STORE_DIR:-${HOME}/poring-lab-store}
   # S2 input socket (ADR-0014, S2 step 3): one unix socket, RAM only. An input path into Windows:
   # mounted in gamestream (the listener) and backend (the Injector) ONLY -- never vision, desktop or
   # anything else (tests/test_guards.py). The bot reaches it only through the mux.
@@ -711,7 +743,7 @@ networks:
       com.docker.network.bridge.gateway_mode_ipv4: isolated
     ipam:
       config:
-        - subnet: 10.210.97.0/24
+        - subnet: ${LAB_AGENT_NET_PREFIX:-10.210.97}.0/24
   default:
     # PINNED -- never let Docker pick this subnet. The daemon's fallback pools hand out 192.168.x.0/20
     # blocks, and on 2026-09-29 it gave this network 192.168.96.0/20, which overlaps the operator's LAN
@@ -719,4 +751,4 @@ networks:
     # 192.168.x range on this host (LAN uses 192.168.1, 110, 111, 112 and 120).
     ipam:
       config:
-        - subnet: 10.210.96.0/24
+        - subnet: ${LAB_NET_PREFIX:-10.210.96}.0/24

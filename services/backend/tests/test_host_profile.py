@@ -60,7 +60,8 @@ def test_dedicated_nvidia_is_the_cuda_path_without_the_shared_rules(tmp_path: Pa
     assert shared.shared and not prof.shared
     for name in (*prof.vision_overlay, *prof.worker_overlay):
         assert (ROOT / name).is_file(), name
-    assert sorted(hp.PROFILES) == ["dedicated-intel", "dedicated-nvidia", "shared-nvidia"]
+    assert sorted(hp.PROFILES) == ["dedicated-cpu", "dedicated-intel", "dedicated-nvidia",
+                                   "shared-nvidia"]  # fmt: skip
     assert hp.DEFAULT == "shared-nvidia"  # a host is dedicated only by declaration
 
 
@@ -82,7 +83,8 @@ def test_bot_server_adds_its_overlays_last(monkeypatch: pytest.MonkeyPatch) -> N
                                 "-f", "compose.vision-worker.intel.yaml",
                                 "--profile", "vision-worker"]  # fmt: skip
     step = gb.parse_step("rundev:vision@60=python -c pass")
-    assert gb.run_cmd(step)[4:10] == gb.VISION_DEV
+    assert gb.run_cmd(step)[2:6] == ["docker", "compose", "-p", "poring-lab"]
+    assert gb.run_cmd(step)[6:12] == gb.VISION_DEV
 
 
 def test_a_dedicated_nvidia_host_adds_its_overlays_last(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -94,7 +96,7 @@ def test_a_dedicated_nvidia_host_adds_its_overlays_last(monkeypatch: pytest.Monk
                                 "-f", "compose.vision-worker.nvidia.yaml",
                                 "--profile", "vision-worker"]  # fmt: skip
     step = gb.parse_step("rundev:vision@60=python -c pass")
-    assert gb.run_cmd(step)[4:10] == gb.VISION_DEV
+    assert gb.run_cmd(step)[6:12] == gb.VISION_DEV
 
 
 def test_a_dedicated_nvidia_host_lists_its_gpu_with_nvidia_smi(
@@ -179,3 +181,40 @@ def test_drm_holders_are_found_and_unreadable_own_processes_are_unverifiable(
     finally:
         (proc / "13" / "fdinfo").chmod(0o755)
         (proc / "14" / "fdinfo").chmod(0o755)
+
+
+def test_the_cpu_profile_has_no_gpu_at_all() -> None:
+    """Batt 2026-11-17 ("no GPU -> use the CPU"): dedicated-cpu has no vision image, no worker, no
+    GPU lister; it is dedicated (no shared-host rules) and never a GPU profile."""
+    cpu = hp.PROFILES["dedicated-cpu"]
+    assert (cpu.accel, cpu.shared, cpu.vision_overlay, cpu.worker_overlay) == ("cpu", False, (), ())
+    assert (cpu.detect_backend, cpu.gpu_lister) == ("none", "none")
+    assert {"shared-nvidia", "dedicated-intel", "dedicated-nvidia"} == hp.GPU_PROFILES
+
+
+def test_a_cpu_host_refuses_every_vision_step_but_a_stop(monkeypatch: pytest.MonkeyPatch) -> None:
+    """ADR-0022 Amendment 2026-11-17: no vision image or worker on dedicated-cpu; the refusal names
+    the way out. Other steps, and the GPU profiles, are untouched."""
+    gb = load_gb(monkeypatch, "dedicated-cpu")
+    cpu = hp.PROFILES["dedicated-cpu"]
+    vision_steps = (
+        "worker:vision@60",
+        "build:vision",
+        "pull:vision",
+        "run:vision@600=python scripts/check_gpu.py",
+        "execdev:vision@60=true",
+    )
+    for step in vision_steps:
+        why = gb.cpu_profile_refusal([gb.parse_step(step)], cpu)
+        assert why is not None and "has no GPU" in why and "detector_setup" in why, step
+    for step in (
+        "worker-stop:vision",
+        "build:backend",
+        "restart:backend@30",
+        "recreate:sniffer@120",
+    ):
+        assert gb.cpu_profile_refusal([gb.parse_step(step)], cpu) is None, step
+    for name in ("dedicated-intel", "dedicated-nvidia", "shared-nvidia"):
+        assert (
+            gb.cpu_profile_refusal([gb.parse_step("worker:vision@60")], hp.PROFILES[name]) is None
+        )

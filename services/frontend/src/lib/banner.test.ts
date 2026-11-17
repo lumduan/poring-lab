@@ -137,6 +137,8 @@ test("the interlock shows a window or a refusal while the bot could act, and not
   const at = (mode: "HUMAN" | "BOT" | "ASSIST", e: ReturnType<typeof env>) =>
     bannerProblems({ links: { stream: true, input: true }, status: status({ backend: "rdp", seq: 1, phase: "steady" }, { mode, environment: e }) });
   assert.ok(at("BOT", env("red")).some((p) => p.includes("REFUSED (lock_not_steady)")));
+  // ADR-0023 decision 4: a Windows PC mismatch points at the Settings page's own field
+  assert.ok(at("BOT", env("red", { reason: "host_mismatch" })).some((p) => p.includes("REFUSED (host_mismatch)") && p.includes("set it on the Settings page")));
   assert.ok(at("ASSIST", env("window")).some((p) => p.includes("operator window open (login, 87 s left)")));
   assert.ok(!at("BOT", env("green")).some((p) => p.startsWith("Interlock")));
   assert.ok(!at("HUMAN", env("red")).some((p) => p.startsWith("Interlock"))); // the human is never gated

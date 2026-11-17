@@ -11,7 +11,7 @@ services:
     build:
       context: .
       dockerfile: services/vision/Dockerfile.intel
-    image: poring-lab/vision-intel:local
+    image: ${COMPOSE_PROJECT_NAME:-poring-lab}/vision-intel:local
     deploy: !reset {}
     devices:
       # the render node only (Batt 2026-11-08): compute needs no KMS node (card0/card1)

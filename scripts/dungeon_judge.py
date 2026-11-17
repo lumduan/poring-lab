@@ -8,8 +8,8 @@ no runner imports this module, and it reads only banked session files.
     dungeon_judge.py table SID [SID ...] [--json] [--items PATH]
     dungeon_judge.py positive [--items PATH]     the positive cases on REAL banked sessions
 
-A session is read from /dev/shm/poring-lab-demo/<sid>/ while fresh, else from the NAS
-(/mnt/poring-lab-datasets/<sid>/): events.jsonl, packets.jsonl.gz, manifest.json.
+A session is read from /dev/shm/poring-lab-demo/<sid>/ while fresh, else from the storage folder
+(LAB_STORE_DIR/<sid>/; the lab: its NAS): events.jsonl, packets.jsonl.gz, manifest.json.
 
 THE WINDOW: run_start -> run_end (events, t_ns = CLOCK_MONOTONIC, the packets' clock). Without
 them: the manifest's t0_ns..t1_ns (a survival trial), else its t0_mono_ns..t1_mono_ns (a hunt
@@ -73,9 +73,10 @@ from pathlib import Path
 from typing import Any
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
+import lab_env  # noqa: E402
 
 DEMO = Path("/dev/shm/poring-lab-demo")
-NAS = Path("/mnt/poring-lab-datasets")
+NAS = lab_env.store_dir()  # the storage folder (LAB_STORE_DIR)
 NS = 1_000_000_000
 AID = 2000002  # our block id: the GM account; the Crusader is a character on it (crusader.py)
 MAX_HP, MAX_SP = 5260, 312  # the Crusader's verified MaxHP / MaxSP (crusader-orcsdun01.md 2b)

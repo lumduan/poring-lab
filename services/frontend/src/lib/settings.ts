@@ -45,6 +45,7 @@ export interface EnvView {
   ready: boolean;
   signals: string[];
   declared?: Declaration | null; // allowed environments only (ADR-0023)
+  windows_host?: string | null; // the Windows game PC a person set (ADR-0023 decision 4)
 }
 
 export interface SettingsView {
@@ -52,6 +53,7 @@ export interface SettingsView {
   store: string;
   seeded_from: string | null;
   config: string;
+  win_host?: string | null; // the Windows PC this lab drives (.env WIN_HOST)
   environments: EnvView[];
   forbidden: string[];
   saved?: boolean;
@@ -72,6 +74,8 @@ export interface EnvInput {
   why: string;
   servers: { host: string; port: number | null; note: string; source?: string }[];
   declared?: string | null;
+  /** ADR-0023 decision 4: null/absent = keep, "" = clear, an address = set. */
+  windows_host?: string | null;
 }
 
 export interface AuditRecord {
@@ -142,6 +146,9 @@ export const REASON_TEXT: Record<string, string> = {
   declaration_not_importable: "A declaration cannot come from a file: declare it on this page yourself.",
   declaration_not_allowed_here: "Only an allowed environment can carry a declaration.",
   declaration_not_for_attested: "This environment is verified by the lab's own packet check; it takes no declaration.",
+  windows_host_not_an_address: "Give the Windows PC's IP address (e.g. 192.168.1.50), not a name.",
+  windows_host_not_a_machine: "That address is not one machine (loopback, link-local, multicast or empty).",
+  windows_host_is_this_host: "That is the bot server's own address; give the Windows game PC's.",
 };
 
 export function reasonText(reason: string): string {
@@ -317,7 +324,32 @@ export function toInputs(view: Pick<SettingsView, "environments">): EnvInput[] {
     why: e.why,
     servers: e.servers.map((s) => ({ host: s.host, port: s.port, note: s.note })),
     declared: e.declared ? e.declared.statement : null, // sent back unchanged: the backend keeps it
+    windows_host: e.windows_host ?? null, // null = keep (ADR-0023 decision 4)
   }));
+}
+
+/** The whole set with one environment's Windows PC set (an address) or cleared (""). */
+export function withWindowsHost(envs: EnvInput[], envId: string, host: string): EnvInput[] {
+  return envs.map((e) => (e.id === envId ? { ...e, windows_host: host.trim() } : e));
+}
+
+/** A typo check before Save (the backend decides): "" when `host` looks like one machine's IPv4
+ * address or any IPv6 literal, else the reason the backend would give. */
+export function windowsHostRefusal(host: string): string {
+  const h = host.trim();
+  if (h.includes(":")) return /^[0-9a-fA-F:.]+$/.test(h) ? "" : "windows_host_not_an_address";
+  if (!IPV4.test(h)) return "windows_host_not_an_address";
+  const why = ipRefusal(h);
+  if (why === "bad_host") return "windows_host_not_an_address";
+  return why ? "windows_host_not_a_machine" : "";
+}
+
+/** The Windows PC line: what the environment names against what this lab drives. */
+export function windowsHostText(env: Pick<EnvView, "windows_host">, winHost: string | null | undefined): string {
+  const set = env.windows_host ?? null;
+  if (!set) return "No Windows PC set: the bot cannot act here until you set the game PC's address.";
+  if (winHost && set !== winHost) return `Windows PC ${set} -- this lab drives ${winHost} (WIN_HOST): the bot cannot act until they match.`;
+  return `Windows PC ${set}`;
 }
 
 /** A server in plain words: "thro-acc3.gnjoy.in.th : every port", "gnjoy.in.th and every name

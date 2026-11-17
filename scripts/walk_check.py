@@ -1,8 +1,10 @@
 #!/usr/bin/env python3
 """Evidence for the clean walk search (Post-S2 round E1, 2026-10-04): replay the walks recorded in
-the NAS datasets' packets and check poring_dataset.walk against what the server actually did.
+the stored datasets' packets and check poring_dataset.walk against what the server actually did.
 
-    walk_check.py [--datasets /mnt/poring-lab-datasets] [--compare-port] [--max-len N]
+    walk_check.py [--datasets STORE] [--compare-port] [--max-len N]
+
+STORE: the session root, by default the storage folder (LAB_STORE_DIR; the lab: its NAS).
 
 Packets give each walk's start, end and start tick, never the cells in between, so the checks are:
   * found: the share of recorded walks (self_move + entities' move entries) the search finds a path
@@ -28,6 +30,8 @@ from typing import Any
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "scripts"))
+import lab_env  # noqa: E402
+
 from poring_dataset import mapcache  # noqa: E402
 from poring_dataset.walk import MAX_LEN, walk_path  # noqa: E402
 from poring_packets.world import MOVE_COST, MOVE_DIAGONAL_COST, TICK_MOD  # noqa: E402
@@ -86,7 +90,7 @@ def walks(events: list[dict[str, Any]]) -> list[dict[str, Any]]:
 
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawTextHelpFormatter)
-    ap.add_argument("--datasets", type=Path, default=Path("/mnt/poring-lab-datasets"))
+    ap.add_argument("--datasets", type=Path, default=lab_env.store_dir())
     ap.add_argument("--compare-port", action="store_true")
     ap.add_argument("--max-len", type=int, default=MAX_LEN, help="path limit in steps")
     a = ap.parse_args()

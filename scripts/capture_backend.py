@@ -102,13 +102,14 @@ from poring_backend.capture_lock import (  # noqa: E402
     parse_lock,
 )
 
+sys.path.insert(0, str(REPO / "scripts"))
+import lab_env  # noqa: E402  (stdlib only: this copy's compose project names)
+
 STATE = Path(os.environ.get("LAB_STATE_HOST_DIR", REPO / "state"))
 ENV_FILE = REPO / ".env"  # read for WIN_HOST and whether RDP is configured; values never printed
-DESKTOP, BACKEND, GAMESTREAM = (
-    "poring-lab-desktop-1",
-    "poring-lab-backend-1",
-    "poring-lab-gamestream-1",
-)
+DESKTOP = lab_env.container("desktop")
+BACKEND = lab_env.container("backend")
+GAMESTREAM = lab_env.container("gamestream")
 OWNER = "capture_backend"
 NO_MOUNT = "<no /lab-state mount: recreate this container>"
 HEALTH = "http://{ip}:8000/health"
@@ -841,8 +842,9 @@ VARIANTS = {
 KNOBS = {"FPS": ("30", "60"), "EVIDENCE": ("inline", "thread"), "DECODE_THREADS": ("1", "2", "4")}
 KNOB_VARIANTS = ("S2",)
 WM_NAMES = "openbox"
+# Per copy (two copies on one host never share it): /dev/shm/<project>-tmp/capture-backend.flock
 FLOCK = Path(
-    os.environ.get("CAPTURE_BACKEND_FLOCK", "/dev/shm/poring-lab-tmp/capture-backend.flock")
+    os.environ.get("CAPTURE_BACKEND_FLOCK", str(lab_env.shm("tmp") / "capture-backend.flock"))
 )
 
 

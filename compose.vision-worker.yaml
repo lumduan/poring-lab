@@ -25,7 +25,7 @@
 services:
   vision-worker:
     profiles: [vision-worker]
-    image: poring-lab/vision:local
+    image: ${COMPOSE_PROJECT_NAME:-poring-lab}/vision:local
     pull_policy: never
     restart: "no"
     init: true
@@ -53,7 +53,7 @@ services:
       - datasets-nas:/datasets:ro
       - ./services/vision/src:/opt/vision-src:ro
       - ./state/train-duty:/lab-duty:ro
-      - /dev/shm/poring-lab-detect:/detect
+      - /dev/shm/${COMPOSE_PROJECT_NAME:-poring-lab}-detect:/detect
     networks: [agent]
     deploy:
       resources:
@@ -62,6 +62,6 @@ services:
             - driver: nvidia
               count: 1
               capabilities: [gpu]
-    mem_limit: 6g
-    memswap_limit: 6g
+    mem_limit: ${VISION_WORKER_MEM:-6g}
+    memswap_limit: ${VISION_WORKER_MEM:-6g}
     shm_size: 1g

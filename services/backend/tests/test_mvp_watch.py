@@ -17,6 +17,7 @@ import pytest
 ROOT = Path(__file__).resolve().parents[3]
 sys.path.insert(0, str(ROOT / "scripts"))
 
+import lab_env  # noqa: E402
 import mvp_watch as mw  # noqa: E402
 import mvp_watch_study as st  # noqa: E402
 
@@ -305,7 +306,7 @@ def test_truth_map_is_a_parameter() -> None:
 # --- the real positive case (skips without the local data) -------------------------------------
 
 WATCH = "20261025T195325-rdp-ow1"
-WATCH_DIRS = (Path("/dev/shm/poring-lab-rec") / WATCH, Path("/mnt/poring-lab-datasets") / WATCH)
+WATCH_DIRS = (Path("/dev/shm/poring-lab-rec") / WATCH, lab_env.store(WATCH))
 MODEL = Path(os.environ.get("MVP_WATCH_MODEL", str(mw.DEFAULT_MODEL)))
 
 

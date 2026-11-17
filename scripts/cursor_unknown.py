@@ -13,9 +13,9 @@ here reaches a runner.
     cursor_unknown.py loop                       Batt's loop vs the NPCs and the delegated zones
 
 A TAG names a gef_fild10 Rogue run (a2 ... = /dev/shm/poring-lab-demo/*-dungeon-rogue-gef_fild10-
-B-<TAG>; its recording /mnt/poring-lab-datasets/*-rdp-rogue-<TAG>, or /dev/shm/poring-lab-rec
-while unshipped). The detector's round-2 TEST2 recordings (a9, a10, a11, any w3) are REFUSED by
-name (gef10-eval.md amendment R2); their events are not read either.
+B-<TAG>; its recording <store>/*-rdp-rogue-<TAG> (the storage folder, LAB_STORE_DIR), or
+/dev/shm/poring-lab-rec while unshipped). The detector's round-2 TEST2 recordings (a9, a10, a11,
+any w3) are REFUSED by name (gef10-eval.md amendment R2); their events are not read either.
 
 DEFINITIONS (written before the split was counted, 2026-10-26 ~11:2x ICT):
 - a WALK DECISION is a runner "walk" event (clicked, or refused with why "cursor <verdict>");
@@ -50,11 +50,12 @@ from pathlib import Path
 from typing import Any
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
+import lab_env  # noqa: E402
 
 ROOT = Path(__file__).resolve().parents[1]
 DATA = ROOT  # where data/ (L3, the cursor references) and the generated map cache live: --data-root
 DEMO = Path("/dev/shm/poring-lab-demo")
-NAS = Path("/mnt/poring-lab-datasets")
+NAS = lab_env.store_dir()  # the storage folder (LAB_STORE_DIR)
 REC_SHM = Path("/dev/shm/poring-lab-rec")
 REC_DISK = Path.home() / "poring-lab-rec"  # recordings go here since 2026-10-29 (rule 7)
 OUT = Path("/dev/shm/poring-lab-tmp/cursor-unknown")

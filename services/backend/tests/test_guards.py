@@ -32,8 +32,22 @@ for _tag in ("!reset", "!override"):
     )
 
 
+# The install keys (scripts/lab_env.py, Batt 2026-11-17: nothing locked): compose interpolates
+# each as ${KEY:-default}. These guards check the DEFAULTS, the lab's own values;
+# test_lab_env.py checks the keys and that lab_env shares the defaults.
+INSTALL_KEYS = ("COMPOSE_PROJECT_NAME", "LAB_NET_PREFIX", "LAB_AGENT_NET_PREFIX",
+                "RATHENA_LOGIN_PORT", "RATHENA_CHAR_PORT", "RATHENA_MAP_PORT", "RATHENA_WEB_PORT",
+                "NOVNC_PORT", "BACKEND_PORT", "VISION_WORKER_MEM")  # fmt: skip
+_INSTALL_DEFAULT = re.compile(r"\$\{(" + "|".join(INSTALL_KEYS) + r"):-([^}$]*)\}")
+
+
+def with_defaults(text: str) -> str:
+    return _INSTALL_DEFAULT.sub(lambda m: m.group(2), text)
+
+
 def compose(name: str) -> dict[str, Any]:
-    data: dict[str, Any] = yaml.load((ROOT / name).read_text(), Loader=_ComposeLoader)
+    text = with_defaults((ROOT / name).read_text())
+    data: dict[str, Any] = yaml.load(text, Loader=_ComposeLoader)
     return data
 
 
@@ -527,7 +541,9 @@ def test_the_pairing_key_volume_is_mounted_in_gamestream_only(name: str) -> None
 
 def test_gamestream_image_never_runs_the_desktop_startup() -> None:
     dockerfile = (ROOT / "services" / "gamestream" / "Dockerfile").read_text()
-    assert "FROM poring-lab/desktop:local" in dockerfile
+    # built on THIS copy's desktop image (<project>/desktop:local; the lab's by default)
+    assert "ARG LAB_PROJECT=poring-lab\n" in dockerfile.split("\nFROM ", 1)[0]
+    assert "FROM ${LAB_PROJECT}/desktop:local" in dockerfile
     assert 'CMD ["/usr/local/bin/gamestream-loop.sh"]' in dockerfile
     assert "HEALTHCHECK NONE" in dockerfile and "ENTRYPOINT []" in dockerfile
     assert "--checksum=sha256:" in dockerfile and "ARG MOONLIGHT_SHA256=" in dockerfile
@@ -592,7 +608,7 @@ def test_the_gamestream_dev_overlay_binds_code_read_only_and_no_secrets() -> Non
     dev = compose("compose.dev.yaml")["services"]["gamestream"]
     writable = [v for v in dev["volumes"] if not str(v).endswith(":ro")]
     # experiment C1: exactly ONE writable bind, the H.264 recording dir (dot-named, outside ./data)
-    assert writable == ["${S2_REC_DIR:-/home/batt/poring-lab-rec/.s2-h264}:/s2-rec"]
+    assert writable == ["${S2_REC_DIR:-${HOME}/poring-lab-rec/.s2-h264}:/s2-rec"]
     assert dev["environment"]["S2_REC"] == "/s2-rec"
     assert "gamestream-state" not in str(dev) and ".config" not in str(dev["volumes"])
     assert "/lab-state" not in str(writable) and "./data" not in str(writable)
@@ -813,9 +829,12 @@ def test_the_nas_datasets_are_mounted_read_only_in_vision_only(name: str) -> Non
         else:
             assert mounts == [], f"{name}: {svc} mounts the NAS datasets"
     if name == "compose.yaml":
+        # Batt 2026-11-17 ("most users have no NAS"): the volume is a bind of the storage folder
+        # (LAB_STORE_DIR). Read-only comes from every mount above (":ro"); the lab's NFS options
+        # live in its own compose.override.yaml (new-lab-host.md 4.1), outside the repo.
         opts = compose(name)["volumes"]["datasets-nas"]["driver_opts"]
-        assert opts["type"] == "nfs" and opts["device"] == ":/mnt/tank-main/poring-lab/datasets"
-        assert {"ro", "soft"} <= set(opts["o"].split(","))
+        assert opts == {"type": "none", "o": "bind",
+                        "device": "${LAB_STORE_DIR:-${HOME}/poring-lab-store}"}  # fmt: skip
 
 
 def test_the_vision_dev_overlay_adds_only_the_source() -> None:

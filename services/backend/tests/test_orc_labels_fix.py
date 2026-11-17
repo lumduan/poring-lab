@@ -26,6 +26,7 @@ from poring_packets.world import World
 
 ROOT = Path(__file__).resolve().parents[3]
 sys.path.insert(0, str(ROOT / "scripts"))
+import lab_env  # noqa: E402
 import label_check  # noqa: E402
 import orc_camera_check as occ  # noqa: E402
 import orc_label_sheets as ols  # noqa: E402
@@ -571,7 +572,7 @@ def test_round4_samples_are_each_candidates_first_30_of_one_order() -> None:
 RSW = Path("/dev/shm/poring-lab-tmp/orc/gat/data/orcsdun01.rsw")
 MODELS = Path("/dev/shm/poring-lab-tmp/orc-labels-fix/grf/data/model")
 GAT = cm.GAT_DIR / "orcsdun01.gat"
-COL3 = Path("/mnt/poring-lab-datasets/detector-collection/orcsdun01/20261021T142100-orcsdun01-col3")
+COL3 = lab_env.store("detector-collection", "orcsdun01", "20261021T142100-orcsdun01-col3")
 KB = Path(os.environ.get("PORING_KB", str(ROOT / "data" / "kb")))
 
 
@@ -826,8 +827,8 @@ def test_a_human_demos_layout_is_checked_on_pixels(tmp_path: Path) -> None:
     assert not check(black)  # nothing readable: not the hunting layout
 
 
-# the demo recorded with Batt's Crusader, 2026-10-22 (local / NAS data only: skipped elsewhere)
-DEMO = Path("/mnt/poring-lab-datasets/20261022T184536-demo-human-demo-orcsdun01-crusader")
+# the demo recorded with Batt's Crusader, 2026-10-22 (the storage folder only: skipped elsewhere)
+DEMO = lab_env.store("20261022T184536-demo-human-demo-orcsdun01-crusader")
 LAYOUT_TM = Path(os.environ.get("PORING_LAYOUT_TEMPLATES",
                                 str(ROOT / "data" / "ui_anchors" / "layout")))  # fmt: skip
 

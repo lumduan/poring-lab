@@ -6,8 +6,9 @@ mapcache tool from the Thai client's GRF.
 
 * rAthena at the pinned SHA (the tarball scripts/gen_packet_tables.py fetched and verified against
   packages/poring_packets/src/poring_packets/tables.lock.json) is compiled in a THROWAWAY container
-  of the toolchain image (poring-lab/rathena-build:local): --network none, a tmpfs work dir, our
-  uid. Only `common` and the `mapcache` tool are built.
+  of the toolchain image (<project>/rathena-build:local, gen_packet_tables.IMAGE; poring-lab by
+  default): --network none, a tmpfs work dir, our uid. Only `common` and the `mapcache` tool are
+  built.
 * The tool reads the maps from a data_dir: rAthena's grfio refuses this 2026 GRF outright (a
   stored file name longer than its buffer: "...new_dragonbreath_water_11_clock.str is too long",
   2026-10-05). So OUR reader (scripts/grf_read.py) extracts only the lab's maps (--maps: .gat and

@@ -34,6 +34,7 @@ import numpy as np
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import benchlib  # noqa: E402
+import lab_env  # noqa: E402
 import measure_delay  # noqa: E402
 import measure_motion  # noqa: E402
 import ro_agent as r  # noqa: E402
@@ -43,7 +44,8 @@ from poring_backend.capture_lock import read_lock  # noqa: E402
 ROOT = Path(__file__).resolve().parents[1]
 RESULTS = ROOT / "docs" / "benchmarks"
 EXPERIMENTS = RESULTS / "experiments"
-GAMESTREAM = "poring-lab-gamestream-1"
+GAMESTREAM = lab_env.container("gamestream")
+DESKTOP = lab_env.container("desktop")
 EVIDENCE = ROOT / "data" / "bench"  # gitignored (data/)
 SCRATCH = Path(os.environ.get("SCRATCH", "/dev/shm/poring-lab-tmp"))
 
@@ -93,9 +95,9 @@ def _exec(container: str, *cmd: str) -> str:
 def run_config(backend: str) -> dict[str, Any]:
     env = r.env()
     if backend == "rdp":
-        version = _exec("poring-lab-desktop-1", "xfreerdp3", "--version").splitlines()[0]
+        version = _exec(DESKTOP, "xfreerdp3", "--version").splitlines()[0]
         logs = subprocess.run(
-            ["docker", "logs", "--tail", "400", "poring-lab-desktop-1"],
+            ["docker", "logs", "--tail", "400", DESKTOP],
             capture_output=True, text=True,
         )  # fmt: skip
         lines = [ln for ln in (logs.stderr + logs.stdout).splitlines() if "connecting to" in ln]
@@ -110,13 +112,11 @@ def run_config(backend: str) -> dict[str, Any]:
             if "=" in line
         ) if (ROOT / "state" / "gamestream-variant").exists() else {}  # fmt: skip
         if variant.get("CLIENT") == "s2spike":
-            version = "moonlight-common-c " + _exec(
-                "poring-lab-gamestream-1", "cat", "/opt/s2spike/lib/MLCC_SHA"
-            )
+            version = "moonlight-common-c " + _exec(GAMESTREAM, "cat", "/opt/s2spike/lib/MLCC_SHA")
             client = {"name": "s2spike", "version": version, "codec": "H.264",
                       "paint": variant.get("PAINT") or "x11"}  # fmt: skip
         else:
-            version = _exec("poring-lab-gamestream-1", "gamestream-version")
+            version = _exec(GAMESTREAM, "gamestream-version")
             client = {"name": "moonlight-qt", "version": version, "codec": "H.264"}
     return {
         "spec": benchlib.SPEC_VERSION,

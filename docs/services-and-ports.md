@@ -32,6 +32,12 @@ To switch to the Thai-data server and back (stop needs no guard; start does):
 
 ## Ports
 
+Every host port below is a `.env` setting with the number shown as its default (ADR-0026, Batt
+2026-11-17: nothing locked): `RATHENA_LOGIN_PORT`, `RATHENA_CHAR_PORT`, `RATHENA_MAP_PORT`,
+`RATHENA_WEB_PORT`, `BACKEND_PORT`, `NOVNC_PORT`, `CONSOLE_PORT`. rAthena listens on the same
+numbers it publishes (char and map are advertised to the client), and the sniffer's filter follows
+them. The two Docker subnets are `LAB_NET_PREFIX` / `LAB_AGENT_NET_PREFIX` (10.210.96 / 10.210.97).
+
 | Host bind | Service | Purpose | Exposure |
 |---|---|---|---|
 | `HOST_LAN_IP:6900` | rathena | login server | LAN |

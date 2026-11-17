@@ -127,13 +127,11 @@ stream test reports it.
 2. Make it fixed: in your router's settings, add a **DHCP reservation** for that MAC address, so
    the PC always gets the same IPv4 address. (Every router names this differently; look for
    "DHCP reservation" or "static lease".)
-3. **Known limit for the BOT (not for you):** today the bot can act only for a game PC at
-   **192.168.1.169**. The safety interlock's shipped environment set names that address as the
-   lab's Windows host, and it is not a setting yet ([new-lab-host.md](new-lab-host.md) section 7,
-   "Known limit"). The packet sniffer follows your PC's address (WIN_HOST, since 2026-11-17), and
-   its packets only label a session "verified", never stop the bot. At any other address you can
-   still view and play through the console, but every bot press is refused (`host_mismatch`). If
-   your network has 192.168.1.169 free, reserve that address for the PC.
+3. **Any address works** (since 2026-11-17, Batt: "don't lock an IP"; ADR-0026). The wizard
+   writes your PC's address as `WIN_HOST`; the safety interlock's environment set takes it at its
+   first start, and you can change an environment's Windows PC later on the console's Settings
+   page ("Set Windows PC"). The packet sniffer follows `WIN_HOST` too, and its packets only label
+   a session "verified", never stop the bot. (Before 2026-11-17 only 192.168.1.169 worked.)
 
 ## 7. Never asleep, never locked, always logged in
 

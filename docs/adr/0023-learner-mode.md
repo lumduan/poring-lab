@@ -7,7 +7,7 @@ verdict_date: 2026-11-07
 verdict_ticket: null
 supersedes: null
 related: [0006-sanctioned-test-environments.md, 0016-environment-interlock.md, 0019-windows-stays-clean.md, 0021-external-servers.md, 0001-single-rdp-session.md, ../planning/bot-server-cutover.md]
-next_action: "Decision 1 (the `declared` attestation in envstore / interlock / the Settings page) is BUILT 2026-11-12 (section Implementation). Still to design and build: decision 3 (the learner's Windows gets only the remote program), decision 4 (the Windows host as a console session setting) and the per-target remote identity (credentials, RDP certificate pin, Sunshine pairing) on a shared bot server."
+next_action: "Decision 1 (the `declared` attestation in envstore / interlock / the Settings page) is BUILT 2026-11-12, decision 4 (the Windows host on the Settings page) 2026-11-17 (section Implementation). Still to design and build: decision 3 (the learner's Windows gets only the remote program) and the per-target remote identity (credentials, RDP certificate pin, Sunshine pairing) on a shared bot server."
 ---
 
 # ADR-0023: Learner mode -- a person may declare permission; nothing on the learner's Windows
@@ -158,6 +158,34 @@ environment stops being allowed. It survives restarts and pulls (the store is gi
 
 NOT built here: decision 3 (nothing on the learner's Windows but the remote program), decision 4
 (the Windows host as a console setting; today `windows_host` is still technical, so a
-user-created environment has none and the declared path does not check the host), the per-target
+user-created environment has none and the declared path does not check the host;
+➡️ BUILT 2026-11-17, section "Implementation (2026-11-17): decision 4" below), the per-target
 identity on a shared bot server, and a link from the game-file finder's `clientinfo.xml` check to
 the declaration (the finder works as before, separately).
+
+## Implementation (2026-11-17): decision 4
+
+Batt 2026-11-17: "don't lock an IP or anything" (ADR-0026). The Windows PC is a person's setting:
+
+- **Seeded from this install, not the lab:** the shipped set names the game PC `${WIN_HOST}` and the
+  server `${HOST_LAN_IP}` with this install's ports (`interlock.load_config` fills the tokens with
+  the backend's own values, checked as an address literal / a port before they enter the text).
+  The first seed copies the Windows PC into the store; with WIN_HOST unset it stays EMPTY (red
+  `host_mismatch`), never a guessed address.
+- **Changed on the Settings page:** each allowed environment shows its Windows PC beside the one
+  this lab drives (`.env` WIN_HOST), with "Set Windows PC" and "Use this lab's PC". Through the
+  page's write gate only (a LAN browser with the console's Origin and the CSRF token; never the lab
+  host or the Windows PC itself), audited as `env_windows_host`: setting or changing it is a
+  normal change, clearing it easy (tightening). An import never carries it. Refused: a name, a
+  loopback / link-local / multicast / unspecified address, and the bot server's own address.
+- **The interlock is unchanged:** an environment is green only while its Windows PC equals this
+  backend's WIN_HOST (signal `lab_host`, and the declared path when it names one). The console's
+  banner for `host_mismatch` now points at the Settings page.
+- Code: `interlock.load_config` / `install_values`, `envstore` (`windows_host_refusal`, the
+  `env_windows_host` change), `routes_settings` (`EnvIn.windows_host`, the view's `windows_host`
+  and `win_host`), the frontend's `ServerSettings.tsx` (`WindowsPcPanel`), `settings.ts`,
+  `banner.ts`; tests in `test_interlock.py`, `test_settings.py`, `settings.test.ts`,
+  `banner.test.ts`.
+- The live lab's store keeps its Windows PC (192.168.1.169): the seed runs once, into an empty
+  store only.
+

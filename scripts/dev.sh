@@ -56,4 +56,16 @@ if ${force} && ! guarded_parent; then refuse "--force-recreate"; fi
 # Batt 2026-11-12: this machine's own values (gitignored compose.override.yaml) come LAST
 LOCAL=()
 [ -f compose.override.yaml ] && LOCAL=(-f compose.override.yaml)
-exec docker compose -f compose.yaml -f compose.dev.yaml "${LOCAL[@]}" --profile remote --profile dev "$@"
+# The project name (Batt 2026-11-17: two copies on one host need two names): the environment, else
+# .env's COMPOSE_PROJECT_NAME, else poring-lab -- the same order as scripts/lab_env.py's project().
+PROJECT="${COMPOSE_PROJECT_NAME:-}"
+if [[ -z "${PROJECT}" && -f .env ]]; then
+  PROJECT="$(sed -n 's/^COMPOSE_PROJECT_NAME=//p' .env | head -n 1 | tr -d '[:space:]')"
+fi
+PROJECT="${PROJECT:-poring-lab}"
+[[ "${PROJECT}" =~ ^[a-z0-9][a-z0-9_-]{0,62}$ ]] || {
+  echo "scripts/dev.sh: COMPOSE_PROJECT_NAME='${PROJECT}': lowercase letters, digits, - and _ only" >&2
+  exit 64
+}
+exec docker compose -p "${PROJECT}" -f compose.yaml -f compose.dev.yaml "${LOCAL[@]}" --profile remote \
+  --profile dev "$@"

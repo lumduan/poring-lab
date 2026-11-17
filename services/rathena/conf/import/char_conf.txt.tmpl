@@ -18,3 +18,8 @@ pincode_enabled: ${RATHENA_PINCODE}
 // option 2 FORBIDS the listed characters and allows everything else (the rAthena-Thailand setting).
 char_name_option: 2
 char_name_letters: @#
+
+// The game ports (Batt 2026-11-17: nothing fixed): this install's RATHENA_*_PORT (compose.yaml).
+// char -> login inside this container, and the port the game clients are sent to.
+login_port: ${RATHENA_LOGIN_PORT}
+char_port: ${RATHENA_CHAR_PORT}

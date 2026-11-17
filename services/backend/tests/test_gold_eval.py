@@ -9,6 +9,8 @@ from types import ModuleType
 import pytest
 
 SCRIPT = Path(__file__).resolve().parents[3] / "scripts" / "gold_eval.py"
+sys.path.insert(0, str(SCRIPT.parent))
+import lab_env  # noqa: E402
 
 
 @pytest.fixture
@@ -236,8 +238,8 @@ def test_cache_refs_are_container_paths_to_the_frames_in_place(
 
 
 GOLD_SESSION = "20261004T103815-console-s2-indoor-v2"
-NAS_GOLD = Path("/mnt/poring-lab-datasets/archive/train/eval/gold") / GOLD_SESSION
-NAS_HAND = Path("/mnt/poring-lab-datasets") / GOLD_SESSION / "handcheck.json"
+NAS_GOLD = lab_env.store("archive", "train", "eval", "gold", GOLD_SESSION)  # the storage folder
+NAS_HAND = lab_env.store(GOLD_SESSION, "handcheck.json")
 
 
 @pytest.mark.skipif(not (NAS_GOLD / "pred-v1png-20261008.json").exists() or not NAS_HAND.exists(),
@@ -260,7 +262,7 @@ def test_real_g1_reproduces_v1s_recorded_gold_numbers(
         assert (npc["tp"], npc["fp"], npc["fn"]) == (52, 1, 2)
 
 
-V1_CACHE = Path("/mnt/poring-lab-datasets/.framecache/v1png-20261008")
+V1_CACHE = lab_env.store(".framecache", "v1png-20261008")
 
 
 @pytest.mark.skipif(not (V1_CACHE / "manifest.json").exists(), reason="the NAS cache is absent")

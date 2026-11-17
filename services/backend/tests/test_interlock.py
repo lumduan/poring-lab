@@ -17,7 +17,13 @@ from fastapi.testclient import TestClient
 
 from poring_backend import capture_lock as cl
 from poring_backend.config import Settings
-from poring_backend.interlock import EnvironmentsConfig, Window, evaluate, load_config
+from poring_backend.interlock import (
+    EnvironmentsConfig,
+    Window,
+    evaluate,
+    install_values,
+    load_config,
+)
 from poring_backend.main import create_app
 from poring_backend.mux import InputMux, Source
 from poring_env.clock import FrameCounter, monotonic_ns
@@ -332,10 +338,15 @@ def test_no_config_file_fails_closed_and_the_committed_one_is_valid(app_client: 
     env = client.get("/health").json()["environment"]
     assert (env["state"], env["reason"], env["config"]) == ("red", "config_missing",
                                                             "config_missing")  # fmt: skip
-    committed, err = load_config(ROOT / "config" / "environments.yaml")
+    ports = {"RATHENA_LOGIN_PORT": 6900, "RATHENA_CHAR_PORT": 6121, "RATHENA_MAP_PORT": 5121}
+    shipped = ROOT / "config" / "environments.yaml"
+    committed, err = load_config(shipped, install_values("192.168.1.228", HOST, ports))
     assert err == "" and committed is not None
     lab = {e.id: e for e in committed.environments}
     assert lab["lab-rathena"].status == "allowed" and lab["lab-rathena"].windows_host == HOST
+    assert lab["lab-rathena"].server is not None
+    assert (lab["lab-rathena"].server.host, lab["lab-rathena"].server.ports) == (
+        "192.168.1.228", [6900, 6121, 5121])  # fmt: skip
     assert set(lab["lab-rathena"].accounts) == {AGENT, GM}
     assert lab["community-bot-testing"].status == "pending"
     # Known-forbidden (Batt, 2026-10-05): the official Thai RO login the Thai data points at.
@@ -604,3 +615,35 @@ def test_a_declared_environment_lets_the_bot_press_labelled_in_health(
         while (msg := json.loads(ws.receive_text()))["type"] != "status":
             pass
         assert msg["environment"] is None
+
+
+def test_the_shipped_set_names_this_install_never_the_lab(tmp_path: Path) -> None:
+    """Batt 2026-11-17 ("don't lock an IP or anything"): the shipped set carries no address or port
+    of the lab's own; each install's backend fills in its own HOST_LAN_IP, WIN_HOST and ports."""
+    shipped = ROOT / "config" / "environments.yaml"
+    for n, line in enumerate(shipped.read_text().splitlines(), 1):
+        code = line.split("#", 1)[0]
+        assert "192.168." not in code and "10.210." not in code, (n, line)
+    other = {"RATHENA_LOGIN_PORT": 7900, "RATHENA_CHAR_PORT": 7121, "RATHENA_MAP_PORT": 7122}
+    cfg, err = load_config(shipped, install_values("10.0.5.20", "10.0.5.31", other))
+    assert err == "" and cfg is not None
+    for env_id in ("lab-rathena", "lab-rathena-th"):
+        env = next(e for e in cfg.environments if e.id == env_id)
+        assert env.windows_host == "10.0.5.31" and env.server is not None
+        assert (env.server.host, env.server.ports) == ("10.0.5.20", [7900, 7121, 7122])
+    # no Windows PC set yet: the field is EMPTY (red host_mismatch), never a guessed address
+    cfg, err = load_config(shipped, install_values("10.0.5.20", "", other))
+    assert err == "" and cfg is not None
+    assert next(e for e in cfg.environments if e.id == "lab-rathena").windows_host == ""
+
+
+def test_install_tokens_are_checked_before_they_enter_the_text(tmp_path: Path) -> None:
+    ports = {"RATHENA_LOGIN_PORT": 6900, "RATHENA_CHAR_PORT": 0, "RATHENA_MAP_PORT": 70000}
+    values = install_values("not-an-ip", "192.168.1.169\nversion: 2", ports)
+    assert values == {"RATHENA_LOGIN_PORT": "6900"}  # names, injections and bad ports never pass
+    unknown = tmp_path / "e.yaml"
+    unknown.write_text(
+        "version: 1\nattestation_max_age_s: 10\nwindow_max_s: 120\nenvironments:\n"
+        "  - {id: a, status: allowed, adr: x, windows_host: '${HOME}'}\n"
+    )
+    assert load_config(unknown, {"WIN_HOST": "192.168.1.169"}) == (None, "config_invalid")

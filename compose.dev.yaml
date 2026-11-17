@@ -102,7 +102,8 @@ services:
       - ./services/gamestream/openbox:/opt/openbox:ro
       # The ONE writable bind in gamestream: recordings only (a host dir on the local recording
       # root, dot-named; never the pairing key, never the state dir). test_guards pins it.
-      - ${S2_REC_DIR:-/home/batt/poring-lab-rec/.s2-h264}:/s2-rec
+      # Default = record_session.py's own (~/poring-lab-rec/.s2-h264; gap J fixed 2026-11-17, ADR-0026).
+      - ${S2_REC_DIR:-${HOME}/poring-lab-rec/.s2-h264}:/s2-rec
 
   frontend-dev:
     profiles: [dev]
@@ -125,7 +126,7 @@ services:
     working_dir: /app
     command: ["node", "/src/dev/run-dev.mjs"]
     environment:
-      BACKEND_PUBLIC_URL: http://${HOST_LAN_IP:?}:8000
+      BACKEND_PUBLIC_URL: http://${HOST_LAN_IP:?}:${BACKEND_PORT:-8000}
       HOST_LAN_IP: ${HOST_LAN_IP:?}
       HOME: /app/.home
       COREPACK_HOME: /app/.corepack

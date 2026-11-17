@@ -31,6 +31,7 @@ import time
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
+import lab_env  # noqa: E402
 import ro_agent as r  # noqa: E402
 
 COUNTER = r"""
@@ -58,7 +59,8 @@ for t, a, source in GrabSource().frames((int(x), int(y), int(w), int(h)), secs, 
 
 # The display path's containers (ADR-0009): desktop (Xvfb + xfreerdp) and, in console mode,
 # gamestream (Moonlight). Lab-side cost = their cgroup CPU together.
-DISPLAY_PATH = ("poring-lab-desktop-1", "poring-lab-gamestream-1")
+DESKTOP = lab_env.container("desktop")
+DISPLAY_PATH = (DESKTOP, lab_env.container("gamestream"))
 
 
 def container_usage_us(name: str) -> int | None:
@@ -86,7 +88,7 @@ def cores_between(
 
 
 def desktop_usage_us() -> int:
-    usage = container_usage_us("poring-lab-desktop-1")
+    usage = container_usage_us(DESKTOP)
     assert usage is not None, "the desktop container is not running"
     return usage
 
@@ -163,7 +165,7 @@ def measure_rotation(
         "idle_lead_in": [n for _, n, _ in rows[:4]],
         "grabs_per_s_median": statistics.median(g for _, _, g in rows) if rows else None,
         "frame_sources": sources,
-        "desktop_cores": cores.get("poring-lab-desktop-1"),
+        "desktop_cores": cores.get(DESKTOP),
         "lab_cores": cores,
         "t_wall_end": time.strftime("%H:%M:%S"),
     }  # fmt: skip

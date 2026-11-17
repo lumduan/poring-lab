@@ -4,7 +4,7 @@ map_verdict the check and the runner use, against the true map from the session'
 
     minimap_id.py eval SPEC.json [--expect MAP] [--refs NPZ] [--out JSON]
 
-SPEC: a JSON list of sessions (NAS names under /mnt/poring-lab-datasets, or absolute paths):
+SPEC: a JSON list of sessions (names under the storage folder, LAB_STORE_DIR, or absolute paths):
   {"kind": "shards", "path": S, "per_shard": N, "shards": [i, ...]}  -- the recorder's PNG shards:
       N frames spread over each listed shard (tar members are seeked, never extracted to disk);
   {"kind": "frames", "path": S}  -- a demo's frames/<name>-<t_mono_ns>.png;
@@ -24,6 +24,7 @@ import gzip
 import io
 import json
 import re
+import sys
 import tarfile
 import time
 from collections import Counter
@@ -33,7 +34,10 @@ from typing import Any
 
 import numpy as np
 
-NAS = Path("/mnt/poring-lab-datasets")
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import lab_env  # noqa: E402
+
+NAS = lab_env.store_dir()  # the storage folder (LAB_STORE_DIR)
 LOAD_BEFORE_S, LOAD_AFTER_S = 2.0, 5.0  # the load screen: ~1-3 s on the lab
 PACE_S = 0.05  # between two frames read from the NAS
 

@@ -132,3 +132,44 @@ next_action: "Intel first (bot-server's Arc A380): the OpenVINO inference backen
   worker's 6 GB (bot-server's trainer was OOM-killed at 6 GB; its Intel overlay gives 11 GB). Raise it in
   the machine's own `compose.override.yaml` (`mem_limit` == `memswap_limit`), never in a tracked file:
   docs/setup/new-lab-host.md section 5.
+
+## Amendment 2026-11-17: dedicated-cpu, and the setup detects and recommends
+
+- **Batt (Thai, translated):** "If it is this specific, users cannot even start installing and
+  learning, e.g. fixing the graphics card. The setup should detect the graphics card by itself and
+  recommend it to the user; with no GPU, use the CPU instead." The wider decision is ADR-0026
+  (any host, nothing locked).
+- **A fourth profile, `dedicated-cpu`** (`scripts/host_profile.py`): a host with NO usable GPU (none,
+  an AMD card, or a card whose driver or container runtime is not ready). The dedicated rules,
+  accelerator `cpu`, no vision image, no vision worker, no GPU lister; the CPU detector serves alone.
+  guarded_build refuses every vision step there with that reason. It closes
+  second-install-gaps.md row D's "a CPU-only profile still open".
+- **What the setup checks** (`scripts/gpu_ready.py`; the wizard's pre-flight and profile screen):
+  only what a container cannot bring, because the GPU's kernel driver is the host's:
+
+  | GPU | ready when | recommended | otherwise |
+  |---|---|---|---|
+  | NVIDIA | the driver's release >= 580 (`/proc/driver/nvidia/version`; the image is CUDA 13.0) and the NVIDIA Container Toolkit is installed (its runtime hook / `nvidia-ctk`) | `dedicated-nvidia`, build the vision image, VRAM share 1.0, the worker's memory from the RAM | `dedicated-cpu`, with the fixes (update the driver; install the toolkit + `nvidia-ctk runtime configure`) |
+  | Intel | the i915/xe kernel driver is loaded and the user is in the render node's group | `dedicated-intel`, the same | `dedicated-cpu`, with the fixes; a note when the host is not Ubuntu 26.04 (the Intel image's runtime must match the host's driver) |
+  | AMD | (no vision image for AMD yet) | `dedicated-cpu` | |
+  | none | | `dedicated-cpu` | |
+
+  The person may still choose the GPU profile against the recommendation; the real proof is
+  later and inside the image (`scripts/check_gpu.py`).
+- **The worker's memory** (`VISION_WORKER_MEM`, both worker overlays read it): the setup proposes
+  the host's RAM minus 6 GiB, between 4 and 16 GiB (bot-server's 15 GiB would get 8g; the lab
+  keeps its Intel overlay's 11g, Batt 2026-11-08, by leaving the key unset).
+- **The detect server and the Run helper follow the profile:** the Run helper starts the profile's
+  detect backend (torch on NVIDIA, OpenVINO on Intel, none on `dedicated-cpu`), and the detect
+  server registers only the models whose pinned files are present in the storage folder (a new
+  install has v1 only; the lab all eight). It closes second-install-gaps.md row N.
+  - ⚠️ The torch backend (NVIDIA) loads each model's `.pt` checkpoint, the OpenVINO one (Intel) its
+    ONNX. The teaching-kit branch publishes v1's ONNX only, so a NEW NVIDIA install has no model
+    for its GPU server until it has a `.pt` (its own training, or a published v1 checkpoint): its
+    detections come from the CPU detector, which runs v1's ONNX. A decision for Batt (publishing
+    v1's `.pt` beside its ONNX, or an ONNX backend on CUDA) -- not decided here.
+- **The starter model** for a new install: v1 (`v1.onnx` of the teaching-kit branch, the same file
+  as the lab's `v1png-last-736x1280.onnx`, sha256 `32b448a1...`), installed by
+  `scripts/detector_setup.py` into the CPU detector's folder and the storage folder's
+  `archive/models/`.
+- **Unchanged:** the three existing profiles, their rules and overlays; VM 103 stays `shared-nvidia`.

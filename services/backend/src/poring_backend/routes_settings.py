@@ -91,6 +91,10 @@ class EnvIn(BaseModel):
     servers: list[ServerIn] = Field(default_factory=list, max_length=envstore.MAX_SERVERS)
     # ADR-0023: the person's statement only (the backend stamps the time and the peer); null = none
     declared: str | None = Field(default=None, max_length=envstore.MAX_STATEMENT)
+    # ADR-0023 decision 4 (Batt 2026-11-17): the Windows game PC's address. null/absent = keep the
+    # current one (an older page sends none), "" = clear it, an IP literal = set it. Never from an
+    # import (a file names no machine of yours).
+    windows_host: str | None = Field(default=None, max_length=45)
 
 
 class PutBody(BaseModel):
@@ -252,7 +256,7 @@ def _resolved_view(state: AppState, host: str, forbidden: bool) -> list[dict[str
 def view(state: AppState) -> dict[str, Any]:
     """What the Settings page shows; the same for the console and the agent's read."""
     es, error = state.envset()
-    defaults, _ = load_config(state.settings.environments_file)
+    defaults, _ = load_config(state.settings.environments_file, state.settings.install_values())
     suggested = envstore.suggestions(defaults, es) if es is not None else {}
     blocked = state.forbidden()
     envs: list[dict[str, Any]] = []
@@ -275,6 +279,9 @@ def view(state: AppState) -> dict[str, Any]:
             "ready": env.type == "allowed" and bool(env.servers) and (
                 bool(env.signals) or env.declared is not None),
             "signals": list(env.signals),
+            # ADR-0023 decision 4: the Windows game PC a person set (the interlock needs it to be
+            # this backend's WIN_HOST, the top-level "win_host")
+            "windows_host": env.windows_host,
             # ADR-0023: a person's declaration -- shown as "declared by a person, not verified"
             "declared": env.declared.model_dump() if env.declared is not None else None,
         })  # fmt: skip
@@ -283,6 +290,9 @@ def view(state: AppState) -> dict[str, Any]:
         "store": error or "ok",
         "seeded_from": es.seeded_from if es is not None else None,
         "config": state.interlock.config_error or "ok",
+        # the Windows PC THIS backend drives (.env WIN_HOST): an environment that names another one
+        # is red host_mismatch until a person sets it here, or WIN_HOST changes
+        "win_host": state.settings.win_host or None,
         "environments": envs,
         "forbidden": sorted(
             [f"{h}:{p}" if p else h for h, p in blocked.hosts] + [f"*{d}" for d in blocked.domains]
@@ -343,6 +353,16 @@ def _declared(e: EnvIn, current: envstore.Declaration | None, source: str, who: 
     return envstore.Declaration(at=now, peer=who.client, statement=statement)
 
 
+def _windows_host(e: EnvIn, current: str | None, source: str) -> str | None:
+    """The environment's Windows PC after this save (ADR-0023 decision 4): the page may set,
+    change or clear it; an import, an absent field or a non-allowed environment keeps it.
+    envstore.validate checks the address."""
+    if source == "import" or e.windows_host is None or e.type != "allowed":
+        return current
+    value = e.windows_host.strip()
+    return value or None
+
+
 def _build(body: PutBody, current: envstore.EnvSet, who: Who) -> envstore.EnvSet | tuple[str, str]:
     """The new set from the request: stable ids, kept metadata, technical fields from the current
     set only (a declaration: the page's statement, stamped here; ``_declared``); (reason, subject)
@@ -382,6 +402,8 @@ def _build(body: PutBody, current: envstore.EnvSet, who: Who) -> envstore.EnvSet
                 host=host, port=srv.port, note=clean(srv.note).strip(), source=source, added_at=now,
                 added_by=who.client or ""))  # fmt: skip
         technical = {k: getattr(base, k) for k in envstore.TECHNICAL} if base else {}
+        technical["windows_host"] = _windows_host(e, base.windows_host if base else None,
+                                                  body.source)  # fmt: skip
         declared = _declared(e, base.declared if base else None, body.source, who, now)
         if isinstance(declared, str):
             return declared, env_id
@@ -434,6 +456,11 @@ async def put_environments(request: Request,
             h: ips for h, ips in state.allowlist_resolved.items() if h not in resolved
         }
         problem = envstore.validate(new, names, current)
+        lab_ip = state.settings.host_lan_ip
+        if problem is None and lab_ip:
+            # the bot's own host is never the Windows game PC (it runs no game client)
+            hits = [e.windows_host for e in new.environments if e.windows_host == lab_ip]
+            problem = ("windows_host_is_this_host", hits[0]) if hits else None
         if problem is not None:
             raise _refuse(request, 422, problem[0], audit=True, entry=problem[1] or None,
                           extra={"entry": problem[1]})  # fmt: skip

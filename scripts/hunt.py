@@ -44,6 +44,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 import farm0 as f0  # noqa: E402
 import farm1 as f1  # noqa: E402
 import hunt_core as hc  # noqa: E402
+import lab_env  # noqa: E402
 import ro_agent as r  # noqa: E402
 
 RULE = "hunt"
@@ -51,7 +52,7 @@ MAP = "prt_fild08"
 START = (268, 107)
 OUT = Path("/dev/shm/poring-lab-tmp/hunt")  # logs (small)
 # the 5 Hz frames go to the NAS (not /dev/shm: four runs filled it on 2026-10-16)
-REC_ROOT = Path("/mnt/poring-lab-datasets/hunt-recordings")
+REC_ROOT = lab_env.store("hunt-recordings")  # in the storage folder (LAB_STORE_DIR)
 REC_QUALITY = 80
 REC_HZ = 5.0
 CHECK_EVERY_S = 30.0

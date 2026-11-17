@@ -55,8 +55,12 @@ import numpy as np
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import detector_worker as dw  # noqa: E402 -- the CPU worker's own letterbox / decode / NMS
+import lab_env  # noqa: E402 -- stdlib only: this copy's per-copy RAM paths
 
-ENV = Path("/dev/shm/poring-lab-detector")
+# The CPU detector's environment + models: DETECTOR_DIR, else ~/.local/share/<project>/detector
+# (ADR-0026; scripts/detector_setup.py makes it). The lab keeps it in RAM:
+# /dev/shm/poring-lab-detector.
+ENV = lab_env.detector_dir()
 PYTHON = ENV / ".venv/bin/python"
 # v1 (labels v1, 30 epochs): LIVE since 2026-10-13 (Batt decision 10), after the gold-set deployment
 # parity in docs/benchmarks/v1-vs-v0png.md. Rollback: V0_MODEL. 1280 x 736 input, classes as v0.
@@ -289,7 +293,9 @@ def for_map(map_name: str | None, *, env: Path = ENV, onnx: str | None = None,
 
 
 # --- THE GPU PATH (gpu-live-detector.md option A; ADR-0005 Amendment 2026-11-07) ---------------
-GPU_DIR = Path("/dev/shm/poring-lab-detect")  # the worker's /detect; guarded_build creates it 0700
+# The worker's /detect, PER COPY (/dev/shm/<project>-detect; compose.vision-worker.yaml mounts the
+# same path); guarded_build creates it 0700.
+GPU_DIR = lab_env.shm("detect")
 GPU_SOCKET = GPU_DIR / "detect.sock"
 SERVER_SOCKET = "/detect/detect.sock"  # the same socket, inside the worker
 IMGSZ = (736, 1280)  # every deployed model's input (h, w), as the ONNX files' names say
@@ -696,6 +702,28 @@ def for_map_gpu(map_name: str | None, *, env: Path = ENV, socket_path: Path = GP
     return GpuDetector(cpu, weights, socket_path=socket_path, **dict(gpu_kw or {}))
 
 
+# The worker's /datasets is the host's storage folder (compose: datasets-nas, LAB_STORE_DIR).
+WORKER_DATASETS = "/datasets"
+
+
+def host_path(worker_path: str, store: Path | None = None) -> Path:
+    """Where a /datasets/... file of the worker lies on THIS host (the storage folder)."""
+    rel = Path(worker_path).relative_to(WORKER_DATASETS)
+    return (lab_env.store_dir() if store is None else store) / rel
+
+
+def present_models(backend: str, store: Path | None = None) -> tuple[str, ...]:
+    """ADR-0022 Amendment 2026-11-17: the GPU_WEIGHTS names whose file for ``backend`` is in the
+    storage folder (torch: the .pt; openvino: the deployed ONNX). A new install has v1's ONNX only
+    (scripts/detector_setup.py); the lab all of them. The server still checks each sha256."""
+    out = []
+    for name, w in GPU_WEIGHTS.items():
+        rel = w.path if backend == "torch" else f"{NAS_MODELS}/{w.onnx}" if w.onnx else ""
+        if rel and host_path(rel, store).is_file():
+            out.append(name)
+    return tuple(out)
+
+
 def serve_step(seconds: int, models: Sequence[str] = tuple(GPU_WEIGHTS)) -> str:
     """PURE: the guarded step that runs the detect server for ``seconds`` (the pinned weights)."""
     parts = ["python", "-m", "poring_vision.detect_server", "--socket", SERVER_SOCKET]
@@ -766,10 +794,16 @@ def main(argv: list[str] | None = None) -> int:
             ap.error("--ov-preproc is --backend openvino's (torch converts on the card already)")
         if a.backend != "openvino" and a.ov_precision is not None:
             ap.error("--ov-precision is --backend openvino's (torch runs FP32)")
-        step = (serve_step_openvino(a.seconds, a.device,
+        models = present_models(a.backend)
+        if not models:
+            print(f"no model for the {a.backend} detect server in the storage folder "
+                  f"({lab_env.store_dir()}): the CPU detector serves alone "
+                  "(scripts/detector_setup.py installs v1)", file=sys.stderr)  # fmt: skip
+            return 3
+        step = (serve_step_openvino(a.seconds, a.device, models,
                                     ov_preproc=a.ov_preproc or OV_PREPROC_DEFAULT,
                                     ov_precision=a.ov_precision or OV_PRECISION_DEFAULT)
-                if a.backend == "openvino" else serve_step(a.seconds))  # fmt: skip
+                if a.backend == "openvino" else serve_step(a.seconds, models))  # fmt: skip
         print(f"python3 scripts/guarded_build.py --threshold 30 --sustain 30 '{step}'")
     return 0
 

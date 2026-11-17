@@ -49,7 +49,7 @@ On a breach:
                 OFFLINE re-decode of the banked captures (ADR-0007; Batt 2026-10-08) with the
                 CURRENT decoders: the sniffer's capture-*.pcapng opened in [FROM, TO] (UTC hours,
                 YYYYmmddTHH) plus the one open at FROM, through `python -m poring_packets.replay`
-                in a ONE-OFF container from poring-lab/sniffer:local -- never the live sniffer
+                in a ONE-OFF container from <project>/sniffer:local -- never the live sniffer
                 (its 256 MB would be shared): no network, captures read-only, every capability
                 dropped, uid 1000, mem == memswap 1g, oom_score_adj 500, 2 CPUs, reads capped at
                 REPLAY_READ_BPS on the root LV. Output: $REPLAY_OUT/<FROM>..<TO>/events.jsonl.
@@ -89,12 +89,12 @@ On a breach:
   OPTION A, the long-lived vision worker (docs/operations/vision-long-lived.md; Batt 2026-10-09:
   BUILT, unit-tested; PROVEN + SWITCHED 2026-10-10, 5b -- train-day.sh uses it with WORKER=1):
   worker:vision[@<seconds>]
-                start THE worker once: `docker compose -f compose.yaml -f
+                start THE worker once: `docker compose -p <project> -f compose.yaml -f
                 compose.vision-worker.yaml --profile vision-worker up -d --no-deps --no-build
                 vision-worker`, then watch the IO guard for <seconds> (default 120; a breach stops
                 it) and check it is IDLE (docker-init + `sleep infinity`) with nothing of ours on
                 the GPU. The same image, mounts, limits and network as a rundev: run
-                (tests/test_guards.py), plus ONE mount: /dev/shm/poring-lab-detect at /detect,
+                (tests/test_guards.py), plus ONE mount: /dev/shm/<project>-detect at /detect,
                 the detect server's socket (ADR-0005 Amendment 2026-11-07), created first as
                 ours, mode 0700 (else REFUSED). Its entrypoint never imports torch, so it holds
                 no CUDA context. It is the day's ONE cold start: run it through
@@ -102,7 +102,7 @@ On a breach:
                 nothing is started. Busy, paused or unreadable: REFUSED (rc 3).
   execdev:vision[@<seconds>]=<command>
                 <command> INSIDE the worker: `timeout <seconds+60> docker exec
-                poring-lab-vision-worker-1 timeout --kill-after=30 <seconds> <command>`. The INNER
+                <project>-vision-worker-1 timeout --kill-after=30 <seconds> <command>`. The INNER
                 timeout bounds the process: a killed `docker exec` client never stops what it
                 started (the Docker API cannot signal an exec). Everything of rundev: holds: the
                 same R2/R3 pre-start refusals, the PairedR3 ON/OFF windows (docker pause / unpause
@@ -134,18 +134,20 @@ On a breach:
                 the overlay dirs: once pushed quant-postgres to 15-18 % alone). buildx-du: the
                 lab builder's (default) cache records. Read-only; a trip kills it and stops the run.
   archive:<src>=<dst>
-                the disk audit's MOVE to the NAS (Batt, 2026-10-21: "long-term files live ONLY on
-                the NAS ... copy to the NAS paced (chunked, IO guard) ... verify, then delete
-                locally"). <src> under MEASURE_ROOTS, <dst> under NAS_ARCHIVE_ROOT and NOT existing.
+                the disk audit's MOVE to long-term storage (Batt, 2026-10-21: "long-term files live
+                ONLY on the NAS ... copy to the NAS paced (chunked, IO guard) ... verify, then
+                delete locally"). <src> under MEASURE_ROOTS, <dst> under the storage folder
+                (store_root(): LAB_STORE_DIR, scripts/lab_env.py; the lab: its NAS) and NOT
+                existing; neither inside the other.
                 Three phases, each under the guard: `rsync -a --bwlimit` (paced) -> a size+count
                 check (`rsync -a -n --itemize-changes` must list NOTHING) -> `rm -rf <src>`. A trip
                 or a failed check stops before the delete. One item per step.
   voldump:<volume>=<dst.tar.gz> | volrm:<volume>=<dst.tar.gz>
-                a STOPPED volume to the NAS, then removed (Batt, 2026-10-22, decision 7: "db-th-data
+                a STOPPED volume to storage, then removed (Batt 2026-10-22, decision 7: "db-th-data
                 dump to the NAS then remove"). Only VOLUME_ALLOWED volumes (db-th-data); voldump:
                 also the captures (VOLUME_DUMP: the bot-server cutover, never volrm). voldump:
-                refused while any container that mounts it runs, or when <dst> (under
-                NAS_ARCHIVE_ROOT, *.tar.gz) exists; a COLD copy of the data directory -- a one-off,
+                refused while any container that mounts it runs, or when <dst> (under the storage
+                folder, *.tar.gz) exists; a COLD copy of the data directory -- a one-off,
                 network-less container of the volume's own image as its owner (cap-drop ALL),
                 `tar czf -` to the host's <dst> -- then the file count of the volume must equal
                 the archive's. volrm: only when <dst> is there and readable (`tar tzf`): `compose
@@ -197,9 +199,15 @@ sys.path.insert(0, str(REPO / "scripts"))
 import frigate_r3  # noqa: E402
 import host_profile  # noqa: E402
 import io_baseline  # noqa: E402
+import lab_env  # noqa: E402
 
 STATE = Path(os.environ.get("LAB_STATE_HOST_DIR", REPO / "state"))
-BACKEND = "poring-lab-backend-1"
+# This copy's compose project (Batt 2026-11-17: two copies on one host need two names; the lab's is
+# the default, poring-lab). Every Docker name below is built from it (scripts/lab_env.py), and every
+# raw `docker compose` argv carries it as `-p` (COMPOSE): scripts/dev.sh passes the same name.
+COMPOSE_PROJECT = lab_env.project()
+COMPOSE = ["docker", "compose", "-p", COMPOSE_PROJECT]
+BACKEND = lab_env.container("backend")
 LOGDIR = Path(os.environ.get("TMPDIR", "/dev/shm/poring-lab-tmp"))  # rule 7: never host /tmp
 LOGDIR.mkdir(parents=True, exist_ok=True)
 CONTAINERS = [
@@ -247,7 +255,17 @@ MEASURE_ROOTS = (
     Path.home() / "poring-lab-shm-archive",
     Path.home() / ".cache" / "poring-lab",
 )
-NAS_ARCHIVE_ROOT = Path("/mnt/poring-lab-datasets")  # archive: destinations (tank-main/poring-lab)
+
+
+def store_root() -> Path:
+    """archive: / voldump: / volrm: destinations: the storage folder (LAB_STORE_DIR, lab_env; the
+    lab: its NAS, tank-main/poring-lab). Read when such a step is parsed: a bad value refuses it."""
+    try:
+        return lab_env.store_dir()
+    except SystemExit as exc:
+        raise ValueError(str(exc)) from None
+
+
 ARCHIVE_BWLIMIT_KIB = 20000  # ~20 MB/s off the shared disk
 MEASURE_FIXED = {
     "docker-df": ["docker", "system", "df", "-v"],
@@ -261,13 +279,12 @@ VOLUME_ALLOWED = {"db-th-data": ("db-th", "mariadb:11.8.9", "999:999")}
 # files: read as nobody, cap-drop ALL, network none, read-only.
 VOLUME_DUMP = {
     **VOLUME_ALLOWED,
-    "captures": ("sniffer", "poring-lab/sniffer:local", "65534:65534"),
-    "captures-th": ("sniffer-th", "poring-lab/sniffer:local", "65534:65534"),
+    "captures": ("sniffer", lab_env.image("sniffer"), "65534:65534"),
+    "captures-th": ("sniffer-th", lab_env.image("sniffer"), "65534:65534"),
 }
-COMPOSE_PROJECT = "poring-lab"
 REPLAY_RANGE = re.compile(r"^(\d{8}T\d{2})\.\.(\d{8}T\d{2})$")
 CAPTURE_NAME = re.compile(r"^capture-(\d{8}T\d{6})Z\.pcapng$")
-REPLAY_IMAGE = "poring-lab/sniffer:local"
+REPLAY_IMAGE = lab_env.image("sniffer")
 REPLAY_OUT = Path("/dev/shm/poring-lab-tmp/replay")  # RAM: rule 7
 REPLAY_DEVICE = "/dev/dm-0"  # the root LV (Docker's volumes); the disk shared with live capture
 REPLAY_READ_BPS = "20mb"
@@ -370,8 +387,9 @@ def parse_step(step: str) -> Step:
             raise ValueError(f"{step}: only {', '.join(sorted(allowed))}")
         if not eq or not dst.is_absolute() or ".." in dst.parts or not dst.name.endswith(".tar.gz"):
             raise ValueError(f"{step}: expected {kind}:<volume>=<abs dst>.tar.gz")
-        if NAS_ARCHIVE_ROOT not in dst.parents:
-            raise ValueError(f"{step}: dst only below {NAS_ARCHIVE_ROOT}")
+        root = store_root()
+        if root not in dst.parents:
+            raise ValueError(f"{step}: dst only below the storage folder {root} (LAB_STORE_DIR)")
         return Step(kind, [name], None, [str(dst)])
     if kind == "archive":
         src_s, eq, dst_s = arg.partition("=")
@@ -382,8 +400,13 @@ def parse_step(step: str) -> Step:
             raise ValueError(f"{step}: no '..'")
         if not any(r in src.parents for r in MEASURE_ROOTS):
             raise ValueError(f"{step}: src only BELOW {', '.join(str(r) for r in MEASURE_ROOTS)}")
-        if NAS_ARCHIVE_ROOT not in dst.parents:
-            raise ValueError(f"{step}: dst only below {NAS_ARCHIVE_ROOT}")
+        root = store_root()
+        if root not in dst.parents:
+            raise ValueError(f"{step}: dst only below the storage folder {root} (LAB_STORE_DIR)")
+        # the NAS never overlapped our roots; a storage folder may (e.g. under the home): a copy
+        # into itself followed by the delete would remove both
+        if src == dst or src in dst.parents or dst in src.parents:
+            raise ValueError(f"{step}: src and dst must not contain each other")
         return Step("archive", ["archive"], None, [str(src), str(dst)])
     if kind == "cache" or step.startswith("cache@") or step.startswith("cache="):
         head, eq, command = step.partition("=")
@@ -421,7 +444,7 @@ VISION_FILES = (host_profile.files("compose.yaml", overlay=PROFILE.vision_overla
 
 def container_name(step: Step) -> str:
     """The run:/rundev: step's container, NAMED so an abort can stop the container itself."""
-    return f"poring-lab-{step.services[0]}-{step.kind}-{os.getpid()}"
+    return f"{COMPOSE_PROJECT}-{step.services[0]}-{step.kind}-{os.getpid()}"
 
 
 def run_cmd(step: Step) -> list[str]:
@@ -429,14 +452,14 @@ def run_cmd(step: Step) -> list[str]:
     seconds = str(int(step.seconds or 600))
     files = VISION_DEV if step.kind == "rundev" else VISION_FILES
     return [
-        "timeout", seconds, "docker", "compose", *files, "--profile", svc, "run", "--rm",
+        "timeout", seconds, *COMPOSE, *files, "--profile", svc, "run", "--rm",
         "--name", container_name(step), "--no-deps", svc, *step.command,
     ]  # fmt: skip
 
 
 # --- OPTION A: the long-lived vision worker (docs/operations/vision-long-lived.md) ---------------
 WORKER_SERVICE = "vision-worker"
-WORKER = "poring-lab-vision-worker-1"  # compose's name for the ONE worker container
+WORKER = lab_env.container(WORKER_SERVICE)  # compose's name for the ONE worker container
 VISION_WORKER = [*host_profile.files("compose.yaml", "compose.vision-worker.yaml",
                                      overlay=PROFILE.worker_overlay), *local_override(),
                  "--profile", WORKER_SERVICE]  # fmt: skip  # this machine's own values LAST
@@ -450,7 +473,7 @@ EXEC_HOST = b"docker\x00exec\x00" + WORKER.encode() + b"\x00"
 # the duty file guarded_build writes and the results it reads are this checkout's.
 # ADR-0005 Amendment 2026-11-07: the detect server's socket directory (RAM), the host's only
 # GPU-detector route (scripts/unit_detector.GpuDetector); created here, ours, mode 0700.
-DETECT_DIR = Path("/dev/shm/poring-lab-detect")
+DETECT_DIR = lab_env.shm("detect")  # per copy: /dev/shm/<project>-detect (unit_detector.GPU_DIR)
 WORKER_MOUNTS = {
     "/opt/vision-src": REPO / "services" / "vision" / "src",
     "/lab-duty": REPO / "state" / "train-duty",
@@ -488,12 +511,12 @@ def ensure_detect_dir(path: Path = DETECT_DIR) -> str | None:
 
 
 def worker_start_cmd() -> list[str]:
-    return ["docker", "compose", *VISION_WORKER, "up", "-d", "--no-deps", "--no-build",
+    return [*COMPOSE, *VISION_WORKER, "up", "-d", "--no-deps", "--no-build",
             WORKER_SERVICE]  # fmt: skip
 
 
 def worker_stop_cmd() -> list[str]:
-    return ["docker", "compose", *VISION_WORKER, "stop", WORKER_SERVICE]
+    return [*COMPOSE, *VISION_WORKER, "stop", WORKER_SERVICE]
 
 
 def docker_state(name: str) -> tuple[str, str]:
@@ -950,7 +973,7 @@ def archive_cmds(step: Step) -> tuple[list[str], list[str], list[str]]:
 def volume_cmds(name: str, dst: str) -> tuple[list[str], list[str], list[str]]:
     """PURE: voldump's dump (stdout -> dst), its volume file count, and its archive file count."""
     _svc, image, owner = VOLUME_DUMP[name]
-    vol = f"{COMPOSE_PROJECT}_{name}"
+    vol = lab_env.volume(name)
     one_off = ["docker", "run", "--rm", "--network", "none", "--cap-drop", "ALL", "--user", owner,
                "-v", f"{vol}:/v:ro", "--entrypoint"]  # fmt: skip
     nice = ["nice", "-n", "19", "ionice", "-c3"]
@@ -975,7 +998,7 @@ def _last_int(label: str) -> int | None:
 def run_volume(step: Step, guard: "Guard") -> bool:
     name, dst = step.services[0], Path(step.command[0])
     svc, _image, _owner = VOLUME_DUMP[name]
-    vol = f"{COMPOSE_PROJECT}_{name}"
+    vol = lab_env.volume(name)
     running = subprocess.run(["docker", "ps", "-q", "--filter", f"volume={vol}"],
                              capture_output=True, text=True).stdout.strip()  # fmt: skip
     if running:
@@ -1065,7 +1088,7 @@ def log_path(label: str) -> Path:
 def target_build_cmd(service: str, stage: str, image: str) -> list[str]:
     """`docker build --target` with the build args compose would pass for <service>."""
     cfg = json.loads(subprocess.run(
-        ["docker", "compose", *VISION_FILES, *ALL, "config", "--format", "json"],
+        [*COMPOSE, *VISION_FILES, *ALL, "config", "--format", "json"],
         cwd=REPO, capture_output=True, text=True, check=True,
     ).stdout)  # fmt: skip
     build = cfg["services"][service]["build"]
@@ -1076,9 +1099,9 @@ def target_build_cmd(service: str, stage: str, image: str) -> list[str]:
 
 
 def dev_overlay_active() -> bool:
-    """True if any running poring-lab container was created through scripts/dev.sh."""
+    """True if any running container of this copy's project was created through scripts/dev.sh."""
     out = subprocess.run(
-        ["docker", "ps", "--filter", "label=com.docker.compose.project=poring-lab",
+        ["docker", "ps", "--filter", f"label=com.docker.compose.project={COMPOSE_PROJECT}",
          "--format", '{{.Label "com.docker.compose.project.config_files"}}'],
         capture_output=True, text=True,
     ).stdout  # fmt: skip
@@ -1418,9 +1441,9 @@ def watch(seconds: float, guard: Guard, what: str, stop_cmd: list[str]) -> bool:
 
 
 def run_up(seconds: float, guard: Guard) -> bool:
-    if not run_process("up", ["docker", "compose", *RUNTIME, "up", "-d"], guard):
+    if not run_process("up", [*COMPOSE, *RUNTIME, "up", "-d"], guard):
         return False
-    return watch(seconds, guard, "the running stack", ["docker", "compose", *RUNTIME, "stop"])
+    return watch(seconds, guard, "the running stack", [*COMPOSE, *RUNTIME, "stop"])
 
 
 def backend_health(timeout: float = 3) -> dict[str, Any] | None:
@@ -1797,6 +1820,26 @@ def sniffer_code_gate(steps: list[Step], root: Path = REPO,
     return None
 
 
+def cpu_profile_refusal(steps: list[Step], profile: host_profile.HostProfile | None = None
+                        ) -> str | None:  # fmt: skip
+    """ADR-0022 Amendment 2026-11-17: a dedicated-cpu host has no vision image and no worker; every
+    step that builds, pulls or runs vision is refused there with the way out. Stopping a worker is
+    never refused."""
+    prof = PROFILE if profile is None else profile
+    if prof.accel != "cpu":
+        return None
+    for s in steps:
+        vision = s.kind in ("run", "rundev", "execdev", "worker") or (
+            s.kind in ("build", "pull", "target") and s.services[:1] == ["vision"]
+        )
+        if vision:
+            return (f"REFUSED: {s.label}: host profile {prof.name} has no GPU (no vision image, no "
+                    "worker): the CPU detector serves (scripts/detector_setup.py). A GPU ready "
+                    "later: re-run ./setup.sh, it re-checks and recommends (ADR-0022 Amendment "
+                    "2026-11-17).")  # fmt: skip
+    return None
+
+
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("steps", nargs="+")
@@ -1818,6 +1861,10 @@ def main() -> int:
         steps = [parse_step(s) for s in args.steps]
     except ValueError as exc:
         print(exc, flush=True)
+        return 2
+    refused = cpu_profile_refusal(steps)
+    if refused:
+        print(refused, flush=True)
         return 2
     if args.test_abort_after_cycles:
         if args.test_abort_after_cycles < 0 or not any(
@@ -1856,11 +1903,11 @@ def main() -> int:
     print(f"[{ts()}] watching: {', '.join(guard.paths)}", flush=True)
     for step in steps:
         if step.kind == "build":
-            cmd = ["docker", "compose", *VISION_FILES, *ALL, "build", "--progress=plain",
+            cmd = [*COMPOSE, *VISION_FILES, *ALL, "build", "--progress=plain",
                    *step.services]  # fmt: skip
             ok = run_process(step.label, cmd, guard, env=build_env())
         elif step.kind == "pull":
-            ok = run_process(step.label, ["docker", "compose", *VISION_FILES, *ALL, "pull",
+            ok = run_process(step.label, [*COMPOSE, *VISION_FILES, *ALL, "pull",
                                           *step.services], guard)  # fmt: skip
         elif step.kind == "target":
             ok = run_process(step.label, target_build_cmd(*step.services), guard, env=build_env())
@@ -1955,7 +2002,7 @@ def main() -> int:
                 return 1
             out = replay_out(step)
             out.mkdir(parents=True, exist_ok=True)
-            name = f"poring-lab-replay-{os.getpid()}"
+            name = f"{COMPOSE_PROJECT}-replay-{os.getpid()}"
             print(
                 f"[{ts()}] {step.label}: {len(files)} file(s) {files[0]} .. {files[-1]}", flush=True
             )

@@ -32,9 +32,13 @@ environments:
     summary: "The lab's own rAthena server on this network; the bot may act here once its servers are confirmed."
     status: allowed            # allowed | pending | forbidden
     adr: "ADR-0006 environment 1 (the self-hosted rAthena)"
-    # the lab host: bot-server since the 2026-11-07 cutover (192.168.1.13 = VM 103 before it)
-    server: {host: 192.168.1.228, ports: [6900, 6121, 5121]}
-    windows_host: 192.168.1.169
+    # THIS install's server and game PC, by token (Batt 2026-11-17: "don't lock an IP or anything";
+    # interlock.load_config fills them from the backend's .env values HOST_LAN_IP, WIN_HOST and
+    # RATHENA_*_PORT). The server is offered as a suggestion a person confirms; the Windows PC is
+    # copied once into the store and can be changed on the Settings page (ADR-0023 decision 4).
+    # (Before 2026-11-17 these were the lab's own 192.168.1.228 / 192.168.1.169.)
+    server: {host: "${HOST_LAN_IP}", ports: ["${RATHENA_LOGIN_PORT}", "${RATHENA_CHAR_PORT}", "${RATHENA_MAP_PORT}"]}
+    windows_host: "${WIN_HOST}"
     client:                    # the lab profile ro_agent launches and verifies (login phase)
       exe: 'C:\RO-rAthena\client\PoringLab.exe'
       shortcut: "Ragnarok Offline"
@@ -51,9 +55,13 @@ environments:
     # kept). Allowed stays true: it is still our own lab server if ever started again.
     status: allowed
     adr: "ADR-0006 environment 1b (the self-hosted rAthena, Thai-data experiment)"
-    # the lab host: bot-server since the 2026-11-07 cutover (192.168.1.13 = VM 103 before it)
-    server: {host: 192.168.1.228, ports: [6900, 6121, 5121]}
-    windows_host: 192.168.1.169
+    # THIS install's server and game PC, by token (Batt 2026-11-17: "don't lock an IP or anything";
+    # interlock.load_config fills them from the backend's .env values HOST_LAN_IP, WIN_HOST and
+    # RATHENA_*_PORT). The server is offered as a suggestion a person confirms; the Windows PC is
+    # copied once into the store and can be changed on the Settings page (ADR-0023 decision 4).
+    # (Before 2026-11-17 these were the lab's own 192.168.1.228 / 192.168.1.169.)
+    server: {host: "${HOST_LAN_IP}", ports: ["${RATHENA_LOGIN_PORT}", "${RATHENA_CHAR_PORT}", "${RATHENA_MAP_PORT}"]}
+    windows_host: "${WIN_HOST}"
     client:
       exe: 'C:\RO-rAthena-th\client\PoringLab.exe'
       shortcut: "Ragnarok Offline TH"
@@ -93,8 +101,8 @@ environments:
     # The th client overrides it with loose files (AssistAddr = 127.0.0.1:3000, client config only;
     # docs/thai-data-experiment.md section 4). The MAIN lab client got the same override 2026-10-05 16:23.
     # Since 2026-11-05 the main client's AssistAddr is the lab's own rAthena web-server,
-    # 192.168.1.13:8888 (Batt: fix the account-settings error); this endpoint stays forbidden.
-    # ➡️ Since the 2026-11-07 cutover: 192.168.1.228:8888 (bot-server; the four lubs rewritten).
+    # HOST_LAN_IP:RATHENA_WEB_PORT (Batt: fix the account-settings error); this endpoint stays
+    # forbidden. (The lab: VM 103 until 2026-11-07, bot-server since; the four lubs rewritten.)
     status: forbidden
     adr: "ADR-0006 (official servers: forbidden); ADR-0016 known-forbidden endpoints"
     server: {host: kro-assit.ragnarok.co.kr, ports: [3000]}

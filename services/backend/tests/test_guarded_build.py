@@ -128,7 +128,9 @@ def test_builds_use_the_lab_builder_without_touching_the_global_one(
     monkeypatch.setattr(sys, "argv", ["guarded_build.py", "build:desktop", "pull:db"])
     assert gb.main() == 0
     (build, build_env), (pull, pull_env) = calls
-    assert build[:3] == ["docker", "compose", "--profile"] and "build" in build
+    # this copy's project on every raw compose argv (lab_env.project(); the tests see the default)
+    assert build[:5] == ["docker", "compose", "-p", "poring-lab", "--profile"] and "build" in build
+    assert pull[:5] == ["docker", "compose", "-p", "poring-lab", "--profile"] and "pull" in pull
     assert build_env is not None and build_env["BUILDX_BUILDER"] == "default"
     assert pull_env is None  # only builds pick a builder
     assert not any("buildx" in c and "use" in c for c in build)  # never `docker buildx use`
@@ -149,7 +151,8 @@ def test_run_step_is_vision_only_and_never_starts_dependencies(gb: ModuleType) -
     step = gb.parse_step("run:vision@600=python scripts/check_gpu.py")
     assert (step.kind, step.services, step.seconds) == ("run", ["vision"], 600.0)
     assert gb.run_cmd(step) == [
-        "timeout", "600", "docker", "compose", "--profile", "vision", "run", "--rm",
+        "timeout", "600", "docker", "compose", "-p", "poring-lab", "--profile", "vision", "run",
+        "--rm",
         "--name", gb.container_name(step), "--no-deps", "vision", "python", "scripts/check_gpu.py",
     ]  # fmt: skip
     for refused in ("run:gamestream=true", "run:desktop=true", "run:vision", "run:vision="):
@@ -163,7 +166,7 @@ def test_rundev_adds_only_the_vision_dev_overlay(gb: ModuleType) -> None:
     step = gb.parse_step("rundev:vision@3600=python -m poring_vision.train --smoke")
     assert (step.kind, step.services, step.seconds) == ("rundev", ["vision"], 3600.0)
     assert gb.run_cmd(step) == [
-        "timeout", "3600", "docker", "compose", "-f", "compose.yaml", "-f",
+        "timeout", "3600", "docker", "compose", "-p", "poring-lab", "-f", "compose.yaml", "-f",
         "compose.vision-dev.yaml", "--profile", "vision", "run", "--rm",
         "--name", gb.container_name(step), "--no-deps", "vision",
         "python", "-m", "poring_vision.train", "--smoke",
@@ -967,8 +970,15 @@ def test_measure_docker_steps_are_fixed_read_only_commands(gb: ModuleType) -> No
         gb.parse_step("measure:docker-df=/x")
 
 
-def test_archive_only_from_our_roots_to_the_nas(gb: ModuleType) -> None:
-    """The disk audit's move (Batt 2026-10-21): ours -> the NAS, copy, size+count check, delete."""
+LAB_STORE = "/mnt/poring-lab-datasets"  # the lab's LAB_STORE_DIR (its NAS mount)
+
+
+def test_archive_only_from_our_roots_to_the_nas(
+    gb: ModuleType, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The disk audit's move (Batt 2026-10-21): ours -> the NAS, copy, size+count check, delete.
+    The destination root is the storage folder (LAB_STORE_DIR); here the lab's own value."""
+    monkeypatch.setenv("LAB_STORE_DIR", LAB_STORE)
     home = Path.home()  # gap J: the running user's home
     src = f"{home}/poring-lab-shm-archive/poring-lab-demo/S1"
     step = gb.parse_step(f"archive:{src}=/mnt/poring-lab-datasets/S1")
@@ -997,7 +1007,10 @@ def test_archive_refuses_an_existing_destination(gb: ModuleType, tmp_path: Path)
     assert src.exists()
 
 
-def test_voldump_and_volrm_take_only_the_allowed_volume_to_a_nas_tar(gb: ModuleType) -> None:
+def test_voldump_and_volrm_take_only_the_allowed_volume_to_a_nas_tar(
+    gb: ModuleType, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("LAB_STORE_DIR", LAB_STORE)  # the lab's storage folder
     dst = "/mnt/poring-lab-datasets/archive/db-th-data/db-th-data-20261022.tar.gz"
     step = gb.parse_step(f"voldump:db-th-data={dst}")
     assert step.kind == "voldump" and step.services == ["db-th-data"] and step.command == [dst]
@@ -1021,6 +1034,44 @@ def test_voldump_and_volrm_take_only_the_allowed_volume_to_a_nas_tar(gb: ModuleT
         gb.parse_step(f"volrm:captures={cap}")
     dump, _, _ = gb.volume_cmds("captures", cap)
     assert "--user 65534:65534" in dump[2] and "poring-lab_captures:/v:ro" in dump[2]
+
+
+def test_the_archive_root_is_the_storage_folder_setting(
+    gb: ModuleType, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Batt 2026-11-17 ("most users have no NAS"): archive: / voldump: go below LAB_STORE_DIR, any
+    folder; the lab's NAS path is then refused like any other folder outside it. The checks stay
+    as strict: below the root (never the root itself), no '..', and -- since a storage folder may
+    now share a tree with our roots -- never a copy into itself (the delete would remove both)."""
+    home = Path.home()
+    src = f"{home}/poring-lab-shm-archive/poring-lab-demo/S1"
+    store = f"{home}/poring-lab-store"
+    monkeypatch.setenv("LAB_STORE_DIR", store)
+    step = gb.parse_step(f"archive:{src}={store}/S1")
+    assert step.command == [src, f"{store}/S1"]
+    dump = f"{store}/a/x.tar.gz"
+    assert gb.parse_step(f"voldump:db-th-data={dump}").command == [dump]
+    for bad in (
+        f"archive:{src}={LAB_STORE}/S1",  # the lab's NAS is not this install's storage folder
+        f"archive:{src}={store}",  # the root itself
+        f"archive:{src}={store}/../x",
+        f"voldump:db-th-data={LAB_STORE}/x.tar.gz",
+        f"voldump:db-th-data={store}/../x.tar.gz",
+    ):
+        with pytest.raises(ValueError):
+            gb.parse_step(bad)
+    # a storage folder under one of our roots: never into the source itself, nor the source into
+    # its own copy
+    monkeypatch.setenv("LAB_STORE_DIR", f"{home}/poring-lab-shm-archive")
+    with pytest.raises(ValueError, match="contain each other"):
+        gb.parse_step(f"archive:{src}={src}/inner")
+    with pytest.raises(ValueError, match="contain each other"):
+        gb.parse_step(f"archive:{src}/a={src}")
+    # a bad setting refuses the step (a ValueError like every other refusal), not the whole run
+    monkeypatch.setenv("LAB_STORE_DIR", "relative/store")
+    with pytest.raises(ValueError, match="absolute"):
+        gb.parse_step(f"archive:{src}=/x/S1")
+    assert gb.parse_step("measure:docker-df").kind == "measure"
 
 
 class _R3Quiet:

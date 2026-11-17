@@ -159,7 +159,13 @@ Official servers and every other public server are forbidden. Start with `README
      ➡️ VM 103 (shared-nvidia) only. On bot-server none of the market-hour rules apply (Batt
      2026-11-10).
 
-6. **Never put a Docker network on a 192.168.x subnet on this host.** The LAN uses 192.168.1, 110, 111, 112
+6. ➡️ **Nothing of the lab's is locked into a new install (Batt 2026-11-17, ADR-0026):** the project
+   name, the ports, the two subnets (`LAB_NET_PREFIX` / `LAB_AGENT_NET_PREFIX`, always inside
+   10.210.0.0/16), the storage folder (`LAB_STORE_DIR`; the lab: its NAS mount) and the detector
+   folder come from `.env` with the lab's values as defaults (`scripts/lab_env.py`, compose
+   interpolation; bash: `scripts/lab_project.sh`). Never write a lab address, path or name into
+   new code: read `lab_env`.
+   **Never put a Docker network on a 192.168.x subnet on this host.** The LAN uses 192.168.1, 110, 111, 112
    and 120, and Docker can't see the segments behind the router. On 2026-09-29 an auto-assigned
    192.168.96.0/20 cut the operator's MacBook off from VM 103 (home-assistant-ops OS-034).
    `compose.yaml` pins `10.210.96.0/24`; keep it pinned. Health check:
@@ -216,8 +222,9 @@ Official servers and every other public server are forbidden. Start with `README
      false). Packet-attested environments are tried first.
    - Research counts only packet-verified sessions. The agent never declares.
    - The lab agent still runs pilots only on the environments Batt names.
-   - NOT built: decisions 3-4 (a learner's Windows gets only the remote program; the Windows host
-     as a console setting).
+   - NOT built: decision 3 (a learner's Windows gets only the remote program). ➡️ Decision 4 (the
+     Windows host as a console setting) BUILT 2026-11-17: a Settings-page field per allowed
+     environment, seeded from this install's WIN_HOST (ADR-0023 Implementation 2026-11-17).
    environments in ADR-0006, verified by an interlock signal, not by judgment. Other players' chat
    data stays local and pseudonymized.
    - **The interlock is built** (ADR-0016 ACCEPTED 2026-10-04): a LOGIC interlock driven by

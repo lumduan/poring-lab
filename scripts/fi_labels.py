@@ -92,6 +92,7 @@ sys.path.insert(0, str(ROOT / "scripts"))
 
 import gef10_items as gi  # noqa: E402
 import item_labels as il  # noqa: E402
+import lab_env  # noqa: E402
 import label_check  # noqa: E402
 import map_labels as ml  # noqa: E402
 import orc_camera_check as occ  # noqa: E402
@@ -112,7 +113,7 @@ NS = 1_000_000_000
 RULE = "xmas02-fi-1"
 CLASS_NAME = "floor_item"
 FI = Path("/dev/shm/poring-lab-tmp/xmas-fi")  # client-derived inputs and outputs: RAM (rule 7)
-NAS = Path("/mnt/poring-lab-datasets")
+NAS = lab_env.store_dir()  # the storage folder (LAB_STORE_DIR)
 LAYOUT_TEMPLATES = Path.home() / "docker" / "poring-lab" / "data" / "ui_anchors" / "layout"
 INSTRUCTIONS = ROOT / "docs" / "planning" / "xmas02-item-blind-instructions.txt"
 INSTRUCTIONS_SHA256 = "cff8ee8b7e738c13357c680072f9ce39762b652403a86a15ef462ff50e5fcdf5"

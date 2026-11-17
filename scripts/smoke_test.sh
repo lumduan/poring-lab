@@ -17,6 +17,11 @@ $core_only && services=(db rathena)
 HOST="$(sed -n 's/^HOST_LAN_IP=//p' .env)"
 # the console's host port (compose.yaml: ${CONSOLE_PORT:-3000}); empty or absent = 3000
 CONSOLE_PORT="$(sed -n 's/^CONSOLE_PORT=//p' .env | tail -n 1)"
+# This install's ports (Batt 2026-11-17: nothing fixed): .env, else the defaults (scripts/lab_env.py).
+port_of() { local v; v="$(sed -n "s/^$1=//p" .env | tail -n 1)"; echo "${v:-$2}"; }
+LOGIN_PORT="$(port_of RATHENA_LOGIN_PORT 6900)" CHAR_PORT="$(port_of RATHENA_CHAR_PORT 6121)"
+MAP_PORT="$(port_of RATHENA_MAP_PORT 5121)" BACKEND_PORT="$(port_of BACKEND_PORT 8000)"
+NOVNC_PORT="$(port_of NOVNC_PORT 6080)"
 CONSOLE_PORT="${CONSOLE_PORT:-3000}"
 failures=0
 pass() { printf '  \033[32mPASS\033[0m %s\n' "$*"; }
@@ -38,7 +43,7 @@ for svc in "${services[@]}"; do
 done
 
 echo "== rathena reachable on the LAN IP"
-for port in 6900 6121 5121; do
+for port in "${LOGIN_PORT}" "${CHAR_PORT}" "${MAP_PORT}"; do
   if timeout 3 bash -c "</dev/tcp/${HOST}/${port}" 2>/dev/null; then
     pass "${HOST}:${port} accepts TCP"
   else
@@ -47,7 +52,7 @@ for port in 6900 6121 5121; do
 done
 # Capture first: with pipefail, `logs | grep -q` fails when grep exits early and logs gets SIGPIPE.
 rathena_logs="$(docker compose logs rathena 2>/dev/null)"
-if grep -q "clients will be sent to char ${HOST}:6121 and map ${HOST}:5121" <<<"$rathena_logs"; then
+if grep -q "clients will be sent to char ${HOST}:${CHAR_PORT} and map ${HOST}:${MAP_PORT}" <<<"$rathena_logs"; then
   pass "rathena advertises ${HOST} for char/map"
 else
   fail "rathena does not advertise ${HOST} (check conf/import rendering)"
@@ -66,7 +71,7 @@ if $core_only; then
 fi
 
 echo "== HTTP endpoints"
-for url in "http://${HOST}:8000/health" "http://${HOST}:${CONSOLE_PORT}/api/health" "http://${HOST}:6080/vnc.html"; do
+for url in "http://${HOST}:${BACKEND_PORT}/health" "http://${HOST}:${CONSOLE_PORT}/api/health" "http://${HOST}:${NOVNC_PORT}/vnc.html"; do
   if curl -fsS -o /dev/null --max-time 5 "$url"; then pass "$url"; else fail "$url"; fi
 done
 if curl -fsS --max-time 5 "http://${HOST}:8001/" -o /dev/null 2>/dev/null; then
@@ -76,7 +81,7 @@ else
 fi
 
 echo "== stream + input round trip"
-if uv run --quiet python scripts/ws_probe.py --backend "http://${HOST}:8000" --seconds 3 --min-frames 30 --input-probe; then
+if uv run --quiet python scripts/ws_probe.py --backend "http://${HOST}:${BACKEND_PORT}" --seconds 3 --min-frames 30 --input-probe; then
   pass "ws_probe"
 else
   fail "ws_probe (see JSON above)"

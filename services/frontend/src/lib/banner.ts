@@ -82,6 +82,10 @@ export function describeEnvironment(status: Status | null): string | null {
     const left = env.window_left_s === null || env.window_left_s === undefined ? "" : `, ${Math.round(env.window_left_s)} s left`;
     return `Interlock: operator window open (${env.window}${left}) -- bot input allowed in ASSIST only.`;
   }
+  if (env.state === "red" && env.reason === "host_mismatch") {
+    // ADR-0023 decision 4 (Batt 2026-11-17): the Windows PC is a person's setting, not a fixed address
+    return "Interlock: bot input REFUSED (host_mismatch) -- the environment's Windows PC is not the one this lab drives (WIN_HOST): set it on the Settings page.";
+  }
   if (env.state === "red") {
     return `Interlock: bot input REFUSED (${env.reason}) -- check the environment's servers (Settings), the capture lock and the Windows host.`;
   }

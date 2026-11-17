@@ -20,6 +20,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[3] / "scripts"))
 import dungeon_judge as dj  # noqa: E402
 import econ_dash as ed  # noqa: E402
 import econ_items as ei  # noqa: E402
+import lab_env  # noqa: E402
 
 S = 10**9
 A = dj.AID
@@ -302,7 +303,7 @@ def test_write_reads_back_and_the_listing_skips_foreign_names(tmp_path: Path) ->
 
 # --- REAL positive cases (read at test time; skipped when absent) --------------------------------
 
-ARCHIVE = Path("/mnt/poring-lab-datasets/scratch-archive/2026-11-11/demo-sessions")
+ARCHIVE = lab_env.store("scratch-archive", "2026-11-11", "demo-sessions")  # the storage folder
 P57 = ARCHIVE / "20261111T082037-demo-dungeon-rogue-xmas_dun02-patrol-P2-xmas02-p57"
 P58 = ARCHIVE / "20261111T084908-demo-dungeon-rogue-xmas_dun02-patrol-P2-xmas02-p58"
 

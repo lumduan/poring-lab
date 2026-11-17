@@ -43,6 +43,10 @@ from collections.abc import Callable, Iterable, Mapping, Sequence
 from pathlib import Path
 from typing import Any
 
+if str(Path(__file__).resolve().parent) not in sys.path:
+    sys.path.insert(0, str(Path(__file__).resolve().parent))
+import lab_env  # noqa: E402  (a sibling, stdlib only: names, the storage folder)
+
 REPO = Path(__file__).resolve().parents[1]
 HOME = Path.home()
 SOURCE_HOST, TARGET_HOST, TARGET_IP = "ubuntu-docker", "bot-server", "192.168.1.228"
@@ -56,7 +60,8 @@ SKIP_STATE = ("state/train-duty",)  # the duty level: written by the running gua
 DB_TABLES = ("login", "char", "inventory", "cart_inventory", "storage", "skill", "party",
              "guild", "global_acc_reg_num", "global_acc_reg_str", "char_reg_num", "char_reg_str",
              "acc_reg_num", "acc_reg_str", "mail", "hotkey", "quest", "chatlog")  # fmt: skip
-NAS_MOUNTS = ("/mnt/poring-lab-datasets", "/mnt/poring-locale-packs", "/mnt/poring-thai-src")
+# the storage folder (LAB_STORE_DIR; the lab: its NAS mount) and the two locale shares
+NAS_MOUNTS = (str(lab_env.store_dir()), "/mnt/poring-locale-packs", "/mnt/poring-thai-src")
 # The RAM run-time inputs (CLAUDE.md rule 7: the GAT maps, sprites, calibrations, the chat guard;
 # the KB, the rathena source it reads, the detector's models), file by file with sha256 (RAM).
 # scripts/runtime_sync.py pushes them RAM to RAM. Not here: scratch, logs, locks, test leftovers,
@@ -80,7 +85,9 @@ PREFACE_MARK = "# READ FIRST on bot-server"
 FORBIDDEN_NETS = (ipaddress.ip_network("192.168.0.0/16"), ipaddress.ip_network("172.16.0.0/12"))
 POOL = ipaddress.ip_network("10.210.0.0/16")
 # ADR-0022: the target runs the Intel vision image where the source ran the NVIDIA one
-IMAGE_SUBSTITUTES = {"poring-lab/vision:local": "poring-lab/vision-intel:local"}
+IMAGE_SUBSTITUTES = {lab_env.image("vision"): lab_env.image("vision-intel")}
+DB = lab_env.container("db")
+LAB_PREFIX = f"{lab_env.project()}-"  # every container of this copy's compose project
 
 Row = dict[str, str]
 
@@ -210,7 +217,7 @@ def db_counts(env: Mapping[str, str]) -> dict[str, int] | str:
     sql = " UNION ALL ".join(f"SELECT '{t}', COUNT(*) FROM `{db}`.`{t}`" for t in DB_TABLES)
     cnf = f"[client]\nuser=root\npassword={env.get('DB_ROOT_PASSWORD', '')}\n"
     # the SQL as a plain argv (no shell: its backticks stay literal); the password on stdin
-    code, out = run(["docker", "exec", "-i", "poring-lab-db-1", "mariadb",
+    code, out = run(["docker", "exec", "-i", DB, "mariadb",
                      "--defaults-extra-file=/dev/stdin", "-N", "-e", sql], stdin=cnf)  # fmt: skip
     if code != 0:
         return f"db unreadable (rc {code}): {out.strip()[:120]}"
@@ -228,7 +235,7 @@ def db_checksums(env: Mapping[str, str]) -> dict[str, str] | str:
     db = env.get("DB_NAME", "ragnarok")
     sql = "CHECKSUM TABLE " + ", ".join(f"`{db}`.`{t}`" for t in DB_TABLES)
     cnf = f"[client]\nuser=root\npassword={env.get('DB_ROOT_PASSWORD', '')}\n"
-    code, out = run(["docker", "exec", "-i", "poring-lab-db-1", "mariadb",
+    code, out = run(["docker", "exec", "-i", DB, "mariadb",
                      "--defaults-extra-file=/dev/stdin", "-N", "-e", sql], stdin=cnf)  # fmt: skip
     if code != 0:
         return f"db unreadable (rc {code}): {out.strip()[:120]}"
@@ -318,10 +325,10 @@ def make_manifest(hash_data: bool) -> dict[str, Any]:
 
 
 def source_images() -> list[str]:
-    """The images of every poring-lab container on the source (running or not)."""
+    """The images of every container of this copy's project on the source (running or not)."""
     code, out = run(["docker", "ps", "-a", "--format", "{{.Names}} {{.Image}}"])
     return sorted({ln.split()[1] for ln in out.splitlines()
-                   if ln.startswith("poring-lab-") and len(ln.split()) == 2})  # fmt: skip
+                   if ln.startswith(LAB_PREFIX) and len(ln.split()) == 2})  # fmt: skip
 
 
 def image_rows(want: Sequence[str], have: Iterable[str]) -> list[Row]:
@@ -443,7 +450,7 @@ def docker_rows(phase: str) -> list[Row]:
     rows.append(row("docker: docker0 (bip) off 192.168/16 and 172.16/12", ok_b, str(b)))
     if phase == "final":
         code, ps = run(["docker", "ps", "--format", "{{.Names}} {{.Status}}"])
-        lab = [ln for ln in ps.splitlines() if ln.startswith("poring-lab-")]
+        lab = [ln for ln in ps.splitlines() if ln.startswith(LAB_PREFIX)]
         unhealthy = [ln for ln in lab if "unhealthy" in ln or "Restarting" in ln]
         rows.append(row("docker: the lab's containers up, none unhealthy",
                         bool(lab) and not unhealthy, f"{len(lab)} up" if not unhealthy

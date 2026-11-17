@@ -41,6 +41,7 @@ Asymmetric rules (``classify``):
 from __future__ import annotations
 
 import hashlib
+import ipaddress
 import json
 import os
 import re
@@ -104,8 +105,11 @@ class EnvEntry(BaseModel):
     summary: str = Field(default="", max_length=400)  # ONE sentence, plain words
     why: str = Field(default="", max_length=300)  # the reference (ADR) behind it: a "why?" link
     servers: list[ServerEntry] = Field(default_factory=list, max_length=MAX_SERVERS)
-    # Technical, from the shipped defaults only (never from the page or an import):
+    # The Windows game PC this environment is played from: copied ONCE from the shipped set (its
+    # ${WIN_HOST} token = this install's WIN_HOST), then a PERSON's (ADR-0023 decision 4, Batt
+    # 2026-11-17 "don't lock an IP"): changed on the page's write gate only, never by an import.
     windows_host: str | None = None
+    # Technical, from the shipped defaults only (never from the page or an import):
     accounts: list[int] = Field(default_factory=list)
     signals: list[Literal["lab_host", "session"]] = Field(default_factory=list)
     client: ClientProfile | None = None
@@ -144,8 +148,8 @@ def from_defaults(cfg: EnvironmentsConfig, sha: str) -> EnvSet:
                     servers.append(ServerEntry(host=parsed[0], port=parsed[1], source="default"))
         envs.append(EnvEntry(
             id=env.id, name=env.title or env.id, type=env.status, summary=env.summary or "",
-            why=env.adr, servers=servers, windows_host=env.windows_host, accounts=env.accounts,
-            signals=env.signals, client=env.client,
+            why=env.adr, servers=servers, windows_host=env.windows_host or None,
+            accounts=env.accounts, signals=env.signals, client=env.client,
         ))  # fmt: skip
     return EnvSet(seeded_from=sha, attestation_max_age_s=cfg.attestation_max_age_s,
                   window_max_s=cfg.window_max_s, environments=envs)  # fmt: skip
@@ -160,8 +164,8 @@ def suggestions(
     blocked = forbidden(current, {})
     for env in current.environments:
         d = shipped.get(env.id)
-        if env.type != "allowed" or d is None or d.server is None:
-            continue
+        if env.type != "allowed" or d is None or d.server is None or not d.server.host:
+            continue  # no server shipped, or this install's address is not set (HOST_LAN_IP)
         have = {s.key for s in env.servers}
         host = allowlist.normalise_host(d.server.host)
         out[env.id] = [ServerEntry(host=host, port=p, source="default") for p in d.server.ports
@@ -266,11 +270,41 @@ ChangeKind = Literal["easy", "normal", "hard", "declare"]
 @dataclass(frozen=True)
 class Change:
     kind: ChangeKind
-    action: str  # env_create/_delete/_rename/_type/_text, server_add/_remove, declare, withdraw
+    action: str  # env_create/_delete/_rename/_type/_text/_windows_host, server_add/_remove,
+    #              declare, withdraw
     env_id: str
     subject: str  # what a hard change must be confirmed with (the endpoint, or the env's name)
     text: str  # plain words for the audit log and the page
     note: str = ""  # declare / withdraw: the person's statement (the audit's note)
+
+
+def windows_host_refusal(host: str) -> str | None:
+    """None when ``host`` may be an environment's Windows PC: an IP literal of one machine (the
+    interlock compares it with WIN_HOST, the sniffer listens to it), else the refusal reason."""
+    try:
+        ip = ipaddress.ip_address(host)
+    except ValueError:
+        return "windows_host_not_an_address"
+    if ip.is_unspecified or ip.is_loopback or ip.is_multicast or ip.is_link_local or ip.is_reserved:
+        return "windows_host_not_a_machine"
+    return None
+
+
+def _windows_host_change(env_id: str, name: str, old: str | None, new: str | None) -> Change | None:
+    """ADR-0023 decision 4: setting or changing the Windows PC is a person's normal change;
+    clearing it is easy (tightening: no Windows PC = never green)."""
+    if old == new:
+        return None
+    if new is None:
+        return Change("easy", "env_windows_host", env_id, name,
+                      f"cleared the Windows PC of {name!r} (was {old})")  # fmt: skip
+    return Change(
+        "normal",
+        "env_windows_host",
+        env_id,
+        new,
+        f"set the Windows PC of {name!r} to {new}" + (f" (was {old})" if old else ""),
+    )
 
 
 def _declaration_change(env_id: str, name: str, old: Declaration | None,
@@ -310,6 +344,9 @@ def classify(old: EnvSet, new: EnvSet) -> list[Change]:
             declared = _declaration_change(env_id, n.name, None, n.declared)
             if declared is not None:
                 out.append(declared)
+            host = _windows_host_change(env_id, n.name, None, n.windows_host)
+            if host is not None:
+                out.append(host)
             continue
         if n.name != o.name:
             out.append(Change("normal", "env_rename", env_id, n.name,
@@ -339,6 +376,9 @@ def classify(old: EnvSet, new: EnvSet) -> list[Change]:
         declared = _declaration_change(env_id, n.name, o.declared, n.declared)
         if declared is not None:
             out.append(declared)
+        host = _windows_host_change(env_id, n.name, o.windows_host, n.windows_host)
+        if host is not None:
+            out.append(host)
     return out
 
 
@@ -361,6 +401,10 @@ def validate(new: EnvSet, resolved: dict[str, list[str]],
             # lab's own rAthena) keeps that check alone -- a declaration there would turn it green
             # whenever its attestation fails (a non-lab account, character select)
             return "declaration_not_for_attested", env.id
+        if env.windows_host is not None:
+            why = windows_host_refusal(env.windows_host)
+            if why is not None:
+                return why, env.windows_host
         ids.add(env.id)
         names.add(env.name.strip().lower())
         keys = set()

@@ -48,8 +48,9 @@ from pathlib import Path
 from typing import Any
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
+import lab_env  # noqa: E402
 
-HD_ROOT = Path("/mnt/poring-lab-datasets/human-demos")
+HD_ROOT = lab_env.store("human-demos")  # in the storage folder (LAB_STORE_DIR)
 STOP_FILE = Path("/dev/shm/poring-lab-tmp/human-demo.stop")
 REC_HZ = 5.0
 REC_QUALITY = 80

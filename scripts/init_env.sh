@@ -17,6 +17,7 @@ umask 077
 cp .env.example .env
 sed -i \
   -e "s|^HOST_LAN_IP=.*|HOST_LAN_IP=${lan_ip}|" \
+  -e "s|^LAB_STORE_DIR=$|LAB_STORE_DIR=${HOME}/poring-lab-store|" \
   -e "s|^DB_PASSWORD=$|DB_PASSWORD=$(secret)|" \
   -e "s|^DB_ROOT_PASSWORD=$|DB_ROOT_PASSWORD=$(secret)|" \
   -e "s|^RATHENA_SERVER_USER=$|RATHENA_SERVER_USER=srv_$(secret | cut -c1-8)|" \

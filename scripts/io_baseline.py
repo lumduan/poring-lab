@@ -22,6 +22,10 @@ from collections.abc import Sequence
 from datetime import UTC, datetime, timedelta, timezone
 from pathlib import Path
 
+if str(Path(__file__).resolve().parent) not in sys.path:
+    sys.path.insert(0, str(Path(__file__).resolve().parent))
+import lab_env  # noqa: E402  (a sibling, stdlib only: this copy's compose project names)
+
 REPO = Path(__file__).resolve().parents[1]
 CAPTURE = [
     "quant-orderbook-engine",
@@ -73,7 +77,7 @@ def resolve() -> dict[str, Path]:
         cg = Path(f"/sys/fs/cgroup/system.slice/docker-{cid}.scope/io.pressure")
         if name in CAPTURE:
             paths[name] = cg
-        elif project == "poring-lab" and service in LAB:
+        elif project == lab_env.project() and service in LAB:
             paths[f"lab-{service}"] = cg
     paths[CRON[0]] = CRON[1]
     return {k: v for k, v in paths.items() if v.exists()}

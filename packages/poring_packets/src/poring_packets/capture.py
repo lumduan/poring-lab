@@ -15,6 +15,11 @@ client is THIS host's Windows game PC, `CLIENT_IP` from the environment (compose
 swapped. libpcap compiles `host X` to the same instructions for every IPv4 X; test_core proves it
 by recompiling for several addresses. And the packets only READ (ADR-0016 amendment 11-17): whatever
 this filter sees or misses labels a session verified or not, never whether the bot plays.
+
+➡️ The game ports too (Batt 2026-11-17: "don't lock anything"): `SNIFF_SERVER_PORTS` (compose: this
+install's RATHENA_LOGIN/CHAR/MAP_PORT) swaps the three port constants of the same program, in both
+the source and the destination compares; `server_of` names each port's server. test_core recompiles
+it with libpcap for several port sets.
 """
 
 import ctypes
@@ -34,10 +39,43 @@ BPF_PROGRAM: tuple[tuple[int, int, int, int], ...] = (
     (72, 0, 0, 16), (21, 2, 0, 6900), (21, 1, 0, 6121), (21, 0, 1, 5121), (6, 0, 0, 65535),
     (6, 0, 0, 0),
 )  # fmt: skip
-PORT_SERVER = {6900: "login", 6121: "char", 5121: "map"}
+LAB_PORTS = (6900, 6121, 5121)  # login, char, map: the committed program's ports
+PORT_SERVER = {6900: "login", 6121: "char", 5121: "map"}  # the lab's; server_of() for any install
+SERVER_PORTS_ENV = "SNIFF_SERVER_PORTS"
 # the two instructions that carry the client address: the IPv4 source and destination compares
 _ADDR_INSNS = (3, 5)
+# the instructions that carry the ports, (source, destination) per port, in LAB_PORTS' order
+_PORT_INSNS = ((12, 16), (13, 17), (14, 18))
 _BPF_JEQ_K = 21  # BPF_JMP | BPF_JEQ | BPF_K
+
+
+def server_ports(value: str | None) -> tuple[int, int, int]:
+    """``"login,char,map"`` -> three distinct ports 1-65535; empty/None -> LAB_PORTS. ValueError
+    otherwise (a sniffer with the wrong ports never starts)."""
+    if not value or not value.strip():
+        return LAB_PORTS
+    parts = [p.strip() for p in value.split(",")]
+    if len(parts) != 3 or not all(p.isdigit() for p in parts):
+        raise ValueError(f"{SERVER_PORTS_ENV}: three ports login,char,map, got {value!r}")
+    return check_ports((int(parts[0]), int(parts[1]), int(parts[2])))
+
+
+def check_ports(ports: tuple[int, int, int]) -> tuple[int, int, int]:
+    """Three distinct ports 1-65535 (login, char, map), or ValueError."""
+    if len(ports) != 3 or not all(isinstance(p, int) and 1 <= p <= 65535 for p in ports):
+        raise ValueError(f"the game ports: three of 1-65535 (login, char, map), got {ports!r}")
+    if len(set(ports)) != 3:
+        raise ValueError(f"the game ports must differ, got {ports!r}")
+    return ports
+
+
+def server_of(ports: tuple[int, int, int] = LAB_PORTS) -> dict[int, str]:
+    return dict(zip(ports, ("login", "char", "map"), strict=True))
+
+
+def ports_expr(ports: tuple[int, int, int] = LAB_PORTS) -> str:
+    login, char, map_ = ports
+    return f"tcp and (port {login} or port {char} or port {map_})"
 
 
 def client_address(client_ip: str) -> ipaddress.IPv4Address:
@@ -49,15 +87,17 @@ def client_address(client_ip: str) -> ipaddress.IPv4Address:
     return ip
 
 
-def bpf_expr(client_ip: str) -> str:
-    return f"host {client_address(client_ip)} and {PORTS_EXPR}"
+def bpf_expr(client_ip: str, ports: tuple[int, int, int] = LAB_PORTS) -> str:
+    return f"host {client_address(client_ip)} and {ports_expr(check_ports(ports))}"
 
 
-def bpf_program(client_ip: str) -> tuple[tuple[int, int, int, int], ...]:
-    """PURE: the kernel filter for ``client_ip`` -- BPF_PROGRAM with its address constant swapped
-    in exactly the two ``host`` compares (checked, so a changed template can never be patched
-    silently)."""
+def bpf_program(client_ip: str, ports: tuple[int, int, int] = LAB_PORTS
+                ) -> tuple[tuple[int, int, int, int], ...]:  # fmt: skip
+    """PURE: the kernel filter for ``client_ip`` and the game ``ports`` -- BPF_PROGRAM with its
+    address constant swapped in exactly the two ``host`` compares and each port constant in its two
+    ``port`` compares (checked, so a changed template can never be patched silently)."""
     k = int(client_address(client_ip))
+    ports = check_ports(ports)
     lab = int(ipaddress.IPv4Address(LAB_CLIENT_IP))
     prog = list(BPF_PROGRAM)
     for i in _ADDR_INSNS:
@@ -65,8 +105,17 @@ def bpf_program(client_ip: str) -> tuple[tuple[int, int, int, int], ...]:
         if (code, old) != (_BPF_JEQ_K, lab):
             raise ValueError(f"BPF_PROGRAM[{i}] is not the address compare it should be")
         prog[i] = (code, jt, jf, k)
-    if sum(1 for ins in prog if ins[3] == lab) != (len(_ADDR_INSNS) if k == lab else 0):
+    for (src, dst), lab_port, port in zip(_PORT_INSNS, LAB_PORTS, ports, strict=True):
+        for i in (src, dst):
+            code, jt, jf, old = BPF_PROGRAM[i]
+            if (code, old) != (_BPF_JEQ_K, lab_port):
+                raise ValueError(f"BPF_PROGRAM[{i}] is not the port compare it should be")
+            prog[i] = (code, jt, jf, port)
+    if sum(1 for ins in BPF_PROGRAM if ins[3] == lab) != len(_ADDR_INSNS):
         raise ValueError("BPF_PROGRAM carries the address somewhere else too")
+    for lab_port in LAB_PORTS:
+        if sum(1 for ins in BPF_PROGRAM if ins[3] == lab_port) != 2:
+            raise ValueError(f"BPF_PROGRAM carries port {lab_port} somewhere else too")
     return tuple(prog)
 
 
@@ -130,8 +179,10 @@ def parse_frame(frame: bytes, t_real_ns: int) -> TcpSegment | None:
 class Capture:
     """Blocking reader; `read(timeout)` returns one frame with its kernel timestamp, or None."""
 
-    def __init__(self, iface: str, client_ip: str = CLIENT_IP) -> None:
-        program = bpf_program(client_ip)  # ValueError before any socket: a bad address never runs
+    def __init__(self, iface: str, client_ip: str = CLIENT_IP,
+                 ports: tuple[int, int, int] = LAB_PORTS) -> None:  # fmt: skip
+        # ValueError before any socket: a bad address or port set never runs
+        program = bpf_program(client_ip, ports)
         self.sock = socket.socket(socket.AF_PACKET, socket.SOCK_RAW, socket.htons(ETH_P_ALL))
         insns = (_SockFilter * len(program))(*[_SockFilter(*i) for i in program])
         self._fprog = _SockFprog(len(program), insns)  # kept alive for the kernel copy

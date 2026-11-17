@@ -12,7 +12,9 @@
 # both names count, so a client started any other way is never missed. Prints the new connect line
 # and the process count; exits 1 if it isn't exactly 1.
 set -euo pipefail
-C=poring-lab-desktop-1
+# This copy's desktop container (scripts/lab_project.sh: COMPOSE_PROJECT_NAME, default poring-lab)
+source "$(dirname "$0")/lab_project.sh"
+C="$(lab_project)-desktop-1"
 # ADR-0009: only in RDP mode. In console mode the RDP client must stay down (scripts/capture_backend.py).
 LOCK="$(dirname "$0")/../state/capture-backend"
 if [[ -e "${LOCK}" ]] && ! grep -qx 'BACKEND=rdp' "${LOCK}"; then

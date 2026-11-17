@@ -34,6 +34,21 @@ while True:
 GEF10 = ["player", "npc", "warp", *(f"species_{i}" for i in range(3, 26))]
 
 
+@pytest.fixture(autouse=True)
+def every_model_in_the_store(tmp_path_factory: pytest.TempPathFactory,
+                             monkeypatch: pytest.MonkeyPatch) -> Path:  # fmt: skip
+    """ADR-0022 Amendment 2026-11-17: serve-cmd registers the models present in the storage folder.
+    Tests see a store holding every pinned file (the lab's), unless a test sets its own."""
+    store = tmp_path_factory.mktemp("store")
+    for w in ud.GPU_WEIGHTS.values():
+        for rel in (w.path, f"{ud.NAS_MODELS}/{w.onnx}"):
+            f = ud.host_path(rel, store)
+            f.parent.mkdir(parents=True, exist_ok=True)
+            f.write_bytes(b"")
+    monkeypatch.setenv("LAB_STORE_DIR", str(store))
+    return store
+
+
 @pytest.fixture
 def worker(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     path = tmp_path / "fake_worker.py"
@@ -635,10 +650,11 @@ def test_the_openvino_backend_serves_the_deployed_onnx_by_its_pin(
 
 
 def test_the_openvino_serve_step_runs_in_the_worker_and_pins_each_onnx(
-    capsys: pytest.CaptureFixture[str],
+    capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """Batt 2026-11-07: the OpenVINO server runs IN the Intel worker (a guarded execdev step), the
     deployed ONNX from the NAS (read-only /datasets), each by its pinned sha256."""
+    monkeypatch.setattr(ud, "present_models", lambda backend, store=None: tuple(ud.GPU_WEIGHTS))
     step = ud.serve_step_openvino(900)
     assert step.startswith("execdev:vision@900=python -m poring_vision.detect_server --backend "
                            "openvino --device GPU --socket /detect/detect.sock")  # fmt: skip
@@ -741,3 +757,30 @@ def test_a_detectors_priority_is_none_or_hud(worker: Path, tmp_path: Path, priva
         assert twin.detect(FRAME) == [] and twin.last_reason == "disabled"
     finally:
         cpu.close()
+
+
+def test_the_serve_step_registers_only_the_models_in_the_storage_folder(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """ADR-0022 Amendment 2026-11-17: a new install has v1's ONNX only (detector_setup.py), so its
+    OpenVINO server serves v1 alone; torch needs the .pt files; with none the command says the CPU
+    serves alone and exits 3 (the Run helper then runs CPU-only)."""
+    store = tmp_path / "store"
+    (store / "archive" / "models").mkdir(parents=True)
+    assert ud.present_models("openvino", store) == ()
+    (store / "archive" / "models" / ud.GPU_WEIGHTS["v1"].onnx).write_bytes(b"v1")
+    assert ud.present_models("openvino", store) == ("v1",)
+    assert ud.present_models("torch", store) == ()
+    pt = ud.host_path(ud.GPU_WEIGHTS["xmas02sk"].path, store)
+    pt.parent.mkdir(parents=True)
+    pt.write_bytes(b"pt")
+    assert ud.present_models("torch", store) == ("xmas02sk",)
+    assert ud.host_path("/datasets/archive/x.onnx", store) == store / "archive" / "x.onnx"
+    monkeypatch.setenv("LAB_STORE_DIR", str(tmp_path / "empty"))
+    assert ud.main(["serve-cmd", "--backend", "openvino", "--seconds", "900"]) == 3
+    captured = capsys.readouterr()
+    assert captured.out == "" and "the CPU detector serves alone" in captured.err
+    monkeypatch.setenv("LAB_STORE_DIR", str(store))
+    assert ud.main(["serve-cmd", "--backend", "openvino", "--seconds", "900"]) == 0
+    out = capsys.readouterr().out
+    assert "--model v1=/datasets/archive/models/" in out and "xmas02sk" not in out

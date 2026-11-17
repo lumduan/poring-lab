@@ -40,6 +40,10 @@ fi
 : "${RATHENA_SERVER_NAME:=PoringLab}" "${RATHENA_NEW_ACCOUNT:=yes}" "${RATHENA_PINCODE:=no}"
 : "${RATHENA_WEB_SERVER:=false}" "${RATHENA_TEST_USER:=}" "${RATHENA_TEST_PASSWORD:=}"
 : "${RATHENA_AGENT_USER:=}" "${RATHENA_AGENT_PASSWORD:=}" "${RATHENA_GM_USER:=}" "${RATHENA_GM_PASSWORD:=}"
+# The game ports (Batt 2026-11-17: nothing fixed). char and map are ADVERTISED to the client, so
+# each server listens on the very number compose publishes (compose.yaml: X:X).
+: "${RATHENA_LOGIN_PORT:=6900}" "${RATHENA_CHAR_PORT:=6121}" "${RATHENA_MAP_PORT:=5121}"
+: "${RATHENA_WEB_PORT:=8888}"
 
 # rAthena's conf parser takes everything after "key: " to end of line, and the server account is
 # also written into SQL below -- keep these to a safe charset instead of escaping them.
@@ -64,11 +68,20 @@ for acct in TEST AGENT GM; do
   fi
 done
 
+for port_var in RATHENA_LOGIN_PORT RATHENA_CHAR_PORT RATHENA_MAP_PORT RATHENA_WEB_PORT; do
+  [[ "${!port_var}" =~ ^[0-9]{1,5}$ ]] && ((10#${!port_var} >= 1 && 10#${!port_var} <= 65535)) ||
+    die "${port_var} must be a port number (1-65535)"
+done
+[[ "$(printf '%s\n' "${RATHENA_LOGIN_PORT}" "${RATHENA_CHAR_PORT}" "${RATHENA_MAP_PORT}" \
+  "${RATHENA_WEB_PORT}" | sort -u | wc -l)" == 4 ]] || die "the four RATHENA_*_PORT values must differ"
+
 export HOST_LAN_IP DB_HOST DB_PORT DB_NAME DB_USER DB_PASSWORD RATHENA_SERVER_USER \
-  RATHENA_SERVER_PASSWORD RATHENA_SERVER_NAME RATHENA_NEW_ACCOUNT RATHENA_PINCODE
+  RATHENA_SERVER_PASSWORD RATHENA_SERVER_NAME RATHENA_NEW_ACCOUNT RATHENA_PINCODE \
+  RATHENA_LOGIN_PORT RATHENA_CHAR_PORT RATHENA_MAP_PORT RATHENA_WEB_PORT
 vars='${HOST_LAN_IP} ${DB_HOST} ${DB_PORT} ${DB_NAME} ${DB_USER} ${DB_PASSWORD}'
 vars+=' ${RATHENA_SERVER_USER} ${RATHENA_SERVER_PASSWORD} ${RATHENA_SERVER_NAME}'
 vars+=' ${RATHENA_NEW_ACCOUNT} ${RATHENA_PINCODE}'
+vars+=' ${RATHENA_LOGIN_PORT} ${RATHENA_CHAR_PORT} ${RATHENA_MAP_PORT} ${RATHENA_WEB_PORT}'
 for tmpl in /opt/rathena-conf-templates/*.txt.tmpl; do
   out="conf/import/$(basename "${tmpl}" .tmpl)"
   envsubst "${vars}" <"${tmpl}" >"${out}"
@@ -77,7 +90,7 @@ done
 # Static (no variables): the Validation group for the agent's GM account.
 cp /opt/rathena-conf-templates/groups.yml conf/import/groups.yml
 log "installed conf/import/groups.yml"
-log "clients will be sent to char ${HOST_LAN_IP}:6121 and map ${HOST_LAN_IP}:5121 ($(tr '\n' ' ' <BUILD_INFO))"
+log "clients will be sent to char ${HOST_LAN_IP}:${RATHENA_CHAR_PORT} and map ${HOST_LAN_IP}:${RATHENA_MAP_PORT} ($(tr '\n' ' ' <BUILD_INFO))"
 
 # DB credentials via an option file, never argv.
 umask 077

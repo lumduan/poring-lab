@@ -25,10 +25,11 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
+import lab_env  # noqa: E402
 import migration_check as mc  # noqa: E402
 
-DB = "poring-lab-db-1"
-RATHENA = "poring-lab-rathena-1"
+DB = lab_env.container("db")
+RATHENA = lab_env.container("rathena")
 IN_CONTAINER = "/tmp/poring-lab-move.sql"
 
 

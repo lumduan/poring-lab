@@ -61,8 +61,9 @@ from typing import Any
 import numpy as np
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
+import lab_env  # noqa: E402
 
-NAS_ROOT = Path("/mnt/poring-lab-datasets/detector-collection")
+NAS_ROOT = lab_env.store("detector-collection")  # in the storage folder (LAB_STORE_DIR)
 REC_HZ = 5.0
 REC_QUALITY = 80
 SHARD_BYTES = 256 << 20

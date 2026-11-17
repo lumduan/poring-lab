@@ -80,12 +80,14 @@ from pathlib import Path
 from typing import Any
 
 import flow_config as fc  # the settings' registry (same directory: scripts/)
+import host_profile  # this host's detect backend (ADR-0022; same directory, stdlib only)
+import lab_env  # this copy's compose project names (same directory, stdlib only)
 
 ROOT = Path(__file__).resolve().parents[1]
 DIR = ROOT / "settings" / "flowrun"
 SCRATCH = Path("/dev/shm/poring-lab-tmp")
 SERVE_LOG = SCRATCH / "poring-guarded-execdev-vision.log"
-WORKER = "poring-lab-vision-worker-1"
+WORKER = lab_env.container("vision-worker")
 PY = str(ROOT / ".venv" / "bin" / "python")
 STATUS_EVERY_S = 2.0
 POLL_S = 1.0
@@ -750,8 +752,26 @@ class Helper:
 
     def detect_up(self) -> bool:
         """The vision worker and the detect server (its time box: the run's cap + 150 s), as the
-        night chain starts them; False: failed (status says why)."""
+        night chain starts them; False: failed (status says why). ADR-0022 Amendment 2026-11-17:
+        the backend is this host's profile's (OpenVINO on Intel, torch on NVIDIA); with none
+        (dedicated-cpu), or no model of the server's in the storage folder, the run goes on with the
+        CPU detector alone (the runner falls back to it by itself)."""
         assert self.run_dir is not None
+        backend = host_profile.current().detect_backend
+        if backend == "none":
+            self.note(event="detect_cpu_only", why="profile")
+            return True  # no GPU here: the CPU detector serves
+        self.detail = "building the detect server's command"
+        self.write_status()
+        cmd = subprocess.run([PY, "scripts/unit_detector.py", "serve-cmd", "--backend", backend,
+                              "--seconds", str(int(self.cap_s + 150))], cwd=ROOT,
+                             capture_output=True, text=True)  # fmt: skip
+        if cmd.returncode == 3:  # no model for this backend in the storage folder
+            self.note(event="detect_cpu_only", why="no_model")
+            return True
+        if cmd.returncode != 0 or not cmd.stdout.strip():
+            self.fail("the detect server's command did not build", cmd.stderr[-300:])
+            return False
         self.detail = "starting the vision worker"
         self.write_status()
         up = subprocess.run(["docker", "inspect", "-f", "{{.State.Running}}", WORKER],
@@ -764,12 +784,6 @@ class Helper:
                 return False
         self.detail = "starting the detect server"
         self.write_status()
-        cmd = subprocess.run([PY, "scripts/unit_detector.py", "serve-cmd", "--backend", "openvino",
-                              "--seconds", str(int(self.cap_s + 150))], cwd=ROOT,
-                             capture_output=True, text=True)  # fmt: skip
-        if cmd.returncode != 0 or not cmd.stdout.strip():
-            self.fail("the detect server's command did not build", cmd.stderr[-300:])
-            return False
         SERVE_LOG.unlink(missing_ok=True)  # only the NEW step's start line may match
         with open(self.run_dir / "serve.log", "wb") as fh:
             self.server = subprocess.Popen(
