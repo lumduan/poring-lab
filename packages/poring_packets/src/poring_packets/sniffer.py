@@ -28,7 +28,16 @@ from typing import Any
 
 from pydantic import TypeAdapter
 
-from poring_packets.capture import PORT_SERVER, Capture, TcpSegment, bpf_expr, parse_frame
+from poring_packets.capture import (
+    LAB_PORTS,
+    SERVER_PORTS_ENV,
+    Capture,
+    TcpSegment,
+    bpf_expr,
+    parse_frame,
+    server_of,
+    server_ports,
+)
 from poring_packets.clock import ClockMap, take_sample
 from poring_packets.decode import Decoded, decode, is_gm_command, text
 from poring_packets.events import GM_WINDOW_NS, Attestation, PacketEvent, PacketStats
@@ -73,8 +82,10 @@ class Session:
         client_ip: str,
         validation_userids: set[str],
         server_id: str | None = None,
+        ports: tuple[int, int, int] = LAB_PORTS,
     ) -> None:
         self.table, self.client_ip = table, client_ip
+        self.port_server = server_of(ports)  # this install's game ports (SNIFF_SERVER_PORTS)
         self.server_id = server_id or None  # the attestation's `server` (SNIFFER_SERVER_ID)
         self.validation_userids = validation_userids
         self.validation_aids: set[int] = set()
@@ -85,7 +96,7 @@ class Session:
 
     def _conn(self, seg: TcpSegment, direction: str) -> Conn | None:
         cport, sport = (seg.sport, seg.dport) if direction == "cs" else (seg.dport, seg.sport)
-        server = PORT_SERVER.get(sport)
+        server = self.port_server.get(sport)
         if server is None:
             return None
         key = (self.client_ip, cport, sport)
@@ -320,20 +331,24 @@ def run() -> None:
     # on them)
     client_ip = os.environ.get("CLIENT_IP", "").strip()
     try:
-        expr = bpf_expr(client_ip)
+        ports = server_ports(os.environ.get(SERVER_PORTS_ENV))
+    except ValueError as exc:
+        raise SystemExit(f"{exc} (compose passes RATHENA_LOGIN/CHAR/MAP_PORT)") from None
+    try:
+        expr = bpf_expr(client_ip, ports)
     except ValueError:
         raise SystemExit(f"CLIENT_IP must be the Windows game PC's IPv4 address (compose passes "
                          f"WIN_HOST), got {client_ip!r}") from None  # fmt: skip
     log.info("capture filter: %s", expr)
     table = load_table()
-    session = Session(table, client_ip, userids, server_id)
+    session = Session(table, client_ip, userids, server_id, ports)
     scrub = LoginScrub(login_ports(os.environ.get(LOGIN_PORTS_ENV)))
     log.info("pcap credential scrub: %s", scrub.mode)
     # ADR-0007 Amendment C: the code's commit (the guarded restart passes it in dev mode; the image
     # path leaves it unset) names the decoder in the start log and in every capture's header
     commit = os.environ.get("SNIFFER_COMMIT", "").strip() or "image"
     log.info("decoder code: %s", commit)
-    cap = Capture(iface, client_ip)
+    cap = Capture(iface, client_ip, ports)
     out = Rotating(root, app=f"poring-lab sniffer (code {commit})")
     ingest = Ingest(url) if url else None
     if ingest:

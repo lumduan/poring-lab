@@ -24,7 +24,16 @@ from helpers import (  # noqa: E402
 )
 
 from poring_packets import tables
-from poring_packets.capture import BPF_EXPR, BPF_PROGRAM, bpf_expr, bpf_program, parse_frame
+from poring_packets.capture import (
+    BPF_EXPR,
+    BPF_PROGRAM,
+    PORT_SERVER,
+    bpf_expr,
+    bpf_program,
+    parse_frame,
+    server_of,
+    server_ports,
+)
 from poring_packets.clock import ClockMap, Sample
 from poring_packets.decode import decode, is_gm_command, pos, pos2
 from poring_packets.events import json_schema
@@ -202,8 +211,12 @@ def test_login_ports_from_the_environment(value: str | None, want: set[int] | No
 
 def test_compose_gives_both_sniffers_the_published_login_port() -> None:
     text = (Path(__file__).resolve().parents[3] / "compose.yaml").read_text()
-    assert text.count('SNIFF_LOGIN_PORTS: "6900"') == 2
-    assert text.count(':6900:6900" # login') == 2  # rathena and rathena-th publish it
+    # Batt 2026-11-17 ("nothing locked"): both follow this install's login port, default 6900
+    assert text.count('SNIFF_LOGIN_PORTS: "${RATHENA_LOGIN_PORT:-6900}"') == 2
+    # rathena and rathena-th publish it on the same number inside and out (char/map are advertised)
+    assert text.count(':${RATHENA_LOGIN_PORT:-6900}:${RATHENA_LOGIN_PORT:-6900}" # login') == 2
+    ports = '"${RATHENA_LOGIN_PORT:-6900},${RATHENA_CHAR_PORT:-6121},${RATHENA_MAP_PORT:-5121}"'
+    assert text.count(f"SNIFF_SERVER_PORTS: {ports}") == 2
 
 
 def _libpcap_compile() -> Any:
@@ -251,6 +264,46 @@ def test_the_filter_for_any_game_pc_is_libpcaps_own(ip: str) -> None:
 def test_a_bad_client_address_never_builds_a_filter(bad: str) -> None:
     with pytest.raises(ValueError):
         bpf_program(bad)
+
+
+@pytest.mark.parametrize(
+    "ports", [(6900, 6121, 5121), (7900, 7121, 7122), (16900, 16121, 15121), (5121, 6900, 6121),
+              (1, 2, 65535)],
+)  # fmt: skip
+def test_the_filter_for_any_game_ports_is_libpcaps_own(ports: tuple[int, int, int]) -> None:
+    """Batt 2026-11-17 ("don't lock anything"): another install's game ports -- the same program,
+    only the port constants differ, exactly what libpcap compiles."""
+    for ip in ("192.168.1.169", "10.0.5.31"):
+        assert bpf_program(ip, ports) == _libpcap_compile()(bpf_expr(ip, ports)), (ip, ports)
+
+
+@pytest.mark.parametrize(
+    ("raw", "ok"), [(None, (6900, 6121, 5121)), ("", (6900, 6121, 5121)),
+                    ("7900,7121,7122", (7900, 7121, 7122)),
+                    (" 7900 , 7121 ,7122 ", (7900, 7121, 7122)),
+                    ("6900,6900,5121", None), ("6900,6121", None), ("6900,6121,0", None),
+                    ("6900,6121,70000", None), ("a,b,c", None), ("6900,6121,5121,1", None)],
+)  # fmt: skip
+def test_the_server_ports_are_three_distinct_ports(
+    raw: str | None, ok: tuple[int, int, int] | None
+) -> None:
+    if ok is None:
+        with pytest.raises(ValueError):
+            server_ports(raw)
+    else:
+        assert server_ports(raw) == ok
+        assert server_of(ok) == dict(zip(ok, ("login", "char", "map"), strict=True))
+
+
+def test_a_session_names_servers_by_this_installs_ports() -> None:
+    from poring_packets.sniffer import Session
+    from poring_packets.tables import LengthTable
+
+    s = Session(LengthTable({}, {}), "10.0.5.31", set(), "lab-rathena", (7900, 7121, 7122))
+    assert s.port_server == {7900: "login", 7121: "char", 7122: "map"}
+    assert (
+        Session(LengthTable({}, {}), "10.0.5.31", set(), "lab-rathena").port_server == PORT_SERVER
+    )
 
 
 def test_compose_gives_both_sniffers_this_hosts_windows_pc() -> None:

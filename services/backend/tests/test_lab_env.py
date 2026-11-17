@@ -144,3 +144,32 @@ def test_env_example_lists_every_install_key() -> None:
     example = (ROOT / ".env.example").read_text()
     for key in [le.PROJECT_KEY, le.STORE_KEY, *le.PORTS, *le.NETS, "VISION_WORKER_MEM"]:
         assert re.search(rf"^{key}=", example, re.M), key
+
+
+def test_rathena_listens_on_the_ports_compose_publishes() -> None:
+    """char and map are ADVERTISED to the game client: each server listens on the very number
+    compose publishes (X:X), from the same RATHENA_*_PORT the entrypoint renders into the conf
+    (rAthena's keys at the pinned commit: login_port, char_port, map_port, web_port)."""
+    tmpl = ROOT / "services" / "rathena" / "conf" / "import"
+    want = {
+        "login_conf.txt.tmpl": {"login_port: ${RATHENA_LOGIN_PORT}"},
+        "char_conf.txt.tmpl": {
+            "login_port: ${RATHENA_LOGIN_PORT}",
+            "char_port: ${RATHENA_CHAR_PORT}",
+        },
+        "map_conf.txt.tmpl": {"char_port: ${RATHENA_CHAR_PORT}", "map_port: ${RATHENA_MAP_PORT}"},
+        "web_conf.txt.tmpl": {"web_port: ${RATHENA_WEB_PORT}"},
+    }
+    for name, lines in want.items():
+        text = (tmpl / name).read_text().splitlines()
+        assert lines <= set(text), name
+    entry = (ROOT / "services" / "rathena" / "entrypoint.sh").read_text()
+    for key in ("RATHENA_LOGIN_PORT", "RATHENA_CHAR_PORT", "RATHENA_MAP_PORT", "RATHENA_WEB_PORT"):
+        assert f"${{{key}:={le.PORTS[key]}}}" in entry, key  # the same default as lab_env
+        assert f"${{{key}}}" in entry.split("vars='", 1)[1], key  # substituted into the templates
+    # smoke_test.sh greps this line's prefix
+    assert 'log "clients will be sent to char ${HOST_LAN_IP}:${RATHENA_CHAR_PORT} and map' in entry
+    compose = (ROOT / "compose.yaml").read_text()
+    for key in ("RATHENA_LOGIN_PORT", "RATHENA_CHAR_PORT", "RATHENA_MAP_PORT", "RATHENA_WEB_PORT"):
+        v = f"${{{key}:-{le.PORTS[key]}}}"
+        assert f":{v}:{v}" in compose, key
