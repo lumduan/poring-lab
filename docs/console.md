@@ -163,7 +163,13 @@ Open **Settings** in the console's top bar (`http://<host>:<CONSOLE_PORT>/settin
   lab's rAthena) are only a starting set.
 - **Found by the lab:** servers your game client is set up for. They are suggestions until you
   press **Confirm** (or **Confirm all** for one server's ports). Every save is checked by reading
-  the file back ("Saved and checked ✓").
+  the file back ("Saved and checked ✓"). The lab's own rAthena is suggested at THIS server's
+  address and ports (`HOST_LAN_IP`, `RATHENA_*_PORT`; since 2026-11-17).
+- **Windows PC** (each Allowed environment; ADR-0023 decision 4, 2026-11-17): the game PC the
+  environment is played from, beside the one this lab drives (`WIN_HOST`). The bot acts only while
+  they match; **Set Windows PC** changes it (an IP address of one machine, never this server's),
+  **Use this lab's PC** copies `WIN_HOST`. An import never changes it. The red banner
+  `host_mismatch` points here.
 - **Blocking is easy; unblocking is hard.** Removing a forbidden server, deleting a Forbidden
   environment, or making it Allowed needs a written reason and the name typed again, one change at
   a time.

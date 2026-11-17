@@ -550,12 +550,13 @@ to edit `.env` in an editor).
 
   | # | Screen | What it does |
   |---|---|---|
-  | 0 | Pre-flight | read-only: Linux, Docker without sudo, the address pool (`null` STOPS with section 1.1), no Docker bridge on 192.168.x, disk, RAM, `/dev/shm` at logout (1.3), the user id, the GPU. Then the host profile (section 5): the detected default, `shared-nvidia` only behind a warning; and, with a GPU, whether to build the vision image |
+  | 0 | Pre-flight | read-only: Linux, Docker without sudo, the address pool (`null` STOPS with section 1.1), no Docker bridge on 192.168.x, disk, RAM, `/dev/shm` at logout (1.3), the user id, the GPU and whether it is READY (driver, container runtime, render group: section 5). ADR-0026: this copy's Docker name (a name whose containers ANOTHER folder created stops; the wizard then asks for another, e.g. `poring-lab-2`) and the two pinned subnets (taken -> the first free pair). Then the host profile: the RECOMMENDED one with the GPU's fixes, `dedicated-cpu` when the GPU is not ready, `shared-nvidia` only behind a warning; and, with a ready GPU, the vision image (recommended) |
   | 1 | This server's address | the default route's source (init_env.sh's method), or another of the host's IPv4 addresses; must be a private LAN address of this machine |
-  | 2 | The console port | default 3000, any of 1024-65535 except the lab's own ports; a bind test on that address (a port already serving this lab's console is fine) |
-  | 3 | The Windows PC | its address (warns when it is not 192.168.1.169: the bot limit of section 7), then a TCP test of Sunshine's 47984, 47989, 48010 with fixes |
-  | 4 | Review, `.env` | no `.env`: `scripts/init_env.sh` (random secrets); then ONLY the changed settings through `rotate_secrets.py set` (read back): `HOST_LAN_IP`, `CONSOLE_PORT`, `WIN_HOST`, `LAB_HOST_PROFILE`, `RENDER_GID`, `VISION_MAX_VRAM_FRACTION=1.0` (dedicated), `RATHENA_WEB_SERVER=true`, `S2_REC_DIR`. A secret is never regenerated or shown; RDP_* are never written |
-  | 5 | Install | the steps of this section in order, one guarded step each, plus `build:gamestream` and `start:gamestream@60`; per step a status line, the elapsed time and the full log (`/dev/shm/poring-lab-tmp/setup/logs/`); a failure shows the last lines and this manual's fix: Retry, Skip (optional steps only), or Quit and resume. A finished step is checked (the image, the container, the file), not redone |
+  | 2 | The console port | default 3000, any of 1024-65535 except this install's other ports; a bind test on that address (a port this copy's own containers already publish is fine; another copy's console is not). Then the game, backend and noVNC ports: any another program holds is moved (+1000, free), shown, and written |
+  | 3 | The Windows PC | its address (any LAN address; no fixed PC since 2026-11-17), then a TCP test of Sunshine's 47984, 47989, 48010 with fixes |
+  | 3b | Storage | the long-term storage folder `LAB_STORE_DIR` (default `~/poring-lab-store`; a NAS is a folder you mounted), with its disk's free space (section 1.4) |
+  | 4 | Review, `.env` | no `.env`: `scripts/init_env.sh` (random secrets); then ONLY the changed settings through `rotate_secrets.py set` (read back): `HOST_LAN_IP`, `CONSOLE_PORT`, `WIN_HOST`, `LAB_HOST_PROFILE`, `RENDER_GID`, `VISION_MAX_VRAM_FRACTION=1.0` (dedicated), `RATHENA_WEB_SERVER=true`, `S2_REC_DIR`, `LAB_STORE_DIR`, and where they differ from the defaults `COMPOSE_PROJECT_NAME`, the moved ports, the subnets, `VIEWER_NETWORKS` (the server's LAN when 192.168.0.0/16 does not cover it) and, in a new `.env`, `VISION_WORKER_MEM` (from the RAM). A secret is never regenerated or shown; RDP_* are never written |
+  | 5 | Install | the steps of this section in order, one guarded step each, plus `build:gamestream`, the CPU detector with its starter model (`scripts/detector_setup.py`, section 9) and `start:gamestream@60`; per step a status line, the elapsed time and the full log (`/dev/shm/poring-lab-tmp/setup/logs/`); a failure shows the last lines and this manual's fix: Retry, Skip (optional steps only), or Quit and resume. A finished step is checked (the image, the container, the file), not redone |
   | 6 | Pairing | skipped when `capture_backend.py paired` says so; else a random 4-digit PIN, `capture_backend.py pair <PIN>` (it waits), and you type the PIN on the PC's Sunshine page (sunshine-windows.md step 8) |
   | 7 | The stream test | `capture_backend.py to-console --sunshine-only` (section 7.5), then `scripts/stream_frame.py`: one fresh frame from the S2 frame bus, saved as a PNG in `/dev/shm/poring-lab-tmp/setup/`, with its size and age |
   | 8 | Summary | the console's address, the settings, the paths, the next steps and the known limit (section 7.5) |
@@ -579,19 +580,13 @@ The PC's one job is to run the game and stream it ([ADR-0019](../adr/0019-window
 "Windows stays clean"). The user-facing list is [docs/windows-setup.md](../windows-setup.md); the
 lab's full client recipe is [docs/client/rathena-client.md](../client/rathena-client.md).
 
-> **Known limit TODAY: the game PC's address.** The interlock's shipped seed names 192.168.1.169
-> as the lab environment's Windows host (`windows_host`, a technical field taken from the seed
-> only; the Settings page cannot change it). The bot can act only while it matches the game PC
-> (ADR-0016 signal `lab_host`; else `host_mismatch`).
-> - ➡️ Since 2026-11-17 (Batt) the sniffer's kernel filter is built for THIS host's `WIN_HOST`
->   (`capture.bpf_program`), and the packets only LABEL a session verified or not; they never stop
->   the bot (ADR-0016 amendment 2026-11-17, signal `session`). So only `windows_host` is still fixed.
-> - On a separate network, a DHCP reservation of 192.168.1.169 for the new game PC matches what
->   the code expects today.
-> - On Batt's current LAN, 192.168.1.169 is the running lab's game PC. A second game PC there gets
->   another address, and then the human can play but every bot press is refused
->   (`environment_unattested`) until the Windows host becomes a setting (ADR-0023 decision 4;
->   docs/planning/endpoints-as-config.md C7). Do not edit code or config to get around it.
+> **The game PC's address is yours** (➡️ since 2026-11-17, ADR-0026; before it, the interlock's
+> shipped seed fixed 192.168.1.169 and every other PC was red `host_mismatch`). The shipped set
+> names `${WIN_HOST}`: at the backend's first start the environment takes THIS install's
+> `WIN_HOST`. Change it later on the Settings page ("Set Windows PC", ADR-0023 decision 4); the bot
+> acts only while an environment's Windows PC equals `WIN_HOST` (signal `lab_host`). The sniffer's
+> kernel filter follows `WIN_HOST` too, and the packets only LABEL a session (ADR-0016 amendment
+> 2026-11-17).
 
 ### 7.1 The client copy
 
@@ -712,8 +707,8 @@ display, no sleep or lock).
   foreground gate refuses bot keys until its stream template is cut.
 - The bot programs (the dungeon runner, hunt, farm, agent_play) refuse a console lock or stop at the
   UI gate at their start.
-- A single bot click passes only in ASSIST or BOT with the interlock green (and the game PC at
-  192.168.1.169, section 7), or in ASSIST during an operator window.
+- A single bot click passes only in ASSIST or BOT with the interlock green (and the environment's
+  Windows PC equal to `WIN_HOST`, section 7), or in ASSIST during an operator window.
 
 The lab itself runs RDP; use RDP (section 7.3) until the S2 set is proven if the bot must type. On an
 RDP host, Sunshine is reached with the RDP handovers (`capture_backend.py to-console --yes-tscon`,
@@ -1195,8 +1190,12 @@ docs/thai-data-experiment.md section 3):
 | `worker:vision` fails to start | no render node, wrong `RENDER_GID` (`getent group render`), or an unreachable NAS volume (section 4.1) |
 | the detect server `REFUSED` with `FileNotFoundError ... archive/models/...` | a registered ONNX is missing from the models folder: section 9's rule |
 | `quiet_start.py` waits for ever | it waits 10 quiet minutes and skips SET market windows on every host: on a dedicated host start the worker directly |
-| bot presses refused, `environment_unattested` | read `/health` `environment`: servers not confirmed (`no_servers`); the capture lock not steady (`capture_backend.py status`); the game PC is not 192.168.1.169 (section 7, `host_mismatch`). The packets never refuse a press since 2026-11-17 (ADR-0016 amendment 2026-11-17): a sniffer restart or a missing session only shows `unverified:<why>` (green, not verified) |
+| bot presses refused, `environment_unattested` | read `/health` `environment`: servers not confirmed (`no_servers`); the capture lock not steady (`capture_backend.py status`); the environment's Windows PC is not `WIN_HOST` (section 7, `host_mismatch`: set it on the Settings page). The packets never refuse a press since 2026-11-17 (ADR-0016 amendment 2026-11-17): a sniffer restart or a missing session only shows `unverified:<why>` (green, not verified) |
 | a Settings save refused | from the bot host or the game PC (use a third computer); a LAN outside 192.168.0.0/16 (section 4.1); a stale page (reload: the CSRF token is per backend start) |
+| the wizard: `Docker name: '<name>' belongs to the poring-lab copy in <folder>` | another copy of poring-lab on this host created containers with that name; this copy needs its own: take the offered `<name>-2` or type one (`COMPOSE_PROJECT_NAME`; ADR-0026). The other copy is never touched |
+| the wizard: ports moved (`RATHENA_LOGIN_PORT 6900->7900` ...) | another program (often another copy) holds them; accept, then point your game client's `clientinfo.xml` at the new LOGIN port (section 7.1) |
+| the wizard: `GPU ... NOT ready -> dedicated-cpu` | do the fixes it lists (the NVIDIA driver 580+, the NVIDIA Container Toolkit + `nvidia-ctk runtime configure`, or the render group), then re-run `./setup.sh`; meanwhile the CPU detector serves |
+| `dataset_ship`: `... is configured as a mount but is not mounted` | your storage folder is an fstab / automount NAS mount point and the NAS is down: mount it; a plain folder needs no mount (section 1.4) |
 | ro_agent refuses "mux mode is HUMAN" | the mux boots HUMAN after every backend start; a person sets ASSIST |
 | Failed to Connect to Server right after login | this client needs the server picked within ~1-2 s of the list |
 | login works, then a hang at server or character select | `HOST_LAN_IP` is not the host's LAN address; `scripts/dev.sh logs rathena` shows the advertised address |

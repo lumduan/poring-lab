@@ -144,7 +144,8 @@ def test_dev_sh_passes_the_same_project_name() -> None:
 
 def test_env_example_lists_every_install_key() -> None:
     example = (ROOT / ".env.example").read_text()
-    for key in [le.PROJECT_KEY, le.STORE_KEY, *le.PORTS, *le.NETS, "VISION_WORKER_MEM"]:
+    for key in [le.PROJECT_KEY, le.STORE_KEY, le.DETECTOR_KEY, *le.PORTS, *le.NETS,
+                "VISION_WORKER_MEM"]:
         assert re.search(rf"^{key}=", example, re.M), key
 
 

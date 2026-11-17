@@ -163,7 +163,8 @@ Official servers and every other public server are forbidden. Start with `README
    name, the ports, the two subnets (`LAB_NET_PREFIX` / `LAB_AGENT_NET_PREFIX`, always inside
    10.210.0.0/16), the storage folder (`LAB_STORE_DIR`; the lab: its NAS mount) and the detector
    folder come from `.env` with the lab's values as defaults (`scripts/lab_env.py`, compose
-   interpolation). Never write a lab address, path or name into new code: read `lab_env`.
+   interpolation; bash: `scripts/lab_project.sh`). Never write a lab address, path or name into
+   new code: read `lab_env`.
    **Never put a Docker network on a 192.168.x subnet on this host.** The LAN uses 192.168.1, 110, 111, 112
    and 120, and Docker can't see the segments behind the router. On 2026-09-29 an auto-assigned
    192.168.96.0/20 cut the operator's MacBook off from VM 103 (home-assistant-ops OS-034).

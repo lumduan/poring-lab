@@ -99,15 +99,16 @@ for RDP, section 7.3.
 
 ## Ports
 
-Everything binds to `HOST_LAN_IP`. Keep it on a trusted LAN.
+Everything binds to `HOST_LAN_IP`. Keep it on a trusted LAN. Every port is a setting in `.env`
+with the default shown; the wizard moves any port another program holds (ADR-0026).
 
-| Port | What |
+| Port (default) | What |
 |---|---|
-| `CONSOLE_PORT` (3000) | the web console (`.env`; the wizard asks for it) |
-| 8000 | the backend (stream, input, health) |
-| 6900, 6121, 5121 | the rAthena login, char and map servers |
-| 8888 | the rAthena web server (the client's account settings) |
-| 6080 | noVNC, view-only, **no authentication** |
+| `CONSOLE_PORT` (3000) | the web console (the wizard asks for it) |
+| `BACKEND_PORT` (8000) | the backend (stream, input, health) |
+| `RATHENA_LOGIN_PORT`, `_CHAR_`, `_MAP_PORT` (6900, 6121, 5121) | the rAthena login, char and map servers |
+| `RATHENA_WEB_PORT` (8888) | the rAthena web server (the client's account settings) |
+| `NOVNC_PORT` (6080) | noVNC, view-only, **no authentication** |
 
 Every service and port: [docs/services-and-ports.md](docs/services-and-ports.md).
 
