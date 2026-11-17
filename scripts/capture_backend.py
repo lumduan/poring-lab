@@ -18,6 +18,20 @@ rdp-loop.sh connects only while it says ``rdp``; gamestream-loop.sh streams only
         can revert its display settings, then lock -> rdp/switching, exactly one xfreerdp, lock ->
         steady, and check Sunshine's log for a pending revert (rc 3 + the remedy if pending).
     capture_backend.py pair PIN          # one-time pairing (private display; ok in rdp)
+    capture_backend.py paired            # read-only: 0 paired, 1 not paired, 2 gamestream down
+    capture_backend.py to-console --sunshine-only
+    capture_backend.py to-rdp --sunshine-only
+        A SUNSHINE-ONLY host (docs/setup/sunshine-windows.md, 2026-11-17): RDP is off (.env has no
+        RDP_USER / RDP_PASSWORD, so rdp-loop.sh idles), the PC is logged on at its own console, and
+        Sunshine is the ONE display path. There is no tscon and no RDP client to end. `init` leaves
+        rdp/steady there too: nothing connects and gamestream holds, so pairing runs with no stream
+        beside it. to-console --sunshine-only (paired first) writes the S2 variant, then
+        console/steady REASON sunshine-only, and waits for the S2 client's first decoded frame: that
+        is the host's steady state from then on. to-rdp --sunshine-only ends the stream through
+        Sunshine (/cancel) and goes back to rdp/steady (nothing streams; e.g. to pair again). Both
+        refuse while RDP is configured in .env or in the running desktop, or an xfreerdp runs
+        (rule 2: one display path). A plain to-rdp on such a host is refused: it would wait for an
+        RDP client that never comes and leave the lock at rdp/switching.
     capture_backend.py to-console [--yes-tscon] [--external]
         RDP -> console: preflight; with --yes-tscon (after Batt's OK): focus + verify poring-lab's
         own console (open and visible), THEN lock -> console/switching, type `schtasks /run` of
@@ -89,6 +103,7 @@ from poring_backend.capture_lock import (  # noqa: E402
 )
 
 STATE = Path(os.environ.get("LAB_STATE_HOST_DIR", REPO / "state"))
+ENV_FILE = REPO / ".env"  # read for WIN_HOST and whether RDP is configured; values never printed
 DESKTOP, BACKEND, GAMESTREAM = (
     "poring-lab-desktop-1",
     "poring-lab-backend-1",
@@ -332,6 +347,12 @@ def cmd_drill(hold_s: float) -> int:
 
 def cmd_to_rdp(recover: bool) -> int:
     backend, _, _ = read_host()
+    if rdp_env() == "disabled":
+        raise Stop(
+            "RDP is off in .env (no RDP_USER / RDP_PASSWORD): to-rdp would wait for an RDP client "
+            "that never comes and leave the lock at rdp/switching. On a Sunshine-only host: "
+            "to-rdp --sunshine-only"
+        )
     if backend == "rdp" and not recover:
         say("already rdp (use --recover to re-run the handover steps anyway)")
         return 0
@@ -527,10 +548,129 @@ def verify_sunshine_revert(timeout: float = 15) -> str:
 
 
 def win_host() -> str:
-    for line in (REPO / ".env").read_text().splitlines():
+    for line in ENV_FILE.read_text().splitlines():
         if line.startswith("WIN_HOST="):
             return line.split("=", 1)[1].strip()
     raise Stop("WIN_HOST is not set in .env")
+
+
+# --- a Sunshine-only host (no RDP at all; 2026-11-17, docs/setup/sunshine-windows.md) -----------
+SUNSHINE_ONLY_REASON, SUNSHINE_OFF_REASON = "sunshine-only", "sunshine-only-off"
+RDP_KEYS = ("WIN_HOST", "RDP_USER", "RDP_PASSWORD")
+# rdp-loop.sh main() idles ("RDP disabled") unless ALL THREE are non-empty in its environment.
+# The same test inside the running desktop; it prints one word, never a value.
+RDP_ENV_PROBE = (
+    '[ -n "${WIN_HOST:-}" ] && [ -n "${RDP_USER:-}" ] && [ -n "${RDP_PASSWORD:-}" ] '
+    "&& echo configured || echo disabled"
+)
+S2_FIRST_FRAME_RX = r"FIRST FRAME decoded"  # s2spike/run.py, once per stream
+
+
+def rdp_env() -> str:
+    """What .env says about RDP: "configured" when WIN_HOST, RDP_USER and RDP_PASSWORD are all
+    set (rdp-loop's own rule), "disabled" when any is empty, "unknown" without a readable .env."""
+    try:
+        text = ENV_FILE.read_text()
+    except OSError:
+        return "unknown"
+    values: dict[str, str] = {}
+    for line in text.splitlines():
+        key, sep, value = line.partition("=")
+        if sep and key.strip() in RDP_KEYS and not line.lstrip().startswith("#"):
+            values.setdefault(key.strip(), value.strip())
+    return "configured" if all(values.get(k) for k in RDP_KEYS) else "disabled"
+
+
+def desktop_rdp_env() -> str:
+    """The RUNNING desktop's view ("configured" | "disabled" | "not-running"): a container keeps
+    the environment it was created with, whatever .env says now."""
+    if not running(DESKTOP):
+        return "not-running"
+    out = sh("docker", "exec", DESKTOP, "sh", "-c", RDP_ENV_PROBE).stdout.strip()
+    return out if out in ("configured", "disabled") else "configured"  # unreadable: assume RDP
+
+
+def rdp_possible() -> str:
+    """'' when no RDP client can exist on this host, else why one can (rule 2: one path)."""
+    env = rdp_env()
+    if env != "disabled":
+        return (
+            "RDP is configured in .env (WIN_HOST, RDP_USER and RDP_PASSWORD are set): this host "
+            "uses the RDP handovers (to-console --yes-tscon / to-rdp), not --sunshine-only"
+            if env == "configured"
+            else "no readable .env: cannot tell whether RDP is off"
+        )
+    if desktop_rdp_env() == "configured":
+        return (
+            "the RUNNING desktop still has RDP credentials (created before .env changed): "
+            "recreate it first (python3 scripts/guarded_build.py recreate:desktop@90)"
+        )
+    if count(DESKTOP, RDP_NAMES):
+        return "an xfreerdp client runs in desktop"
+    return ""
+
+
+def cmd_to_console_sunshine_only() -> int:
+    """rdp/steady -> console/steady on a host without RDP: the S2 client streams from now on."""
+    backend, _, text = read_host()
+    phase, reason = lock_phase(text), lock_reason(text)
+    if backend == "console" and phase == "steady" and reason == SUNSHINE_ONLY_REASON:
+        verify_everywhere(text)
+        say("already console/steady (sunshine-only): nothing to do")
+        return 0
+    if backend != "rdp" or phase not in ("steady", ""):
+        raise Stop(f"--sunshine-only starts from rdp/steady (the lock is {backend}/{phase})")
+    why = rdp_possible()
+    if why:
+        raise Stop(why)
+    if not running(GAMESTREAM) or not paired():
+        raise Stop("gamestream must be running and paired (capture_backend.py pair PIN)")
+    host = win_host()
+    if not sunshine_reachable(host):
+        raise Stop(f"Sunshine is not reachable on {host} {SUNSHINE_PORTS} (firewall?)")
+    lab_clients = count(GAMESTREAM, STREAM_NAMES)
+    if lab_clients:
+        raise Stop(f"{lab_clients} lab client process(es) already run in gamestream")
+    write_variant("S2")  # the bot's primary path (ADR-0014): frames to the bus, input by socket
+    since = utc_now()
+    body = write_lock("console", "steady", SUNSHINE_ONLY_REASON)
+    verify_everywhere(body)
+    wait_log(GAMESTREAM, rf"capture-backend console seq={raw_seq(body)}: streaming", since, 60)
+    line = wait_log(GAMESTREAM, S2_FIRST_FRAME_RX, since, 60)
+    say(f"S2 client: {line.split('s2spike: ', 1)[-1].strip()}")
+    say("CONSOLE mode (Sunshine only): the S2 client streams; the lock stays console/steady")
+    return 0
+
+
+def cmd_to_rdp_sunshine_only() -> int:
+    """console -> rdp/steady on a host without RDP: end the stream through Sunshine, then hold."""
+    backend, _, text = read_host()
+    why = rdp_possible()
+    if why:
+        raise Stop(why)
+    if backend == "rdp" and lock_phase(text) in ("steady", ""):
+        say("already rdp/steady: nothing streams (RDP is off on this host)")
+        return 0
+    if backend != "rdp":
+        verify_everywhere(write_lock("console", "switching", SUNSHINE_OFF_REASON))
+        say(f"stream end: {quit_stream()}")
+    body = write_lock("rdp", "steady", SUNSHINE_OFF_REASON)
+    verify_everywhere(body)
+    term_until_zero(GAMESTREAM, STREAM_NAMES, quiet_s=3)
+    write_variant("V1")  # what to-rdp leaves too; --sunshine-only writes S2 again
+    clear_cleanroom()
+    say("rdp/steady with RDP off: nothing streams; to-console --sunshine-only streams again")
+    return 0
+
+
+def cmd_paired() -> int:
+    """Read-only: is the lab's gamestream client paired with Sunshine?"""
+    if not running(GAMESTREAM):
+        print("gamestream not running")
+        return 2
+    ok = paired()
+    print("paired" if ok else "not paired")
+    return 0 if ok else 1
 
 
 def sunshine_reachable(host: str) -> bool:
@@ -561,6 +701,12 @@ def cmd_pair(pin: str) -> int:
         raise Stop("the PIN is 4 digits")
     if not running(GAMESTREAM):
         raise Stop("gamestream is not running (guarded start:gamestream first)")
+    lab_clients = count(GAMESTREAM, STREAM_NAMES)
+    if lab_clients:  # a streaming client beside the pair CLI: two clients on one identity
+        raise Stop(
+            f"{lab_clients} lab client process(es) stream in gamestream: end the stream first "
+            "(to-rdp, or to-rdp --sunshine-only on a host without RDP)"
+        )
     if not sunshine_reachable(win_host()):
         raise Stop(f"Sunshine is not reachable on {win_host()} {SUNSHINE_PORTS} (firewall?)")
     say(
@@ -942,11 +1088,16 @@ def main() -> int:
     ap.add_argument("--wait-lock", type=float, default=30.0, help="seconds to wait for the flock")
     sub = ap.add_subparsers(dest="cmd", required=True)
     sub.add_parser("status")
+    sub.add_parser("paired")
     sub.add_parser("init")
     drill = sub.add_parser("drill")
     drill.add_argument("--hold-s", type=float, default=20.0)
     to_rdp = sub.add_parser("to-rdp")
     to_rdp.add_argument("--recover", action="store_true")
+    to_rdp.add_argument(
+        "--sunshine-only", action="store_true",
+        help="a host without RDP: end the Sunshine stream, back to rdp/steady (nothing streams)",
+    )  # fmt: skip
     to_console = sub.add_parser("to-console")
     to_console.add_argument("--yes-tscon", action="store_true", help="after Batt's OK only")
     to_console.add_argument(
@@ -958,6 +1109,10 @@ def main() -> int:
         help="the clean room: the session stays on the console; then stream/hold",
     )  # fmt: skip
     to_console.add_argument("--hard-cap", type=int, help="clean room: unix time of the hard cap")
+    to_console.add_argument(
+        "--sunshine-only", action="store_true",
+        help="a host without RDP: the S2 client streams from now on (console/steady)",
+    )  # fmt: skip
     stream = sub.add_parser("stream")
     stream.add_argument("--variant", required=True, choices=sorted(VARIANTS))
     stream.add_argument("--box-until", type=int, help="unix time the variant's box ends")
@@ -977,12 +1132,18 @@ def main() -> int:
     args = ap.parse_args()
     if args.cmd == "status":
         return cmd_status()
+    if args.cmd == "paired":
+        return cmd_paired()
     with mutation_lock(args.wait_lock):
         if args.cmd == "init":
             return cmd_init()
         if args.cmd == "drill":
             return cmd_drill(args.hold_s)
         if args.cmd == "to-rdp":
+            if args.sunshine_only:
+                if args.recover:
+                    raise Stop("--recover and --sunshine-only exclude each other")
+                return cmd_to_rdp_sunshine_only()
             return cmd_to_rdp(args.recover)
         if args.cmd == "pair":
             return cmd_pair(args.pin)
@@ -996,6 +1157,10 @@ def main() -> int:
             if not args.close and args.kind is None:
                 raise Stop("window: login|desktop, or --close")
             return cmd_window(args.kind, args.seconds, args.reason, args.close)
+        if args.sunshine_only:
+            if args.yes_tscon or args.external or args.cleanroom or args.hard_cap is not None:
+                raise Stop("--sunshine-only takes no other to-console option (there is no tscon)")
+            return cmd_to_console_sunshine_only()
         if args.external and args.cleanroom:
             raise Stop("--external and --cleanroom exclude each other")
         if args.hard_cap is not None and not args.cleanroom:

@@ -648,3 +648,27 @@ recalibrated while the tray visibly said ENG; `Screen.AllScreens` is cached per 
 layout in a child process); `open-terminal` reuses only a VISIBLE shell (a click on the taskbar
 thumbnail first avoids a new window).
 
+
+## Amendment (Batt, 2026-11-17): the Sunshine-only host (the student setup)
+
+**Decided** (Batt's answers to the setup wizard's questions, 2026-11-17): the student setup has **no
+RDP**; the wizard's remote-desktop test is the Sunshine stream; its pairing PIN is the 4-digit code
+typed on Sunshine's PIN page on the PC, whose web UI stays PC-only. What that adds to the lock
+(BUILT 2026-11-17, branch `feat/setup-wizard`; `scripts/capture_backend.py`, tested with fakes only,
+NOT yet run on a real host):
+- **A Sunshine-only host** = `WIN_HOST` set, `RDP_USER` / `RDP_PASSWORD` empty: `rdp-loop.sh` idles
+  ("RDP disabled") and never connects. The PC is logged on at its own console, so there is no
+  tscon.
+- `init` is unchanged (rdp/steady). There nothing connects and gamestream holds, so `pair` runs
+  with no stream beside it. `pair` now refuses while a lab client streams.
+- `to-console --sunshine-only`: from rdp/steady; refuses while RDP is configured in `.env` or in
+  the running desktop, while an xfreerdp runs (rule 2), or unpaired / unreachable; writes the S2
+  variant, then **console/steady REASON `sunshine-only`**, and waits for the S2 client's first
+  decoded frame. That is the host's steady state.
+- `to-rdp --sunshine-only`: console → (the stream ended through Sunshine, `/cancel`) → rdp/steady,
+  nothing streams. A plain `to-rdp` is refused on such a host (it would wait for an RDP client that
+  never comes and leave rdp/switching).
+- `paired`: a read-only check (0 paired, 1 not, 2 gamestream down).
+- The RDP handovers above are unchanged on an RDP host (`.env` with RDP credentials).
+- On this path the UI gate's S2 set is still unproven, so bot-typed lines stay refused
+  ([docs/setup/sunshine-windows.md](../setup/sunshine-windows.md) section 11).
