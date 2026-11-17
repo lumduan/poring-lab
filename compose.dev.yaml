@@ -143,7 +143,8 @@ services:
       - /app/.next:size=1g,uid=1000,gid=1000,mode=0755,exec
       - /tmp:size=256m,mode=1777
     ports:
-      - "${HOST_LAN_IP:?}:3000:3000"
+      # the console's HOST port is CONSOLE_PORT (.env, default 3000); inside it is always 3000
+      - "${HOST_LAN_IP:?}:${CONSOLE_PORT:-3000}:3000"
     # A crashing node must never try to write a multi-GB core dump.
     ulimits:
       core: 0

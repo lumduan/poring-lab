@@ -495,7 +495,7 @@ The error column is in every run's economics block (run_row's second table: "MOD
 ## 10. The dashboard (`/economy`, Batt 2026-11-11)
 
 Batt: "make a dashboard page of business results (P&L), because I will teach economics too". The
-console's **Economy** page (`http://<host>:3000/economy`) shows banked runs at the fixed NPC prices of
+console's **Economy** page (`http://<host>:<CONSOLE_PORT>/economy`) shows banked runs at the fixed NPC prices of
 section 2. It reads exports, so a run appears there only after someone exports it:
 
 Each run row also shows **when it ran and what ran** (Batt 2026-11-11: "show when each run started and

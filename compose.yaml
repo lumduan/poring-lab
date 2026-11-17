@@ -175,8 +175,9 @@ services:
       SESSION_SIZE: ${SESSION_SIZE:-1440x900}
       DATA_DIR: /data
       HARDWARE_SHM_PATH: /host-shm # the hardware page's /dev/shm (the mount below)
-      # Browser WebSocket Origin allowlist (comma-separated); unknown origins are refused.
-      FRONTEND_ORIGINS: ${FRONTEND_ORIGINS:-http://${HOST_LAN_IP:?}:3000}
+      # Browser WebSocket Origin allowlist (comma-separated); unknown origins are refused. The
+      # default follows the console's host port (CONSOLE_PORT, default 3000).
+      FRONTEND_ORIGINS: ${FRONTEND_ORIGINS:-http://${HOST_LAN_IP:?}:${CONSOLE_PORT:-3000}}
       ASSIST_LEASE_S: ${ASSIST_LEASE_S:-3.0}
       STREAM_FPS: ${STREAM_FPS:-30}
       # Phase 0 (docs/phase0-latency.md): grab on XDamage, capped at STREAM_MAX_FPS; "fixed" = the
@@ -255,7 +256,8 @@ services:
       # Read at request time by the server component -- not baked in at build time.
       BACKEND_PUBLIC_URL: http://${HOST_LAN_IP:?}:8000
     ports:
-      - "${HOST_LAN_IP:?}:3000:3000"
+      # the console's HOST port is CONSOLE_PORT (.env, default 3000); inside it is always 3000
+      - "${HOST_LAN_IP:?}:${CONSOLE_PORT:-3000}:3000"
     mem_limit: 512m
     memswap_limit: 512m
 

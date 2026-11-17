@@ -19,7 +19,7 @@
 │                                │               │   │          (the only input writer)                           │
 │                                │               │   ▼          ▲ /ws/input   │ /ws/stream                        │
 │                                │               │  db          │             ▼                                   │
-│                                │               │              frontend :3000 ◄──► your browser                  │
+│                                │               │              frontend :CONSOLE_PORT ◄──► your browser          │
 │                                │               │  sniffer (ADR-0007, rathena's netns) ─► captures + /ingest     │
 └────────────────────────────────┘               └────────────────────────────────────────────────────────────────┘
 ```

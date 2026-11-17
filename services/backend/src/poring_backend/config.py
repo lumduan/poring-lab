@@ -29,8 +29,10 @@ class Settings(BaseSettings):
     internal_port: int = 8001
     # FRONTEND_ORIGINS: comma-separated Origins allowed to open browser WebSockets (cross-site
     # WebSocket hijacking guard); anything else is refused. Requests without an Origin header
-    # (scripts, the agent) are not browsers and are allowed. compose.yaml defaults it to
-    # http://${HOST_LAN_IP}:3000; add e.g. http://localhost:3000 for `pnpm dev` on a workstation.
+    # (scripts, the agent) are not browsers and are allowed. compose.yaml always passes it: empty
+    # in .env = http://${HOST_LAN_IP}:${CONSOLE_PORT} (the console's host port, default 3000), so
+    # the check follows a changed console port. Add e.g. http://localhost:3000 for `pnpm dev` on a
+    # workstation. The value below is only the bare-Settings() fallback (tests, a host run).
     frontend_origins: str = "http://192.168.1.13:3000"
 
     assist_lease_s: float = 3.0

@@ -15,6 +15,9 @@ services=(db rathena desktop backend frontend)
 $core_only && services=(db rathena)
 
 HOST="$(sed -n 's/^HOST_LAN_IP=//p' .env)"
+# the console's host port (compose.yaml: ${CONSOLE_PORT:-3000}); empty or absent = 3000
+CONSOLE_PORT="$(sed -n 's/^CONSOLE_PORT=//p' .env | tail -n 1)"
+CONSOLE_PORT="${CONSOLE_PORT:-3000}"
 failures=0
 pass() { printf '  \033[32mPASS\033[0m %s\n' "$*"; }
 fail() {
@@ -63,7 +66,7 @@ if $core_only; then
 fi
 
 echo "== HTTP endpoints"
-for url in "http://${HOST}:8000/health" "http://${HOST}:3000/api/health" "http://${HOST}:6080/vnc.html"; do
+for url in "http://${HOST}:8000/health" "http://${HOST}:${CONSOLE_PORT}/api/health" "http://${HOST}:6080/vnc.html"; do
   if curl -fsS -o /dev/null --max-time 5 "$url"; then pass "$url"; else fail "$url"; fi
 done
 if curl -fsS --max-time 5 "http://${HOST}:8001/" -o /dev/null 2>/dev/null; then

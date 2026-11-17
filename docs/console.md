@@ -21,7 +21,8 @@ scripts/dev.sh logs -f frontend-dev           # dev server output
 scripts/dev.sh stop frontend-dev              # console off
 ```
 
-Open **http://HOST_LAN_IP:3000**. What it gives you:
+Open **http://HOST_LAN_IP:CONSOLE_PORT** (`CONSOLE_PORT` in `.env`, 3000 unless you changed it;
+`./setup.sh` asks for it). What it gives you:
 - **View:** Fit (aspect ratio kept, letterboxed) or 1:1.
 - **Input:** click the screen to give it keyboard focus. That focus lives in a hidden textarea, so
   ⌘V pastes your clipboard into Windows (ADR-0004). Leaving it, or hiding the tab, releases
@@ -83,7 +84,7 @@ Open **http://HOST_LAN_IP:3000**. What it gives you:
 
 **Workstation alternative:** run the console on your own machine against this backend.
 1. Add your browser's origin to the backend allowlist in `.env`:
-   `FRONTEND_ORIGINS=http://HOST_LAN_IP:3000,http://localhost:3000`
+   `FRONTEND_ORIGINS=http://HOST_LAN_IP:CONSOLE_PORT,http://localhost:3000` (your console port)
 2. Apply it: `python3 scripts/guarded_build.py --sustain 30 --spike 25 recreate:backend@30`.
 3. Run the console:
 
@@ -93,7 +94,8 @@ BACKEND_PUBLIC_URL=http://HOST_LAN_IP:8000 corepack pnpm dev    # open http://lo
 ```
 
 `FRONTEND_ORIGINS` is the backend's WebSocket Origin allowlist: comma-separated, and unknown origins are
-refused. It defaults to `http://${HOST_LAN_IP}:3000`. Stream rate and quality are `STREAM_FPS` (30) and
+refused. It defaults to `http://${HOST_LAN_IP}:${CONSOLE_PORT}` (3000 when `CONSOLE_PORT` is empty), so a
+moved console stays allowed. Stream rate and quality are `STREAM_FPS` (30) and
 `JPEG_QUALITY` (80). The stream is sent without WebSocket compression: JPEG doesn't compress, and
 deflate cost 8 fps on the event loop.
 
@@ -153,7 +155,7 @@ Applying a change reconnects the RDP session once, because desktop and backend a
 
 ## Settings: the game servers the bot may use
 
-Open **Settings** in the console's top bar (`http://<host>:3000/settings`).
+Open **Settings** in the console's top bar (`http://<host>:<CONSOLE_PORT>/settings`).
 - **Environments** are game services you manage yourself: **Allowed** (the bot may act while the
   game is connected to one of its servers), **Forbidden** (never; its servers can never be allowed
   anywhere) or **Pending** (not approved). Create, rename and delete them, and edit their server
@@ -180,9 +182,9 @@ Open **Settings** in the console's top bar (`http://<host>:3000/settings`).
 
 ## Flows: block programs, SIMULATE only (MW2, 2026-10-08)
 
-Open `http://<host>:3000/flows` (Flows in the top bar). The page edits ADR-0020's flow IR.
+Open `http://<host>:<CONSOLE_PORT>/flows` (Flows in the top bar). The page edits ADR-0020's flow IR.
 
-**Maps** (`http://<host>:3000/maps`, Maps in the top bar, 2026-11-10): the same flow as a graph of maps:
+**Maps** (`http://<host>:<CONSOLE_PORT>/maps`, Maps in the top bar, 2026-11-10): the same flow as a graph of maps:
 START -> Login -> Choose character (MOCKS: only the lab rAthena is selectable, no credential field)
 -> the map nodes, each bound to its own flow ("Open flow" opens its /flows tab; /flows' `Map` picker
 names the bound map). Simulate plays the bot on each map's walk grid: walks, seeded monsters, NPC

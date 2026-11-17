@@ -28,7 +28,7 @@ scripts/smoke_test.sh --core                 # db + rathena health, LAN ports, a
 stalling on disk IO. On a dedicated machine, `docker compose --profile core --profile remote up -d --build`
 does the same thing unguarded.
 
-- **Web console:** `http://HOST_LAN_IP:3000`. Click the screen to control it; switch between HUMAN,
+- **Web console:** `http://HOST_LAN_IP:CONSOLE_PORT` (3000 by default). Click the screen to control it; switch between HUMAN,
   ASSIST and BOT at the top.
 - **Debug view:** `http://HOST_LAN_IP:6080` (noVNC, view-only).
 - **GPU check:**
