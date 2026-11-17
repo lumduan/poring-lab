@@ -190,3 +190,31 @@ def test_the_cpu_profile_has_no_gpu_at_all() -> None:
     assert (cpu.accel, cpu.shared, cpu.vision_overlay, cpu.worker_overlay) == ("cpu", False, (), ())
     assert (cpu.detect_backend, cpu.gpu_lister) == ("none", "none")
     assert {"shared-nvidia", "dedicated-intel", "dedicated-nvidia"} == hp.GPU_PROFILES
+
+
+def test_a_cpu_host_refuses_every_vision_step_but_a_stop(monkeypatch: pytest.MonkeyPatch) -> None:
+    """ADR-0022 Amendment 2026-11-17: no vision image or worker on dedicated-cpu; the refusal names
+    the way out. Other steps, and the GPU profiles, are untouched."""
+    gb = load_gb(monkeypatch, "dedicated-cpu")
+    cpu = hp.PROFILES["dedicated-cpu"]
+    vision_steps = (
+        "worker:vision@60",
+        "build:vision",
+        "pull:vision",
+        "run:vision@600=python scripts/check_gpu.py",
+        "execdev:vision@60=true",
+    )
+    for step in vision_steps:
+        why = gb.cpu_profile_refusal([gb.parse_step(step)], cpu)
+        assert why is not None and "has no GPU" in why and "detector_setup" in why, step
+    for step in (
+        "worker-stop:vision",
+        "build:backend",
+        "restart:backend@30",
+        "recreate:sniffer@120",
+    ):
+        assert gb.cpu_profile_refusal([gb.parse_step(step)], cpu) is None, step
+    for name in ("dedicated-intel", "dedicated-nvidia", "shared-nvidia"):
+        assert (
+            gb.cpu_profile_refusal([gb.parse_step("worker:vision@60")], hp.PROFILES[name]) is None
+        )

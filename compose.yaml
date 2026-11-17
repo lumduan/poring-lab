@@ -334,6 +334,9 @@ services:
     profiles: [gamestream]
     build:
       context: services/gamestream
+      # its last stage is FROM <project>/desktop:local: THIS copy's desktop image (ADR-0026)
+      args:
+        LAB_PROJECT: ${COMPOSE_PROJECT_NAME:-poring-lab}
     image: ${COMPOSE_PROJECT_NAME:-poring-lab}/gamestream:local
     # NO depends_on: a guarded `up -d gamestream` must never recreate desktop as a dependency.
     environment:

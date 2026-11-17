@@ -1820,6 +1820,26 @@ def sniffer_code_gate(steps: list[Step], root: Path = REPO,
     return None
 
 
+def cpu_profile_refusal(steps: list[Step], profile: host_profile.HostProfile | None = None
+                        ) -> str | None:  # fmt: skip
+    """ADR-0022 Amendment 2026-11-17: a dedicated-cpu host has no vision image and no worker; every
+    step that builds, pulls or runs vision is refused there with the way out. Stopping a worker is
+    never refused."""
+    prof = PROFILE if profile is None else profile
+    if prof.accel != "cpu":
+        return None
+    for s in steps:
+        vision = s.kind in ("run", "rundev", "execdev", "worker") or (
+            s.kind in ("build", "pull", "target") and s.services[:1] == ["vision"]
+        )
+        if vision:
+            return (f"REFUSED: {s.label}: host profile {prof.name} has no GPU (no vision image, no "
+                    "worker): the CPU detector serves (scripts/detector_setup.py). A GPU ready "
+                    "later: re-run ./setup.sh, it re-checks and recommends (ADR-0022 Amendment "
+                    "2026-11-17).")  # fmt: skip
+    return None
+
+
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("steps", nargs="+")
@@ -1841,6 +1861,10 @@ def main() -> int:
         steps = [parse_step(s) for s in args.steps]
     except ValueError as exc:
         print(exc, flush=True)
+        return 2
+    refused = cpu_profile_refusal(steps)
+    if refused:
+        print(refused, flush=True)
         return 2
     if args.test_abort_after_cycles:
         if args.test_abort_after_cycles < 0 or not any(

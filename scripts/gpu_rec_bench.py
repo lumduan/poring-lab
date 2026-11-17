@@ -70,7 +70,7 @@ import numpy.typing as npt
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import lab_env  # noqa: E402
 
-ROOT_DEFAULT = Path("/dev/shm/poring-lab-recbench")  # NOT under poring-lab-tmp (test_guards)
+ROOT_DEFAULT = lab_env.shm("recbench")  # NOT under <project>-tmp (test_guards); compose binds it
 DATASETS = lab_env.store_dir()  # the storage folder (LAB_STORE_DIR)
 SHM = Path("/dev/shm")
 ITEM_CAP = 10**9  # CLAUDE.md rule 7: one scratch item
