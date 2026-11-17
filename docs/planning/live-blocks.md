@@ -1,14 +1,14 @@
 ---
 doc_type: design
 hypothesis: null
-status: "DECIDED 2026-11-13 ~21:4x (Batt): build the live block player first; one box; break the runner into blocks. Stage 1 PASSED live (6); stages 2-4a A/Bs INCONCLUSIVE (7-9; the Knight). 2026-11-14: Batt's answers built (10, 11); s5ab-1114 FAIL by its bar on line 2 only, deaths 0/6 (10.2). Stage 5a (settings as blocks, the runner page gone) MERGED 17:2x (12), then rounds 20-24 of matpilot's browser review (12.4-12.8, all re-measured PASS): wrapped setting blocks, pickers for every value that is not a name (Batt 19:4x), no overlaps, exact Escape/Undo. Stage 5b-1 (HuntState, the loop as 20 steps; AST-proven the same program) MERGED 19:2x; its live A/B s5b1-ab FAIL by the pace p95 line only (noise), every outcome line passed (13.7; the parent's decision: keep it, go on). Stage 5b-2 (the steps as live blocks: a hunt tab, find_target / fight_target) MERGED 2026-11-15 03:0x; its live A/B s5b2-ab PASS on every line (14.11). The Christmas Goblin class round FAILED its precision bar (xmas02-detector S4.10), not deployed. 2026-11-15 (Batt's answers, 14.12): no hunt tab in the ready-made box (the runner block dissolves into function tabs: 5c); the first real block experiment, no Knife swap on the Christmas Cookie and the Cookie, BUILT offline and its A/B pre-registered 13:32 ICT (16), NOT run. Stage 5c (Batt 14.12: the runner block dissolved into functions in tabs -- hunt_loop() in main, role blocks, hunt_tick()'s step blocks) BUILT 2026-11-15 13:5x on feat/runner-blocks, offline-proven, merged with main 95583b9f there, not yet into main; its live A/B s5c-ab pre-registered (15.8), not run (15.11). 2026-11-16 (Batt 17 #6): the Fly Wing FIRST on a boss at any distance (18, dungeon@9.57 --fly-first, the setting fly_first, off until its A/B) BUILT offline on feat/fly-first; s7ab pre-registered (18.7), not run. ➡️ s7ab PASS (18.9), fly_first ON in the ready-made boxes; s8ab PASS (18.13), fly_first_hp ON too. 2026-11-17 (Batt 18.14: \"use it for real\"): xmas02sk DEPLOYED as xmas_dun02's model (18.15, dungeon@9.59; xmas02gb the reference), its live A/B s9ab pre-registered, ➡️ run 07:32-10:23: PASS on every line (18.16), xmas02sk stays the default; the stale re-fire (both arms) found, its fix 18.17. ➡️ dungeon@9.60 --fly-first-land BUILT offline (18.17; FF_LAND_S 0.75 s derived from 79 banked teleports; OFF everywhere until s10ab), s10ab pre-registered, ➡️ run 11:23-14:11: PASS on every line (18.18: B 0 stale re-fires of 7 alarm boss Fly Wings, A 4; deaths 0/0), fly_first_land still OFF (a person's decision)."
+status: "DECIDED 2026-11-13 ~21:4x (Batt): build the live block player first; one box; break the runner into blocks. Stage 1 PASSED live (6); stages 2-4a A/Bs INCONCLUSIVE (7-9; the Knight). 2026-11-14: Batt's answers built (10, 11); s5ab-1114 FAIL by its bar on line 2 only, deaths 0/6 (10.2). Stage 5a (settings as blocks, the runner page gone) MERGED 17:2x (12), then rounds 20-24 of matpilot's browser review (12.4-12.8, all re-measured PASS): wrapped setting blocks, pickers for every value that is not a name (Batt 19:4x), no overlaps, exact Escape/Undo. Stage 5b-1 (HuntState, the loop as 20 steps; AST-proven the same program) MERGED 19:2x; its live A/B s5b1-ab FAIL by the pace p95 line only (noise), every outcome line passed (13.7; the parent's decision: keep it, go on). Stage 5b-2 (the steps as live blocks: a hunt tab, find_target / fight_target) MERGED 2026-11-15 03:0x; its live A/B s5b2-ab PASS on every line (14.11). The Christmas Goblin class round FAILED its precision bar (xmas02-detector S4.10), not deployed. 2026-11-15 (Batt's answers, 14.12): no hunt tab in the ready-made box (the runner block dissolves into function tabs: 5c); the first real block experiment, no Knife swap on the Christmas Cookie and the Cookie, BUILT offline and its A/B pre-registered 13:32 ICT (16), NOT run. Stage 5c (Batt 14.12: the runner block dissolved into functions in tabs -- hunt_loop() in main, role blocks, hunt_tick()'s step blocks) BUILT 2026-11-15 13:5x on feat/runner-blocks, offline-proven, merged with main 95583b9f there, not yet into main; its live A/B s5c-ab pre-registered (15.8), not run (15.11). 2026-11-16 (Batt 17 #6): the Fly Wing FIRST on a boss at any distance (18, dungeon@9.57 --fly-first, the setting fly_first, off until its A/B) BUILT offline on feat/fly-first; s7ab pre-registered (18.7), not run. ➡️ s7ab PASS (18.9), fly_first ON in the ready-made boxes; s8ab PASS (18.13), fly_first_hp ON too. 2026-11-17 (Batt 18.14: \"use it for real\"): xmas02sk DEPLOYED as xmas_dun02's model (18.15, dungeon@9.59; xmas02gb the reference), its live A/B s9ab pre-registered, ➡️ run 07:32-10:23: PASS on every line (18.16), xmas02sk stays the default; the stale re-fire (both arms) found, its fix 18.17. ➡️ dungeon@9.60 --fly-first-land BUILT offline (18.17; FF_LAND_S 0.75 s derived from 79 banked teleports; OFF everywhere until s10ab), s10ab pre-registered, ➡️ run 11:23-14:11: PASS on every line (18.18: B 0 stale re-fires of 7 alarm boss Fly Wings, A 4; deaths 0/0), fly_first_land still OFF (a person's decision). ➡️ 2026-11-17 ~15:0x ICT (Batt): fly_first_land ON in the ready-made boxes (18.18's last item; feat/fly-first-land-on), the registry and the reference boxes off."
 
 role: null
 verdict_date: null
 verdict_ticket: null
 supersedes: null
 related: [project-model.md, player-mode.md, ADR-0020, ../../scripts/dungeon_hunt.py, ../../scripts/runner_flow_export.py, ../../packages/poring_flow/src/poring_flow/runtime.py]
-next_action: "18.18: s10ab PASS; Batt decides whether fly_first_land goes ON in the ready-made boxes (17d18124's pattern); the clear-bag key fix (F2 vs F8) still open. ➡️ Older: 18.17: merge feat/fly-first-land, then run s10ab FROM MAIN (stage10_ab.py plan / run / score --label s10ab --pairs 4 --minutes 20); PASS -> fly_first_land ON in the ready-made boxes (a person's decision); FAIL -> it stays off; the clear-bag key fix (F2 vs F8) is named there, not built. ➡️ Older: 18.16: s9ab PASS, xmas02sk stays deployed; 18.17: the stale re-fire fix (a sighting grabbed after the landing) built offline as a flag, then its own live A/B"
+next_action: "18.18: fly_first_land ON in the ready-made boxes (Batt 2026-11-17 ~15:0x ICT), built on feat/fly-first-land-on (4a4e0022): merge it, then the frontend's test / typecheck / lint in its container; the clear-bag key fix (F2 vs F8) still open. ➡️ Older: 18.18: s10ab PASS; Batt decides whether fly_first_land goes ON in the ready-made boxes (17d18124's pattern). ➡️ Older: 18.17: merge feat/fly-first-land, then run s10ab FROM MAIN (stage10_ab.py plan / run / score --label s10ab --pairs 4 --minutes 20); PASS -> fly_first_land ON in the ready-made boxes (a person's decision); FAIL -> it stays off; the clear-bag key fix (F2 vs F8) is named there, not built. ➡️ Older: 18.16: s9ab PASS, xmas02sk stays deployed; 18.17: the stale re-fire fix (a sighting grabbed after the landing) built offline as a flag, then its own live A/B"
 
 title: "Live blocks: the player that plays a project's blocks in the game, and the runner broken into blocks"
 date: 2026-11-13
@@ -4523,7 +4523,7 @@ detect server before it):** the worktree's `unit_detector.py serve-cmd --backend
   the default. Batt is told, with the defect and its fix.
 
 
-### 18.17 ➡️ BUILT: the stale re-fire's fix, dungeon@9.60 `--fly-first-land`, and THE A/B s10ab -- written 2026-11-17 10:58 ICT from `date`, BEFORE any s10ab run (feat/fly-first-land from main c694f0f4; offline only, NOT run live) ➡️ RUN 11:23-14:11: PASS on every line (18.18); fly_first_land stays OFF until Batt decides
+### 18.17 ➡️ BUILT: the stale re-fire's fix, dungeon@9.60 `--fly-first-land`, and THE A/B s10ab -- written 2026-11-17 10:58 ICT from `date`, BEFORE any s10ab run (feat/fly-first-land from main c694f0f4; offline only, NOT run live) ➡️ RUN 11:23-14:11: PASS on every line (18.18); fly_first_land stays OFF until Batt decides ➡️ Batt 2026-11-17 ~15:0x ICT: ON in the ready-made boxes (18.18's last item)
 
 **The rule (the simplest one the data proves):**
 - Every Fly Wing's key moves a LAND FLOOR to its send time + `FF_LAND_S`. This covers the boss
@@ -4541,6 +4541,9 @@ detect server before it):** the worktree's `unit_detector.py serve-cmd --backend
   - `fly_first_land` (the switch, "after a Fly Wing: no Fly Wing again on what the picture showed
     before the landing"; needs fly_first): **registry default OFF**, and OFF in every box,
     the ready-made ones included, until s10ab passes. The ready-made box as it is now is s10ab's A.
+    ➡️ s10ab passed (18.18); since 2026-11-17 (Batt) the two ready-made functions boxes hold it ON
+    (so the fixture is B's box now; stage10_ab's A sets it OFF explicitly); the registry's default
+    and the reference boxes stay OFF.
   - `FF_LAND_S` (a runner constant through `--tune`, 0.2-2.0 s, "after a Fly Wing, ignore boss
     sightings in the pictures of the first"): **our default 0.75 s**.
 - Records:
@@ -4690,7 +4693,7 @@ s7ab from the NAS; 94 teleports, each a `use_item_result` 601 ok + its `map_chan
   fly_key and heal_key) from the series. Changing CHARS_CONF would move the CLI's default keys.
 
 
-### 18.18 Result of s10ab (run 2026-11-17 11:23 - 14:11 ICT, scored 14:13): PASS on every line; fly_first_land stays OFF until Batt decides
+### 18.18 Result of s10ab (run 2026-11-17 11:23 - 14:11 ICT, scored 14:13): PASS on every line; fly_first_land stays OFF until Batt decides ➡️ Batt 2026-11-17 ~15:0x ICT: ON in the ready-made boxes (the last item)
 
 - **Valid:** 3 pairs of 4 (ABBA ABBA), every run rc 0, 0 deaths.
   - r08A (A) ended at 12.8 min by the runner's own stock keep ("1 Fly Wing(s) left, kept for the
@@ -4752,3 +4755,29 @@ s7ab from the NAS; 94 teleports, each a `use_item_result` 601 ok + its `map_chan
   ready-made boxes as a person's decision. It stays OFF (registry and every box) until Batt says
   so. The change would be the same as 17d18124 did for fly_first_hp: the functions box and its
   cookie twin get the block ON, and the reference arms keep their pinned argv.
+- ➡️ **Batt's decision (2026-11-17 ~15:0x ICT, in Thai: "turn it on"): fly_first_land ON in the
+  ready-made boxes, 4a4e0022** (feat/fly-first-land-on from main 12680ffb):
+  - The functions box and its cookie twin hold the block ON. Their runner argv is the hunt box's
+    plus `--fly-first`, `--fly-first-hp` and now `--fly-first-land`, in that order. FF_LAND_S stays
+    at its default 0.75 s, so no `--tune` is passed.
+  - The reference arms keep it off and their pinned argv: the one box, the hunt box, the one-box
+    cookie box and the frozen A/B fixtures. The registry's default stays off.
+  - The A/B tools built from the ready-made box set the block explicitly, so each plan means what
+    it meant:
+    - stage5c_ab's B: the hunt box's value (off);
+    - stage7_ab's, stage8_ab's and stage9_ab's arms: off in both (what s7ab, s8ab and s9ab
+      measured), checked by their box_difference; stage8_ab and stage9_ab also refuse
+      `--fly-first-land` in a runner argv;
+    - stage10_ab: A off, B on, as before.
+  - The five plans (`plan --label chk --pairs 1 --minutes 20`; offline, read-only, no series
+    folder) were run on main 12680ffb and on this branch. All are rc 0, and every arm's project
+    hash, runner settings and run argv equal main's:
+
+        A/B      A          B
+        5c       eaac67e8   0dfd2174
+        s7ab     0dfd2174   88f3234b
+        s8ab     88f3234b   e3f90eeb
+        s9ab     e3f90eeb   dde5257d
+        s10ab    dde5257d   bfdb5d4a   (18.17's pre-registered pair)
+
+    Only stage10_ab's A label changed: "as s10ab measured it".

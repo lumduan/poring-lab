@@ -531,9 +531,10 @@ Amendment B); a not-adopted model is never offered.
     off), and `fly_first_hp`, "HP low, no boss in sight: the Fly Wing first too" (➡️ ON in the same
     two ready-made boxes since s8ab passed, 18.13; the reference boxes keep it off); ➡️ 125 since
     2026-11-17 (18.17, dungeon@9.60), with the safety tab's `fly_first_land`, "after a Fly Wing:
-    no Fly Wing again on what the picture showed before the landing" (OFF in every box until
-    s10ab passes), and `FF_LAND_S`, "after a Fly Wing, ignore boss sightings in the pictures of
-    the first" 0.75 s (0.2-2.0 s; used only with fly_first_land on),
+    no Fly Wing again on what the picture showed before the landing" (➡️ ON in the same two
+    ready-made boxes since s10ab passed, 18.18; the reference boxes keep it off), and `FF_LAND_S`,
+    "after a Fly Wing, ignore boss sightings in the pictures of the first" 0.75 s (0.2-2.0 s; used
+    only with fly_first_land on),
     [planning/live-blocks.md](planning/live-blocks.md) 18 --: heal and escape, the Knife swap, leaving the map, the respawn, the start, the fight, choosing and striking, loot,
     walking and exploring, safety and the end, timing), in the TAB of its group on a map node or
     on Global: its words, its value as it is set (a number or a percent with its range, step and
