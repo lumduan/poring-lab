@@ -1497,8 +1497,10 @@ def recover_gate(health: dict[str, Any] | None) -> str | None:
     env = health.get("environment") or {}
     if env.get("config") != "ok":
         return f"interlock config {env.get('config')!r}"
-    if env.get("state") == "green":
-        return "the interlock is already green: nothing to recover"
+    # ADR-0016 amendment 11-17 (Batt): the packets no longer decide green, they label it.
+    # The re-login exists to bring back the packet-VERIFIED lab session, so it is judged on that.
+    if env.get("state") == "green" and env.get("verified") is True:
+        return "the session is already packet-verified: nothing to recover"
     return None
 
 
@@ -1527,13 +1529,15 @@ def auto_recover_gm(*, run: Any = subprocess.run, sleep: Any = time.sleep) -> bo
             print(f"  | {line}", flush=True)
         return False
     for _ in range(GREEN_WAIT_S):
-        state = ((backend_health() or {}).get("environment") or {}).get("state")
-        if state == "green":
-            print(f"[{ts()}] auto GM recover OK: the interlock is green again", flush=True)
+        env_now = (backend_health() or {}).get("environment") or {}
+        state = env_now.get("state")
+        if state == "green" and env_now.get("verified") is True:
+            print(f"[{ts()}] auto GM recover OK: the session is packet-verified again", flush=True)
             return True
         sleep(1)
-    print(f"[{ts()}] auto GM recover FAILED: logged in, but the interlock is not green after "
-          f"{GREEN_WAIT_S} s (state {state}): stop and report", flush=True)  # fmt: skip
+    print(f"[{ts()}] auto GM recover FAILED: logged in, but the session is not packet-verified "
+          f"after {GREEN_WAIT_S} s (state {state}, reason {env_now.get('reason')}): stop and "
+          "report", flush=True)  # fmt: skip
     return False
 
 

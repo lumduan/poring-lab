@@ -367,10 +367,13 @@ def test_it_runs_on_the_hosts_bare_python3() -> None:
 # --- the auto GM recover after a sniffer restart (Batt, 2026-10-04) -------------------------------
 
 
-def health(mode: str = "ASSIST", backend: str = "rdp", phase: str = "steady",
-           state: str = "red", config: str = "ok") -> dict:  # fmt: skip
+def health(mode: str = "ASSIST", backend: str = "rdp", phase: str = "steady", state: str = "red",
+           config: str = "ok", verified: bool | None = None) -> dict:  # fmt: skip
+    if verified is None and state == "green":
+        verified = True  # a green helper means a packet-verified one unless a test says not
     return {"mode": mode, "capture_backend": {"backend": backend, "phase": phase, "seq": 9},
-            "environment": {"state": state, "config": config}}  # fmt: skip
+            "environment": {"state": state, "config": config,
+                            "verified": verified}}  # fmt: skip
 
 
 @pytest.mark.parametrize(
@@ -382,7 +385,7 @@ def health(mode: str = "ASSIST", backend: str = "rdp", phase: str = "steady",
         (health(backend="hold", phase=""), "steady only"),
         (health(phase="switching"), "steady only"),
         (health(config="config_missing"), "config"),
-        (health(state="green"), "already green"),
+        (health(state="green"), "already packet-verified"),
     ],
 )  # fmt: skip
 def test_the_auto_recover_runs_only_under_batts_conditions(
@@ -395,6 +398,8 @@ def test_the_gate_opens_for_assist_on_a_steady_lock_rdp_or_console(gb: ModuleTyp
     assert gb.recover_gate(health()) is None
     assert gb.recover_gate(health(backend="console")) is None
     assert gb.recover_gate(health(state="window")) is None  # a login window open: still not green
+    # amendment 11-17: green WITHOUT the packets (after a sniffer restart) still needs the re-login
+    assert gb.recover_gate(health(state="green", verified=False)) is None
 
 
 class Done:

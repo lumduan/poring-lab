@@ -5,6 +5,7 @@ import json
 import struct
 import sys
 from pathlib import Path
+from typing import Any
 
 import pytest
 
@@ -23,7 +24,7 @@ from helpers import (  # noqa: E402
 )
 
 from poring_packets import tables
-from poring_packets.capture import BPF_EXPR, BPF_PROGRAM, parse_frame
+from poring_packets.capture import BPF_EXPR, BPF_PROGRAM, bpf_expr, bpf_program, parse_frame
 from poring_packets.clock import ClockMap, Sample
 from poring_packets.decode import decode, is_gm_command, pos, pos2
 from poring_packets.events import json_schema
@@ -205,7 +206,8 @@ def test_compose_gives_both_sniffers_the_published_login_port() -> None:
     assert text.count(':6900:6900" # login') == 2  # rathena and rathena-th publish it
 
 
-def test_bpf_constant_matches_libpcap() -> None:
+def _libpcap_compile() -> Any:
+    """libpcap's own compiler (pcap_compile_nopcap: Ethernet, snaplen 65535, optimised), or skip."""
     lib_name = ctypes.util.find_library("pcap")
     if not lib_name:
         pytest.skip("libpcap not installed")
@@ -218,14 +220,42 @@ def test_bpf_constant_matches_libpcap() -> None:
     class Prog(ctypes.Structure):
         _fields_ = [("bf_len", ctypes.c_uint), ("bf_insns", ctypes.POINTER(Insn))]
 
-    prog = Prog()
-    assert (
-        lib.pcap_compile_nopcap(65535, 1, ctypes.byref(prog), BPF_EXPR.encode(), 1, 0xFFFFFFFF) == 0
-    )
-    ins = prog.bf_insns
-    got = tuple((ins[i].code, ins[i].jt, ins[i].jf, ins[i].k)
-                for i in range(prog.bf_len))  # fmt: skip
-    assert got == BPF_PROGRAM
+    def compile_(expr: str) -> tuple[tuple[int, int, int, int], ...]:
+        prog = Prog()
+        assert lib.pcap_compile_nopcap(65535, 1, ctypes.byref(prog), expr.encode(), 1,
+                                       0xFFFFFFFF) == 0  # fmt: skip
+        ins = prog.bf_insns
+        return tuple((ins[i].code, ins[i].jt, ins[i].jf, ins[i].k) for i in range(prog.bf_len))
+
+    return compile_
+
+
+def test_bpf_constant_matches_libpcap() -> None:
+    assert _libpcap_compile()(BPF_EXPR) == BPF_PROGRAM
+
+
+@pytest.mark.parametrize(
+    "ip", ["192.168.1.169", "192.168.1.50", "10.0.0.7", "172.16.5.200", "192.168.0.1",
+           "100.64.1.2", "1.2.3.4", "203.0.113.254"],
+)  # fmt: skip
+def test_the_filter_for_any_game_pc_is_libpcaps_own(ip: str) -> None:
+    """Batt 2026-11-17 (the sniffer listens to WIN_HOST): the swapped program equals what libpcap
+    itself compiles for that address -- the same instructions, only the address differs."""
+    assert bpf_program(ip) == _libpcap_compile()(bpf_expr(ip))
+
+
+@pytest.mark.parametrize(
+    "bad", ["", "  ", "0.0.0.0", "127.0.0.1", "224.0.0.1", "255.255.255.255", "240.0.0.1",
+            "192.168.1", "192.168.1.300", "pc.local", "192.168.1.0/24", "::1"],
+)  # fmt: skip
+def test_a_bad_client_address_never_builds_a_filter(bad: str) -> None:
+    with pytest.raises(ValueError):
+        bpf_program(bad)
+
+
+def test_compose_gives_both_sniffers_this_hosts_windows_pc() -> None:
+    text = (Path(__file__).resolve().parents[3] / "compose.yaml").read_text()
+    assert text.count("CLIENT_IP: ${WIN_HOST:-}") == 2
 
 
 def test_parse_frame() -> None:

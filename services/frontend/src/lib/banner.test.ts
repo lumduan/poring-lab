@@ -126,7 +126,7 @@ test("the alarm box is bright red, bold and sticky (Batt missed the dark one, 20
 test("the interlock shows a window or a refusal while the bot could act, and nothing when green", () => {
   const env = (state: "green" | "window" | "red", extra: object = {}) => ({
     state,
-    reason: state === "red" ? "attestation_stale" : state === "window" ? "window:login" : "ok",
+    reason: state === "red" ? "lock_not_steady" : state === "window" ? "window:login" : "ok",
     env_id: null,
     window: state === "window" ? ("login" as const) : null,
     window_left_s: state === "window" ? 87.4 : null,
@@ -136,7 +136,7 @@ test("the interlock shows a window or a refusal while the bot could act, and not
   });
   const at = (mode: "HUMAN" | "BOT" | "ASSIST", e: ReturnType<typeof env>) =>
     bannerProblems({ links: { stream: true, input: true }, status: status({ backend: "rdp", seq: 1, phase: "steady" }, { mode, environment: e }) });
-  assert.ok(at("BOT", env("red")).some((p) => p.includes("REFUSED (attestation_stale)")));
+  assert.ok(at("BOT", env("red")).some((p) => p.includes("REFUSED (lock_not_steady)")));
   assert.ok(at("ASSIST", env("window")).some((p) => p.includes("operator window open (login, 87 s left)")));
   assert.ok(!at("BOT", env("green")).some((p) => p.startsWith("Interlock")));
   assert.ok(!at("HUMAN", env("red")).some((p) => p.startsWith("Interlock"))); // the human is never gated
@@ -162,6 +162,22 @@ test("a green by a person's DECLARATION says so, naming the environment, never a
   // packet-verified green (true) and an old backend without the field (null) stay silent
   assert.ok(!at("BOT", { ...declared, reason: "ok", verified: true }).some((p) => p.startsWith("Interlock")));
   assert.ok(!at("BOT", { ...declared, reason: "ok", verified: null }).some((p) => p.startsWith("Interlock")));
+});
+
+test("a green the packets do not confirm says so with their reason, never as verified (amendment 11-17)", () => {
+  const unverified = {
+    state: "green" as const, reason: "unverified:no_attestation", env_id: "lab-rathena",
+    window: null, window_left_s: null, attest_age_s: null, verified: false,
+  };
+  const at = (mode: "HUMAN" | "BOT" | "ASSIST") =>
+    bannerProblems({ links: LINKS, status: status({ backend: "rdp", seq: 1, phase: "steady" }, { mode, environment: unverified }) });
+  for (const mode of ["BOT", "ASSIST"] as const) {
+    const line = at(mode).find((p) => p.startsWith("Interlock"));
+    assert.ok(line, mode);
+    assert.match(line, /allowed on "lab-rathena", NOT verified by packets \(no_attestation\)/);
+    assert.doesNotMatch(line, /DECLARATION/);
+  }
+  assert.ok(!at("HUMAN").some((p) => p.startsWith("Interlock")));
 });
 
 test("the console says when the GM is being re-logged in automatically after a sniffer restart", () => {

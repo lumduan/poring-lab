@@ -72,7 +72,8 @@ def test_the_constants_match_their_sources(core: ModuleType) -> None:
     assert core.SUNSHINE_TCP == cb.SUNSHINE_PORTS  # what pair / to-console test
     from poring_packets import capture
 
-    assert core.LAB_WIN_HOST == capture.CLIENT_IP  # the sniffer's compiled filter
+    # the committed filter's address (the live sniffer follows WIN_HOST since 2026-11-17)
+    assert core.LAB_WIN_HOST == capture.LAB_CLIENT_IP
     seed = yaml.safe_load((ROOT / "config" / "environments.yaml").read_text())
     lab = next(e for e in seed["environments"] if e["id"] == "lab-rathena")
     assert lab["windows_host"] == core.LAB_WIN_HOST  # the interlock's shipped seed

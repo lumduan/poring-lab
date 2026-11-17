@@ -32,6 +32,14 @@ test("a declared green is never shown as verified (ADR-0023)", () => {
   assert.match(modeBadge("BOT", { state: "green", verified: true }).detail, /Lab session verified/);
 });
 
+test("a green the packets do not confirm is never shown as verified (amendment 11-17)", () => {
+  for (const mode of ["BOT", "ASSIST"] as const) {
+    const b = modeBadge(mode, { state: "green", reason: "unverified:no_session", verified: false });
+    assert.match(b.detail, /Allowed, NOT verified by packets \(no_session\)\./);
+    assert.doesNotMatch(b.detail, /session verified|declaration/);
+  }
+});
+
 test("no status is never shown as a safe mode", () => {
   const u = modeBadge(null);
   assert.equal(u.tone, "unknown");

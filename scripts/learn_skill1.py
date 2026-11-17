@@ -842,12 +842,11 @@ def to_char_select_and_back(rig: Rig) -> None:
     rig.io.ui_click(centre(btn), "char_select", btn)
     _harness(rig, "window", "character select (game option)", t0, points=[centre(btn)])
     r.wait_state(rig.screen, ["char_select"], 20)
-    # /health ticks at 1 Hz: right after character select it can still say green, and
-    # ensure_window then skips the login window, so enter_game's Enter is refused once the
-    # interlock turns red (2026-10-10 03:44, the first scored run). Wait for red first, and for
-    # green again before any further input.
-    if not wait_interlock(lambda s: s != "green", INTERLOCK_WAIT_S):
-        raise r.Stop("learn_skill@1 charselect: the interlock stayed green at character select")
+    # 2026-10-10 03:44: /health said green right after character select, ensure_window skipped
+    # the login window, and enter_game's Enter was refused once the interlock turned red (no
+    # session). ➡️ Since ADR-0016 amendment 11-17 (Batt) the packets never turn it red:
+    # character select stays green (unverified:no_session), so there is no red to wait for. The
+    # wait for green after enter_game stays (the other signals: the lock, the host, the servers).
     t1 = r.ns()
     r.enter_game(rig.agent, rig.screen, "gm")
     _harness(rig, "login", "back into the game (enter_game)", t1, atype="login")

@@ -18,7 +18,9 @@ export interface InterlockLike {
   state?: string | null;
   reason?: string | null;
   window?: string | null;
-  /** While green: true = packet-verified, false = declared by a person, not verified (ADR-0023). */
+  /** While green: true = packet-verified; false = not verified: declared by a person (ADR-0023,
+   * reason "declared") or without the packets' confirmation (reason "unverified:<why>",
+   * ADR-0016 amendment 11-17). */
   verified?: boolean | null;
 }
 
@@ -38,8 +40,12 @@ export const MODE_ACTIVE_CLASS: Record<Mode, string> = {
 
 function interlockText(env: InterlockLike | null | undefined): string {
   if (!env?.state) return "";
-  if (env.state === "green" && env.verified === false) {
+  if (env.state === "green" && env.verified === false && env.reason === "declared") {
     return " Allowed by a person's declaration, not verified.";
+  }
+  if (env.state === "green" && env.verified === false) {
+    const why = (env.reason ?? "").replace(/^unverified:/, "") || "no reason given";
+    return ` Allowed, NOT verified by packets (${why}).`;
   }
   if (env.state === "green") return " Lab session verified.";
   if (env.state === "window") return ` Operator window open (${env.window ?? "?"}).`;

@@ -65,8 +65,10 @@ LAB_PORTS: dict[int, str] = {
 SUNSHINE_TCP = (47984, 47989, 48010)
 SUNSHINE_UDP = (47998, 47999, 48000)
 SUNSHINE_WEB = 47990
-# The sniffer's compiled kernel filter (poring_packets/capture.py CLIENT_IP) and the interlock's
-# shipped seed (config/environments.yaml windows_host): the only game PC the bot can act for today.
+# The interlock's shipped seed (config/environments.yaml windows_host, ADR-0016 signal lab_host):
+# the only game PC the bot can act for today, until the Windows host is a setting (ADR-0023
+# decision 4, not built). ➡️ Since 2026-11-17 the sniffer follows WIN_HOST
+# (poring_packets/capture.py bpf_program) and the packets only label (ADR-0016 amendment 11-17).
 LAB_WIN_HOST = "192.168.1.169"
 # Docker's ranges on a lab host (manual 1.1; compose pins 10.210.96/97; the default bridge).
 DOCKER_NETS = tuple(
@@ -597,11 +599,12 @@ def win_ip_problems(ip: str, server_ip: str, addrs: Sequence[Addr]) -> tuple[str
 
 
 BOT_PC_LIMIT = (
-    f"The bot can act only for a game PC at {LAB_WIN_HOST} today: the sniffer's packet filter is "
-    "compiled for that address and the interlock's shipped seed names it (manual section 7, "
-    "'Known limit'). At another address a person can view and play through the console, but every "
-    "bot press is refused (environment_unattested). A DHCP reservation of "
-    f"{LAB_WIN_HOST} for this PC avoids it, on a network where that address is free."
+    f"The bot can act only for a game PC at {LAB_WIN_HOST} today: the interlock's shipped "
+    "environment set names that address as the lab environment's Windows host, and a person cannot "
+    "change it yet (manual section 7, 'Known limit'; the packet sniffer itself follows this PC's "
+    "address). At another address a person can view and play through the console, but every bot "
+    f"press is refused (host_mismatch). A DHCP reservation of {LAB_WIN_HOST} for this PC avoids "
+    "it, on a network where that address is free."
 )
 
 
@@ -1425,7 +1428,8 @@ S2_LIMIT = (
     "at the UI gate at their start.",
     "A single bot click (e.g. `ro_agent.py click`): the mux passes it only in ASSIST or BOT (a "
     "person switches the mode) AND while the safety interlock is green (the servers confirmed on "
-    "the Settings page, and today a game PC at 192.168.1.169), or in ASSIST during a short "
+    "the Settings page, and today a game PC at 192.168.1.169: the environment set's Windows "
+    "host), or in ASSIST during a short "
     "operator window. Everything else is refused.",
     "The lab itself runs on RDP. This path is the bot's designed primary path (ADR-0014); its "
     "UI-gate templates are the open step, and on a new host they must be cut from YOUR client "

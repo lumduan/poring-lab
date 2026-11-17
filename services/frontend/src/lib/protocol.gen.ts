@@ -973,15 +973,15 @@ export interface EnvironmentStatus {
    */
   env_id: string | null;
   /**
-   * "ok" (attested), "declared" (a person's declaration), "window:<kind>", or why bot presses are refused.
+   * "ok" (packet-verified), "declared" (a person's declaration), "unverified:<why>" (green, the packets do not confirm it), "window:<kind>", or why bot presses are refused.
    */
   reason: string;
   /**
-   * green: an allowed environment is attested, or declared by a person (ADR-0023; see verified); window: an operator window lets ASSIST's bot side through; red: every bot press is refused.
+   * green: an allowed environment's signals hold -- the packets aside, which only label it (ADR-0016 amendment 11-17; see verified) -- or a person declared it (ADR-0023); window: an operator window lets ASSIST's bot side through; red: every bot press is refused.
    */
   state: "green" | "window" | "red";
   /**
-   * Only while green: true = packet-verified (the sniffer attested the session); false = DECLARED by a person, not verified (ADR-0023). null when not green.
+   * Only while green: true = packet-verified (the sniffer attested the session); false = not verified: DECLARED by a person (ADR-0023) or without the packets' confirmation (reason unverified:<why>, amendment 11-17). null when not green.
    */
   verified: boolean | null;
   window: ("login" | "desktop") | null;

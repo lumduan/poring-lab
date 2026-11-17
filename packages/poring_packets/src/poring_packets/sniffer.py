@@ -28,7 +28,7 @@ from typing import Any
 
 from pydantic import TypeAdapter
 
-from poring_packets.capture import PORT_SERVER, Capture, TcpSegment, parse_frame
+from poring_packets.capture import PORT_SERVER, Capture, TcpSegment, bpf_expr, parse_frame
 from poring_packets.clock import ClockMap, take_sample
 from poring_packets.decode import Decoded, decode, is_gm_command, text
 from poring_packets.events import GM_WINDOW_NS, Attestation, PacketEvent, PacketStats
@@ -315,15 +315,25 @@ def run() -> None:
     server_id = os.environ.get("SNIFFER_SERVER_ID", "").strip()
     if not re.fullmatch(r"[a-z0-9-]{1,64}", server_id):
         raise SystemExit("SNIFFER_SERVER_ID must name this sniffer's server (an environment id)")
+    # WHICH game PC (Batt 2026-11-17): compose passes this host's WIN_HOST; no valid address, no
+    # start (the packets only label sessions since ADR-0016 amendment 11-17: the bot never waits
+    # on them)
+    client_ip = os.environ.get("CLIENT_IP", "").strip()
+    try:
+        expr = bpf_expr(client_ip)
+    except ValueError:
+        raise SystemExit(f"CLIENT_IP must be the Windows game PC's IPv4 address (compose passes "
+                         f"WIN_HOST), got {client_ip!r}") from None  # fmt: skip
+    log.info("capture filter: %s", expr)
     table = load_table()
-    session = Session(table, os.environ.get("CLIENT_IP", "192.168.1.169"), userids, server_id)
+    session = Session(table, client_ip, userids, server_id)
     scrub = LoginScrub(login_ports(os.environ.get(LOGIN_PORTS_ENV)))
     log.info("pcap credential scrub: %s", scrub.mode)
     # ADR-0007 Amendment C: the code's commit (the guarded restart passes it in dev mode; the image
     # path leaves it unset) names the decoder in the start log and in every capture's header
     commit = os.environ.get("SNIFFER_COMMIT", "").strip() or "image"
     log.info("decoder code: %s", commit)
-    cap = Capture(iface)
+    cap = Capture(iface, client_ip)
     out = Rotating(root, app=f"poring-lab sniffer (code {commit})")
     ingest = Ingest(url) if url else None
     if ingest:
