@@ -606,7 +606,7 @@ def test_the_gamestream_dev_overlay_binds_code_read_only_and_no_secrets() -> Non
     dev = compose("compose.dev.yaml")["services"]["gamestream"]
     writable = [v for v in dev["volumes"] if not str(v).endswith(":ro")]
     # experiment C1: exactly ONE writable bind, the H.264 recording dir (dot-named, outside ./data)
-    assert writable == ["${S2_REC_DIR:-/home/batt/poring-lab-rec/.s2-h264}:/s2-rec"]
+    assert writable == ["${S2_REC_DIR:-${HOME}/poring-lab-rec/.s2-h264}:/s2-rec"]
     assert dev["environment"]["S2_REC"] == "/s2-rec"
     assert "gamestream-state" not in str(dev) and ".config" not in str(dev["volumes"])
     assert "/lab-state" not in str(writable) and "./data" not in str(writable)

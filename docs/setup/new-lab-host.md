@@ -291,7 +291,7 @@ mounts it into the worker as an NFS volume instead (section 4.1, Example 1).
 | `WIN_LAB_PASSWORD` | `rotate_secrets.py rotate WIN_LAB_PASSWORD` | generated; the Windows account gets the same password (section 7.2) |
 | `RATHENA_SERVER_USER` / `_PASSWORD` | init_env.sh | at most 23 characters: char and map truncate to 24-byte buffers |
 | `RATHENA_WEB_SERVER` | you (`set`) | `true` for the client's account settings |
-| `S2_REC_DIR` | you (`set`) or the wizard, console path only | empty means `/home/batt/poring-lab-rec/.s2-h264`: set it to your own home's path (the wizard sets `~/poring-lab-rec/.s2-h264` and creates it) |
+| `S2_REC_DIR` | the wizard, console path only | empty means `~/poring-lab-rec/.s2-h264` (since 2026-11-17; record_session.py's default too). It must exist and be yours (uid 1000): the wizard creates it |
 | `VIEWER_NETWORKS` | the wizard (the server's own LAN), else `192.168.0.0/16` | the browsers' LAN(s): Settings-page writes and the packet viewer accept only these |
 | `FRONTEND_ORIGINS` | leave empty | empty means `http://<BOT_HOST_IP>:<CONSOLE_PORT>` |
 
