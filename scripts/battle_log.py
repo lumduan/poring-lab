@@ -97,8 +97,11 @@ from typing import Any
 import numpy as np
 
 ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT / "scripts"))
+import lab_env  # noqa: E402
+
 DEMO = Path("/dev/shm/poring-lab-demo")
-RECORDINGS = Path("/mnt/poring-lab-datasets/hunt-recordings")
+RECORDINGS = lab_env.store("hunt-recordings")  # in the storage folder (LAB_STORE_DIR)
 ANCHORS = ROOT / "data/ui_anchors/battle_log"
 GLYPHS = ANCHORS / "glyphs.npz"
 NAMES = ANCHORS / "names.npz"

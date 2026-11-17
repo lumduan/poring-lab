@@ -19,15 +19,16 @@ auto-vs-hand (scripts/label_iou.py: the same per-class greedy match at IoU >= 0.
         [--split test] [--metric position]    from the shards IN PLACE as the truth, species
                                               collapsed on both sides; every PRED in ONE command
     gold_eval.py refs --out REFS.json         predict_dir --refs for that session's frames
-        [--cache DIR] [--session S]           (container paths: /mnt/poring-lab-datasets ->
-                                              /datasets)
+        [--cache DIR] [--session S]           (container paths: the storage folder,
+                                              LAB_STORE_DIR -> /datasets)
 
 PRED.json comes from `python -m poring_vision.predict_dir` in the vision container (GPU, guarded).
 The frames are client-derived pixels: they stay in data/ or on the NAS, never committed.
 
 G1 (gef10-eval.md R2-2), v1 and the new model in one command:
 
-    S=20261004T103815-console-s2-indoor-v2; G=/mnt/poring-lab-datasets/archive/train/eval/gold/$S
+    STORE=<the storage folder, LAB_STORE_DIR>
+    S=20261004T103815-console-s2-indoor-v2; G=$STORE/archive/train/eval/gold/$S
     gold_eval.py score $S --metric position --collapse-species --gold-dir $G \
         $G/pred-v1png-20261008.json NEW.json
 """
@@ -49,12 +50,13 @@ import numpy as np
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "scripts"))
 import eval_q1  # noqa: E402
+import lab_env  # noqa: E402
 import label_iou  # noqa: E402
 
 from poring_dataset import frames as recorded  # noqa: E402
 from poring_dataset.shards import encode_png  # noqa: E402
 
-NAS = Path("/mnt/poring-lab-datasets")
+NAS = lab_env.store_dir()  # the storage folder (LAB_STORE_DIR)
 OUT = ROOT / "data" / "train" / "eval" / "gold"
 # G2: v1's cache and its prt_fild08 held-out session (v2orc-vs-v1.md)
 CACHE = NAS / ".framecache" / "v1png-20261008"

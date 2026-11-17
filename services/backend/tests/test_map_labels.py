@@ -14,6 +14,7 @@ import pytest
 
 ROOT = Path(__file__).resolve().parents[3]
 sys.path.insert(0, str(ROOT / "scripts"))
+import lab_env  # noqa: E402
 import map_labels as ml  # noqa: E402
 import orc_labels_fix as olf  # noqa: E402
 
@@ -1138,7 +1139,7 @@ XW2 = "20261106T130000-rdp-xmas02-xw2"
 XW5 = "20261106T140000-rdp-xmas02-xw5"
 XP1 = "20261106T150000-rdp-xmas02-xp1"
 XTEST = (XW5, XP1, X2)
-NAS = Path("/mnt/poring-lab-datasets")
+NAS = lab_env.store_dir()  # the storage folder (LAB_STORE_DIR)
 W2 = "20261026T014529-rdp-w2"  # gef_fild10's immune lattice watch (TRAIN)
 LEGACY_CHAT = (0, 532, 600, 626)
 STANDARD_CHAT = (0, 585, 600, 720)
@@ -1211,7 +1212,7 @@ def test_t1_positive_case_a_real_gef10_session() -> None:
 
     from poring_dataset import mapcache
 
-    kbs = (ROOT / "data" / "kb", Path("/home/batt/docker/poring-lab/data/kb"))
+    kbs = (ROOT / "data" / "kb", Path.home() / "docker" / "poring-lab" / "data" / "kb")  # main
     kb = next((p for p in kbs if (p / "classes.json").exists()), None)
     if kb is None:
         pytest.skip("data/kb is absent")

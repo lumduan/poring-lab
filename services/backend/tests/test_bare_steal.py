@@ -12,6 +12,8 @@ import numpy as np
 import pytest
 
 ROOT = Path(__file__).resolve().parents[3]
+sys.path.insert(0, str(ROOT / "scripts"))
+import lab_env  # noqa: E402
 
 
 @pytest.fixture(scope="module")
@@ -138,7 +140,7 @@ def test_a_popup_still_shown_from_before_the_bare_phase_is_no_cue(bs: ModuleType
     assert st.tick(1.5, [], old, 0.9) == ("equip", "popup")  # drawn again: a new gain
 
 
-REC = Path("/mnt/poring-lab-datasets/20261111T132013-rdp-hunt-xmas02-fiT14")
+REC = lab_env.store("20261111T132013-rdp-hunt-xmas02-fiT14")  # in the storage folder
 
 
 @pytest.mark.skipif(not REC.exists(), reason="the p63 recording is not mounted")

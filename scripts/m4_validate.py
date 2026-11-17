@@ -50,6 +50,7 @@ import numpy as np
 import numpy.typing as npt
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
+import lab_env  # noqa: E402
 import label_check  # noqa: E402
 import m4_cells  # noqa: E402
 import qa_export  # noqa: E402
@@ -71,7 +72,7 @@ from poring_dataset.sprites import parse_act, parse_spr  # noqa: E402
 from poring_dataset.timeline import Timeline  # noqa: E402
 from poring_dataset.ui_layout import covered_fraction  # noqa: E402
 
-NAS = Path("/mnt/poring-lab-datasets")
+NAS = lab_env.store_dir()  # the storage folder (LAB_STORE_DIR)
 ACT_DIR = Path("/dev/shm/poring-lab-tmp/sprites/data/sprite/몬스터")  # sprite_catalog.py --work
 JOB = {"poring": 1002, "lunatic": 1063, "drops": 1113, "pupa": 1008}
 DIFF = 24

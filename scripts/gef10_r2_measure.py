@@ -45,9 +45,10 @@ import numpy.typing as npt
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "scripts"))
+import lab_env  # noqa: E402
 
 Box = tuple[float, float, float, float]
-NAS = Path("/mnt/poring-lab-datasets")
+NAS = lab_env.store_dir()  # the storage folder (LAB_STORE_DIR)
 FRAME_W, FRAME_H = 1280, 720
 
 # --- the split: what may be read (gef10-detector.md 3b, 13p; the brief of 2026-10-26 03:2x) -----

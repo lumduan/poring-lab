@@ -2,7 +2,9 @@
 """Re-decode a recorded session's packets with the CURRENT decoder (Phase 3 M3 states) from the
 banked captures, as a sidecar next to the session on the NAS.
 
-    replay_states.py SESSION [SESSION ...] [--datasets /mnt/poring-lab-datasets] [--dry-run]
+    replay_states.py SESSION [SESSION ...] [--datasets STORE] [--dry-run]
+
+STORE: the session root, by default the storage folder (LAB_STORE_DIR; the lab: its NAS).
 
 Why: the M3 decoders (the ZC_NOTIFY_ACT family, ZC_CHANGE_DIRECTION, the vanish reason as dying)
 went live on 2026-10-04 21:09; every session recorded before that has a packets.jsonl.gz without

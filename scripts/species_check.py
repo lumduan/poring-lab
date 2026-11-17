@@ -120,9 +120,10 @@ from typing import Any
 import numpy as np
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
+import lab_env  # noqa: E402
 
 ROOT = Path(__file__).resolve().parents[1]
-REC_ROOT = Path("/mnt/poring-lab-datasets/hunt-recordings")
+REC_ROOT = lab_env.store("hunt-recordings")  # in the storage folder (LAB_STORE_DIR)
 DEMO_ROOT = Path("/dev/shm/poring-lab-demo")
 WORK = Path("/dev/shm/poring-lab-species")  # labels and crops: client pixels, RAM only
 MODEL_PATH = ROOT / "data" / "species" / "model.npz"  # gitignored (client-derived, rule 4)

@@ -3,8 +3,10 @@
 
     build_frame_cache.py --train S [S ...] --val S [S ...] [--test S [S ...]]
                          [--cache-id ID] [--every 15] [--max-per-session N] [--labels v0]
-                         [--out /mnt/poring-lab-datasets/.framecache] [--shard-mb 512]
+                         [--out <store>/.framecache] [--shard-mb 512]
                          [--quality 95]
+
+<store> is the storage folder (LAB_STORE_DIR, scripts/lab_env.py; the lab: its NAS mount).
 
 Batt's rules (2026-10-04): vision reads the NAS READ-ONLY, and a frame cache is SHARDED (large
 files), never one file per frame on the shared disk. So:
@@ -227,6 +229,7 @@ import numpy as np
 from PIL import Image
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
+import lab_env  # noqa: E402
 import qa_export  # noqa: E402
 
 from poring_dataset import camera as camera_mod  # noqa: E402
@@ -236,7 +239,7 @@ from poring_dataset.camera import map_key  # noqa: E402
 from poring_dataset.labels import CLASSES  # noqa: E402
 from poring_dataset.shards import encode_png  # noqa: E402
 
-NAS = Path("/mnt/poring-lab-datasets")
+NAS = lab_env.store_dir()  # the storage folder (LAB_STORE_DIR; the lab: its NAS mount)
 OUT = NAS / ".framecache"
 SCENE_MAPS = {"prt_fild08", "prt_church", "orcsdun01"}  # v0 / v1; v2's: the KB's maps (kb_maps)
 GOLD = "20261004T103815-console-s2-indoor-v2"
@@ -2226,7 +2229,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         nargs="*",
         default=[],
         help="more session roots, searched after --datasets (e.g. "
-        "/mnt/poring-lab-datasets/detector-collection/orcsdun01 for a combined cache)",
+        "<the storage folder>/detector-collection/orcsdun01 for a combined cache)",
     )
     ap.add_argument("--out", type=Path, default=OUT)
     ap.add_argument("--shard-mb", type=int, default=512)

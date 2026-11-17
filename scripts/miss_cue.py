@@ -63,11 +63,12 @@ import numpy as np
 import numpy.typing as npt
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
+import lab_env  # noqa: E402
 
 ROOT = Path(__file__).resolve().parents[1]
 OUT_DIR = ROOT / "data" / "miss_cue"  # client pixels: gitignored (/data/*), never committed
 TEMPLATE = OUT_DIR / "template.npy"
-NAS = Path("/mnt/poring-lab-datasets")
+NAS = lab_env.store_dir()  # the storage folder (LAB_STORE_DIR)
 REC = Path("/dev/shm/poring-lab-rec")
 REC_DISK = Path.home() / "poring-lab-rec"  # recordings go here since 2026-10-29 (rule 7)
 DEMO = Path("/dev/shm/poring-lab-demo")

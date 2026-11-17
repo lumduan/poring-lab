@@ -21,8 +21,9 @@ import json
 import math
 import sys
 from collections import Counter, defaultdict
+from pathlib import Path
 
-sys.path.insert(0, "/home/batt/docker/poring-lab/scripts")
+sys.path.insert(0, str(Path(__file__).resolve().parent))  # this checkout's scripts/
 import arm_judge as aj
 import flow_judge as fj
 import reversals_study as rs

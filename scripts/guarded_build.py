@@ -134,18 +134,20 @@ On a breach:
                 the overlay dirs: once pushed quant-postgres to 15-18 % alone). buildx-du: the
                 lab builder's (default) cache records. Read-only; a trip kills it and stops the run.
   archive:<src>=<dst>
-                the disk audit's MOVE to the NAS (Batt, 2026-10-21: "long-term files live ONLY on
-                the NAS ... copy to the NAS paced (chunked, IO guard) ... verify, then delete
-                locally"). <src> under MEASURE_ROOTS, <dst> under NAS_ARCHIVE_ROOT and NOT existing.
+                the disk audit's MOVE to long-term storage (Batt, 2026-10-21: "long-term files live
+                ONLY on the NAS ... copy to the NAS paced (chunked, IO guard) ... verify, then
+                delete locally"). <src> under MEASURE_ROOTS, <dst> under the storage folder
+                (store_root(): LAB_STORE_DIR, scripts/lab_env.py; the lab: its NAS) and NOT
+                existing; neither inside the other.
                 Three phases, each under the guard: `rsync -a --bwlimit` (paced) -> a size+count
                 check (`rsync -a -n --itemize-changes` must list NOTHING) -> `rm -rf <src>`. A trip
                 or a failed check stops before the delete. One item per step.
   voldump:<volume>=<dst.tar.gz> | volrm:<volume>=<dst.tar.gz>
-                a STOPPED volume to the NAS, then removed (Batt, 2026-10-22, decision 7: "db-th-data
+                a STOPPED volume to storage, then removed (Batt 2026-10-22, decision 7: "db-th-data
                 dump to the NAS then remove"). Only VOLUME_ALLOWED volumes (db-th-data); voldump:
                 also the captures (VOLUME_DUMP: the bot-server cutover, never volrm). voldump:
-                refused while any container that mounts it runs, or when <dst> (under
-                NAS_ARCHIVE_ROOT, *.tar.gz) exists; a COLD copy of the data directory -- a one-off,
+                refused while any container that mounts it runs, or when <dst> (under the storage
+                folder, *.tar.gz) exists; a COLD copy of the data directory -- a one-off,
                 network-less container of the volume's own image as its owner (cap-drop ALL),
                 `tar czf -` to the host's <dst> -- then the file count of the volume must equal
                 the archive's. volrm: only when <dst> is there and readable (`tar tzf`): `compose
@@ -197,6 +199,7 @@ sys.path.insert(0, str(REPO / "scripts"))
 import frigate_r3  # noqa: E402
 import host_profile  # noqa: E402
 import io_baseline  # noqa: E402
+import lab_env  # noqa: E402
 
 STATE = Path(os.environ.get("LAB_STATE_HOST_DIR", REPO / "state"))
 BACKEND = "poring-lab-backend-1"
@@ -247,7 +250,17 @@ MEASURE_ROOTS = (
     Path.home() / "poring-lab-shm-archive",
     Path.home() / ".cache" / "poring-lab",
 )
-NAS_ARCHIVE_ROOT = Path("/mnt/poring-lab-datasets")  # archive: destinations (tank-main/poring-lab)
+
+
+def store_root() -> Path:
+    """archive: / voldump: / volrm: destinations: the storage folder (LAB_STORE_DIR, lab_env; the
+    lab: its NAS, tank-main/poring-lab). Read when such a step is parsed: a bad value refuses it."""
+    try:
+        return lab_env.store_dir()
+    except SystemExit as exc:
+        raise ValueError(str(exc)) from None
+
+
 ARCHIVE_BWLIMIT_KIB = 20000  # ~20 MB/s off the shared disk
 MEASURE_FIXED = {
     "docker-df": ["docker", "system", "df", "-v"],
@@ -370,8 +383,9 @@ def parse_step(step: str) -> Step:
             raise ValueError(f"{step}: only {', '.join(sorted(allowed))}")
         if not eq or not dst.is_absolute() or ".." in dst.parts or not dst.name.endswith(".tar.gz"):
             raise ValueError(f"{step}: expected {kind}:<volume>=<abs dst>.tar.gz")
-        if NAS_ARCHIVE_ROOT not in dst.parents:
-            raise ValueError(f"{step}: dst only below {NAS_ARCHIVE_ROOT}")
+        root = store_root()
+        if root not in dst.parents:
+            raise ValueError(f"{step}: dst only below the storage folder {root} (LAB_STORE_DIR)")
         return Step(kind, [name], None, [str(dst)])
     if kind == "archive":
         src_s, eq, dst_s = arg.partition("=")
@@ -382,8 +396,13 @@ def parse_step(step: str) -> Step:
             raise ValueError(f"{step}: no '..'")
         if not any(r in src.parents for r in MEASURE_ROOTS):
             raise ValueError(f"{step}: src only BELOW {', '.join(str(r) for r in MEASURE_ROOTS)}")
-        if NAS_ARCHIVE_ROOT not in dst.parents:
-            raise ValueError(f"{step}: dst only below {NAS_ARCHIVE_ROOT}")
+        root = store_root()
+        if root not in dst.parents:
+            raise ValueError(f"{step}: dst only below the storage folder {root} (LAB_STORE_DIR)")
+        # the NAS never overlapped our roots; a storage folder may (e.g. under the home): a copy
+        # into itself followed by the delete would remove both
+        if src == dst or src in dst.parents or dst in src.parents:
+            raise ValueError(f"{step}: src and dst must not contain each other")
         return Step("archive", ["archive"], None, [str(src), str(dst)])
     if kind == "cache" or step.startswith("cache@") or step.startswith("cache="):
         head, eq, command = step.partition("=")

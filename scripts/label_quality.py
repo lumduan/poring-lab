@@ -42,8 +42,9 @@ from typing import Any
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "scripts"))
+import lab_env  # noqa: E402
 
-NAS = Path("/mnt/poring-lab-datasets")
+NAS = lab_env.store_dir()  # the storage folder (LAB_STORE_DIR)
 SCRATCH = Path("/dev/shm/poring-lab-tmp/label-quality")
 CLASSES = ("player", "monster", "npc")
 SIZE = (1280, 720)

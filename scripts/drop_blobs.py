@@ -54,9 +54,10 @@ from typing import Any
 import numpy as np
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
+import lab_env  # noqa: E402
 
 ROOT = Path(__file__).resolve().parents[1]
-REC_ROOT = Path("/mnt/poring-lab-datasets/hunt-recordings")
+REC_ROOT = lab_env.store("hunt-recordings")  # in the storage folder (LAB_STORE_DIR)
 DEMO_ROOT = Path("/dev/shm/poring-lab-demo")
 MAP = "prt_fild08"
 GM = 2000002
