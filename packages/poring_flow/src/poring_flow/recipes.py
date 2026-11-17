@@ -123,12 +123,16 @@ class BlockPlan:
     default: tuple[str, ...] = ()  # the species it strikes with no function: the runner's own
 
     def model_doc(self) -> dict[str, Any] | None:
-        """dungeon_hunt run(box_model=...): the catalogue entry, by id."""
+        """dungeon_hunt run(box_model=...): the catalogue entry, by id. 18.15: a model that names
+        an alarm brings it and its classes (dungeon_hunt.alarm_classes reads both); one without
+        gives exactly the entry it gave before (the reference arms' run() arguments unchanged)."""
         if self.model is None or self.spec is None:
             return None
         s = self.spec
         return {"id": self.model, "file": s.file, "sha256": s.sha256, "maps": list(s.maps),
-                "status": s.status, "kind": s.kind, "strikes": list(s.strikes)}  # fmt: skip
+                "status": s.status, "kind": s.kind, "strikes": list(s.strikes),
+                **({"alarm": list(s.alarm), "classes": list(s.classes)}
+                   if s.alarm else {})}  # fmt: skip
 
 
 def is_primitive(a: ir.ActionStmt) -> bool:

@@ -455,7 +455,7 @@ function modelChoices(models: Models | null | undefined): Choice[] {
   const out: Choice[] = [];
   for (const [id, m] of Object.entries(models ?? {})) {
     const where = m.maps.length ? m.maps.join(", ") : "any map";
-    out.push({ value: id, label: id, note: `${m.kind === "boss_recognizer" ? "a boss recognizer" : "a detector"} · ${where} · ${m.available ? "live" : "not adopted"}`, group: m.available ? "live" : "not adopted" });
+    out.push({ value: id, label: id, note: `${m.kind === "boss_recognizer" ? "a boss recognizer" : "a detector"} · ${where} · ${m.available ? (m.reference ? "live, a reference arm's" : "live") : "not adopted"}`, group: m.available ? "live" : "not adopted" });
   }
   return out.sort((a, b) => Number(a.group !== "live") - Number(b.group !== "live"));
 }

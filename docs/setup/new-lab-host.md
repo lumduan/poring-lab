@@ -721,12 +721,18 @@ What to know:
 
 **Which model a map uses (`scripts/unit_detector.py`):**
 - `MAP_MODELS`: the map's own deployed model. Today only xmas_dun02:
-  `xmas02gb-last-736x1280.onnx`, sha256 `b22d972b...` (since 2026-11-10; Myst Case, Cruiser and
-  the two Cookies collapse to one `monster` class; Garm Baby stays its own class for `--garm-fly`).
-  A map without an entry uses v1 (`v1png-last-736x1280.onnx`).
+  `xmas02sk-last-736x1280.onnx`, sha256 `76316fb4...` (since 2026-11-17, live-blocks.md 18.15; Myst
+  Case, Cruiser and the two Cookies collapse to one `monster` class; Garm Baby, the Christmas Goblin
+  and the Stormy Knight stay their own classes, the alarm's). A map without an entry uses v1
+  (`v1png-last-736x1280.onnx`).
+- `MAP_REFERENCES`: a map's other loadable models, each by its pinned file, loaded only for a box
+  whose use_model names it. Today xmas_dun02's `xmas02gb-last-736x1280.onnx` (sha256
+  `b22d972b...`, its model 2026-11-10 to 2026-11-17).
 - `GPU_WEIGHTS`: the registry of everything the detect server may load, by name, each with its
-  `.pt` (torch) and its ONNX (OpenVINO) and their sha256: v1, xmas02, xmas02gb, and the floor-item
-  rounds xmas02fi to xmas02fi5 (served for evaluation only; not in MAP_MODELS).
+  `.pt` (torch) and its ONNX (OpenVINO) and their sha256: v1, xmas02, xmas02gb, xmas02sk, and the
+  floor-item rounds xmas02fi to xmas02fi5 (served for evaluation only; not in MAP_MODELS).
+  A new host needs every one of their ONNX files where the server reads them, or it refuses to
+  start.
 - `--box-model map` (default) picks MAP_MODELS, `--box-model v1` is the rollback.
 - `--box-detector gpu` (default): the GPU server first; on no server, a pause, a 250-ms timeout or a
   bad reply, the CPU's boxes, never none, retrying the GPU every 5 s. A wrong sha256 or an unsafe

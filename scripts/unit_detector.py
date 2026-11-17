@@ -16,6 +16,7 @@ A MAP-SCOPED model (Batt 2026-11-07: "use it" -- xmas02-eval.md PASSED) is chose
 
     det = for_map("xmas_dun02")     # its pinned ONNX (sha256 checked), species -> "monster"
     det = for_map("prt_fild08")     # no entry: v1, as before
+    det = for_map("xmas_dun02", onnx="xmas02gb-last-736x1280.onnx")  # a reference model (18.15)
 
 ``collapse`` renames classes (a species -> ``monster``) and the worker suppresses every class of one
 new name TOGETHER, before the boxes leave it: one box per sprite where per-class NMS gave a Cookie
@@ -86,14 +87,31 @@ class MapModel:
 # x; Batt 2026-11-09 "go ahead with (c)": the class, then a pilot): its four species collapse to
 # "monster" as before; garm_baby is NOT collapsed -- the runner never strikes it, and --garm-fly
 # (dungeon@9.19) takes the Fly Wing on it. The old model stays in GPU_WEIGHTS (xmas02) for rollback.
-MAP_MODELS: dict[str, MapModel] = {
-    "xmas_dun02": MapModel(
-        "xmas02gb-last-736x1280.onnx",
-        "b22d972b714f1461250710221802667c2c980af6299afd0e54c1778fdc53ce37",
-        {s: "monster" for s in ("mystcase", "cruiser", "cookie", "cookie_xmas")},
-        gpu="xmas02gb",
-    ),
-}
+# ➡️ SUPERSEDED 2026-11-17 by xmas02-sk (live-blocks.md 18.14 / 18.15, Batt: "use it for real";
+# xmas02-detector.md S7.6: the alarm bar PASSED -- detection 33 / 33 visits, false fires 0 / 98 and
+# 0 / 265): its 10 classes (player, npc, warp, the four species, garm_baby, g_gobline_xmas,
+# knight_of_windstorm) keep the SAME collapse -- the four species -> "monster"; the three alarm
+# classes (garm_baby, the Christmas Goblin, the Stormy Knight) are never collapsed, so the runner
+# never strikes them and the alarm reads them by name (models.yaml `alarm`). xmas02-gb stays
+# loadable as the map's REFERENCE model (MAP_REFERENCES: a box whose use_model names it, s9ab's A).
+XMAS02_SPECIES = ("mystcase", "cruiser", "cookie", "cookie_xmas")
+XMAS02GB = MapModel(
+    "xmas02gb-last-736x1280.onnx",
+    "b22d972b714f1461250710221802667c2c980af6299afd0e54c1778fdc53ce37",
+    {s: "monster" for s in XMAS02_SPECIES},
+    gpu="xmas02gb",
+)
+XMAS02SK = MapModel(
+    "xmas02sk-last-736x1280.onnx",
+    "76316fb4e58102aaf015de597eec2b188f9f103e29fb4ca74f87d2f636d19473",
+    {s: "monster" for s in XMAS02_SPECIES},
+    gpu="xmas02sk",
+)
+MAP_MODELS: dict[str, MapModel] = {"xmas_dun02": XMAS02SK}
+# live-blocks.md 18.15 (dungeon@9.59): a map's OTHER loadable models -- the reference arms', the
+# rollback -- each by its own pinned file. The runner loads one only when the box's use_model names
+# its file (dungeon_hunt.box_model_refused / BoxWatch); with no use_model the map's MAP_MODELS one.
+MAP_REFERENCES: dict[str, tuple[MapModel, ...]] = {"xmas_dun02": (XMAS02GB,)}
 
 
 class DetectorUnavailable(RuntimeError):
@@ -232,20 +250,42 @@ class UnitDetector:
         self.close()
 
 
-def for_map(map_name: str | None, *, env: Path = ENV, **kw: Any) -> UnitDetector:
-    """The detector for a map: its MAP_MODELS entry (the ONNX's sha256 must match, else
-    DetectorUnavailable), else v1 (``MODEL``). ``kw`` goes to UnitDetector (threads, python...)."""
+def map_model(map_name: str | None, onnx: str | None = None) -> MapModel | None:
+    """PURE: the map's model whose ONNX file is ``onnx`` -- its MAP_MODELS entry or one of its
+    MAP_REFERENCES (live-blocks.md 18.15) -- or, ``onnx`` None, its MAP_MODELS entry. None: v1 (a
+    map without an entry; ``onnx`` must then be v1's file). Raises DetectorUnavailable when
+    ``onnx`` names none of them (fail closed: a box never gets a model the map does not list)."""
     spec = MAP_MODELS.get(map_name or "")
+    if onnx is None:
+        return spec
+    if spec is None:
+        if onnx == MODEL.name:
+            return None
+        raise DetectorUnavailable(f"{onnx}: {map_name} has no model of its own (v1's is "
+                                  f"{MODEL.name})")  # fmt: skip
+    for m in (spec, *MAP_REFERENCES.get(str(map_name), ())):
+        if m.onnx == onnx:
+            return m
+    names = [m.onnx for m in (spec, *MAP_REFERENCES.get(str(map_name), ()))]
+    raise DetectorUnavailable(f"{onnx} is not one of {map_name}'s models ({', '.join(names)})")
+
+
+def for_map(map_name: str | None, *, env: Path = ENV, onnx: str | None = None,
+            **kw: Any) -> UnitDetector:  # fmt: skip
+    """The detector for a map: its MAP_MODELS entry -- or, ``onnx`` (18.15: the box's use_model's
+    file), the map's model of that file (map_model) -- the ONNX's sha256 checked (else
+    DetectorUnavailable), else v1 (``MODEL``). ``kw`` goes to UnitDetector (threads, python...)."""
+    spec = map_model(map_name, onnx)
     if spec is None:
         return UnitDetector(**kw)
-    onnx = env / "model" / spec.onnx
-    if not onnx.exists():
-        raise DetectorUnavailable(f"{onnx} missing (docs/operations/detector-cpu.md)")
-    got = file_sha256(onnx)
+    onnx_p = env / "model" / spec.onnx
+    if not onnx_p.exists():
+        raise DetectorUnavailable(f"{onnx_p} missing (docs/operations/detector-cpu.md)")
+    got = file_sha256(onnx_p)
     if got != spec.sha256:
-        raise DetectorUnavailable(f"{onnx}: sha256 {got[:12]}... is not the deployed "
+        raise DetectorUnavailable(f"{onnx_p}: sha256 {got[:12]}... is not the deployed "
                                   f"{spec.sha256[:12]}... ({map_name})")  # fmt: skip
-    return UnitDetector(model=onnx, collapse=spec.collapse, **kw)
+    return UnitDetector(model=onnx_p, collapse=spec.collapse, **kw)
 
 
 # --- THE GPU PATH (gpu-live-detector.md option A; ADR-0005 Amendment 2026-11-07) ---------------
@@ -324,6 +364,13 @@ GPU_WEIGHTS: dict[str, GpuWeights] = {
                             "331b1927cfbe86c2df03a74207c81e9393c7d528eb3ffda2bc9d5bd369491875",
                             "xmas02fi5-last-736x1280.onnx",
                             "9c43f6cdae28bf874d24299e70d915bf6cc0b1a09e676b537d343a56c29bb25c"),
+    # xmas02-detector.md Amendment S4 (2026-11-14): + the Christmas Goblin and the Stormy Knight
+    # (the masked cache), init xmas02gb; frozen 0b43ebbf, exported 76316fb4 (S4.8 / S4.9). S7.6's
+    # alarm bar PASSED; DEPLOYED 2026-11-17 (live-blocks.md 18.14 / 18.15): MAP_MODELS xmas_dun02
+    "xmas02sk": GpuWeights("/datasets/archive/train/xmas02-sk-20261114/weights/last.pt",
+                           "0b43ebbfe8e2bb5c4333d2297520f4f05d9ce79b6fa1cdcde12663879d167a10",
+                           "xmas02sk-last-736x1280.onnx",
+                           "76316fb4e58102aaf015de597eec2b188f9f103e29fb4ca74f87d2f636d19473"),
 }  # fmt: skip
 
 
@@ -635,14 +682,16 @@ class GpuDetector:
 
 
 def for_map_gpu(map_name: str | None, *, env: Path = ENV, socket_path: Path = GPU_SOCKET,
-                gpu_kw: Mapping[str, Any] | None = None, **kw: Any) -> GpuDetector:  # fmt: skip
+                gpu_kw: Mapping[str, Any] | None = None, onnx: str | None = None,
+                **kw: Any) -> GpuDetector:  # fmt: skip
     """``for_map``'s CPU detector behind the GPU's forward pass of the SAME model: the map's
-    GPU_WEIGHTS name, or v1 for a map without an entry. ``kw`` goes to the CPU detector (never a
-    ``model``: the GPU weights must be the deployed model's); ``gpu_kw`` to GpuDetector."""
+    GPU_WEIGHTS name (``onnx``: the map's model of that file, 18.15), or v1 for a map without an
+    entry. ``kw`` goes to the CPU detector (never a ``model``: the GPU weights must be the
+    deployed model's); ``gpu_kw`` to GpuDetector."""
     if "model" in kw:
         raise DetectorUnavailable("for_map_gpu: the model is the map's, never an argument")
-    spec = MAP_MODELS.get(map_name or "")
-    cpu = for_map(map_name, env=env, **kw)
+    spec = map_model(map_name, onnx)
+    cpu = for_map(map_name, env=env, onnx=onnx, **kw)
     weights = "v1" if spec is None else spec.gpu
     return GpuDetector(cpu, weights, socket_path=socket_path, **dict(gpu_kw or {}))
 

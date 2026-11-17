@@ -136,11 +136,37 @@ def box_difference(a: Mapping[str, Any], b: Mapping[str, Any]) -> str | None:
 B_SAME_AS_A = (("safety", "fly_first"), ("safety", "fly_first_hp"))
 
 
+def _model_stmt(d: Mapping[str, Any]) -> dict[str, Any]:
+    main = next(t for t in d["nodes"][0]["tabs"] if t["name"] == "main")
+    got = [
+        s for s in main["main"] or [] if s.get("kind") == "action" and s.get("block") == "use_model"
+    ]
+    if len(got) != 1:
+        raise ValueError("the box's main does not name one use_model")
+    return dict(got[0])
+
+
+def box_model_of(d: Mapping[str, Any]) -> str | None:
+    """PURE: the model the box's main names (its use_model literal), None when it is no text."""
+    v = _model_stmt(d)["params"]["model"]
+    return str(v["value"]) if v.get("kind") == "lit" and isinstance(v.get("value"), str) else None
+
+
+def set_box_model(d: dict[str, Any], model: str) -> None:
+    """In place: the box's main names ``model`` (live-blocks 18.15: the ready-made functions box
+    names xmas02sk; an A/B that measured xmas02 keeps its arms on it, explicitly)."""
+    main = next(t for t in d["nodes"][0]["tabs"] if t["name"] == "main")
+    _model_stmt(d)
+    for s in main["main"]:
+        if s.get("kind") == "action" and s.get("block") == "use_model":
+            s["params"]["model"] = {"kind": "lit", "value": model}
+
+
 def arm_doc(arm: str, minutes: float | None = None) -> dict[str, Any]:
     """PURE but for the read: an arm's box -- its fixture, its time box set to the run's length
     when ``minutes`` is given; B's B_SAME_AS_A blocks set to A's values (18.10 #1, 18.13: the
     ready-made functions box holds fly_first and fly_first_hp ON; the hunt box, A, holds them
-    off)."""
+    off), and B's use_model A's (18.15: the functions box names xmas02sk; s5c measured xmas02)."""
     d = json.loads(PROJECTS[arm].read_text())
     if minutes is not None:
         d["max_runtime_s"] = int(round(minutes * 60))
@@ -150,6 +176,10 @@ def arm_doc(arm: str, minutes: float | None = None) -> dict[str, Any]:
             ta = next(t for t in a["nodes"][0]["tabs"] if t["name"] == tab_name)
             tb = next(t for t in d["nodes"][0]["tabs"] if t["name"] == tab_name)
             tb["vars"][var] = ta["vars"][var]
+        model = box_model_of(a)
+        if model is None:
+            raise ValueError("A's use_model names no model as text")
+        set_box_model(d, model)
     return d
 
 

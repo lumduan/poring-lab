@@ -48,6 +48,13 @@ removed `/dev/shm/poring-lab-detector`. Until the rebuild, every user fails clos
   as its own class (never collapsed: the runner never strikes it, and `--garm-fly` reads it); the
   four species are still renamed `monster`. `xmas02` stays in `GPU_WEIGHTS` as the rollback.
   (second-install-gaps.md row G.)
+  ➡️ **SUPERSEDED 2026-11-17 (docs/planning/live-blocks.md 18.15, dungeon@9.59):** `MAP_MODELS`
+  names `xmas02sk-last-736x1280.onnx` (sha256 `76316fb4...`, GPU name `xmas02sk`; its sidecar's 10
+  names add `g_gobline_xmas` and `knight_of_windstorm`, never collapsed, the alarm's). xmas02gb is the
+  map's REFERENCE model (`MAP_REFERENCES`): `for_map(map, onnx=<its file>)` /
+  `for_map_gpu(..., onnx=)` load it, and the runner's box watcher does so only when the box's
+  use_model names it; any other file fails closed. Both ONNX files stay in `model/` (and in
+  `/mnt/poring-lab-datasets/archive/models/`, where the detect server reads them).
 - Its four species are renamed `monster` and suppressed TOGETHER (one NMS group): per-class NMS
   drew a Cookie AND a Christmas Cookie box on one sprite (13 of 964 boxes on X2). The positive case
   on 113 real X2 frames (13 with a double, 100 random): 197 monster boxes -> 184; all 13 dropped

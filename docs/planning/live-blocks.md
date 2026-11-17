@@ -1,14 +1,14 @@
 ---
 doc_type: design
 hypothesis: null
-status: "DECIDED 2026-11-13 ~21:4x (Batt): build the live block player first; one box; break the runner into blocks. Stage 1 PASSED live (6); stages 2-4a A/Bs INCONCLUSIVE (7-9; the Knight). 2026-11-14: Batt's answers built (10, 11); s5ab-1114 FAIL by its bar on line 2 only, deaths 0/6 (10.2). Stage 5a (settings as blocks, the runner page gone) MERGED 17:2x (12), then rounds 20-24 of matpilot's browser review (12.4-12.8, all re-measured PASS): wrapped setting blocks, pickers for every value that is not a name (Batt 19:4x), no overlaps, exact Escape/Undo. Stage 5b-1 (HuntState, the loop as 20 steps; AST-proven the same program) MERGED 19:2x; its live A/B s5b1-ab FAIL by the pace p95 line only (noise), every outcome line passed (13.7; the parent's decision: keep it, go on). Stage 5b-2 (the steps as live blocks: a hunt tab, find_target / fight_target) MERGED 2026-11-15 03:0x; its live A/B s5b2-ab PASS on every line (14.11). The Christmas Goblin class round FAILED its precision bar (xmas02-detector S4.10), not deployed. 2026-11-15 (Batt's answers, 14.12): no hunt tab in the ready-made box (the runner block dissolves into function tabs: 5c); the first real block experiment, no Knife swap on the Christmas Cookie and the Cookie, BUILT offline and its A/B pre-registered 13:32 ICT (16), NOT run. Stage 5c (Batt 14.12: the runner block dissolved into functions in tabs -- hunt_loop() in main, role blocks, hunt_tick()'s step blocks) BUILT 2026-11-15 13:5x on feat/runner-blocks, offline-proven, merged with main 95583b9f there, not yet into main; its live A/B s5c-ab pre-registered (15.8), not run (15.11). 2026-11-16 (Batt 17 #6): the Fly Wing FIRST on a boss at any distance (18, dungeon@9.57 --fly-first, the setting fly_first, off until its A/B) BUILT offline on feat/fly-first; s7ab pre-registered (18.7), not run."
+status: "DECIDED 2026-11-13 ~21:4x (Batt): build the live block player first; one box; break the runner into blocks. Stage 1 PASSED live (6); stages 2-4a A/Bs INCONCLUSIVE (7-9; the Knight). 2026-11-14: Batt's answers built (10, 11); s5ab-1114 FAIL by its bar on line 2 only, deaths 0/6 (10.2). Stage 5a (settings as blocks, the runner page gone) MERGED 17:2x (12), then rounds 20-24 of matpilot's browser review (12.4-12.8, all re-measured PASS): wrapped setting blocks, pickers for every value that is not a name (Batt 19:4x), no overlaps, exact Escape/Undo. Stage 5b-1 (HuntState, the loop as 20 steps; AST-proven the same program) MERGED 19:2x; its live A/B s5b1-ab FAIL by the pace p95 line only (noise), every outcome line passed (13.7; the parent's decision: keep it, go on). Stage 5b-2 (the steps as live blocks: a hunt tab, find_target / fight_target) MERGED 2026-11-15 03:0x; its live A/B s5b2-ab PASS on every line (14.11). The Christmas Goblin class round FAILED its precision bar (xmas02-detector S4.10), not deployed. 2026-11-15 (Batt's answers, 14.12): no hunt tab in the ready-made box (the runner block dissolves into function tabs: 5c); the first real block experiment, no Knife swap on the Christmas Cookie and the Cookie, BUILT offline and its A/B pre-registered 13:32 ICT (16), NOT run. Stage 5c (Batt 14.12: the runner block dissolved into functions in tabs -- hunt_loop() in main, role blocks, hunt_tick()'s step blocks) BUILT 2026-11-15 13:5x on feat/runner-blocks, offline-proven, merged with main 95583b9f there, not yet into main; its live A/B s5c-ab pre-registered (15.8), not run (15.11). 2026-11-16 (Batt 17 #6): the Fly Wing FIRST on a boss at any distance (18, dungeon@9.57 --fly-first, the setting fly_first, off until its A/B) BUILT offline on feat/fly-first; s7ab pre-registered (18.7), not run. ➡️ s7ab PASS (18.9), fly_first ON in the ready-made boxes; s8ab PASS (18.13), fly_first_hp ON too. 2026-11-17 (Batt 18.14: \"use it for real\"): xmas02sk DEPLOYED as xmas_dun02's model (18.15, dungeon@9.59; xmas02gb the reference), its live A/B s9ab pre-registered, not run."
 
 role: null
 verdict_date: null
 verdict_ticket: null
 supersedes: null
 related: [project-model.md, player-mode.md, ADR-0020, ../../scripts/dungeon_hunt.py, ../../scripts/runner_flow_export.py, ../../packages/poring_flow/src/poring_flow/runtime.py]
-next_action: "18 (Batt 17 #6): after s5c-ab2, merge feat/fly-first, then run s7ab FROM MAIN (18.7: stage7_ab.py plan / run / score --label s7ab --pairs 4 --minutes 20); PASS: fly_first ON in the ready-made boxes is Batt's (18.6). ➡️ The items below are older. The parent: run 16's A/B (stage6_ab.py plan / run / score --label s6ab; running from main 2026-11-15 until ~16:15 ICT) and score it. 5c (15): BUILT on feat/runner-blocks and merged with main 95583b9f there (15.11); merge it into main, then run s5c-ab FROM MAIN (15.8: stage5c_ab.py plan / run / score; a worktree lacks the runner's gitignored start data), never beside another live series; Batt: 15.10's two open questions. Round 25 (the layout asks) MERGED (67f6469c). Then the Goblin class's pre-registered rule change and a fresh held-out with staged knights (allowed). Answered by Batt 14.12: no hunt tab in the ready-made box; 5b-1 accepted, no re-run. The drink stays at 50 % until a long series measures it with income (10.2)."
+next_action: "18.15: merge feat/xmas02sk-live, then run s9ab FROM MAIN (stage9_ab.py plan / run / score --label s9ab --pairs 4 --minutes 20); a judged line FAILS -> the default goes back (18.14) and Batt is told. ➡️ Older: 18 (Batt 17 #6): after s5c-ab2, merge feat/fly-first, then run s7ab FROM MAIN (18.7: stage7_ab.py plan / run / score --label s7ab --pairs 4 --minutes 20); PASS: fly_first ON in the ready-made boxes is Batt's (18.6). ➡️ The items below are older. The parent: run 16's A/B (stage6_ab.py plan / run / score --label s6ab; running from main 2026-11-15 until ~16:15 ICT) and score it. 5c (15): BUILT on feat/runner-blocks and merged with main 95583b9f there (15.11); merge it into main, then run s5c-ab FROM MAIN (15.8: stage5c_ab.py plan / run / score; a worktree lacks the runner's gitignored start data), never beside another live series; Batt: 15.10's two open questions. Round 25 (the layout asks) MERGED (67f6469c). Then the Goblin class's pre-registered rule change and a fresh held-out with staged knights (allowed). Answered by Batt 14.12: no hunt tab in the ready-made box; 5b-1 accepted, no re-run. The drink stays at 50 % until a long series measures it with income (10.2)."
 
 title: "Live blocks: the player that plays a project's blocks in the game, and the runner broken into blocks"
 date: 2026-11-13
@@ -4342,3 +4342,123 @@ Report only:
   - check it with a pre-registered live A/B (A = the old xmas02 as the reference arm, B = xmas02sk):
     deaths, false Fly Wings per hour against the packets (with S7's post-vanish rule), and kills/h.
   - If B fails a judged line, the default goes back and Batt is told.
+
+
+### 18.15 ➡️ DEPLOYED: xmas02sk is xmas_dun02's model (dungeon@9.59), and THE A/B s9ab -- written 2026-11-17 07:05 ICT from `date`, BEFORE any s9ab run (feat/xmas02sk-live from main f8e27d21; offline, one serve test; NOT run live)
+
+**What changed (18.14's "deploy it as the default"):**
+
+| Piece | Before | Now |
+|---|---|---|
+| `unit_detector.GPU_WEIGHTS` | 8 models (376a0137's `xmas02sk` reverted by c26d96c0) | + `xmas02sk` again: last.pt `0b43ebbf...`, ONNX `76316fb4...` (S4.8 / S4.9); fi_gpu_latency's ONNX line too |
+| `MAP_MODELS["xmas_dun02"]` | xmas02gb (`b22d972b...`) | **xmas02sk**; the same collapse (Myst Case, Cruiser, Cookie, Christmas Cookie -> "monster"); garm_baby, g_gobline_xmas, knight_of_windstorm NOT collapsed: never struck, read by the alarm by name |
+| `MAP_REFERENCES["xmas_dun02"]` (new) | - | xmas02gb, loadable ONLY when a box's use_model names its file (`map_model`, `for_map(onnx=)`, `for_map_gpu(onnx=)`); any other file fails closed |
+| models.yaml | `xmas02` = xmas02gb, the map's own | `xmas02sk` live, `alarm: [garm_baby, g_gobline_xmas, knight_of_windstorm]` (18.3's hook `alarm_classes` reads it), first; `xmas02` live with `reference: true` (`map_detector` skips it). New fields `alarm` (in class order, never a struck class) and `reference` (a live detector of named maps), validated |
+| The box's run() argument (`BlockPlan.model_doc`) | id, file, sha256, maps, status, kind, strikes | + `alarm` and `classes` for a model that names an alarm; a model without one gives exactly the old entry (the reference arms' run() arguments unchanged) |
+| The runner, dungeon@9.59 `MODEL_PICK` | the box watcher loaded the map's model; a use_model naming another was refused | `box_model_refused` takes the map's own OR one of its references by the box's file; `BoxWatch(..., model_file=)` loads that file's CPU model and its GPU weights; run() hands it the box's file. No use_model, or the map's own: the map's model, as before |
+| The ready-made functions box and its cookie twin | `use_model("xmas02")` | **`use_model("xmas02sk")`** (fixtures + project.ts `FUNCTIONS_MODEL`); argv, settings, keys, loop unchanged |
+| The reference arms (the one box, the hunt box, the one-box cookie box, the frozen stage-4 fixture) | xmas02 | **xmas02 kept**, with their pinned argv and box. stage5c_ab's B takes A's use_model, stage7_ab's and stage8_ab's arms name xmas02 explicitly (`MEASURED_MODEL`), so each plan means what it meant. The stage-2 / stage-3 fixtures and a CLI run name no model: they now get the map's, xmas02sk |
+| /flows | - | the model picker notes "live, a reference arm's"; a node without use_model is shown xmas02sk's monsters (the TS `monstersOf` skips a reference) |
+
+- **The runner change is a branch family, like fly-first.** Every change is `if MODEL_PICK:` whose
+  else is 9.58's code, plus BoxWatch's keyword-only `model_file` (default None).
+  `huntstate_check.py pick` (new): with only these branches read as their else and the keyword
+  dropped, the WHOLE module equals PICK_BASE `f8e27d21`'s (the 9.58 runner s8ab measured): **YES, 5
+  branches**. `check`, `drive` and `flag` read the family as its else too and all pass (rc 0), so
+  each still proves what it proved. `unflag(..., params=)` drops a family's keyword only when its
+  default is None; the module comparison then refuses any use of it outside a branch (tested).
+- **A box whose use_model names neither the map's own nor a reference is refused before any input**
+  (the words now name both files); the 11-07 model (`GPU_WEIGHTS["xmas02"]`) stays a rollback only,
+  never loadable by a box.
+
+**The offline checks (before the serve test, i.e. before 06:56 ICT):**
+- The ready-made box (and its cookie twin): plan model `xmas02sk`, the four recipes resolve
+  (attack_mystcase / _cruiser / _cookie / _cookie_xmas: the same four struck species), lint and
+  `live.problems` clean, `box_model_refused` None (GPU and CPU), alarm classes = the three.
+- The one box: still `xmas02`, not refused (a reference), alarm = garm_baby alone.
+- The CPU detector on this host: `for_map("xmas_dun02")` loads xmas02sk-last-736x1280.onnx
+  (`76316fb4e581`, its sidecar's 10 names in class order, the four species collapsed);
+  `for_map(..., onnx=xmas02gb)` loads xmas02gb (`b22d972b714f`, 8 names).
+- Detection quality to expect (scored once, never again): S4.10 -- Garm Baby on gw3 Q1s 1.000 /
+  0.922 (= xmas02gb's M11), the four species pooled TEST Q1c 0.983-1.000 / 0.933-0.937; S7.6 -- the
+  alarm bar 33 / 33 visits detected, false fires 0 / 98 and 0 / 265; D1 forward p95 17.96 ms.
+
+**THE SERVE TEST (one guarded step, 06:56:20-06:58:52 ICT; the worker idle, no Run or series, no
+detect server before it):** the worktree's `unit_detector.py serve-cmd --backend openvino --seconds
+150`, run with the main checkout's guarded_build.
+- The server's listening line named **9 models** (v1, xmas02, xmas02gb, xmas02fi ... fi5, xmas02sk
+  `76316fb4e581`), OpenVINO GPU, `ov_preproc` gpu, f32, the clock floor 2450 MHz.
+- A host client asked it through `for_map_gpu("xmas_dun02")` (weights xmas02sk) and
+  `for_map_gpu(..., onnx=xmas02gb)` (weights xmas02gb), on the 8 s8ab end screenshots (the game
+  region): **18 / 18 calls on the GPU path** (the hello's pin accepted), server forward p50 15.7 ms /
+  p95 19.2 ms, the client's call 17.7-28.9 ms after a first ~104-121 ms one.
+- GPU vs CPU of the same file: the same classes on every frame, boxes 0.0 px apart.
+- The step ended at its time box (rc 124) with the verified stop: "worker up and idle (no CUDA
+  context), nothing of ours on the GPU".
+- In passing: on every end screenshot (her in Geffen after the Butterfly Wing) xmas02gb boxes a
+  "cookie" that xmas02sk does not.
+
+**THE A/B s9ab (pre-registered here, BEFORE any of its data; `scripts/stage9_ab.py`):**
+- **The arms:** the ready-made functions box, fly_first and fly_first_hp ON in both (set
+  explicitly), with `use_model("xmas02")` (A: xmas02gb, the alarm on the Garm Baby) or
+  `use_model("xmas02sk")` (B: the alarm on the Garm Baby, the Christmas Goblin and the Stormy
+  Knight). 4 pairs of 20 min, alternating (ABBA ABBA), stage2_ab's setup before every run.
+- **`plan` refuses before any input unless the arms differ ONLY in the model:** the box texts in
+  the use_model alone; the runner settings, argv, keys, loop and tick not at all; the run() box
+  arguments only in `box_model`, whose entries differ only in id / file / sha256 and the alarm (and
+  its classes) that follows from the model; each a model the runner loads on the map and the detect
+  server serves; A's alarm classes garm_baby, B's the three. Also the runner is 9.59, `drive`,
+  `check`, `flag` and `pick` hold, and the box's step traces equal the driver's (63 scenarios).
+  Today's plan passes (rc 0; project hashes A `e5d8c8b2...`, B `f9aaef1d...`).
+- **The packets' truth of a boss Fly Wing** (every fly_first record but the HP ones; the moment the
+  runner acted on = the alarm sighting's grab time, else its read):
+  - FALSE when no alarm-species unit (Goblin 1607, knight 1251, Garm Baby 1515) is ON SCREEN by the
+    packets and the moment is outside every S7.1 post-vanish window (5.0 s after a vanish, reason 0
+    or 1, of an alarm-species unit).
+  - On screen: the Timeline world 0.12 s earlier (the frames trail the packets), each unit's cell
+    relative to hers projected by the runner's own camera (camera_rdp.json, flat ground), the
+    knight's sprite envelope (the largest of the three) meeting the 1280 x 720 game region.
+  - Its positive case, on the 12 banked fly-first runs of xmas02gb (s7ab's B, s8ab's A and B, all 39
+    boss Fly Wings alarm ones): **on the 21 judged true, the nearest alarm unit's projected foot lay
+    2-98 px from the box's foot (median 45)**. On the 16 judged false, the nearest monster of any
+    kind was >= 190 px away or absent, or a Myst Case / Cruiser / Cookie she was fighting 8-24 px
+    away (a species confusion). High scores and long streaks (0.96-0.98, 4-12 in a row) on nothing
+    at all fit S7.1's painted Garm Baby on the floor. 2 lay inside post-vanish windows.
+- **JUDGED (FAIL if one fails, INCONCLUSIVE if none fails but one cannot be judged, else PASS):**
+  1. deaths: B's <= A's over every run that played (stage5b_ab's line; `<=`: two zero arms pass);
+  2. **false boss Fly Wings an hour: B <= A + 6.2** (each arm's valid runs pooled). The margin,
+     derived at 07:00 from the same 12 runs (3.83 h): per-run false rates 0-15.0 / h, SD 4.32 / h,
+     pooled 4.01 / h; 2 x sqrt(2 / 4) x 4.32 = 6.11 / h, the Poisson floor 2 x sqrt(2 x 4.01 /
+     1.33) = 4.91 / h; the larger, rounded up to 0.1 = 6.2 / h (`stage9_ab.py derive`);
+  3. kills / h and loot / h: mean paired (B - A) >= -2 SE (judged with >= 3 valid pairs);
+  4. openers / h: B within +-20 % of A;
+  5. the tick pace: B's median <= A's + 5 ms;
+  6. kinds, errors, the drive (stage7_ab's lines);
+  7. the model: every run that played loaded its arm's model (its box_model records: the ONNX and
+     the detect server's weights).
+- **The scorer's dry run (07:18 ICT, read-only, on s8ab's archived series and sessions, both
+  arms xmas02gb so only the new lines mean anything):** every line computes; s8ab's own per-run
+  kills / loot / openers / pace come back as in 18.13; false boss Fly Wings "A" 3.02 / h, "B" 4.91
+  / h; party visits 8 and 3, 6 and 2 of them flown, 1.0 and 1.44 s to the Fly Wing (median); the
+  detect server's call 21.4 / 21.5 ms median.
+- **REPORTED only:** the alarm's true Fly Wings per party visit (a visit: 0.25-s samples with a
+  Goblin or the knight on screen, a gap > 5 s ends it); the time from a visit's first sample to its
+  Fly Wing; the boss Fly Wings by source and the alarm sightings by class; the economy with steals
+  (econ_db.totals_of); the detect server's call ms; deaths per arm.
+- **On a FAIL of a judged line:** the default goes back (18.14) -- the ready-made boxes'
+  use_model to "xmas02" and MAP_MODELS to xmas02gb -- and Batt is told.
+- **Commands (from MAIN after the merge, the worker free):**
+
+      cd /home/bot/docker/poring-lab
+      .venv/bin/python scripts/stage9_ab.py plan  --label s9ab --pairs 4 --minutes 20
+      .venv/bin/python scripts/stage9_ab.py run   --label s9ab --pairs 4 --minutes 20
+      .venv/bin/python scripts/stage9_ab.py score --label s9ab
+
+  ~3.5 h (the detect server's time box 12,600 s).
+- **Limits:**
+  - The on-screen rule is approximate: flat ground (no GAT altitude), one envelope for the three,
+    the Timeline without the map grid (diagonal-first walks), so a unit at the screen's edge may be
+    judged either way. Both arms and the margin's data are judged by the same rule.
+  - Visits are rare: the knight respawns every 60-70 min; the banked 12 runs held 13 visits.
+  - The false-Fly-Wing line has little power at 4 pairs: the margin (6.2 / h) is wider than A's
+    expected rate (~4 / h).

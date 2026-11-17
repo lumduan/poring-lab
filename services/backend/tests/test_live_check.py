@@ -365,12 +365,13 @@ def test_the_feature_version_is_the_checks() -> None:
     assert dh.LIVE_CHECK_VERSION == "9.45" and dh.VERSION == "dungeon@8.7"
     assert dh.MAP_IDENTITY_VERSION == "9.46"  # the map line's reader (minimap_id)
     assert dh.SLOT_ITEMS_VERSION == "9.47"  # the keys' items (slot_items)
-    # the newest feature is the HP Fly Wing first (dungeon@9.58, live-blocks 18.11; before it the
-    # Fly Wing first on a boss, 9.57, and the fast alarm, 9.53); 9.48-9.52 and 9.54-9.56 are
+    # the newest feature is the box's model among the map's (dungeon@9.59, live-blocks 18.15: the
+    # xmas02sk deployment, xmas02gb the reference); before it the HP Fly Wing first (9.58), the
+    # Fly Wing first on a boss (9.57) and the fast alarm (9.53); 9.48-9.52 and 9.54-9.56 are
     # NOT_FEATURES (the player's and the box's)
     assert dh.ALARM_FAST_VERSION == "9.53" and dh.FLY_FIRST_VERSION == "9.57"
-    assert dh.FLY_FIRST_HP_VERSION == "9.58"
-    assert rfe.feature_version(dh) == "dungeon@9.58"
+    assert dh.FLY_FIRST_HP_VERSION == "9.58" and dh.MODEL_PICK_VERSION == "9.59"
+    assert rfe.feature_version(dh) == "dungeon@9.59"
 
 
 # --- (c) dungeon@9.46: the map line, from the minimap's picture -----------------------------------

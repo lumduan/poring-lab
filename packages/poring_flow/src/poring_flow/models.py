@@ -44,6 +44,12 @@ class ModelSpec(BaseModel):
     # live blocks stage 4a: the classes the RUNNER strikes (unit_detector MAP_MODELS' collapse),
     # the monsters a box's recipes may name (poring_flow.recipes)
     strikes: list[str] = []
+    # live-blocks 18.15: the classes the runner's ALARM flies on (dungeon_hunt.alarm_classes, with
+    # fly_first); empty = garm_baby alone (ALARM_CLASSES). Never a class it strikes
+    alarm: list[str] = []
+    # live-blocks 18.15: a LIVE model kept loadable for a reference arm (a box's use_model names it;
+    # unit_detector MAP_REFERENCES), never the map's own detector (map_detector skips it)
+    reference: bool = False
     why: str = Field(max_length=400)
 
     @model_validator(mode="after")
@@ -62,6 +68,14 @@ class ModelSpec(BaseModel):
             raise ValueError("only a detector boxes what the runner strikes")
         if self.kind == "boss_recognizer" and len(self.classes) != 1:
             raise ValueError("a boss recognizer answers one question: one class")
+        if [c for c in self.classes if c in self.alarm] != self.alarm:
+            raise ValueError("alarm names classes the model has, in its class order")
+        if set(self.alarm) & set(self.strikes):
+            raise ValueError("the runner never strikes a class its alarm flies on")
+        if self.alarm and self.kind != "detector":
+            raise ValueError("only a detector's boxes feed the alarm")
+        if self.reference and not (self.kind == "detector" and self.status == "live" and self.maps):
+            raise ValueError("a reference is a live detector of named maps (a box loads it there)")
         return self
 
     @property
@@ -136,11 +150,13 @@ def detector_keys(flow: ir.Flow) -> list[str]:
 def map_detector(map_id: str, cat: ModelCatalogue | None = None) -> tuple[str, ModelSpec] | None:
     """The live detector trained for `map_id` that names the monsters the runner strikes there
     (models.yaml `maps` and `strikes`): the runner's own box detector on that map (unit_detector
-    MAP_MODELS), the hunt core's model when no use_model names one (matpilot round 17 N3). None:
-    no such model (the runner strikes v1's every "monster" box there)."""
+    MAP_MODELS), the hunt core's model when no use_model names one (matpilot round 17 N3). A
+    REFERENCE model is never it (18.15: a box loads one only by naming it). None: no such model
+    (the runner strikes v1's every "monster" box there)."""
     cat = models() if cat is None else cat
     for mid, spec in cat.models.items():
-        if spec.available and spec.kind == "detector" and spec.strikes and map_id in spec.maps:
+        if (spec.available and spec.kind == "detector" and spec.strikes and map_id in spec.maps
+                and not spec.reference):  # fmt: skip
             return mid, spec
     return None
 

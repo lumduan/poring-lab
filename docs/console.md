@@ -405,7 +405,12 @@ Amendment B); a not-adopted model is never offered.
   ➡️ **2026-11-14 (stage 4a, [planning/live-blocks.md](planning/live-blocks.md) 3.4):** the one box
   has a sixth tab, `monsters` (one function per monster, `attack_<monster>(t, priority=1)`, each a
   recipe of the runner's steps), and its main names the trained data, `use_model("xmas02")`, before
-  the runner block. On /flows the toolbox offers `use_model(...)` under Movement in a map's main,
+  the runner block (➡️ **2026-11-17, [planning/live-blocks.md](planning/live-blocks.md) 18.15:** the
+  ready-made xmas_dun02 box and its cookie twin name `use_model("xmas02sk")`, the map's deployed
+  model, whose alarm flies on the Christmas Goblin and the Stormy Knight as well as the Garm Baby;
+  the old one box and the A/B reference arms keep `xmas02`, now the map's REFERENCE model -- loaded
+  only by a box that names it, never a node's default; the model picker says "live, a reference
+  arm's"). On /flows the toolbox offers `use_model(...)` under Movement in a map's main,
   and in a tab named `monsters` a **Monsters** category: a function per monster of the node's model,
   each monster as a `mob(<id>)` value, and the recipe's steps in their order (knife_on(), strike,
   wait_steal, knife_back(), wait_kill, loot; use_skill marked "not played live yet: 4b"). The steps

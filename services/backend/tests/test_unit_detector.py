@@ -167,6 +167,16 @@ def test_for_map_pins_the_file_and_falls_back_to_v1(
         ud.for_map("test_map", env=tmp_path, python=py)
     with pytest.raises(ud.DetectorUnavailable, match="missing"):
         ud.for_map("xmas_dun02", env=tmp_path / "nowhere", python=py)
+    # 18.15: a reference model by its file, pinned the same way; a file the map does not list fails
+    ref = tmp_path / "model" / "r-736x1280.onnx"
+    ref.write_text(json.dumps([6]))
+    ud.sidecar(ref).write_text(json.dumps(XMAS02))
+    monkeypatch.setitem(ud.MAP_REFERENCES, "test_map",
+                        (ud.MapModel(ref.name, ud.file_sha256(ref), SPECIES),))  # fmt: skip
+    with ud.for_map("test_map", env=tmp_path, python=py, onnx=ref.name) as det:
+        assert det.model == ref and det.collapse == SPECIES
+    with pytest.raises(ud.DetectorUnavailable, match="not one of test_map's models"):
+        ud.for_map("test_map", env=tmp_path, python=py, onnx="other.onnx")
     v1 = model_answering(tmp_path, [1])
     with ud.for_map("prt_fild08", env=tmp_path, python=py, model=v1) as det:  # no entry: v1
         assert det.collapse == {} and [b.cls for b in det.detect(np.zeros((2, 2, 3), np.uint8))] \
@@ -176,15 +186,40 @@ def test_for_map_pins_the_file_and_falls_back_to_v1(
 
 
 def test_the_deployed_xmas02_entry() -> None:
-    """2026-11-10 (xmas02-detector.md Amendment M / M11): the deployed model is xmas02-gb; its
-    four species collapse to "monster", garm_baby stays its own class (never a target)."""
+    """2026-11-17 (live-blocks.md 18.14 / 18.15; xmas02-detector.md S7.6 PASSED): the deployed
+    model is xmas02-sk; its four species collapse to "monster", and the three alarm classes --
+    garm_baby, the Christmas Goblin, the Stormy Knight -- stay their own (never a target). xmas02-gb
+    (2026-11-10, M11) stays loadable as the map's reference model, the same collapse."""
     spec = ud.MAP_MODELS["xmas_dun02"]
-    assert spec.onnx == "xmas02gb-last-736x1280.onnx"
-    assert spec.sha256.startswith("b22d972b")  # M9's export of M8's last.pt
+    assert spec.onnx == "xmas02sk-last-736x1280.onnx" and spec.gpu == "xmas02sk"
+    assert spec.sha256.startswith("76316fb4")  # S4.9's export of S4.8's frozen last.pt
     assert sorted(spec.collapse) == sorted(XMAS02[3:]) and set(spec.collapse.values()) == {
         "monster"
     }
-    assert "garm_baby" not in spec.collapse
+    for alarm in ("garm_baby", "g_gobline_xmas", "knight_of_windstorm"):
+        assert alarm not in spec.collapse
+    (ref,) = ud.MAP_REFERENCES["xmas_dun02"]
+    assert ref.onnx == "xmas02gb-last-736x1280.onnx" and ref.gpu == "xmas02gb"
+    assert ref.sha256.startswith("b22d972b")  # M9's export of M8's last.pt
+    assert ref.collapse == spec.collapse and "garm_baby" not in ref.collapse
+    assert set(ud.MAP_REFERENCES) <= set(ud.MAP_MODELS)  # a reference belongs to a map's own
+
+
+def test_map_model_picks_the_maps_own_or_a_reference_by_file() -> None:
+    """18.15: a box's use_model chooses among the map's models by file; anything else fails closed
+    before a detector exists."""
+    own, (ref,) = ud.MAP_MODELS["xmas_dun02"], ud.MAP_REFERENCES["xmas_dun02"]
+    assert ud.map_model("xmas_dun02") is own and ud.map_model("xmas_dun02", None) is own
+    assert ud.map_model("xmas_dun02", own.onnx) is own
+    assert ud.map_model("xmas_dun02", ref.onnx) is ref
+    assert ud.map_model("prt_fild08") is None and ud.map_model(None) is None
+    assert ud.map_model("prt_fild08", ud.MODEL.name) is None  # v1 IS that map's
+    with pytest.raises(ud.DetectorUnavailable, match="not one of xmas_dun02's models"):
+        ud.map_model("xmas_dun02", ud.MODEL.name)
+    with pytest.raises(ud.DetectorUnavailable, match="not one of xmas_dun02's models"):
+        ud.map_model("xmas_dun02", "xmas02-last-736x1280.onnx")  # the 11-07 model: rollback only
+    with pytest.raises(ud.DetectorUnavailable, match="no model of its own"):
+        ud.map_model("prt_fild08", own.onnx)
 
 
 def test_the_worker_suppresses_a_group_together() -> None:
@@ -512,6 +547,15 @@ def test_for_map_gpu_takes_the_maps_own_weights(
     py = Path(sys.executable)
     with ud.for_map_gpu("test_map", env=tmp_path, python=py) as det:
         assert det.weights == "xmas02"
+    # 18.15: the box's use_model's file -> that reference's CPU model AND its GPU weights
+    ref = tmp_path / "model" / "r-736x1280.onnx"
+    ref.write_text("[1]")
+    monkeypatch.setitem(ud.MAP_REFERENCES, "test_map", (ud.MapModel(
+        ref.name, ud.file_sha256(ref), {}, gpu="xmas02gb"),))  # fmt: skip
+    with ud.for_map_gpu("test_map", env=tmp_path, python=py, onnx=ref.name) as det:
+        assert det.weights == "xmas02gb" and det.model == ref
+    with ud.for_map_gpu("test_map", env=tmp_path, python=py, onnx=onnx.name) as det:
+        assert det.weights == "xmas02"  # the map's own, named by its file
     with ud.for_map_gpu("cpu_only", env=tmp_path, python=py) as det:
         assert det.disabled == "no GPU weights"
         det.detect(FRAME)
@@ -521,7 +565,8 @@ def test_for_map_gpu_takes_the_maps_own_weights(
 
 
 def test_the_deployed_gpu_weights_and_the_server_step() -> None:
-    assert ud.MAP_MODELS["xmas_dun02"].gpu == "xmas02gb"
+    assert ud.MAP_MODELS["xmas_dun02"].gpu == "xmas02sk"  # 18.15 (2026-11-17)
+    assert [m.gpu for m in ud.MAP_REFERENCES["xmas_dun02"]] == ["xmas02gb"]  # s9ab's A
     assert ud.GPU_WEIGHTS["v1"].sha256.startswith("03d5397961")
     assert ud.GPU_WEIGHTS["xmas02"].sha256.startswith("5c5bb67a74")  # kept for a rollback
     assert ud.GPU_WEIGHTS["xmas02gb"].sha256.startswith("85fb37a4cb")  # M8's frozen last.pt
@@ -545,6 +590,15 @@ def test_the_deployed_gpu_weights_and_the_server_step() -> None:
     assert ud.GPU_WEIGHTS["xmas02fi5"].sha256.startswith("331b1927cf")
     assert ud.GPU_WEIGHTS["xmas02fi5"].onnx_sha256.startswith("9c43f6cdae")
     assert all(m.gpu != "xmas02fi5" for m in ud.MAP_MODELS.values())
+    # S4 (2026-11-14): the Goblin round, frozen 0b43ebbf, exported 76316fb4; S7.6 PASSED and
+    # DEPLOYED 2026-11-17 (live-blocks.md 18.15): xmas_dun02's model, its GPU twin the same files
+    assert ud.GPU_WEIGHTS["xmas02sk"].sha256.startswith("0b43ebbfe8")
+    assert ud.GPU_WEIGHTS["xmas02sk"].onnx_sha256.startswith("76316fb4e5")
+    for m in (ud.MAP_MODELS["xmas_dun02"], *ud.MAP_REFERENCES["xmas_dun02"]):
+        assert m.gpu is not None
+        assert (
+            ud.GPU_WEIGHTS[m.gpu].onnx == m.onnx and ud.GPU_WEIGHTS[m.gpu].onnx_sha256 == m.sha256
+        )
     step = ud.serve_step(1800)
     assert step.startswith("execdev:vision@1800=python -m poring_vision.detect_server ")
     assert "--socket /detect/detect.sock" in step
@@ -567,7 +621,7 @@ def test_the_openvino_backend_serves_the_deployed_onnx_by_its_pin(
         assert pinned.onnx == "v1png-last-736x1280.onnx" and pinned.onnx_sha256.startswith(
             "32b448a1"
         )
-        assert ud.GPU_WEIGHTS["xmas02gb"].onnx_sha256 == ud.MAP_MODELS["xmas_dun02"].sha256
+        assert ud.GPU_WEIGHTS["xmas02sk"].onnx_sha256 == ud.MAP_MODELS["xmas_dun02"].sha256
         with gpu_det(model_answering(tmp_path, [1]), sock) as det:
             det.spec = ud.GpuWeights(pinned.path, "b" * 64, pinned.onnx, pinned.sha256)
             det.detect(FRAME)  # the server says the .pt sha; it is the "onnx" pin here: accepted

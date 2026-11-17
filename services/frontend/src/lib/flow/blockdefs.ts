@@ -992,7 +992,7 @@ export function toolbox(
   const oldRunner: ToolboxItem[] = onMap && blocks.dungeon_hunt ? [lbl("the old one-block runner (old projects; a new box calls hunt_loop() in its main):"), { kind: "block", type: "pl_dungeon_hunt", extraState: rest(blocks.dungeon_hunt) }] : [];
   if (onMap && blocks.assert_save_point) movement.push({ kind: "block", type: "pl_save_point", fields: { MAP: "geffen", X: 119, Y: 40 }, extraState: rest(blocks.assert_save_point) });
   if (onMap && scope.main && blocks.use_model) {
-    movement.push(lbl("The trained data (before the runner: its monsters are the recipes' names):"), { kind: "block", type: "pl_action", fields: { BLOCK: "use_model", ARGS: `model=${JSON.stringify(monsters?.model ?? "xmas02")}` }, extraState: rest(blocks.use_model) });
+    movement.push(lbl("The trained data (before the runner: its monsters are the recipes' names):"), { kind: "block", type: "pl_action", fields: { BLOCK: "use_model", ARGS: `model=${JSON.stringify(monsters?.model ?? "xmas02sk")}` }, extraState: rest(blocks.use_model) });
   }
   // stage 4a: the monsters tab -- one function per monster of the model, a recipe of the steps the
   // runner plays with its own code (knife_on / knife_back: the hunt core's Knife functions)

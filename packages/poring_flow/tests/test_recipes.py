@@ -96,9 +96,15 @@ def test_the_model_classes_are_the_monsters_the_runner_strikes() -> None:
     import unit_detector as ud
 
     xmas = models.models().models["xmas02"]
-    assert xmas.strikes == list(ud.MAP_MODELS["xmas_dun02"].collapse)  # garm_baby: not struck
+    (ref,) = ud.MAP_REFERENCES["xmas_dun02"]  # 18.15: xmas02 is the map's reference model
+    assert xmas.strikes == list(ref.collapse)  # garm_baby: not struck
     assert "garm_baby" in xmas.classes and "garm_baby" not in xmas.strikes
-    assert all(not m.strikes for k, m in models.models().models.items() if k != "xmas02")
+    sk = models.models().models["xmas02sk"]  # 18.15: the map's own since 2026-11-17
+    assert sk.strikes == list(ud.MAP_MODELS["xmas_dun02"].collapse) == xmas.strikes
+    for alarm in ("garm_baby", "g_gobline_xmas", "knight_of_windstorm"):
+        assert alarm in sk.classes and alarm not in sk.strikes and alarm in sk.alarm
+    assert all(not m.strikes for k, m in models.models().models.items()
+               if k not in ("xmas02", "xmas02sk"))  # fmt: skip
     with pytest.raises(ValueError, match="strikes name classes"):
         models.ModelSpec(kind="detector", status="live", file="a.onnx", sha256="0" * 12,
                          classes=["a", "b"], strikes=["b", "a"], why="x")  # fmt: skip
@@ -394,7 +400,9 @@ def test_a_runner_node_names_what_the_runner_strikes_and_never_strikes() -> None
     assert [w.split(": ", 1)[1].split(" (")[0] for _, w in plain] == [
         "the runner strikes it", "the runner strikes it", "the runner strikes it", "never struck",
         "the runner strikes it", "never struck"]  # fmt: skip
-    assert "(cookie, a class of xmas02; no recipe: the runner's own technique)" in plain[4][1]
+    # 18.15: no use_model -> the map's own detector, xmas02sk since 2026-11-17 (the same four)
+    assert "(cookie, a class of xmas02sk; no recipe: the runner's own technique)" in plain[4][1]
+    assert "knight_of_windstorm is a class of xmas02sk it never strikes" in plain[3][1]
     # the node's own lists are not the runner's: a warning says so (the simulator reads them)
     listed = json.loads(XMAS.read_text())
     listed["nodes"][0]["targets"] = [{"kind": "mob", "id": 1249}]
@@ -414,10 +422,11 @@ def test_the_hunt_model_is_use_models_else_the_maps_own_detector() -> None:
     got = rc.hunt_model(c.flow, b)
     assert got is not None and (got[0], got[2]) == ("xmas02", True)
     assert models.map_detector("xmas_dun02") is not None
-    assert models.map_detector("xmas_dun02")[0] == "xmas02"  # type: ignore[index]
+    # 18.15: the map's own is xmas02sk; xmas02 (a reference) only where a use_model names it
+    assert models.map_detector("xmas_dun02")[0] == "xmas02sk"  # type: ignore[index]
     assert models.map_detector("prt_fild08") is None  # v1 names no struck classes
     d = box(model=None)
     d["nodes"][0]["tabs"] = [t for t in d["nodes"][0]["tabs"] if t["name"] != rc.MONSTERS_TAB]
     c2 = compiled(d)
     got2 = rc.hunt_model(c2.flow, c2.flow.workflow.blocks[0])
-    assert got2 is not None and (got2[0], got2[2]) == ("xmas02", False)
+    assert got2 is not None and (got2[0], got2[2]) == ("xmas02sk", False)
