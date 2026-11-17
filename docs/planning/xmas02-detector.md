@@ -1,13 +1,13 @@
 ---
 doc_type: design
 hypothesis: "Packet labels with gef_fild10's rule (o3h with the fit floor on every label, Amendments B and C, the pickup-notice rule in C1), re-measured on xmas_dun02's own FIT data and extended by a TERRAIN occluder candidate (the map's raised GAT blocks, adopted only by a FIT test fixed here), give per-species boxes for the four common species (Myst Case, Cruiser, Cookie, Christmas Cookie) that pass the training tier (T1: C1 <= 5 % on >= 100 held-out standing rows; T2: every tier species passes a blind check), so that a detector scoped to xmas_dun02, trained on immune lattice watches, sees those species on held-out data (Q1 collapsed: recall and precision >= 0.80 per species) and boxes the runner's own patrol frames with precision >= 0.80, where v1 saw 1 of 937 labels."
-status: "xmas02-gb (Amendment M, a Garm Baby class): EVALUATED 2026-11-10 06:43-06:48 -- PASSES (M11: Garm Baby Q1s on gw3 59 evaluated crops / 24 dogs, recall 1.000, precision 0.922; the four species Q1c on pooled TEST recall 0.98-1.00, precision 0.93-0.94; CPU p95 0.955 x the deployed model's). DEPLOYED 2026-11-10 ~07:0x (M12). Amendment N (Batt): teach the hidden Garm Babies first; Amendment N1 PROPOSED 2026-11-10 (the occlusion study + a plan), NOT run (N2, Batt: option (a)). Amendment O PROPOSED 2026-11-10, ➡️ ACCEPTED by O1 10:29 (a floor-item class; a separate item model recommended; NOT accepted). Trained and frozen 2026-11-10 (M8). The 4-species xmas02 model: DEPLOYED 2026-11-07 (Amendment J, Batt: use it, and train it to see monsters while walking as well as standing). Walking: Amendment K's timing did not stand (K2); back to Batt. EVALUATED 2026-11-07 00:39: the model PASSES (xmas02-eval.md). The training ran 20 epochs (2026-11-06 20:53 - 11-07 00:01). ACCEPTED 2026-11-06 ~10:45 by Batt (Amendment A); recording under Amendment D; FIT + freeze (G), T1 PASS, T2 (H), the training launch (I)."
+status: "xmas02-sk (S4-S7, the Christmas Goblin and the Stormy Knight): the alarm bar PASSED 2026-11-16 (S7.6) and DEPLOYED 2026-11-17 on xmas_dun02 (live-blocks.md 18.15, dungeon@9.59; xmas02-gb kept as the reference model); its live A/B s9ab pre-registered, not run. xmas02-gb (Amendment M, a Garm Baby class): EVALUATED 2026-11-10 06:43-06:48 -- PASSES (M11: Garm Baby Q1s on gw3 59 evaluated crops / 24 dogs, recall 1.000, precision 0.922; the four species Q1c on pooled TEST recall 0.98-1.00, precision 0.93-0.94; CPU p95 0.955 x the deployed model's). DEPLOYED 2026-11-10 ~07:0x (M12). Amendment N (Batt): teach the hidden Garm Babies first; Amendment N1 PROPOSED 2026-11-10 (the occlusion study + a plan), NOT run (N2, Batt: option (a)). Amendment O PROPOSED 2026-11-10, ➡️ ACCEPTED by O1 10:29 (a floor-item class; a separate item model recommended; NOT accepted). Trained and frozen 2026-11-10 (M8). The 4-species xmas02 model: DEPLOYED 2026-11-07 (Amendment J, Batt: use it, and train it to see monsters while walking as well as standing). Walking: Amendment K's timing did not stand (K2); back to Batt. EVALUATED 2026-11-07 00:39: the model PASSES (xmas02-eval.md). The training ran 20 epochs (2026-11-06 20:53 - 11-07 00:01). ACCEPTED 2026-11-06 ~10:45 by Batt (Amendment A); recording under Amendment D; FIT + freeze (G), T1 PASS, T2 (H), the training launch (I)."
 role: null
 verdict_date: null
 verdict_ticket: null
 supersedes: null
 related: [rogue-xmas02.md, xmas02-prep.md, gef10-detector.md, item-class.md, gef10-round3.md, xmas02-item-blind-instructions.txt, ../benchmarks/gef10-eval.md, payf07-detector.md, orcsdun01-detector.md, training-cost.md, gef10-round2-measure.md, ../../scripts/map_labels.py, ../../scripts/warp_watch.py, ../../scripts/detector_vs_packets.py, ../../scripts/recorder_boxes.py]
-next_action: "O19 (2026-11-11 10:2x): round 3 FAILS -- false boxes fixed (I3 0.42 %, I4 0.9 %, precision 0.994) but recall fell (aura 0.806, no aura 0.854); natural pilot drops stay at 62 % in rounds 2-3. A round 4 (more natural drops in TRAIN, balanced fight negatives) is Batt's decision."
+next_action: "live-blocks.md 18.15: s9ab, the live A/B of the xmas02sk deployment (run from main after the merge); a judged line fails -> xmas02gb back as the default. ➡️ Older: O19 (2026-11-11 10:2x): round 3 FAILS -- false boxes fixed (I3 0.42 %, I4 0.9 %, precision 0.994) but recall fell (aura 0.806, no aura 0.854); natural pilot drops stay at 62 % in rounds 2-3. A round 4 (more natural drops in TRAIN, balanced fight negatives) is Batt's decision."
 title: "A detector for xmas_dun02's monsters: the facts, the data plan, the split, the label rule (terrain candidate), T1 / T2, the classes, the cache and training proposal, the evaluation (PROPOSED pre-registration)"
 date: 2026-11-06
 owner: Batt
@@ -4522,6 +4522,8 @@ model is not loaded live, and the 5b-1 / 5b-2 live A/Bs that start now run on an
 detector. The model stays archived (archive/models/xmas02sk-*, archive/train/xmas02-sk-20261114),
 and the ONNX stays in /dev/shm/poring-lab-detector/model. A deployment step re-adds the entry
 with its own amendment (S4.10's 'what a deployment would need').
+➡️ **Re-added 2026-11-17 by that step** (S7.6 PASSED; live-blocks.md 18.15): xmas02sk is
+xmas_dun02's deployed model since then.
 
 S4.6's steps 5-6, each once. The labellers' answers were scored as given.
 
@@ -5267,6 +5269,13 @@ S6, and scores the frozen `xmas02sk` (`0b43ebbf...`) once on a NEW held-out, sk6
 **THE VERDICT: PASS.** It is scored once and is never re-scored. This amendment does not deploy
 xmas02sk: deployment is its own step (the runner's model and the detect server stay as they are),
 the parent's and Batt's to take.
+➡️ **DEPLOYED 2026-11-17 (Batt, live-blocks.md 18.14: "use it for real"; [live-blocks.md](live-blocks.md)
+18.15, dungeon@9.59):** `GPU_WEIGHTS["xmas02sk"]` registered again, `MAP_MODELS["xmas_dun02"]` =
+xmas02sk (the four species collapsed as before; garm_baby, g_gobline_xmas, knight_of_windstorm
+never struck), models.yaml `xmas02sk` live with its `alarm` = those three, the ready-made boxes'
+`use_model("xmas02sk")`. xmas02gb stays loadable as the map's REFERENCE model (a box that names
+it). One serve test passed (9 models listening, 18 / 18 calls on the GPU path). The check is the
+pre-registered live A/B s9ab (18.15); if B fails a judged line the default goes back.
 
 **Reported, deciding nothing:**
 - **The truth fix decided line 2a. Without it, sk6a would have failed by one fire, like sk5a.**
