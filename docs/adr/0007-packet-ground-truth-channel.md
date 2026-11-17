@@ -276,3 +276,7 @@ path and tonight's option D build is the way the scrub goes live.
   still need it; the bot's play does not.
 - A `poring_packets` code change goes live with a guarded `recreate:sniffer` (Amendment C); the
   section 2a positive cases are re-run after it (demonstrations.md).
+- ➡️ **LIVE 2026-11-17 16:16 ICT** (`recreate:sniffer@120`, SNIFFER_COMMIT 149e68838346): self-test
+  PASS, `capture filter: host 192.168.1.169 and tcp and (port 6900 or port 6121 or port 5121)` built
+  from WIN_HOST; the scrub, monster-click, pickup and npc-click positive cases all PASS
+  (demonstrations.md section 2a).

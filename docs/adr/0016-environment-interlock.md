@@ -81,6 +81,12 @@ clients from every address but the lab host. On any other host, nothing technica
 on a server the client config points at; the console's "NOT verified by packets" line is the
 warning (ADR-0023's direction: safe defaults and warnings, not hard gates, for learners).
 
+**LIVE 2026-11-17** (main 149e6883): `restart:backend@30` 16:15:36 ICT, then `recreate:sniffer@120`
+16:16:19. Seen on /health every 1 s: 143 samples (about 2.4 min, from the recreate to the GM's
+re-login) green `unverified:no_session`, verified false, 0 red; then green `ok`, verified true.
+The section 2a positive cases all PASS after it (demonstrations.md, "Re-proven after the 2026-11-17
+recreates").
+
 **Still fixed (not part of this amendment):** the seed's `windows_host` 192.168.1.169 (signal
 `lab_host`). On a host whose game PC has another address the interlock is red `host_mismatch`.
 ADR-0023 decision 4 (the Windows host as a console setting) covers it; not built.

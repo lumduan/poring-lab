@@ -130,6 +130,30 @@ after, once the trial chain is done (never during a trial)"):
 
 - `demo_verify.py` prints `safety.our_acts` / `unsafe_acts` per session and labels the request counts
   with the instrument's history (63873bc).
+
+**Re-proven after the 2026-11-17 recreates** (Batt, ~15:0x ICT: "fix the sniffer to listen to the
+IP from WIN_HOST, but do not tie it to the bot"; ADR-0007 note 2026-11-17, ADR-0016 amendment
+2026-11-17; main 149e6883):
+- backend: `restart:backend@30` 16:15:36-16:16:09 ICT (the interlock: the packets only label).
+  ASSIST restored by the marker; green `ok`, verified.
+- sniffer: `recreate:sniffer@120` 16:16:19-16:18:21, SNIFFER_COMMIT 149e68838346. Self-test PASS;
+  start log `capture filter: host 192.168.1.169 and tcp and (port 6900 or port 6121 or port 5121)`
+  (built from WIN_HOST; byte-identical to the old constant on this lab). The auto GM re-login was
+  OK at 16:18:56 ("the session is packet-verified again").
+- **The new interlock rule, seen live:** /health sampled every 1 s from the recreate: 143 samples
+  (about 2.4 min, until the re-login) read **green `unverified:no_session`, verified false**, 0 red;
+  then green `ok`, verified true. Before the amendment those minutes were red.
+- The re-login entered the remembered slot (the Rogue), so the client was switched to the Novice
+  GM (slot 1) afterwards, by close / launch / char select / slot 1 / enter-game, each step judged
+  on a screenshot.
+
+| signal | positive case | result |
+|---|---|---|
+| the scrub itself | `scrub_check.py --since` 16:16:15 (2 capture files) | user **NOT FOUND**, password **NOT FOUND**; controls: character name FOUND, 1 `login_accepted` → **PASS** |
+| `attack_request` + `act` from us (`normal`) | `20261117T162309-demo-safety-check-monster-click --species red_plant` | 1 request, 4 acts, the same target (gid 110079275) → **PASS** |
+| `pickup_request` + `act` from us (`pickup`) | `20261117T162456-demo-safety-check-pickup` (the Knife dragged from the Eqp tab to the floor; the scan clicked cell 101,115) | `pickup_request` 1, `pickup_result` 1, `floor_item_vanish` 1, 1 pickup act → **PASS** |
+| `npc_contact` | `20261117T162702-demo-safety-check-npc-garnet` (`--reader robust2`); NEXT x3 by Enter, each on a judged frame, then the menu's cancel clicked | **1 contact** (gid 110000895); `npc_say` 7, `npc_wait` 3, `npc_next_click` 3, `npc_menu` 1, `npc_choose` 1, `npc_close_click` 1 → **PASS** |
+
 - ~~Still open: the banked-capture replay for the walk runs of 2026-10-07/08~~ ➡️ done 07:47–07:52
   (`guarded_build.py replay:`, its own positive controls first; results in the CORRECTION below the
   walk@10 results).
