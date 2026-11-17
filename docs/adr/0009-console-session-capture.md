@@ -649,13 +649,14 @@ layout in a child process); `open-terminal` reuses only a VISIBLE shell (a click
 thumbnail first avoids a new window).
 
 
-## Amendment (Batt, 2026-11-17): the Sunshine-only host (the student setup)
+## Amendment (2026-11-17): the Sunshine-only host (the student setup)
 
-**Decided** (Batt's answers to the setup wizard's questions, 2026-11-17): the student setup has **no
-RDP**; the wizard's remote-desktop test is the Sunshine stream; its pairing PIN is the 4-digit code
-typed on Sunshine's PIN page on the PC, whose web UI stays PC-only. What that adds to the lock
-(BUILT 2026-11-17, branch `feat/setup-wizard`; `scripts/capture_backend.py`, tested with fakes only,
-NOT yet run on a real host):
+**Batt decided** (his answers to the setup wizard's questions, 2026-11-17): the student setup has
+**no RDP**; the wizard's remote-desktop test is the Sunshine stream; its pairing PIN is the 4-digit
+code typed on Sunshine's PIN page on the PC, whose web UI stays PC-only. **The lock design below is
+the agent's, built to serve that decision** (2026-11-17, branch `feat/setup-wizard`;
+`scripts/capture_backend.py`, tested with fakes only, NOT yet run on a real host; PROPOSED until it
+passes on one):
 - **A Sunshine-only host** = `WIN_HOST` set, `RDP_USER` / `RDP_PASSWORD` empty: `rdp-loop.sh` idles
   ("RDP disabled") and never connects. The PC is logged on at its own console, so there is no
   tscon.
