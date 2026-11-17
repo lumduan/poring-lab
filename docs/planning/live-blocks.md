@@ -1,14 +1,14 @@
 ---
 doc_type: design
 hypothesis: null
-status: "DECIDED 2026-11-13 ~21:4x (Batt): build the live block player first; one box; break the runner into blocks. Stage 1 PASSED live (6); stages 2-4a A/Bs INCONCLUSIVE (7-9; the Knight). 2026-11-14: Batt's answers built (10, 11); s5ab-1114 FAIL by its bar on line 2 only, deaths 0/6 (10.2). Stage 5a (settings as blocks, the runner page gone) MERGED 17:2x (12), then rounds 20-24 of matpilot's browser review (12.4-12.8, all re-measured PASS): wrapped setting blocks, pickers for every value that is not a name (Batt 19:4x), no overlaps, exact Escape/Undo. Stage 5b-1 (HuntState, the loop as 20 steps; AST-proven the same program) MERGED 19:2x; its live A/B s5b1-ab FAIL by the pace p95 line only (noise), every outcome line passed (13.7; the parent's decision: keep it, go on). Stage 5b-2 (the steps as live blocks: a hunt tab, find_target / fight_target) MERGED 2026-11-15 03:0x; its live A/B s5b2-ab PASS on every line (14.11). The Christmas Goblin class round FAILED its precision bar (xmas02-detector S4.10), not deployed. 2026-11-15 (Batt's answers, 14.12): no hunt tab in the ready-made box (the runner block dissolves into function tabs: 5c); the first real block experiment, no Knife swap on the Christmas Cookie and the Cookie, BUILT offline and its A/B pre-registered 13:32 ICT (16), NOT run. Stage 5c (Batt 14.12: the runner block dissolved into functions in tabs -- hunt_loop() in main, role blocks, hunt_tick()'s step blocks) BUILT 2026-11-15 13:5x on feat/runner-blocks, offline-proven, merged with main 95583b9f there, not yet into main; its live A/B s5c-ab pre-registered (15.8), not run (15.11). 2026-11-16 (Batt 17 #6): the Fly Wing FIRST on a boss at any distance (18, dungeon@9.57 --fly-first, the setting fly_first, off until its A/B) BUILT offline on feat/fly-first; s7ab pre-registered (18.7), not run. ➡️ s7ab PASS (18.9), fly_first ON in the ready-made boxes; s8ab PASS (18.13), fly_first_hp ON too. 2026-11-17 (Batt 18.14: \"use it for real\"): xmas02sk DEPLOYED as xmas_dun02's model (18.15, dungeon@9.59; xmas02gb the reference), its live A/B s9ab pre-registered, not run."
+status: "DECIDED 2026-11-13 ~21:4x (Batt): build the live block player first; one box; break the runner into blocks. Stage 1 PASSED live (6); stages 2-4a A/Bs INCONCLUSIVE (7-9; the Knight). 2026-11-14: Batt's answers built (10, 11); s5ab-1114 FAIL by its bar on line 2 only, deaths 0/6 (10.2). Stage 5a (settings as blocks, the runner page gone) MERGED 17:2x (12), then rounds 20-24 of matpilot's browser review (12.4-12.8, all re-measured PASS): wrapped setting blocks, pickers for every value that is not a name (Batt 19:4x), no overlaps, exact Escape/Undo. Stage 5b-1 (HuntState, the loop as 20 steps; AST-proven the same program) MERGED 19:2x; its live A/B s5b1-ab FAIL by the pace p95 line only (noise), every outcome line passed (13.7; the parent's decision: keep it, go on). Stage 5b-2 (the steps as live blocks: a hunt tab, find_target / fight_target) MERGED 2026-11-15 03:0x; its live A/B s5b2-ab PASS on every line (14.11). The Christmas Goblin class round FAILED its precision bar (xmas02-detector S4.10), not deployed. 2026-11-15 (Batt's answers, 14.12): no hunt tab in the ready-made box (the runner block dissolves into function tabs: 5c); the first real block experiment, no Knife swap on the Christmas Cookie and the Cookie, BUILT offline and its A/B pre-registered 13:32 ICT (16), NOT run. Stage 5c (Batt 14.12: the runner block dissolved into functions in tabs -- hunt_loop() in main, role blocks, hunt_tick()'s step blocks) BUILT 2026-11-15 13:5x on feat/runner-blocks, offline-proven, merged with main 95583b9f there, not yet into main; its live A/B s5c-ab pre-registered (15.8), not run (15.11). 2026-11-16 (Batt 17 #6): the Fly Wing FIRST on a boss at any distance (18, dungeon@9.57 --fly-first, the setting fly_first, off until its A/B) BUILT offline on feat/fly-first; s7ab pre-registered (18.7), not run. ➡️ s7ab PASS (18.9), fly_first ON in the ready-made boxes; s8ab PASS (18.13), fly_first_hp ON too. 2026-11-17 (Batt 18.14: \"use it for real\"): xmas02sk DEPLOYED as xmas_dun02's model (18.15, dungeon@9.59; xmas02gb the reference), its live A/B s9ab pre-registered, ➡️ run 07:32-10:23: PASS on every line (18.16), xmas02sk stays the default; the stale re-fire (both arms) found, its fix 18.17."
 
 role: null
 verdict_date: null
 verdict_ticket: null
 supersedes: null
 related: [project-model.md, player-mode.md, ADR-0020, ../../scripts/dungeon_hunt.py, ../../scripts/runner_flow_export.py, ../../packages/poring_flow/src/poring_flow/runtime.py]
-next_action: "18.15: merge feat/xmas02sk-live, then run s9ab FROM MAIN (stage9_ab.py plan / run / score --label s9ab --pairs 4 --minutes 20); a judged line FAILS -> the default goes back (18.14) and Batt is told. ➡️ Older: 18 (Batt 17 #6): after s5c-ab2, merge feat/fly-first, then run s7ab FROM MAIN (18.7: stage7_ab.py plan / run / score --label s7ab --pairs 4 --minutes 20); PASS: fly_first ON in the ready-made boxes is Batt's (18.6). ➡️ The items below are older. The parent: run 16's A/B (stage6_ab.py plan / run / score --label s6ab; running from main 2026-11-15 until ~16:15 ICT) and score it. 5c (15): BUILT on feat/runner-blocks and merged with main 95583b9f there (15.11); merge it into main, then run s5c-ab FROM MAIN (15.8: stage5c_ab.py plan / run / score; a worktree lacks the runner's gitignored start data), never beside another live series; Batt: 15.10's two open questions. Round 25 (the layout asks) MERGED (67f6469c). Then the Goblin class's pre-registered rule change and a fresh held-out with staged knights (allowed). Answered by Batt 14.12: no hunt tab in the ready-made box; 5b-1 accepted, no re-run. The drink stays at 50 % until a long series measures it with income (10.2)."
+next_action: "18.16: s9ab PASS, xmas02sk stays deployed; 18.17: the stale re-fire fix (a sighting grabbed after the landing) built offline as a flag, then its own live A/B"
 
 title: "Live blocks: the player that plays a project's blocks in the game, and the runner broken into blocks"
 date: 2026-11-13
@@ -4346,6 +4346,8 @@ Report only:
 
 ### 18.15 ➡️ DEPLOYED: xmas02sk is xmas_dun02's model (dungeon@9.59), and THE A/B s9ab -- written 2026-11-17 07:05 ICT from `date`, BEFORE any s9ab run (feat/xmas02sk-live from main f8e27d21; offline, one serve test; NOT run live)
 
+➡️ **RUN 2026-11-17 07:32-10:23: PASS on every line (18.16); xmas02sk stays deployed.**
+
 **What changed (18.14's "deploy it as the default"):**
 
 | Piece | Before | Now |
@@ -4462,3 +4464,60 @@ detect server before it):** the worktree's `unit_detector.py serve-cmd --backend
   - Visits are rare: the knight respawns every 60-70 min; the banked 12 runs held 13 visits.
   - The false-Fly-Wing line has little power at 4 pairs: the margin (6.2 / h) is wider than A's
     expected rate (~4 / h).
+
+
+### 18.16 Result of s9ab (run 2026-11-17 07:32 - 10:23 ICT, scored 10:23): PASS on every line; xmas02sk STAYS deployed
+
+- **Valid:** 4 pairs of 4 (ABBA ABBA), every run rc 0, 0 deaths. r03B ended at 17.2 min by the
+  runner's own stock keep ("1 Fly Wing(s) left, kept for the end"); every other run hit the time
+  box.
+- **Judged lines (18.15's bar), all PASS:**
+
+      line                     A (xmas02gb)        B (xmas02sk)        bar
+      deaths                   0                   0                   B <= A
+      false boss Fly Wings/h   3.02 (4 of 10)      5.46 (7 of 21)      B <= A + 6.2
+      kills/h, paired          -                   -6.5 +- 5.0         >= -2 SE
+      loot/h, paired           -                   -15.6 +- 10.7       >= -2 SE
+      openers/h                137.2               121.7               within +-20 %
+      pace, median tick        201.6 ms            201.9 ms            <= A + 5 ms
+      kinds / errors / drive   clean               clean               no new kind, none
+      the model                xmas02gb records    xmas02sk records    each arm's own
+
+- **Reported only:**
+  - the party's visits: A 7, 4 of them flown (0.571 true Fly Wings a visit); B 5, all 5 flown
+    (1.000);
+  - the time from a visit's first sample to its Fly Wing: A median 2.52 s (max 6.95); B 0.35 s
+    (max 2.51);
+  - boss Fly Wings all from the alarm; sightings by class: A garm_baby 10; B the Goblin 10,
+    garm_baby 9, the knight 2;
+  - Fly Wings/h 7.5 vs 17.2; potions/h 0.0 vs 3.9; steals/h 101.8 vs 89.0; HP low 61 vs 46 %;
+  - the detect server's call: median 21.7 vs 21.9 ms, p95 24.9 vs 25.1 ms;
+  - the economy with steals (econ_db.totals_of; 145 runs in data/econ/lab.sqlite): net z/h A
+    77,218 (gross 77,723, cost 505), B 86,870 (gross 92,621, cost 5,751). Per run 50k-106k:
+    within the noise, not a claim.
+- **A defect found in the score, in BOTH arms (fly_first, dungeon@9.57): the stale re-fire.**
+  - 9 boss Fly Wings (B 8 of 21, A 1 of 10) went out 2.28-2.46 s after the previous one. Each acted
+    on a sighting GRABBED 0.29-0.45 s after the previous Fly Wing's key: a frame still showing the
+    old place, because the frames trail her teleport. The 3-s latch (FF_LATCH_S) kept it, and
+    ff_sighting's "grabbed after the last Fly Wing" passed it. The loop acted on it 1.81-2.07 s
+    later (age_s), once the landing and the re-arm were over.
+  - By the packets, none of the 9 had an alarm-species unit on screen: 5 were judged false, 4 fell
+    inside a post-vanish window. Her own teleport makes every unit vanish from her view (reason 0),
+    so S7.1's window covered them.
+  - A tenth quick repeat (r07B, 2.38 s) was a FRESH sighting (grabbed 2.22 s after, age 0.08 s, 7
+    units on screen): a true Fly Wing.
+  - Without the 9: A 9 boss Fly Wings, 3 false (2.26/h); B 13, 3 false (2.34/h). The Goblin
+    model's own false rate is A's.
+  - It costs Fly Wings, and it ended r03B early by the stock keep (4 of its 9 boss Fly Wings were
+    re-fires).
+  - The fix (a sighting must be grabbed after the LANDING, not just after the key) is a runner
+    change: built offline as its own flag, then its own live A/B (18.17).
+- **Other observations:**
+  - Between r06B and r07B the series' clear-bag returned rc 1: its stock check read Fly Wing (601)
+    0 after the restock, while the hotbar count read 10. The series went on with the hotbar's
+    read. The run played normally.
+  - With the Goblin and the knight in the alarm, the Fly Wing use more than doubles (17.2/h). A
+    long run needs a bigger Fly Wing stock (the box's stock settings) even after the fix (about
+    10/h without the 9).
+- **Decision (the parent's, under 18.14):** no judged line failed, so xmas02sk stays deployed as
+  the default. Batt is told, with the defect and its fix.
