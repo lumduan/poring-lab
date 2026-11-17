@@ -9,6 +9,10 @@
 # node, ports, limits of this host go here, never into the tracked compose files.
 /compose.override.yaml
 
+# ---- ./setup.sh's resumable progress (answers + step states; never a secret, never settings/ or
+# state/). Its logs and the stream-test picture go to /dev/shm (rule 7). ---------------------------
+/.setup/
+
 # ---- runtime data: datasets, captures, weights, input logs ------------------------------------------
 # `data/` at ANY depth (this also covers a Ragnarok client's own data/ folder), except the root
 # data/README.md. Order matters: re-include the root dir, ignore its contents, re-include the README.

@@ -7,7 +7,12 @@ requires-python = ">=3.12,<3.13"
 authors = [{ name = "lumduan" }]
 # The virtual root installs what host-side dev/test needs. `poring-vision` is deliberately NOT here:
 # it pulls torch+CUDA (~3 GB) and only runs inside its GPU container (`uv sync --package poring-vision`).
-dependencies = ["poring-env[x11,remote]", "poring-backend", "poring-dataset", "poring-skills", "poring-flow"]
+dependencies = [
+  "poring-env[x11,remote]", "poring-backend", "poring-dataset", "poring-skills", "poring-flow",
+  # the setup wizard's screens (scripts/setup_wizard.py; ./setup.sh). Only that UI layer imports it:
+  # setup_core.py, --check and --dry-run run on the standard library.
+  "rich==15.0.0",
+]
 
 [tool.uv]
 package = false
