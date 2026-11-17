@@ -1,14 +1,14 @@
 ---
 doc_type: design
 hypothesis: null
-status: "DECIDED 2026-11-13 ~21:4x (Batt): build the live block player first; one box; break the runner into blocks. Stage 1 PASSED live (6); stages 2-4a A/Bs INCONCLUSIVE (7-9; the Knight). 2026-11-14: Batt's answers built (10, 11); s5ab-1114 FAIL by its bar on line 2 only, deaths 0/6 (10.2). Stage 5a (settings as blocks, the runner page gone) MERGED 17:2x (12), then rounds 20-24 of matpilot's browser review (12.4-12.8, all re-measured PASS): wrapped setting blocks, pickers for every value that is not a name (Batt 19:4x), no overlaps, exact Escape/Undo. Stage 5b-1 (HuntState, the loop as 20 steps; AST-proven the same program) MERGED 19:2x; its live A/B s5b1-ab FAIL by the pace p95 line only (noise), every outcome line passed (13.7; the parent's decision: keep it, go on). Stage 5b-2 (the steps as live blocks: a hunt tab, find_target / fight_target) MERGED 2026-11-15 03:0x; its live A/B s5b2-ab PASS on every line (14.11). The Christmas Goblin class round FAILED its precision bar (xmas02-detector S4.10), not deployed. 2026-11-15 (Batt's answers, 14.12): no hunt tab in the ready-made box (the runner block dissolves into function tabs: 5c); the first real block experiment, no Knife swap on the Christmas Cookie and the Cookie, BUILT offline and its A/B pre-registered 13:32 ICT (16), NOT run. Stage 5c (Batt 14.12: the runner block dissolved into functions in tabs -- hunt_loop() in main, role blocks, hunt_tick()'s step blocks) BUILT 2026-11-15 13:5x on feat/runner-blocks, offline-proven, merged with main 95583b9f there, not yet into main; its live A/B s5c-ab pre-registered (15.8), not run (15.11). 2026-11-16 (Batt 17 #6): the Fly Wing FIRST on a boss at any distance (18, dungeon@9.57 --fly-first, the setting fly_first, off until its A/B) BUILT offline on feat/fly-first; s7ab pre-registered (18.7), not run. ➡️ s7ab PASS (18.9), fly_first ON in the ready-made boxes; s8ab PASS (18.13), fly_first_hp ON too. 2026-11-17 (Batt 18.14: \"use it for real\"): xmas02sk DEPLOYED as xmas_dun02's model (18.15, dungeon@9.59; xmas02gb the reference), its live A/B s9ab pre-registered, ➡️ run 07:32-10:23: PASS on every line (18.16), xmas02sk stays the default; the stale re-fire (both arms) found, its fix 18.17."
+status: "DECIDED 2026-11-13 ~21:4x (Batt): build the live block player first; one box; break the runner into blocks. Stage 1 PASSED live (6); stages 2-4a A/Bs INCONCLUSIVE (7-9; the Knight). 2026-11-14: Batt's answers built (10, 11); s5ab-1114 FAIL by its bar on line 2 only, deaths 0/6 (10.2). Stage 5a (settings as blocks, the runner page gone) MERGED 17:2x (12), then rounds 20-24 of matpilot's browser review (12.4-12.8, all re-measured PASS): wrapped setting blocks, pickers for every value that is not a name (Batt 19:4x), no overlaps, exact Escape/Undo. Stage 5b-1 (HuntState, the loop as 20 steps; AST-proven the same program) MERGED 19:2x; its live A/B s5b1-ab FAIL by the pace p95 line only (noise), every outcome line passed (13.7; the parent's decision: keep it, go on). Stage 5b-2 (the steps as live blocks: a hunt tab, find_target / fight_target) MERGED 2026-11-15 03:0x; its live A/B s5b2-ab PASS on every line (14.11). The Christmas Goblin class round FAILED its precision bar (xmas02-detector S4.10), not deployed. 2026-11-15 (Batt's answers, 14.12): no hunt tab in the ready-made box (the runner block dissolves into function tabs: 5c); the first real block experiment, no Knife swap on the Christmas Cookie and the Cookie, BUILT offline and its A/B pre-registered 13:32 ICT (16), NOT run. Stage 5c (Batt 14.12: the runner block dissolved into functions in tabs -- hunt_loop() in main, role blocks, hunt_tick()'s step blocks) BUILT 2026-11-15 13:5x on feat/runner-blocks, offline-proven, merged with main 95583b9f there, not yet into main; its live A/B s5c-ab pre-registered (15.8), not run (15.11). 2026-11-16 (Batt 17 #6): the Fly Wing FIRST on a boss at any distance (18, dungeon@9.57 --fly-first, the setting fly_first, off until its A/B) BUILT offline on feat/fly-first; s7ab pre-registered (18.7), not run. ➡️ s7ab PASS (18.9), fly_first ON in the ready-made boxes; s8ab PASS (18.13), fly_first_hp ON too. 2026-11-17 (Batt 18.14: \"use it for real\"): xmas02sk DEPLOYED as xmas_dun02's model (18.15, dungeon@9.59; xmas02gb the reference), its live A/B s9ab pre-registered, ➡️ run 07:32-10:23: PASS on every line (18.16), xmas02sk stays the default; the stale re-fire (both arms) found, its fix 18.17. ➡️ dungeon@9.60 --fly-first-land BUILT offline (18.17; FF_LAND_S 0.75 s derived from 79 banked teleports; OFF everywhere until s10ab), s10ab pre-registered, not run."
 
 role: null
 verdict_date: null
 verdict_ticket: null
 supersedes: null
 related: [project-model.md, player-mode.md, ADR-0020, ../../scripts/dungeon_hunt.py, ../../scripts/runner_flow_export.py, ../../packages/poring_flow/src/poring_flow/runtime.py]
-next_action: "18.16: s9ab PASS, xmas02sk stays deployed; 18.17: the stale re-fire fix (a sighting grabbed after the landing) built offline as a flag, then its own live A/B"
+next_action: "18.17: merge feat/fly-first-land, then run s10ab FROM MAIN (stage10_ab.py plan / run / score --label s10ab --pairs 4 --minutes 20); PASS -> fly_first_land ON in the ready-made boxes (a person's decision); FAIL -> it stays off; the clear-bag key fix (F2 vs F8) is named there, not built. ➡️ Older: 18.16: s9ab PASS, xmas02sk stays deployed; 18.17: the stale re-fire fix (a sighting grabbed after the landing) built offline as a flag, then its own live A/B"
 
 title: "Live blocks: the player that plays a project's blocks in the game, and the runner broken into blocks"
 date: 2026-11-13
@@ -4521,3 +4521,170 @@ detect server before it):** the worktree's `unit_detector.py serve-cmd --backend
     10/h without the 9).
 - **Decision (the parent's, under 18.14):** no judged line failed, so xmas02sk stays deployed as
   the default. Batt is told, with the defect and its fix.
+
+
+### 18.17 ➡️ BUILT: the stale re-fire's fix, dungeon@9.60 `--fly-first-land`, and THE A/B s10ab -- written 2026-11-17 10:58 ICT from `date`, BEFORE any s10ab run (feat/fly-first-land from main c694f0f4; offline only, NOT run live)
+
+**The rule (the simplest one the data proves):**
+- Every Fly Wing's key moves a LAND FLOOR to its send time + `FF_LAND_S`. This covers the boss
+  ones, the HP fly-first ones, the box's and the end's, because every Fly Wing goes through `press()`.
+- A latched boss sighting counts only when it was grabbed after that floor, and after the last Fly
+  Wing as before (`ff_floor` = max of the two).
+- Both reads that act on the latch use it: the tick's head (`step_survive`) and the read inside
+  actions (`ff_inside`).
+- The HP Fly Wing itself is decided by the HP read, never by a latched sighting. So the floor does
+  not gate it; its re-fire gates stay sustain's 3 s and the box's 3-s cooldown.
+- `ff["after"]` (set at a fly-first Fly Wing, cleared at the re-arm) gates only the dagger's re-arm
+  (FF_REARM_S), never a re-fire: unchanged. The re-fire's own gate was `ff_sighting`'s `after` =
+  hs.fly_at, which the floor now raises.
+- The two settings, tab safety:
+  - `fly_first_land` (the switch, "after a Fly Wing: no Fly Wing again on what the picture showed
+    before the landing"; needs fly_first): **registry default OFF**, and OFF in every box,
+    the ready-made ones included, until s10ab passes. The ready-made box as it is now is s10ab's A.
+  - `FF_LAND_S` (a runner constant through `--tune`, 0.2-2.0 s, "after a Fly Wing, ignore boss
+    sightings in the pictures of the first"): **our default 0.75 s**.
+- Records:
+  - run_start `fixes.fly_first_land` = [FF_LAND_S, "9.60"];
+  - with the switch on, one `fly_first` record `what: land` per Fly Wing (its `t_key_ns` and
+    `floor_ns`), written after the key.
+
+**THE LANDING TIME, derived from banked data (read-only; 24 runner sessions: s9ab here, s8ab and
+s7ab from the NAS; 94 teleports, each a `use_item_result` 601 ok + its `map_change`):**
+- Method: the detections (both streams) by their GRAB time, i.e. the log time minus the measured
+  log offset (47.8 ms median, 39-73 ms, 70 sightings matched by class and score).
+  - A frame still shows the OLD place while its monster boxes continue the pre-teleport frames:
+    a same-class box within 60 px, at least half of its boxes. Her own box must also stay within
+    20 px (the camera's glide).
+  - The first frame that does not continue shows the new place. 29 of them were a blank transition
+    frame, the rest a new box set.
+  - 79 teleports were measured; 15 had no monster box before the key and could not be.
+  - The continuity rule alone was fooled once: s8ab r07B, a new-place box 49 px from an old one.
+    Her own box's 22-px jump decided it.
+- The numbers:
+
+      measure (s)                                n    p50    p95    p99    max
+      key -> map_change packet                   51   0.107  0.121  0.123  0.123
+      map_change -> last frame of the old place  68   0.255  0.340  0.352  0.579
+      map_change -> first frame of the new one   68   0.469  0.577  0.586  0.829
+      key -> last frame of the old place         51   0.362  0.434  0.452  0.452
+      key -> first frame of the new place        51   0.565  0.676  0.684  0.684
+
+- **FF_LAND_S = 0.75 s:**
+  - start from the p99 of the old place's last frame after the key, 0.123 + 0.352 = 0.475 s;
+  - add one HUD frame interval of margin (0.25 s: the frames are sampled, so the true change lies
+    between two of them): 0.725 s;
+  - round up: 0.75 s.
+  - It lies above every old frame measured: keyed 0.452 s, by the map_change 0.702 s at most (the
+    one s7ab r05A outlier). It also lies above the keyed first new frame's max (0.684 s).
+- Why not larger: a 1.0-s window lost one TRUE Fly Wing on the banked data (s8ab r06B, a Garm Baby
+  at the landing spot boxed only at 0.74-0.96 s). 0.75 s loses none (below).
+
+**THE OFFLINE REPLAY on s9ab's 8 sessions (31 boss Fly Wings, all alarm ones):**
+- **Suppressed: exactly the 9 stale re-fires.** They were grabbed 0.29-0.45 s after the previous
+  key:
+  - r02B 0.29, 0.30;
+  - r03B 0.29, 0.40, 0.42, 0.40;
+  - r04A 0.45;
+  - r07B 0.33, 0.35.
+- For none of them was there a qualifying alarm detection (solo >= 0.7, or 2 in a row) after the
+  floor, up to that Fly Wing + 1 s. So no other Fly Wing takes its place.
+- **Kept: 22.**
+  - r07B's fresh quick repeat (grabbed 2.22 s after the key, 7 alarm units on screen) is kept.
+  - Every first Fly Wing is kept: all 21 whose previous Fly Wing was >= 5 s earlier, or none.
+- **What it costs (all 24 sessions, 94 teleports):**
+  - Frames show the new place from 0.42-0.68 s after the key (median 0.565). The floor drops
+    sightings grabbed before 0.75 s: at most 0.33 s of them (median 0.19 s).
+  - The Fly Wing itself already waits for hs.fly_at + 2.0 s (about key + 2.2 s) in 9.59. So a boss
+    that is boxed again after 0.75 s flies at the same moment as today: **0 extra delay**.
+  - On the banked data, 13 teleports had a qualifying alarm detection within 5.2 s:
+    - 12 of them before the floor: 9 on the old place, 3 true;
+    - all 3 true ones were boxed again 0.11-0.24 s later (0.79-0.97 s after the key);
+    - **lost: 0.**
+  - The loss case is a boss boxed ONLY between the first new frame and 0.75 s. That Fly Wing would
+    then not go out; the 1.0-s window above shows such a case can happen.
+
+**THE PROOFS (all rc 0):**
+- `huntstate_check.py land` (new): with only the 7 `if FLY_LAND:` branches read as their else and
+  FLY_LAND, FLY_LAND_VERSION, FF_LAND_S and ff_floor left out, the WHOLE module equals LAND_BASE
+  `c694f0f4`'s (the 9.59 runner s9ab measured): YES.
+- `check`, `drive`, `flag` and `pick` read the family as their else too, and all hold.
+- The runner's feature version is dungeon@9.60.
+
+**THE A/B s10ab (pre-registered here, BEFORE any of its data; `scripts/stage10_ab.py`):**
+- **The arms** (4 pairs of 20 min, ABBA ABBA, stage2_ab's setup before each run):
+  - A = the ready-made functions box as it is: xmas02sk, fly_first and fly_first_hp ON,
+    fly_first_land OFF. That is 9.59's program, by the `land` proof.
+  - B = the same box with fly_first_land ON.
+  - Each block is set explicitly. FF_LAND_S is at 0.75 in both.
+- **`plan` refuses before any input unless the arms differ only in fly_first_land:**
+  - the box texts in that block alone;
+  - the runner settings in it alone;
+  - the argv by `--fly-first-land` alone;
+  - the box arguments, keys, loop and tick equal, the box model xmas02sk;
+  - the runner is 9.60, and drive, check, flag, pick and land hold;
+  - the step traces equal the driver's (63 scenarios).
+- Today's plan passes (rc 0; project hashes A `dde5257d...`, B `bfdb5d4a...`). The s7ab, s8ab and
+  s9ab plans still pass.
+- **JUDGED (FAIL if one fails, INCONCLUSIVE if none fails but one cannot be judged, else PASS):**
+  1. **B's stale re-fires == 0** over its played runs. A stale re-fire is an alarm boss Fly Wing
+     whose sighting (its record's `sight.t_ns`) was grabbed at or before the previous Fly Wing's
+     key + its run's FF_LAND_S, from the runner's records (B's land records give every Fly Wing's
+     key). It is judged when B made at least one alarm boss Fly Wing (none: INCONCLUSIVE). A's
+     count is reported.
+  2. deaths: B <= A over every played run (non-strict: two zero arms pass);
+  3. kills/h and loot/h: mean paired (B - A) >= -2 SE (with >= 3 valid pairs);
+  4. openers/h: B within +-20 % of A;
+  5. the tick pace: B's median <= A's + 5 ms;
+  6. kinds, errors, the drive (stage7_ab's lines).
+- **The lines against the bar lessons** (no strict < against an arm at 0; tolerances above the
+  noise; judge what the change can move):
+  - Line 1 is the change's own line. With the switch off it is not 0: the scorer on s9ab's own
+    data finds A 1, B 8 (exactly 18.16's 9), so the line FAILS when nothing changed, as it must.
+  - With the switch on it is 0 by construction: the runner and the scorer compare the same
+    recorded key and grab times.
+  - It needs one alarm boss Fly Wing in B to be judged at all: no vacuous PASS.
+  - Lines 2-6 pass when nothing changed:
+    - deaths: <=, so 0 = 0 passes;
+    - kills and loot: -2 SE of the paired difference, so about 98 % under no difference;
+    - openers: +-20 % is about 2.3 SEs of the pooled ratio (per-run SD about 12 %, s8ab's runs);
+    - the median tick: its per-run noise is under 1 ms (201.3-202.5 ms in s8ab / s9ab), so 5 ms is
+      far above it.
+- **REPORTED only:**
+  - Fly Wings/h (by kind);
+  - false boss Fly Wings/h by S7's truth (stage9_ab's);
+  - the party's visits flown, and the time to the Fly Wing;
+  - the sightings the floor holds (alarm detections inside a landing window);
+  - deaths;
+  - the economy with steals;
+  - the detect ms;
+  - the model each run loaded.
+- **The scorer's dry run on s9ab's own series** (both arms had the switch off; read-only):
+  - stale A 1 (+0.454 s), B 8 (+0.288-0.424 s), so the stale line FAILS, as it must;
+  - deaths 0 / 0;
+  - held alarm detections: A 7, B 23.
+- **Commands (from MAIN after the merge, the worker free; about 3.5 h):**
+
+      cd /home/bot/docker/poring-lab
+      .venv/bin/python scripts/stage10_ab.py plan  --label s10ab --pairs 4 --minutes 20
+      .venv/bin/python scripts/stage10_ab.py run   --label s10ab --pairs 4 --minutes 20
+      .venv/bin/python scripts/stage10_ab.py score --label s10ab
+
+- **On a PASS:** fly_first_land goes ON in the ready-made boxes, as fly_first and fly_first_hp did
+  (a person's decision, 18.10's pattern). **On a FAIL:** it stays off, and Batt is told.
+- **Limits:**
+  - The landing measure needs monster boxes before the key: 15 of 94 teleports could not be
+    measured.
+  - The frames are sampled every 0.25 s, so the window carries one interval of margin.
+  - A boss boxed only between the first new frame and 0.75 s is lost from that Fly Wing; none was
+    in 94 teleports.
+
+**18.16's other observation, the clear-bag stock check (report only, NOT fixed here):**
+- Between r06B and r07B (and before r02B, r04A and r05A), `dungeon_hunt.py clear-bag` read Fly
+  Wing 601 as 0 after the restock, while the series' own read said 10.
+- The cause is a key, not the reader: clear-bag reads the hotbar slot of `CHARS_CONF["thief"]
+  ["keys"]["fly"]`, which is F2 (slot 1). The ready-made box (Batt 2026-11-13: "the Fly Wing on
+  F8") and the series read F8.
+- The Fly Wing is no longer on F2, so slot 1 reads 0 and the check raises "the stock is short".
+  The potion's slot (F1) is the same in both and read 10.
+- The fix is a parameter, not a one-line read bug: clear-bag should take the box's keys (the Run's
+  fly_key and heal_key) from the series. Changing CHARS_CONF would move the CLI's default keys.
