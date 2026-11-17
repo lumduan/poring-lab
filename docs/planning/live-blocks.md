@@ -1,14 +1,14 @@
 ---
 doc_type: design
 hypothesis: null
-status: "DECIDED 2026-11-13 ~21:4x (Batt): build the live block player first; one box; break the runner into blocks. Stage 1 PASSED live (6); stages 2-4a A/Bs INCONCLUSIVE (7-9; the Knight). 2026-11-14: Batt's answers built (10, 11); s5ab-1114 FAIL by its bar on line 2 only, deaths 0/6 (10.2). Stage 5a (settings as blocks, the runner page gone) MERGED 17:2x (12), then rounds 20-24 of matpilot's browser review (12.4-12.8, all re-measured PASS): wrapped setting blocks, pickers for every value that is not a name (Batt 19:4x), no overlaps, exact Escape/Undo. Stage 5b-1 (HuntState, the loop as 20 steps; AST-proven the same program) MERGED 19:2x; its live A/B s5b1-ab FAIL by the pace p95 line only (noise), every outcome line passed (13.7; the parent's decision: keep it, go on). Stage 5b-2 (the steps as live blocks: a hunt tab, find_target / fight_target) MERGED 2026-11-15 03:0x; its live A/B s5b2-ab PASS on every line (14.11). The Christmas Goblin class round FAILED its precision bar (xmas02-detector S4.10), not deployed. 2026-11-15 (Batt's answers, 14.12): no hunt tab in the ready-made box (the runner block dissolves into function tabs: 5c); the first real block experiment, no Knife swap on the Christmas Cookie and the Cookie, BUILT offline and its A/B pre-registered 13:32 ICT (16), NOT run. Stage 5c (Batt 14.12: the runner block dissolved into functions in tabs -- hunt_loop() in main, role blocks, hunt_tick()'s step blocks) BUILT 2026-11-15 13:5x on feat/runner-blocks, offline-proven, merged with main 95583b9f there, not yet into main; its live A/B s5c-ab pre-registered (15.8), not run (15.11). 2026-11-16 (Batt 17 #6): the Fly Wing FIRST on a boss at any distance (18, dungeon@9.57 --fly-first, the setting fly_first, off until its A/B) BUILT offline on feat/fly-first; s7ab pre-registered (18.7), not run. ➡️ s7ab PASS (18.9), fly_first ON in the ready-made boxes; s8ab PASS (18.13), fly_first_hp ON too. 2026-11-17 (Batt 18.14: \"use it for real\"): xmas02sk DEPLOYED as xmas_dun02's model (18.15, dungeon@9.59; xmas02gb the reference), its live A/B s9ab pre-registered, ➡️ run 07:32-10:23: PASS on every line (18.16), xmas02sk stays the default; the stale re-fire (both arms) found, its fix 18.17. ➡️ dungeon@9.60 --fly-first-land BUILT offline (18.17; FF_LAND_S 0.75 s derived from 79 banked teleports; OFF everywhere until s10ab), s10ab pre-registered, not run."
+status: "DECIDED 2026-11-13 ~21:4x (Batt): build the live block player first; one box; break the runner into blocks. Stage 1 PASSED live (6); stages 2-4a A/Bs INCONCLUSIVE (7-9; the Knight). 2026-11-14: Batt's answers built (10, 11); s5ab-1114 FAIL by its bar on line 2 only, deaths 0/6 (10.2). Stage 5a (settings as blocks, the runner page gone) MERGED 17:2x (12), then rounds 20-24 of matpilot's browser review (12.4-12.8, all re-measured PASS): wrapped setting blocks, pickers for every value that is not a name (Batt 19:4x), no overlaps, exact Escape/Undo. Stage 5b-1 (HuntState, the loop as 20 steps; AST-proven the same program) MERGED 19:2x; its live A/B s5b1-ab FAIL by the pace p95 line only (noise), every outcome line passed (13.7; the parent's decision: keep it, go on). Stage 5b-2 (the steps as live blocks: a hunt tab, find_target / fight_target) MERGED 2026-11-15 03:0x; its live A/B s5b2-ab PASS on every line (14.11). The Christmas Goblin class round FAILED its precision bar (xmas02-detector S4.10), not deployed. 2026-11-15 (Batt's answers, 14.12): no hunt tab in the ready-made box (the runner block dissolves into function tabs: 5c); the first real block experiment, no Knife swap on the Christmas Cookie and the Cookie, BUILT offline and its A/B pre-registered 13:32 ICT (16), NOT run. Stage 5c (Batt 14.12: the runner block dissolved into functions in tabs -- hunt_loop() in main, role blocks, hunt_tick()'s step blocks) BUILT 2026-11-15 13:5x on feat/runner-blocks, offline-proven, merged with main 95583b9f there, not yet into main; its live A/B s5c-ab pre-registered (15.8), not run (15.11). 2026-11-16 (Batt 17 #6): the Fly Wing FIRST on a boss at any distance (18, dungeon@9.57 --fly-first, the setting fly_first, off until its A/B) BUILT offline on feat/fly-first; s7ab pre-registered (18.7), not run. ➡️ s7ab PASS (18.9), fly_first ON in the ready-made boxes; s8ab PASS (18.13), fly_first_hp ON too. 2026-11-17 (Batt 18.14: \"use it for real\"): xmas02sk DEPLOYED as xmas_dun02's model (18.15, dungeon@9.59; xmas02gb the reference), its live A/B s9ab pre-registered, ➡️ run 07:32-10:23: PASS on every line (18.16), xmas02sk stays the default; the stale re-fire (both arms) found, its fix 18.17. ➡️ dungeon@9.60 --fly-first-land BUILT offline (18.17; FF_LAND_S 0.75 s derived from 79 banked teleports; OFF everywhere until s10ab), s10ab pre-registered, ➡️ run 11:23-14:11: PASS on every line (18.18: B 0 stale re-fires of 7 alarm boss Fly Wings, A 4; deaths 0/0), fly_first_land still OFF (a person's decision)."
 
 role: null
 verdict_date: null
 verdict_ticket: null
 supersedes: null
 related: [project-model.md, player-mode.md, ADR-0020, ../../scripts/dungeon_hunt.py, ../../scripts/runner_flow_export.py, ../../packages/poring_flow/src/poring_flow/runtime.py]
-next_action: "18.17: merge feat/fly-first-land, then run s10ab FROM MAIN (stage10_ab.py plan / run / score --label s10ab --pairs 4 --minutes 20); PASS -> fly_first_land ON in the ready-made boxes (a person's decision); FAIL -> it stays off; the clear-bag key fix (F2 vs F8) is named there, not built. ➡️ Older: 18.16: s9ab PASS, xmas02sk stays deployed; 18.17: the stale re-fire fix (a sighting grabbed after the landing) built offline as a flag, then its own live A/B"
+next_action: "18.18: s10ab PASS; Batt decides whether fly_first_land goes ON in the ready-made boxes (17d18124's pattern); the clear-bag key fix (F2 vs F8) still open. ➡️ Older: 18.17: merge feat/fly-first-land, then run s10ab FROM MAIN (stage10_ab.py plan / run / score --label s10ab --pairs 4 --minutes 20); PASS -> fly_first_land ON in the ready-made boxes (a person's decision); FAIL -> it stays off; the clear-bag key fix (F2 vs F8) is named there, not built. ➡️ Older: 18.16: s9ab PASS, xmas02sk stays deployed; 18.17: the stale re-fire fix (a sighting grabbed after the landing) built offline as a flag, then its own live A/B"
 
 title: "Live blocks: the player that plays a project's blocks in the game, and the runner broken into blocks"
 date: 2026-11-13
@@ -4523,7 +4523,7 @@ detect server before it):** the worktree's `unit_detector.py serve-cmd --backend
   the default. Batt is told, with the defect and its fix.
 
 
-### 18.17 ➡️ BUILT: the stale re-fire's fix, dungeon@9.60 `--fly-first-land`, and THE A/B s10ab -- written 2026-11-17 10:58 ICT from `date`, BEFORE any s10ab run (feat/fly-first-land from main c694f0f4; offline only, NOT run live)
+### 18.17 ➡️ BUILT: the stale re-fire's fix, dungeon@9.60 `--fly-first-land`, and THE A/B s10ab -- written 2026-11-17 10:58 ICT from `date`, BEFORE any s10ab run (feat/fly-first-land from main c694f0f4; offline only, NOT run live) ➡️ RUN 11:23-14:11: PASS on every line (18.18); fly_first_land stays OFF until Batt decides
 
 **The rule (the simplest one the data proves):**
 - Every Fly Wing's key moves a LAND FLOOR to its send time + `FF_LAND_S`. This covers the boss
@@ -4688,3 +4688,67 @@ s7ab from the NAS; 94 teleports, each a `use_item_result` 601 ok + its `map_chan
   The potion's slot (F1) is the same in both and read 10.
 - The fix is a parameter, not a one-line read bug: clear-bag should take the box's keys (the Run's
   fly_key and heal_key) from the series. Changing CHARS_CONF would move the CLI's default keys.
+
+
+### 18.18 Result of s10ab (run 2026-11-17 11:23 - 14:11 ICT, scored 14:13): PASS on every line; fly_first_land stays OFF until Batt decides
+
+- **Valid:** 3 pairs of 4 (ABBA ABBA), every run rc 0, 0 deaths.
+  - r08A (A) ended at 12.8 min by the runner's own stock keep ("1 Fly Wing(s) left, kept for the
+    end"). That is under the 80 % share (16 min), so its pair (r07B, r08A) is out of the paired
+    lines.
+  - 2 of r08A's 7 boss Fly Wings were stale re-fires: the defect ended an A run early again, as it
+    ended s9ab's r03B.
+  - r06B ended at 19.3 min by the bag-full flow ("weight_home", stop "home"), which counts as a
+    valid end. Every other run hit the time box.
+- **Judged lines (18.17's bar), all PASS:**
+
+      line                     A (land OFF)        B (land ON)         bar
+      stale re-fires           4 (reported)        0 of 7 alarm boss   B == 0, >= 1 alarm boss fly
+      deaths (played runs)     0 (4 runs)          0 (4 runs)          B <= A
+      kills/h, paired          -                   +14.5 +- 9.3        >= -2 SE
+      loot/h, paired           -                   +8.8 +- 15.0        >= -2 SE
+      openers/h                124.8               121.5               within +-20 % (-2.6 %)
+      pace, median tick        202.0 ms            201.7 ms            <= A + 5 ms
+      kinds / errors / drive   clean               clean               no new kind, none
+      the model                xmas02sk            xmas02sk            each arm's own
+
+  - Paired kills/h (B - A): -0.3, +12.2, +31.5. Loot/h: -9.4, -2.9, +38.6.
+  - The stale line was judged: B made 7 alarm boss Fly Wings, so it is not a vacuous PASS.
+    - B wrote 11 land records, one per Fly Wing of every kind.
+    - B held 7 alarm detections inside a landing window. On A, 16 such detections fell inside a
+      window that A does not hold.
+- **A's 4 stale re-fires** (grabbed 0.30-0.44 s after the previous key, acted on 1.90-2.10 s
+  later; all 4 judged FALSE by the packets):
+  - r04A +0.352 s (Garm Baby);
+  - r05A +0.334 s (the Goblin);
+  - r08A +0.440 s (the Goblin) and +0.296 s (Garm Baby).
+  - These are 18.16's shape exactly: the frames still showed the old place.
+- **Reported only:**
+  - Fly Wings/h: A 13.1, B 8.4. Boss Fly Wings/h: A 10.1, B 5.3; HP or other: 3.0 in both.
+  - False boss Fly Wings/h by S7's truth: A 7.05 (7 of 10, 0.993 h), B 3.80 (5 of 7, 1.316 h),
+    all from the alarm.
+    - Without A's 2 valid-run stale ones (r04A, r05A, both false): A 5 false of 8.
+    - Of the 10 false boss Fly Wings in the valid runs that were not stale re-fires, 8 were on a
+      Goblin box (B 5 of 5, A 3 of 5). The Goblin class is now the main source of false Fly Wings.
+      This is an observation, not a change.
+  - The party's visits, by the packets:
+    - A 3 visits, 3 flown; to the Fly Wing median 0.35 s, max 0.52 s.
+    - B 2 visits, both flown. The scorer shows "1 of 2" because of a window artefact in a
+      reported line. r03B's second visit was flown 0.01 s after the visit's first packet sample:
+      its knight sighting was grabbed 0.10 s BEFORE that sample, so stage9_ab's visit window
+      (which starts at the first 0.25-s sample) does not contain it. The Fly Wing itself is
+      judged TRUE (unit 1251 on screen).
+  - potions/h A 7.0, B 2.3; steals/h 81.5 vs 88.1; eats/h 6.0 vs 6.8; lowest HP A 39 %, B 48 %.
+  - The detect server's call: median 21.9 vs 21.8 ms, p95 25.0 vs 25.2 ms.
+  - The economy with steals (econ_db.totals_of; 153 runs in data/econ/lab.sqlite), valid runs
+    pooled:
+    - gross / cost / net z/h: A 68,394 / 9,287 / 59,107 (3 runs);
+    - B 64,674 / 3,286 / 61,388 (4 runs).
+    - Per run 37k-84k: within the noise, not a claim.
+- **The clear-bag stock check (18.17's note, still NOT fixed):** before r01A, r03B, r04A, r05A and
+  r07B, clear-bag returned rc 1 because it read Fly Wing (601) as 0 on F2 while the box keeps it on
+  F8. The series went on with its own read each time.
+- **Decision:** none taken here. 18.17 says that on a PASS, fly_first_land goes ON in the
+  ready-made boxes as a person's decision. It stays OFF (registry and every box) until Batt says
+  so. The change would be the same as 17d18124 did for fly_first_hp: the functions box and its
+  cookie twin get the block ON, and the reference arms keep their pinned argv.
