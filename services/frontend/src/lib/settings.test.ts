@@ -17,7 +17,10 @@ import {
   toInputs,
   unblockReady,
   validateEntry,
+  windowsHostRefusal,
+  windowsHostText,
   withDeclaration,
+  withWindowsHost,
   type Declaration,
   type EnvView,
   type ServerView,
@@ -98,7 +101,34 @@ test("the request carries user fields only", () => {
   const env: EnvView = { id: "lab", name: "Lab", type: "allowed", summary: "s", why: "w",
     servers: [server("192.168.1.13", 6900)], suggestions: [], ready: true, signals: ["session"], declared: null };
   assert.deepEqual(toInputs({ environments: [env] }), [{ id: "lab", name: "Lab", type: "allowed", summary: "s",
-    why: "w", servers: [{ host: "192.168.1.13", port: 6900, note: "" }], declared: null }]);
+    why: "w", servers: [{ host: "192.168.1.13", port: 6900, note: "" }], declared: null, windows_host: null }]);
+  // the Windows PC goes back as it is (null = keep): ADR-0023 decision 4
+  assert.equal(toInputs({ environments: [{ ...env, windows_host: "10.0.5.31" }] })[0].windows_host, "10.0.5.31");
+});
+
+// --- ADR-0023 decision 4 (Batt 2026-11-17, "don't lock an IP"): the Windows PC is a person's ------
+
+test("a Windows PC must look like one machine's address before Save", () => {
+  for (const ok of ["192.168.1.50", "10.0.5.31", " 172.16.4.2 ", "fe80::1"]) assert.equal(windowsHostRefusal(ok), "", ok);
+  for (const name of ["my-pc", "my-pc.local", "", "1.2.3", "300.1.1.1"]) assert.equal(windowsHostRefusal(name), "windows_host_not_an_address", name);
+  for (const bad of ["127.0.0.1", "0.0.0.0", "169.254.3.4", "224.0.0.5"]) assert.equal(windowsHostRefusal(bad), "windows_host_not_a_machine", bad);
+  assert.match(reasonText("windows_host_is_this_host"), /bot server's own address/);
+});
+
+test("the Windows PC line names a mismatch with the PC this lab drives", () => {
+  assert.match(windowsHostText({ windows_host: null }, "192.168.1.169"), /No Windows PC set/);
+  assert.equal(windowsHostText({ windows_host: "192.168.1.169" }, "192.168.1.169"), "Windows PC 192.168.1.169");
+  assert.match(windowsHostText({ windows_host: "10.0.5.31" }, "192.168.1.169"), /this lab drives 192\.168\.1\.169 \(WIN_HOST\)/);
+});
+
+test("setting a Windows PC changes only that environment, trimmed", () => {
+  const base = [
+    { id: "a", name: "A", type: "allowed" as const, summary: "", why: "", servers: [], windows_host: null },
+    { id: "b", name: "B", type: "allowed" as const, summary: "", why: "", servers: [], windows_host: "10.0.0.2" },
+  ];
+  const out = withWindowsHost(base, "a", " 10.0.5.31 ");
+  assert.equal(out[0].windows_host, "10.0.5.31");
+  assert.equal(out[1].windows_host, "10.0.0.2");
 });
 
 // --- ADR-0023 decision 1: a person's declaration (Batt 2026-11-12: a warning, not a lock) ----------

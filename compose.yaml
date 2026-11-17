@@ -202,6 +202,11 @@ services:
       # The two pinned /24s (LAB_NET_PREFIX / LAB_AGENT_NET_PREFIX, networks below): the viewer
       # channel refuses the compose subnet, every public listener the agent network.
       COMPOSE_SUBNET: ${LAB_NET_PREFIX:-10.210.96}.0/24
+      # This install's game ports: the shipped environment set names them by token (Batt
+      # 2026-11-17: nothing fixed; interlock.load_config).
+      RATHENA_LOGIN_PORT: ${RATHENA_LOGIN_PORT:-6900}
+      RATHENA_CHAR_PORT: ${RATHENA_CHAR_PORT:-6121}
+      RATHENA_MAP_PORT: ${RATHENA_MAP_PORT:-5121}
       AGENT_NETWORKS: ${LAB_AGENT_NET_PREFIX:-10.210.97}.0/24
       # Black-screen detector: the RO client area "x,y,w,h" in desktop pixels ("" = whole frame).
       GAME_REGION: ${GAME_REGION:-}

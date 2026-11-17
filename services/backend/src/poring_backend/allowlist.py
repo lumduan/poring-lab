@@ -42,7 +42,7 @@ class AuditRecord(BaseModel):
     t_wall: str
     action: Literal[
         "refused", "seed", "env_create", "env_delete", "env_rename", "env_type", "env_text",
-        "server_add", "server_remove", "declare", "withdraw",
+        "env_windows_host", "server_add", "server_remove", "declare", "withdraw",
     ]  # fmt: skip
     kind: Literal["easy", "normal", "hard", "declare"] | None = None  # the rule that applied
     env_id: str | None

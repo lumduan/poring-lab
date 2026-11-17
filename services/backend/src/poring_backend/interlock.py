@@ -31,8 +31,11 @@ whose signals hold but for the packets ("unverified:<the packet reason>"); else 
 operator window in ASSIST.
 """
 
+import contextlib
+import ipaddress
 import logging
-from collections.abc import Callable
+import re
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Literal
@@ -99,12 +102,46 @@ class EnvironmentsConfig(BaseModel):
     environments: list[Environment]
 
 
-def load_config(path: Path) -> tuple[EnvironmentsConfig | None, str]:
-    """(config, "") or (None, why) -- a missing or invalid file is a refusal reason, not a crash."""
+# Batt 2026-11-17 ("don't lock an IP or anything"): the shipped set names THIS install's addresses
+# and ports by token, never the lab's own -- "${HOST_LAN_IP}", "${WIN_HOST}",
+# "${RATHENA_LOGIN_PORT}" ... Each caller passes this backend's values (``install_values``). A
+# token whose value is missing becomes EMPTY (a Windows host nobody gave, a server suggestion with
+# no address); a token that is
+# not one of these is config_invalid (fail closed). Values are checked BEFORE they enter the text:
+# an address literal or a port number, nothing that could change the YAML's shape.
+INSTALL_KEYS = ("HOST_LAN_IP", "WIN_HOST", "RATHENA_LOGIN_PORT", "RATHENA_CHAR_PORT",
+                "RATHENA_MAP_PORT")  # fmt: skip
+_TOKEN = re.compile(r"\$\{([A-Za-z0-9_]*)\}")
+
+
+def install_values(host_lan_ip: str, win_host: str, ports: Mapping[str, int]) -> dict[str, str]:
+    """The token values of this install, checked: addresses as IP literals, ports 1-65535. A bad
+    or empty value is left out (its token becomes empty), never passed through."""
+    out: dict[str, str] = {}
+    for key, raw in (("HOST_LAN_IP", host_lan_ip), ("WIN_HOST", win_host)):
+        with contextlib.suppress(ValueError):
+            out[key] = str(ipaddress.ip_address(raw.strip()))
+    for key in INSTALL_KEYS[2:]:
+        port = ports.get(key)
+        if isinstance(port, int) and 1 <= port <= 65535:
+            out[key] = str(port)
+    return out
+
+
+def load_config(path: Path, values: Mapping[str, str] | None = None
+                ) -> tuple[EnvironmentsConfig | None, str]:  # fmt: skip
+    """(config, "") or (None, why) -- a missing or invalid file is a refusal reason, not a crash.
+    ``values``: this install's token values (``install_values``)."""
     try:
-        raw = yaml.safe_load(path.read_text())
+        text = path.read_text()
     except OSError:
         return None, "config_missing"
+    if any(name not in INSTALL_KEYS for name in _TOKEN.findall(text)):
+        return None, "config_invalid"
+    given = values or {}
+    text = _TOKEN.sub(lambda m: given.get(m.group(1), ""), text)
+    try:
+        raw = yaml.safe_load(text)
     except yaml.YAMLError:
         return None, "config_invalid"
     try:
@@ -277,8 +314,10 @@ class Interlock:
     set (2026-10-06; fail closed when it is missing or invalid) -- or, without one, from ``path``
     (the YAML file; tests)."""
 
-    def __init__(self, path: Path, win_host: str, source: Source | None = None) -> None:
+    def __init__(self, path: Path, win_host: str, source: Source | None = None,
+                 values: Mapping[str, str] | None = None) -> None:  # fmt: skip
         self.path, self.win_host, self.source = path, win_host, source
+        self.values = dict(values or {})  # the YAML path's install tokens (load_config)
         self.attest: Attestation | None = None
         self.attest_at_ns: int | None = None
         self.attestations = 0
@@ -303,7 +342,7 @@ class Interlock:
             if mtime == self._mtime:
                 return
             self._mtime = mtime
-            self.config, self.config_error = load_config(self.path)
+            self.config, self.config_error = load_config(self.path, self.values)
         if self.config is None:
             log.warning("interlock: %s (%s): every bot press is refused", self.path,
                         self.config_error)  # fmt: skip

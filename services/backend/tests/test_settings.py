@@ -789,3 +789,66 @@ def test_the_agent_can_read_a_declaration_but_never_make_one(make: Make) -> None
     find(envs, "class-server")["declared"] = "The agent says the owner permits bots."
     r = agent.put("/settings/environments", json={"base_revision": 2, "environments": envs})
     assert r.status_code == 404 and r.json()["detail"]["reason"] == "not_public_listener"
+
+
+# --- ADR-0023 decision 4 (Batt 2026-11-17, "don't lock an IP"): the Windows PC on the page --------
+
+
+def set_windows_host(env_id: str, host: str | None) -> Callable[[list[dict[str, Any]]], None]:
+    def change(envs: list[dict[str, Any]]) -> None:
+        find(envs, env_id)["windows_host"] = host
+
+    return change
+
+
+def test_the_view_shows_each_windows_pc_and_the_one_this_lab_drives(make: Make) -> None:
+    view = get(make())
+    assert view["win_host"] == "192.168.1.169"
+    assert env(view, "lab-rathena")["windows_host"] == "192.168.1.169"
+
+
+def test_a_person_sets_changes_and_clears_the_windows_pc(make: Make, tmp_path: Path) -> None:
+    client = make()
+    r = edit(client, set_windows_host("lab-rathena", "192.168.1.170"))
+    assert r.status_code == 200, r.text
+    assert [c["kind"] for c in r.json()["changes"]] == ["normal"]
+    assert env(get(client), "lab-rathena")["windows_host"] == "192.168.1.170"
+    # the interlock follows it: this lab drives .169, so the environment is now host_mismatch
+    health = client.get("/health").json()["environment"]
+    assert health["state"] == "red"
+    r = edit(client, set_windows_host("lab-rathena", ""))
+    assert r.status_code == 200 and [c["kind"] for c in r.json()["changes"]] == ["easy"]
+    assert env(get(client), "lab-rathena")["windows_host"] is None
+    records = [a for a in audit(tmp_path) if a.get("action") == "env_windows_host"]
+    assert [(a["kind"], a["ok"]) for a in records] == [("normal", True), ("easy", True)]
+    assert records[0]["entry"] == "192.168.1.170"
+
+
+def test_an_absent_field_keeps_the_windows_pc(make: Make) -> None:
+    """An older page sends no windows_host: nothing changes."""
+    client = make()
+    r = edit(client, lambda envs: [e.pop("windows_host", None) for e in envs])
+    assert r.status_code == 200 and r.json()["changes"] == []
+    assert env(get(client), "lab-rathena")["windows_host"] == "192.168.1.169"
+
+
+@pytest.mark.parametrize(("host", "reason"), [
+    ("my-pc.local", "windows_host_not_an_address"), ("127.0.0.1", "windows_host_not_a_machine"),
+    ("0.0.0.0", "windows_host_not_a_machine"), ("224.0.0.5", "windows_host_not_a_machine"),
+    ("169.254.3.4", "windows_host_not_a_machine"), ("192.168.1.13", "windows_host_is_this_host"),
+])  # fmt: skip
+def test_a_windows_pc_must_be_another_machines_address(make: Make, host: str, reason: str) -> None:
+    client = make()
+    r = edit(client, set_windows_host("lab-rathena", host))
+    assert r.status_code == 422 and r.json()["detail"]["reason"] == reason, r.text
+    assert env(get(client), "lab-rathena")["windows_host"] == "192.168.1.169"
+
+
+def test_an_import_never_sets_a_windows_pc(make: Make) -> None:
+    client = make()
+    view = get(client)
+    envs = as_input(view)
+    find(envs, "lab-rathena")["windows_host"] = "192.168.1.170"
+    r = put(client, envs, view["revision"], source="import")
+    assert r.status_code == 200, r.text
+    assert env(get(client), "lab-rathena")["windows_host"] == "192.168.1.169"

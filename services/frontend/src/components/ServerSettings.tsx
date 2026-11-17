@@ -25,7 +25,10 @@ import {
   toInputs,
   unblockReady,
   validateEntry,
+  windowsHostRefusal,
+  windowsHostText,
   withDeclaration,
+  withWindowsHost,
 } from "@/lib/settings";
 import { backendHttpBase } from "@/lib/ws";
 
@@ -178,6 +181,55 @@ function DeclarePanel({ env, onSave }: { env: EnvView; onSave: (statement: strin
   );
 }
 
+/** ADR-0023 decision 4 (Batt 2026-11-17: "don't lock an IP"): the Windows game PC this environment
+ * is played from is a person's setting. It must be the PC this lab drives (WIN_HOST) for the bot to
+ * act. Text only: the addresses are rendered as text, never as HTML. */
+function WindowsPcPanel({ env, winHost, onSave }: { env: EnvView; winHost: string | null | undefined; onSave: (host: string) => Promise<string | null> }) {
+  const [host, setHost] = useState("");
+  const [error, setError] = useState<string | null>(null);
+  const mismatch = !env.windows_host || (winHost ? env.windows_host !== winHost : false);
+  return (
+    <div className={`mt-3 rounded border p-3 text-sm ${mismatch ? "border-amber-800 bg-amber-950/30" : "border-neutral-800 bg-neutral-950/40"}`} data-testid="windows-pc">
+      <p className={mismatch ? "text-amber-100" : "text-neutral-300"}>{windowsHostText(env, winHost)}</p>
+      <div className="mt-2 flex flex-wrap items-end gap-2">
+        <label className="flex flex-col text-xs text-neutral-400">
+          The game PC&apos;s IP address
+          <input
+            value={host}
+            onChange={(e) => setHost(e.target.value)}
+            placeholder={winHost ?? "192.168.1.50"}
+            maxLength={45}
+            className="mt-1 w-48 rounded border border-neutral-700 bg-neutral-950 px-2 py-1 text-sm text-neutral-100"
+          />
+        </label>
+        <button
+          type="button"
+          disabled={!host.trim()}
+          onClick={async () => {
+            const why = windowsHostRefusal(host);
+            if (why) return setError(reasonText(why));
+            setError(null);
+            if (!(await onSave(host))) setHost("");
+          }}
+          className="rounded bg-sky-700 px-3 py-1 text-sm font-semibold text-white hover:bg-sky-600 disabled:opacity-40"
+        >
+          Set Windows PC
+        </button>
+        {winHost && env.windows_host !== winHost && (
+          <button
+            type="button"
+            onClick={() => void onSave(winHost)}
+            className="rounded border border-neutral-700 px-3 py-1 text-xs text-neutral-200 hover:bg-neutral-800"
+          >
+            Use this lab&apos;s PC ({winHost})
+          </button>
+        )}
+      </div>
+      {error && <p className="mt-1 text-xs text-red-300">{error}</p>}
+    </div>
+  );
+}
+
 type Hard = { title: string; subject: string; envs: EnvInput[] } | null;
 
 function EnvCard({ env, view, save }: { env: EnvView; view: SettingsView; save: Save }) {
@@ -254,6 +306,7 @@ function EnvCard({ env, view, save }: { env: EnvView; view: SettingsView; save: 
   };
 
   const declare = (statement: string | null) => run(withDeclaration(all, env.id, statement));
+  const setWindowsPc = (h: string) => run(withWindowsHost(all, env.id, h));
 
   const notReady = notReadyText(env);
   return (
@@ -328,6 +381,7 @@ function EnvCard({ env, view, save }: { env: EnvView; view: SettingsView; save: 
         </div>
       )}
 
+      {env.type === "allowed" && <WindowsPcPanel env={env} winHost={view.win_host} onSave={setWindowsPc} />}
       {env.type === "allowed" && <DeclarePanel env={env} onSave={declare} />}
 
       <form

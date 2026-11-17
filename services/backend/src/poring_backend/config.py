@@ -121,6 +121,22 @@ class Settings(BaseSettings):
     # (host-side automation included), and the Windows host is the machine the bot itself drives,
     # so a "browser" Save there could be the bot's click. Batt's own machines are other addresses.
     host_lan_ip: str = ""
+    # The game ports this install publishes (compose: RATHENA_*_PORT, Batt 2026-11-17: nothing
+    # fixed): the shipped environment set names them by token (interlock.load_config).
+    rathena_login_port: int = 6900
+    rathena_char_port: int = 6121
+    rathena_map_port: int = 5121
+
+    def install_values(self) -> dict[str, str]:
+        """The shipped environment set's tokens for THIS install (interlock.install_values)."""
+        from poring_backend.interlock import install_values
+
+        return install_values(self.host_lan_ip, self.win_host, {
+            "RATHENA_LOGIN_PORT": self.rathena_login_port,
+            "RATHENA_CHAR_PORT": self.rathena_char_port,
+            "RATHENA_MAP_PORT": self.rathena_map_port,
+        })  # fmt: skip
+
     # How often DNS names on the allowlist are re-resolved (the resolved IPs are shown and matched).
     allowlist_resolve_s: float = 300.0
 
