@@ -147,6 +147,11 @@ What it means for decision 2: a declared server is one our sniffer cannot see, s
 metric, judge or dataset can contain its sessions; the `verified` label marks the rest. No
 research tool reads `verified` yet: a lab script that only checks `state == "green"` treats a
 declared green as green.
+➡️ SUPERSEDED 2026-11-17 (Batt, ADR-0016 Amendment 2026-11-17: the packets only read): green no
+longer implies packet-verified even on the lab's own server (reason `unverified:<why>`, `verified`
+false), so the tools that need packets now read `verified`: `agent_play.py`, `human_demo.py` and
+`guarded_build.py`'s GM re-login. `EnvironmentStatus.verified` false now means declared OR
+unverified (the `reason` tells which).
 
 How long a declaration lasts (an open question above): until a person withdraws it, or the
 environment stops being allowed. It survives restarts and pulls (the store is gitignored).

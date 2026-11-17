@@ -7,7 +7,7 @@ verdict_date: 2026-10-04
 verdict_ticket: null
 supersedes: null
 related: []
-next_action: "2026-10-06: user-managed environments (Settings page, asymmetric rules, CSRF + rate limit), the game-file finder (in-browser, hostile-file controls, strict CSP) and the typing-only foreground gate are BUILT and live. The lab's Allowed environment is red no_servers until Batt confirms its servers from his own computer; the S2 @stream template was cut and verified 2026-10-07 00:45. ➡️ ADR-0019 (Batt, 2026-10-06): Windows stays clean, so the client-side provider (Part C) and its reporting channel (ADR-0013 Part B) are DEFERRED, and may never be built. The community server stays pending."
+next_action: "2026-11-17 (Batt): the packets only READ -- the session signal labels green verified/unverified and never gates (section Amendment 2026-11-17); the sniffer listens to WIN_HOST. ➡️ Older: 2026-10-06: user-managed environments (Settings page, asymmetric rules, CSRF + rate limit), the game-file finder (in-browser, hostile-file controls, strict CSP) and the typing-only foreground gate are BUILT and live. The lab's Allowed environment is red no_servers until Batt confirms its servers from his own computer; the S2 @stream template was cut and verified 2026-10-07 00:45. ➡️ ADR-0019 (Batt, 2026-10-06): Windows stays clean, so the client-side provider (Part C) and its reporting channel (ADR-0013 Part B) are DEFERRED, and may never be built. The community server stays pending."
 ---
 
 # ADR-0016: The environment interlock (a LOGIC interlock, config-driven, fail closed)
@@ -33,6 +33,58 @@ next_action: "2026-10-06: user-managed environments (Settings page, asymmetric r
 
 > ➡️ **Amended by [ADR-0023](0023-learner-mode.md) (Batt 2026-11-07, DECIDED; decision 1 BUILT 2026-11-12):** the signals gain a person's declaration: an environment is green either attested (as below, reason `ok`, `verified` true, tried first) or declared (reason `declared`, `verified` false, labelled "declared by a person, not verified"); packet attestation stays for the lab's own server and for every research count. ADR-0023's Implementation section has the rules.
 
+> ➡️ **Amended 2026-11-17 (Batt): the packets only READ, they never decide whether the bot plays.** See "Amendment (Batt, 2026-11-17)" below: the `session` signal is a label (`verified`), no longer a gate.
+
+## Amendment (Batt, 2026-11-17): the packets only read
+
+**Batt's words** (2026-11-17, Thai, translated), on the report's item "make the sniffer listen to
+the IP from WIN_HOST instead of the fixed 192.168.1.169": "Fix it, but do not tie it to the bot so
+that when it is red the bot cannot play. Use it only to read values, not as what decides how the
+bot works." His answers to the two follow-up questions: when the packets do not confirm the
+session, **the bot plays and the packets only label it** ("Play, label only"); and this holds
+**everywhere**, this lab included ("Everywhere").
+
+**The rule now** (`poring_backend/interlock.py`, tests in `test_interlock.py`):
+- An `allowed` environment is green when its OTHER signals hold: signals configured, servers
+  confirmed on the Settings page, and for `lab_host` the capture lock steady and `WIN_HOST` equal
+  to its `windows_host`. A missing or invalid config is still red (fail closed).
+- The `session` signal (the sniffer's attestation) decides only `verified`:
+  - it holds: reason `ok`, `verified` true (as before);
+  - it does not (no attestation, stale, another client address, another server, no live session,
+    another account): the environment is STILL green, reason `unverified:<why>`, `verified` false.
+- The order: a packet-verified environment first, then a person's declaration (ADR-0023, reason
+  `declared`), then an allowed environment green without the packets.
+- Green -> red still releases what the bot holds, but only a non-packet signal can turn it red
+  now (the lock taken away, the host, the servers, the config). An attestation that expires only
+  relabels; the bot keeps its keys.
+- The console says it: "bot input allowed on <env>, NOT verified by packets (<why>)" (banner and
+  mode badge). The protocol's `EnvironmentStatus.verified` and `reason` describe it.
+
+**The sniffer itself** ([ADR-0007](0007-packet-ground-truth-channel.md)): its kernel filter is no
+longer compiled for 192.168.1.169 only. compose passes this host's `WIN_HOST` as `CLIENT_IP`, and
+`capture.bpf_program(ip)` swaps the address into the committed program's two `host` compares
+(`test_core.py` proves it against libpcap's own compiler for 8 addresses). A missing or invalid
+address stops the sniffer at start, which no longer stops the bot.
+
+**What the label still decides** (research and packet-reading tools, never the bot's play):
+- research counts only packet-verified sessions, as before;
+- `agent_play.py` (ADR-0007 Amendment D: packets READ during play) needs `verified` true on the
+  lab rAthena;
+- `human_demo.py` (a recording judged from the packets) needs `verified` true;
+- `guarded_build.py`'s automatic GM re-login after a sniffer restart (Batt 2026-10-04) runs while
+  the session is not verified, and succeeds when it is verified again;
+- `learn_skill1.py` no longer waits for red at character select (there is none).
+
+**What it gives up, stated:** the interlock no longer proves which server the client is connected
+to. On this lab, layer 1 (the exe-scoped firewall group on the game PC) still blocks the lab
+clients from every address but the lab host. On any other host, nothing technical stops the bot
+on a server the client config points at; the console's "NOT verified by packets" line is the
+warning (ADR-0023's direction: safe defaults and warnings, not hard gates, for learners).
+
+**Still fixed (not part of this amendment):** the seed's `windows_host` 192.168.1.169 (signal
+`lab_host`). On a host whose game PC has another address the interlock is red `host_mismatch`.
+ADR-0023 decision 4 (the Windows host as a console setting) covers it; not built.
+
 ## Rule
 The mux accepts a **BOT press** only while the interlock says so; everything else gets
 `environment_unattested`.
@@ -46,6 +98,8 @@ The mux accepts a **BOT press** only while the interlock says so; everything els
   - human input.
 - **Fail closed:** missing, stale, ambiguous or contradictory signals mean NO, and so does a
   missing or invalid config.
+  ➡️ 2026-11-17 (Batt): except the packets. A missing or stale `session` signal labels the green
+  session `unverified:<why>` and never means NO (Amendment 2026-11-17, above).
 - **Counting:** refusals are counted in `/health` (`refused.bot.environment_unattested`) and shown
   on the console.
 - **Green → red:** the backend releases whatever the bot still holds (`interlock_release`, the
@@ -80,6 +134,9 @@ Today it holds two environments:
 |---|---|---|---|
 | `lab_host` | the capture-backend lock is `steady` on `rdp`/`console`, and the backend's `WIN_HOST` is the environment's `windows_host` | `state/capture-backend` (its only writer is `capture_backend.py`), compose env | no |
 | `session` | the sniffer's **attestation** is fresh (≤ `attestation_max_age_s` = 10 s) and says: a map session from `windows_host`, open (no FIN/RST) and recent (≤ 60 s since its last packet), for one of `accounts` | `/ingest/packets`: the internal port and rathena's pinned 10.210.96.6 only (ADR-0007) | no |
+
+➡️ 2026-11-17 (Batt): `session` is a LABEL since the amendment above (`verified` true or
+`unverified:<why>`), not a gate; `lab_host` and the servers still gate.
 
 ➡️ 2026-10-09: ADR-0021 (PROPOSED) would add `firewall` (the environment's intended rule set has
 the checksum a person last confirmed, and that confirmation is fresh) for EXTERNAL environments,

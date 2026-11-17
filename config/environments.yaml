@@ -18,6 +18,10 @@
 #             THIS server (the attested `server` == this entry's id: one sniffer per rathena, each
 #             naming its server, 2026-10-05), from windows_host, for one of `accounts`
 #             (rAthena login.account_id).
+#             ➡️ Since 2026-11-17 (Batt, ADR-0016 amendment: "the sniffer only reads; it never
+#             decides whether the bot plays") `session` is a LABEL, not a gate: with it the green
+#             session is `verified`; without it the environment is still green when its other
+#             signals hold, shown as "unverified:<why>". The sniffer listens to the host's WIN_HOST.
 # No secrets here: account ids are numbers the server assigns; login ids stay in .env.
 version: 1
 attestation_max_age_s: 10

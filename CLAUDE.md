@@ -227,6 +227,13 @@ Official servers and every other public server are forbidden. Start with `README
        sniffer's attestation is ≤ 10 s old for a live lab-account session;
      - or, in ASSIST only, a bounded operator window is open (`capture_backend.py window
        login|desktop`, ≤ 120 s, tied to the lock SEQ).
+     - ➡️ **SINCE 2026-11-17 (Batt, ADR-0016 Amendment 2026-11-17): the packets only READ.** "Do not
+       tie it to the bot so that when it is red the bot cannot play." An allowed environment is
+       green when the lock is steady, `WIN_HOST` matches its `windows_host` and its servers are
+       confirmed, with or without the sniffer. The attestation only LABELS it: `verified` true
+       (reason `ok`) or `unverified:<why>` (verified false). Research counts only verified
+       sessions; agent_play and human_demo need verified. The sniffer listens to `WIN_HOST`
+       (`capture.bpf_program`). Still fixed: the seed's `windows_host` (ADR-0023 decision 4).
 
      Releases always pass; green → red releases what the bot holds. Adding a server = a person on the
      Settings page (+ an ADR-0006 entry for this lab), never code. The interlock itself adds no OS lock. Since 2026-10-05 (Batt) the

@@ -128,10 +128,12 @@ stream test reports it.
    the PC always gets the same IPv4 address. (Every router names this differently; look for
    "DHCP reservation" or "static lease".)
 3. **Known limit for the BOT (not for you):** today the bot can act only for a game PC at
-   **192.168.1.169**. The packet sniffer's filter is compiled for that address, and the safety
-   interlock's shipped setting names it ([new-lab-host.md](new-lab-host.md) section 7, "Known
-   limit"). At any other address you can still view and play through the console, but every bot
-   press is refused. If your network has 192.168.1.169 free, reserve that address for the PC.
+   **192.168.1.169**. The safety interlock's shipped environment set names that address as the
+   lab's Windows host, and it is not a setting yet ([new-lab-host.md](new-lab-host.md) section 7,
+   "Known limit"). The packet sniffer follows your PC's address (WIN_HOST, since 2026-11-17), and
+   its packets only label a session "verified", never stop the bot. At any other address you can
+   still view and play through the console, but every bot press is refused (`host_mismatch`). If
+   your network has 192.168.1.169 free, reserve that address for the PC.
 
 ## 7. Never asleep, never locked, always logged in
 

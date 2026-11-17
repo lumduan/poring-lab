@@ -564,12 +564,13 @@ The PC's one job is to run the game and stream it ([ADR-0019](../adr/0019-window
 "Windows stays clean"). The user-facing list is [docs/windows-setup.md](../windows-setup.md); the
 lab's full client recipe is [docs/client/rathena-client.md](../client/rathena-client.md).
 
-> **Known limit TODAY: the game PC's address.** The sniffer's kernel filter is compiled for the
-> client address 192.168.1.169 (`packages/poring_packets/src/poring_packets/capture.py`), and the
-> interlock's shipped seed names the same address as the lab environment's Windows host
-> (`windows_host`, a technical field taken from the seed only; the Settings page cannot change
-> it). The bot can act only while BOTH match the game PC (ADR-0016 signals `lab_host` and
-> `session`).
+> **Known limit TODAY: the game PC's address.** The interlock's shipped seed names 192.168.1.169
+> as the lab environment's Windows host (`windows_host`, a technical field taken from the seed
+> only; the Settings page cannot change it). The bot can act only while it matches the game PC
+> (ADR-0016 signal `lab_host`; else `host_mismatch`).
+> - ➡️ Since 2026-11-17 (Batt) the sniffer's kernel filter is built for THIS host's `WIN_HOST`
+>   (`capture.bpf_program`), and the packets only LABEL a session verified or not; they never stop
+>   the bot (ADR-0016 amendment 2026-11-17, signal `session`). So only `windows_host` is still fixed.
 > - On a separate network, a DHCP reservation of 192.168.1.169 for the new game PC matches what
 >   the code expects today.
 > - On Batt's current LAN, 192.168.1.169 is the running lab's game PC. A second game PC there gets
@@ -1010,6 +1011,11 @@ later. Here is what the lab allows TODAY, what is being built, and the warnings.
   session of a lab account from the game PC. In ASSIST only (a mode only a person sets), a
   bounded operator window of at most 120 s also passes presses, for login and desktop steps
   (`capture_backend.py window`). Releases are never gated.
+  ➡️ SUPERSEDED 2026-11-17 (Batt, ADR-0016 amendment 2026-11-17: "the sniffer only reads; it never decides
+  whether the bot plays"): an Allowed environment whose OTHER signals hold (its servers confirmed,
+  the capture lock steady, the game PC the environment names) is green with or without the
+  packets. The packets LABEL it: verified, or `unverified:<why>` on the console. Research still
+  counts only packet-verified sessions.
 - A server we do not run cannot be packet-attested, so **the bot cannot act on an external server
   as built today**, Allowed or not. Its presses are refused with `environment_unattested`.
   ➡️ SUPERSEDED 2026-11-12 for a DECLARED server: ADR-0023 decision 1 is built (next paragraph's
@@ -1158,7 +1164,7 @@ docs/thai-data-experiment.md section 3):
 | `worker:vision` fails to start | no render node, wrong `RENDER_GID` (`getent group render`), or an unreachable NAS volume (section 4.1) |
 | the detect server `REFUSED` with `FileNotFoundError ... archive/models/...` | a registered ONNX is missing from the models folder: section 9's rule |
 | `quiet_start.py` waits for ever | it waits 10 quiet minutes and skips SET market windows on every host: on a dedicated host start the worker directly |
-| bot presses refused, `environment_unattested` | read `/health` `environment`: servers not confirmed (`no_servers`); the capture lock not steady (`capture_backend.py status`); the game PC is not 192.168.1.169 (section 7); the sniffer restarted (no session until the next login) |
+| bot presses refused, `environment_unattested` | read `/health` `environment`: servers not confirmed (`no_servers`); the capture lock not steady (`capture_backend.py status`); the game PC is not 192.168.1.169 (section 7, `host_mismatch`). The packets never refuse a press since 2026-11-17 (ADR-0016 amendment 2026-11-17): a sniffer restart or a missing session only shows `unverified:<why>` (green, not verified) |
 | a Settings save refused | from the bot host or the game PC (use a third computer); a LAN outside 192.168.0.0/16 (section 4.1); a stale page (reload: the CSRF token is per backend start) |
 | ro_agent refuses "mux mode is HUMAN" | the mux boots HUMAN after every backend start; a person sets ASSIST |
 | Failed to Connect to Server right after login | this client needs the server picked within ~1-2 s of the list |

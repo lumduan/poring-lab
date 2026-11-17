@@ -258,3 +258,21 @@ path and tonight's option D build is the way the scrub goes live.
   pixels-only reference.
 - Hard bars apply to agent-demo sessions as to every session, judged from packets offline.
 
+
+## Note (Batt, 2026-11-17): the capture follows WIN_HOST; the packets only read
+
+- **The client address.** `capture.py`'s kernel filter was compiled for 192.168.1.169 only, so a
+  game PC at another address was never captured. Batt: "fix it" (2026-11-17). compose now passes
+  this host's `WIN_HOST` to both sniffers as `CLIENT_IP`, and `capture.bpf_program(ip)` swaps that
+  address into the committed program's two `host` compares (checked: the template must carry the
+  lab address there and nowhere else). `test_core.py` compares the result with libpcap's own
+  compiler for 8 addresses, and refuses names, networks, loopback, multicast and 0.0.0.0. The
+  committed program (192.168.1.169) is the template and the offline tools' default (`replay.py`).
+  A missing or invalid `CLIENT_IP` stops the sniffer at start.
+- **What the packets decide.** Batt, same day: "do not tie it to the bot so that when it is red
+  the bot cannot play; use it only to read values." The attestation is now a LABEL of the
+  interlock (ADR-0016, Amendment 2026-11-17): `verified` or `unverified:<why>`, never a refusal.
+  Ground truth, research counts and the scoped readers (Amendment D's agent-demo, human demos)
+  still need it; the bot's play does not.
+- A `poring_packets` code change goes live with a guarded `recreate:sniffer` (Amendment C); the
+  section 2a positive cases are re-run after it (demonstrations.md).
