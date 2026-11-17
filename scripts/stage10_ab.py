@@ -1,9 +1,11 @@
 #!/usr/bin/env python3
 """Stage 10's live A/B, s10ab (docs/planning/live-blocks.md 18.17): the stale re-fire's fix. The
-ready-made functions box as it is now (A: xmas02sk, fly_first and fly_first_hp ON, fly_first_land
-OFF = dungeon@9.59's program) against the same box with fly_first_land ON (B, dungeon@9.60: a boss
-sighting counts only when grabbed after the last Fly Wing's key + FF_LAND_S), alternating runs on
-the lab's own Rogue on the lab rAthena's xmas_dun02 (player mode; the MVP alive).
+ready-made functions box as it was when s10ab ran (A: xmas02sk, fly_first and fly_first_hp ON,
+fly_first_land OFF = dungeon@9.59's program) against the same box with fly_first_land ON (B,
+dungeon@9.60: a boss sighting counts only when grabbed after the last Fly Wing's key + FF_LAND_S),
+alternating runs on the lab's own Rogue on the lab rAthena's xmas_dun02 (player mode; the MVP
+alive). ➡️ s10ab PASSED (18.18) and the ready-made box holds fly_first_land ON since (Batt
+2026-11-17): the fixture is B's box now, and A sets the block OFF explicitly, as before.
 
 THE ARMS differ ONLY in one setting block: each arm plays a copy of
 services/frontend/src/lib/flow/fixtures/project_xmas_dun02_functions.json whose safety tab holds
@@ -56,9 +58,9 @@ import stage9_ab as s9  # noqa: E402
 
 VERSION = "9.60"  # dungeon_hunt.FLY_LAND_VERSION: the runner it measures
 NODE = s2.NODE
-PROJECT = s7.PROJECT  # the ready-made functions box (xmas02sk; fly_first, fly_first_hp ON)
+PROJECT = s7.PROJECT  # the ready-made box (xmas02sk; fly_first, _hp ON; _land ON since 18.18)
 MODEL = "xmas02sk"  # the fixture's use_model (18.15), both arms
-ARMS = {"A": "fly_first_land off: the ready-made box as it is (dungeon@9.59's program)",
+ARMS = {"A": "fly_first_land off: the ready-made box as s10ab measured it (dungeon@9.59's program)",
         "B": "fly_first_land on: a boss sighting only after the landing (9.60)"}  # fmt: skip
 TAB, VAR, FLAG = "safety", "fly_first_land", "--fly-first-land"
 SCRATCH = Path("/dev/shm/poring-lab-tmp/stage10-ab")
@@ -89,7 +91,8 @@ def _quiet(f: Any, *a: Any, **k: Any) -> tuple[int, str]:
 # --- the arms ------------------------------------------------------------------------------------
 def arm_doc(arm: str, minutes: float, path: Path = PROJECT) -> dict[str, Any]:
     """PURE but for the read: the box with its time box set, fly_first and fly_first_hp ON,
-    fly_first_land set for the arm (A off, B on) and its use_model MODEL -- each explicitly."""
+    fly_first_land set for the arm (A off, B on) and its use_model MODEL -- each explicitly,
+    whatever the fixture holds (18.18: it holds fly_first_land ON, so A is forced OFF)."""
     d = json.loads(path.read_text())
     d["max_runtime_s"] = int(round(minutes * 60))
     tab = next((t for t in d["nodes"][0]["tabs"] if t["name"] == TAB), None)

@@ -39,23 +39,31 @@ def _plan(text: str) -> fp.RunnerPlan:
 
 
 def test_the_functions_box_plays_the_hunt_boxs_runner_exactly() -> None:
-    """The hunt box's runner exactly, but for live-blocks 18.10 #1 and 18.13: the ready-made
-    functions box holds fly_first and fly_first_hp ON (the one box and the hunt box, the reference
-    arms, keep them off), so its argv carries --fly-first and --fly-first-hp and its settings
-    differ in those two alone; and for 18.15: its use_model names xmas02sk (the map's deployed
-    model, with its alarm), the reference arms' xmas02 -- the box's run() model argument alone."""
-    flags = ("--fly-first", "--fly-first-hp")
+    """The hunt box's runner exactly, but for live-blocks 18.10 #1, 18.13 and 18.18: the ready-made
+    functions box holds fly_first, fly_first_hp and fly_first_land ON (the one box and the hunt
+    box, the reference arms, keep them off), so its argv carries --fly-first, --fly-first-hp and
+    --fly-first-land (in that order) and its settings differ in those three alone -- FF_LAND_S at
+    its default 0.75 s in every box, so no --tune; and for 18.15: its use_model names xmas02sk (the
+    map's deployed model, with its alarm), the reference arms' xmas02 -- the box's run() model
+    argument alone."""
+    flags = ("--fly-first", "--fly-first-hp", "--fly-first-land")
     one, hunt, fun = _plan(ONE), _plan(HUNT), _plan(FUN)
     for a in (one, hunt):
         got, ref = fun.argv("L", Path("/S"), None), a.argv("L", Path("/S"), None)
         assert all(got.count(f) == 1 and f not in ref for f in flags)
+        assert [x for x in got if x in flags] == list(flags)  # 18.18: land after the HP flag
         assert [x for x in got if x not in flags] == ref
         assert {k for k in fun.vals if fun.vals[k] != a.vals.get(k)} == {
             "fly_first",
             "fly_first_hp",
+            "fly_first_land",
         }
         assert fun.vals["fly_first"] is True and fun.vals["fly_first_hp"] is True
+        assert fun.vals["fly_first_land"] is True  # 18.18: s10ab passed
         assert a.vals["fly_first"] is False and a.vals["fly_first_hp"] is False
+        assert a.vals["fly_first_land"] is False
+        assert fun.vals["FF_LAND_S"] == a.vals["FF_LAND_S"] == 0.75
+        assert not any("FF_LAND_S" in x for x in got)  # its default: the runner's own number
         fb, ab = fun.box_kwargs(), a.box_kwargs()
         assert fun.keys == a.keys and {k: v for k, v in fb.items() if k != "box_model"} == {
             k: v for k, v in ab.items() if k != "box_model"

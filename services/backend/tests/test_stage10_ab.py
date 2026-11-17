@@ -1,7 +1,8 @@
 """scripts/stage10_ab.py: s10ab, the stale re-fire fix's live A/B (live-blocks.md 18.17) -- the
-ready-made box as it is (A, fly_first_land off) against it with fly_first_land on (B): the plan's
-refusals before any input (one setting apart; the five proofs), the stale re-fires from the
-runner's records, the judged lines. NOT run live here."""
+ready-made box as s10ab measured it (A, fly_first_land off) against it with fly_first_land on (B;
+the ready-made box itself since 18.18): the plan's refusals before any input (one setting apart;
+the five proofs), the stale re-fires from the runner's records, the judged lines. NOT run live
+here."""
 
 from __future__ import annotations
 
@@ -64,6 +65,15 @@ def test_the_arms_differ_in_their_fly_first_land_block_alone() -> None:
     next(t for t in other["nodes"][0]["tabs"] if t["name"] == "safety")["vars"]["FF_LAND_S"] = {
         "kind": "lit", "value": 1.0}  # fmt: skip
     assert "more than its fly_first_land block" in str(ab.box_difference(a, other))
+    # 18.18: the ready-made box holds fly_first_land ON -- it IS B's box but for the time box, and
+    # A is forced OFF explicitly (the fixture as A is refused)
+    raw = json.loads(ab.PROJECT.read_text())
+    assert next(t for t in raw["nodes"][0]["tabs"] if t["name"] == "safety")["vars"][
+        "fly_first_land"]["value"] is True  # fmt: skip
+    assert {**raw, "max_runtime_s": b["max_runtime_s"]} == b
+    tab_a = next(t for t in a["nodes"][0]["tabs"] if t["name"] == "safety")
+    assert tab_a["vars"]["fly_first_land"]["value"] is False
+    assert "does not hold fly_first_land = False" in str(ab.box_difference(raw, b))
 
 
 def test_the_plan_refuses_an_old_runner_or_a_failed_land_proof(tmp_path: Path) -> None:

@@ -282,11 +282,16 @@ test("the ready-made functions boxes hold fly_first and fly_first_hp ON, the ref
   }
 });
 
-// live-blocks 18.17 (dungeon@9.60): the land floor's switch is OFF in every box until s10ab passes
-// (the ready-made box as it is now is s10ab's A), its window at our derived 0.75 s
-test("every box holds fly_first_land OFF and FF_LAND_S at 0.75 s", () => {
+// live-blocks 18.17 (dungeon@9.60): the land floor's switch, its window at our derived 0.75 s;
+// 18.18 (s10ab passed; Batt 2026-11-17: "turn it on"): ON in the two ready-made functions boxes,
+// OFF in the reference boxes (the one box, the hunt box, the one-box cookie box)
+test("the ready-made functions boxes hold fly_first_land ON, the reference boxes off, FF_LAND_S at 0.75 s everywhere", () => {
   const safety = (p: ReturnType<typeof xmasFunctionsProject>) => mapNodes(p)[0].tabs.find((t) => t.name === "safety")!.vars;
-  for (const p of [xmasFunctionsProject(), xmasFunctionsCookieNoSwapProject(), xmasProject(), xmasHuntProject(), xmasCookieNoSwapProject()]) {
+  for (const p of [xmasFunctionsProject(), xmasFunctionsCookieNoSwapProject()]) {
+    assert.equal(safety(p).fly_first_land?.value, true, p.name);
+    assert.equal(safety(p).FF_LAND_S?.value, 0.75, p.name);
+  }
+  for (const p of [xmasProject(), xmasHuntProject(), xmasCookieNoSwapProject()]) {
     assert.equal(safety(p).fly_first_land?.value, false, p.name);
     assert.equal(safety(p).FF_LAND_S?.value, 0.75, p.name);
   }

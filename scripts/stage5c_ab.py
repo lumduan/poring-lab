@@ -9,9 +9,10 @@ THE ARMS differ ONLY in the box's shape: both play the checkout's runner through
 play`, with the same runner settings (stage2_ab.same_vals):
 - A (B5b-2): services/frontend/src/lib/flow/fixtures/project_xmas_dun02_hunt.json;
 - B (B5c): fixtures/project_xmas_dun02_functions.json, its safety tab's fly_first set OFF
-  (arm_doc). ➡️ Since live-blocks 18.10 #1 the ready-made functions box holds fly_first ON; this A/B
-  measures the SHAPE alone (s5c-ab and s5c-ab2 ran with fly_first off in both arms), so B is built
-  with it off, explicitly, and every refusal below still means what it meant.
+  (arm_doc). ➡️ Since live-blocks 18.10 #1 the ready-made functions box holds fly_first ON (and
+  fly_first_hp since 18.13, fly_first_land since 18.18); this A/B measures the SHAPE alone (s5c-ab
+  and s5c-ab2 ran with them off in both arms), so B is built with each at the hunt box's value
+  (off), explicitly, and every refusal below still means what it meant.
 `plan` refuses before any input unless: the two boxes take the same runner settings and keys, and
 the Run config has the fast alarm on (section 11); both give the same runner argv and run()
 arguments; both drive the canonical loop and B's tick leaves no step out; B is A but for main's
@@ -131,9 +132,10 @@ def box_difference(a: Mapping[str, Any], b: Mapping[str, Any]) -> str | None:
     return None
 
 
-# live-blocks 18.10 #1 / 18.13: the blocks B is built with as the hunt box holds them (the shape
-# alone differs): the ready-made functions box holds fly_first and fly_first_hp ON, the hunt box off
-B_SAME_AS_A = (("safety", "fly_first"), ("safety", "fly_first_hp"))
+# live-blocks 18.10 #1 / 18.13 / 18.18: the blocks B is built with as the hunt box holds them (the
+# shape alone differs): the ready-made functions box holds fly_first, fly_first_hp and
+# fly_first_land ON, the hunt box off
+B_SAME_AS_A = (("safety", "fly_first"), ("safety", "fly_first_hp"), ("safety", "fly_first_land"))
 
 
 def _model_stmt(d: Mapping[str, Any]) -> dict[str, Any]:
@@ -164,9 +166,10 @@ def set_box_model(d: dict[str, Any], model: str) -> None:
 
 def arm_doc(arm: str, minutes: float | None = None) -> dict[str, Any]:
     """PURE but for the read: an arm's box -- its fixture, its time box set to the run's length
-    when ``minutes`` is given; B's B_SAME_AS_A blocks set to A's values (18.10 #1, 18.13: the
-    ready-made functions box holds fly_first and fly_first_hp ON; the hunt box, A, holds them
-    off), and B's use_model A's (18.15: the functions box names xmas02sk; s5c measured xmas02)."""
+    when ``minutes`` is given; B's B_SAME_AS_A blocks set to A's values (18.10 #1, 18.13, 18.18:
+    the ready-made functions box holds fly_first, fly_first_hp and fly_first_land ON; the hunt box,
+    A, holds them off), and B's use_model A's (18.15: the functions box names xmas02sk; s5c
+    measured xmas02)."""
     d = json.loads(PROJECTS[arm].read_text())
     if minutes is not None:
         d["max_runtime_s"] = int(round(minutes * 60))

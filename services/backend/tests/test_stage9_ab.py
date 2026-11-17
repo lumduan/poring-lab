@@ -40,6 +40,7 @@ def test_the_plan_alternates_two_copies_differing_in_the_boxs_model_alone(tmp_pa
     assert [r["arm"] for r in doc["runs"]] == ["A", "B", "B", "A", "A", "B", "B", "A"]
     assert doc["vals"]["A"] == doc["vals"]["B"]
     assert doc["vals"]["A"]["fly_first"] is True and doc["vals"]["A"]["fly_first_hp"] is True
+    assert doc["vals"]["A"]["fly_first_land"] is False  # 18.18: s9ab measured 9.59's program
     ma, mb = (doc["arms"][x]["box"]["box_model"] for x in ("A", "B"))
     assert (ma["id"], mb["id"]) == ("xmas02", "xmas02sk")
     assert ma["file"] == ud.MAP_REFERENCES["xmas_dun02"][0].onnx
@@ -66,6 +67,21 @@ def test_the_arms_differ_in_their_use_model_alone() -> None:
     other = json.loads(json.dumps(b))
     other["max_runtime_s"] = 60
     assert "more than its use_model" in str(ab.box_difference(a, other))
+    # 18.18: the ready-made box holds fly_first_land ON; s9ab's arms (9.59's program) hold it OFF,
+    # both, explicitly -- one arm on, or both, is refused
+    raw = json.loads(ab.PROJECT.read_text())
+    assert next(t for t in raw["nodes"][0]["tabs"] if t["name"] == "safety")["vars"][
+        "fly_first_land"]["value"] is True  # fmt: skip
+    for d in (a, b):
+        tab = next(t for t in d["nodes"][0]["tabs"] if t["name"] == "safety")
+        assert tab["vars"]["fly_first_land"]["value"] is False
+    land = {}
+    for arm, d in (("A", a), ("B", b)):
+        land[arm] = json.loads(json.dumps(d))
+        next(t for t in land[arm]["nodes"][0]["tabs"] if t["name"] == "safety")["vars"][
+            "fly_first_land"] = {"kind": "lit", "value": True}  # fmt: skip
+    assert "fly_first_land = False (s9ab's arms)" in str(ab.box_difference(a, land["B"]))
+    assert "fly_first_land = False (s9ab's arms)" in str(ab.box_difference(land["A"], land["B"]))
 
 
 def test_the_model_check_refuses_anything_but_the_models_own_facts() -> None:
