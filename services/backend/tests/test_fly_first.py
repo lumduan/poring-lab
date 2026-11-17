@@ -274,8 +274,12 @@ def test_the_tick_reads_the_boss_first_and_flies_before_any_press() -> None:
     flies.clear()
     ns3 = _tick_ns(seen=None, line="Christmas Goblin", box_boss=True, fly_at=-1e9, flies=flies)
     assert _head_fn(ns3)() is None and not flies and ns3["ff"]["boss"] is True
-    # within 2 s of a Fly Wing: no fly (the teleport lands), the boxes still avoided
+    # within 2 s of a Fly Wing: no fly (the teleport lands), the boxes still avoided. The clock is
+    # read again here: each _head_fn above re-parses the runner (~0.3 s each, more under a full
+    # suite's load), and a Fly Wing "1 s ago" from the test's start was > 2 s old by now
+    # (2026-11-17: the full suite flew, the file alone did not).
     flies.clear()
+    now = time.monotonic()
     ns4 = _tick_ns(seen=(now - 0.3, dog(0.9), 1, False), line=None, box_boss=True,
                    fly_at=now - 1.0, flies=flies)  # fmt: skip
     assert _head_fn(ns4)() is None and not flies and ns4["hs"].boss_until > now
