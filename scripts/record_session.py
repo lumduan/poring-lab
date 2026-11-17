@@ -48,7 +48,7 @@
 * THE VIDEO RECORDING (ADR-0024; gpu-recording.md 9.4, stage 3; rdp only, the default there):
   every kept frame (raw BGRA, alpha set to 255) goes to round 3's encoder (10-bit 4:4:4 HEVC, CQP
   20, all-intra) in the contained sidecar `media-rec` (scripts/media_rec.py: one named pipe in
-  /dev/shm/poring-lab-mediarec; the stream lands in ~/poring-lab-rec/.media-rec and is renamed into
+  /dev/shm/<project>-mediarec; the stream lands in ~/poring-lab-rec/.media-rec and is renamed into
   the session as video.hevc, beside video.idx.csv: one row per kept frame with its frame_id,
   t_mono_ns, place in the stream and the PNG record's t_wall / bus_frame_id / source). No shards:
   the manifest's format is vpp-hevc444-10-q20, `frames` the frames in the stream, `video` the
@@ -96,6 +96,7 @@ import numpy as np
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import dataset_ship  # noqa: E402
+import lab_env  # noqa: E402
 import lab_servers  # noqa: E402
 import measure_delay  # noqa: E402
 import ro_agent as r  # noqa: E402
@@ -119,8 +120,9 @@ RECORDER_VERSION = 7
 H264_MAX_SECONDS = 3570  # the client's time cap is 3600 s; we ask for seconds + 30
 H264_MAX_MB = 8192  # the client's size cap
 CAP_CHECK_S = 5.0  # how often the local caps are re-checked while recording
-GAMESTREAM = "poring-lab-gamestream-1"
-BACKEND = "poring-lab-backend-1"
+GAMESTREAM = lab_env.container("gamestream")
+BACKEND = lab_env.container("backend")
+MEDIA_REC = lab_env.container("media-rec")  # media_rec.CONTAINER
 VIDEO_FORMAT = recorded_frames.VIDEO_FORMAT  # media_rec.ARM: the rdp default (ADR-0024)
 H264_ID = re.compile(r"^[0-9]{8}T[0-9]{6}-[a-z0-9][a-z0-9-]{0,47}$")  # s2spike.h264rec.ID_RE
 TOUCH_S = 3.0  # the control file's dead-man touch (the client stops it after 15 s)
@@ -249,7 +251,7 @@ class CpuMeter:
         out: dict[str, float | None] = {}
         for name, before in self.c0.items():
             after = container_cpu_usec(name)
-            short = name.removeprefix("poring-lab-").removesuffix("-1")
+            short = name.removeprefix(f"{lab_env.project()}-").removesuffix("-1")
             out[short] = (None if before is None or after is None or wall <= 0
                           else round((after - before) / 1e6 / wall, 3))  # fmt: skip
         t = os.times()
@@ -388,7 +390,7 @@ def record(a: argparse.Namespace) -> dict[str, Any]:
     else:
         out.mkdir(parents=True, exist_ok=True)
         writer = NoShards()
-    cpu = CpuMeter(("poring-lab-media-rec-1",) if video is not None else ())
+    cpu = CpuMeter((MEDIA_REC,) if video is not None else ())
     guard = load_guard(a.out, io_rule(a))
     period = 1.0 / a.fps
     screen = r.Screen()
@@ -665,7 +667,7 @@ def record_h264(
         while not part.exists():
             if time.monotonic() > deadline:
                 raise r.Stop("the S2 client did not start the recording in 5 s (is it streaming "
-                             "with --h264-rec? docker logs poring-lab-gamestream-1)")  # fmt: skip
+                             f"with --h264-rec? docker logs {GAMESTREAM})")  # fmt: skip
             time.sleep(0.2)
         t_end = time.monotonic() + a.seconds
         next_touch = next_cap = time.monotonic()
@@ -742,7 +744,7 @@ def freeze_report(t0: int, t1: int) -> dict[str, Any] | None:
     mode or when the log is unavailable (stated, never guessed)."""
     from poring_env.freshness import FREEZE_MS, freeze_spans
 
-    cmd = ["docker", "exec", "poring-lab-gamestream-1", "cat", "/tmp/s2spike/frames.csv"]
+    cmd = ["docker", "exec", GAMESTREAM, "cat", "/tmp/s2spike/frames.csv"]
     res = subprocess.run(cmd, capture_output=True, text=True, check=False)
     if res.returncode != 0:
         return None

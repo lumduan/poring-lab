@@ -33,6 +33,9 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import lab_env  # noqa: E402  (stdlib only: this copy's compose project names)
+
 QUANT = [
     "quant-postgres",
     "quant-orderbook-engine",
@@ -42,16 +45,19 @@ QUANT = [
     "quant-mongo",
 ]
 LAB = [
-    "poring-lab-desktop-1",
-    "poring-lab-backend-1",
-    "poring-lab-frontend-dev-1",
-    "poring-lab-rathena-1",
-    "poring-lab-sniffer-1",
-    "poring-lab-db-1",
-    # the Thai-data experiment (2026-10-05): one at a time with rathena; absent = empty cells
-    "poring-lab-rathena-th-1",
-    "poring-lab-sniffer-th-1",
-    "poring-lab-db-th-1",
+    lab_env.container(svc)
+    for svc in (
+        "desktop",
+        "backend",
+        "frontend-dev",
+        "rathena",
+        "sniffer",
+        "db",
+        # the Thai-data experiment (2026-10-05): one at a time with rathena; absent = empty cells
+        "rathena-th",
+        "sniffer-th",
+        "db-th",
+    )
 ]
 CRON = "cron.service"
 

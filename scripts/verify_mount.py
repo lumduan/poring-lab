@@ -21,6 +21,10 @@ import sys
 from collections.abc import Callable
 from pathlib import Path
 
+if str(Path(__file__).resolve().parent) not in sys.path:
+    sys.path.insert(0, str(Path(__file__).resolve().parent))
+import lab_env  # noqa: E402  (a sibling, stdlib only: this copy's compose project names)
+
 ROOT = Path(__file__).resolve().parents[1]
 Runner = Callable[[list[str]], subprocess.CompletedProcess[str]]
 
@@ -46,7 +50,7 @@ def file_mounts(run: Runner = _run) -> list[tuple[str, Path, str]]:
 
 
 def container_of(svc: str, run: Runner = _run) -> str | None:
-    name = f"poring-lab-{svc}-1"
+    name = lab_env.container(svc)
     state = run(["docker", "inspect", "-f", "{{.State.Running}}", name])
     return name if state.returncode == 0 and state.stdout.strip() == "true" else None
 

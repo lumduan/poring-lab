@@ -7,13 +7,16 @@ Why a root helper: i915 has NO unprivileged source for device-memory use. Its qu
 the free size only to CAP_PERFMON, and debugfs (/sys/kernel/debug, mode 0700) is root only. The
 backend reads plain files only and runs unprivileged (hardware.py), so this loop, as root, reads
 each i915 card's ``i915_gem_objects`` every PERIOD_S and writes the numbers, nothing else, to
-``OUT_DIR/vram.json``. The backend sees OUT_DIR read-only at /host-shm (compose.yaml).
+``<out_dir()>/vram.json``: ``/dev/shm/<project>-hwshm``, the copy's compose project from the unit's
+``Environment=COMPOSE_PROJECT_NAME=`` (unset: poring-lab, the lab's). That copy's backend sees the
+directory read-only at /host-shm (compose.yaml mounts the same path).
 
 Every DRM card bound to i915 that has a ``local0`` region (a discrete card: the Arc's VRAM) gets
 an entry; an integrated GPU has no local0 and is skipped. Clock: ``t_mono_ns`` is
 CLOCK_MONOTONIC, the backend's own clock (one kernel), so it can judge the file's age.
 
-stdlib only; it takes no input. The file is written through a directory handle opened with
+stdlib only; its only input is that one name (checked against Docker Compose's rule, so the path
+stays one directory under /dev/shm). The file is written through a directory handle opened with
 O_NOFOLLOW (never through a symlink) and replaced atomically, mode 0644.
 """
 
@@ -24,13 +27,16 @@ import os
 import re
 import sys
 import time
+from collections.abc import Mapping
 from pathlib import Path
 from typing import Any
 
 PERIOD_S = 2.0
 DRM = Path("/sys/class/drm")
 DEBUGFS = Path("/sys/kernel/debug/dri")
-OUT_DIR = Path("/dev/shm/poring-lab-hwshm")
+PROJECT_KEY = "COMPOSE_PROJECT_NAME"
+PROJECT_DEFAULT = "poring-lab"  # scripts/lab_env.py's (this helper is installed alone: stdlib only)
+PROJECT_RE = re.compile(r"^[a-z0-9][a-z0-9_-]{0,62}$")  # Docker Compose's rule (lab_env.PROJECT_RE)
 OUT_NAME = "vram.json"
 VERSION = 1
 _CARD = re.compile(r"^card(\d+)$")
@@ -133,11 +139,21 @@ def write(out_dir: Path, data: dict[str, Any]) -> None:
         os.close(dfd)
 
 
+def out_dir(env: Mapping[str, str] | None = None) -> Path:
+    """The copy's ``/dev/shm/<project>-hwshm`` (Batt 2026-11-17: two copies on one host need two
+    names); refused (SystemExit) unless the name passes Docker Compose's rule."""
+    name = (os.environ if env is None else env).get(PROJECT_KEY) or PROJECT_DEFAULT
+    if not PROJECT_RE.match(name):
+        raise SystemExit(f"{PROJECT_KEY}={name!r}: lowercase letters, digits, '-' and '_' only")
+    return Path("/dev/shm") / f"{name}-hwshm"
+
+
 def main(argv: list[str]) -> int:
     once = "--once" in argv
+    out = out_dir()
     while True:
         try:
-            write(OUT_DIR, sample())
+            write(out, sample())
         except OSError as exc:  # the next tick tries again; systemd's journal keeps the reason
             print(f"poring-lab-vram: {type(exc).__name__}: {exc}", file=sys.stderr, flush=True)
         if once:

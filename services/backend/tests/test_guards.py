@@ -541,7 +541,9 @@ def test_the_pairing_key_volume_is_mounted_in_gamestream_only(name: str) -> None
 
 def test_gamestream_image_never_runs_the_desktop_startup() -> None:
     dockerfile = (ROOT / "services" / "gamestream" / "Dockerfile").read_text()
-    assert "FROM poring-lab/desktop:local" in dockerfile
+    # built on THIS copy's desktop image (<project>/desktop:local; the lab's by default)
+    assert "ARG LAB_PROJECT=poring-lab\n" in dockerfile.split("\nFROM ", 1)[0]
+    assert "FROM ${LAB_PROJECT}/desktop:local" in dockerfile
     assert 'CMD ["/usr/local/bin/gamestream-loop.sh"]' in dockerfile
     assert "HEALTHCHECK NONE" in dockerfile and "ENTRYPOINT []" in dockerfile
     assert "--checksum=sha256:" in dockerfile and "ARG MOONLIGHT_SHA256=" in dockerfile

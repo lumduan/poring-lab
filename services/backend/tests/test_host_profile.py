@@ -83,7 +83,8 @@ def test_bot_server_adds_its_overlays_last(monkeypatch: pytest.MonkeyPatch) -> N
                                 "-f", "compose.vision-worker.intel.yaml",
                                 "--profile", "vision-worker"]  # fmt: skip
     step = gb.parse_step("rundev:vision@60=python -c pass")
-    assert gb.run_cmd(step)[4:10] == gb.VISION_DEV
+    assert gb.run_cmd(step)[2:6] == ["docker", "compose", "-p", "poring-lab"]
+    assert gb.run_cmd(step)[6:12] == gb.VISION_DEV
 
 
 def test_a_dedicated_nvidia_host_adds_its_overlays_last(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -95,7 +96,7 @@ def test_a_dedicated_nvidia_host_adds_its_overlays_last(monkeypatch: pytest.Monk
                                 "-f", "compose.vision-worker.nvidia.yaml",
                                 "--profile", "vision-worker"]  # fmt: skip
     step = gb.parse_step("rundev:vision@60=python -c pass")
-    assert gb.run_cmd(step)[4:10] == gb.VISION_DEV
+    assert gb.run_cmd(step)[6:12] == gb.VISION_DEV
 
 
 def test_a_dedicated_nvidia_host_lists_its_gpu_with_nvidia_smi(

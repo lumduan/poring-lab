@@ -16,6 +16,11 @@ from poring_backend.clipboard import ConvertRequest, OwnerChanged, OwnershipLost
 # dedicated-intel, which made 7 tests of the shared host's rules (R3, the overlays) fail there.
 # Every test sees the default profile; test_host_profile.py sets the others itself.
 os.environ["LAB_HOST_PROFILE"] = "shared-nvidia"
+# Likewise the compose project (scripts/lab_env.py, Batt 2026-11-17): every script names its Docker
+# objects from COMPOSE_PROJECT_NAME (else the repo's .env, else poring-lab), so a checkout whose
+# .env names another copy must not change what the tests see. Every test sees the lab's default
+# name; test_lab_env.py passes its own environments, test_lab_names.py sets another.
+os.environ["COMPOSE_PROJECT_NAME"] = "poring-lab"
 
 # NO TEST EVER REACHES THE LIVE BACKEND (2026-10-09). test_walk12's operator_hud.enable() built a
 # real ro_agent.Agent and opened /internal/agent links ("operator-hud" hellos in the live input log)

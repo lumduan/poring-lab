@@ -68,9 +68,10 @@ def test_the_worker_steps_start_and_stop_only_the_worker(gb: ModuleType) -> None
         with pytest.raises(ValueError):
             gb.parse_step(refused)
     files = ["-f", "compose.yaml", "-f", "compose.vision-worker.yaml", "--profile", "vision-worker"]
-    assert gb.worker_start_cmd() == ["docker", "compose", *files, "up", "-d", "--no-deps",
+    compose = ["docker", "compose", "-p", "poring-lab"]  # this copy's project (the default here)
+    assert gb.worker_start_cmd() == [*compose, *files, "up", "-d", "--no-deps",
                                      "--no-build", "vision-worker"]  # fmt: skip
-    assert gb.worker_stop_cmd() == ["docker", "compose", *files, "stop", "vision-worker"]
+    assert gb.worker_stop_cmd() == [*compose, *files, "stop", "vision-worker"]
 
 
 def test_only_the_idle_entrypoint_counts_as_idle(gb: ModuleType) -> None:

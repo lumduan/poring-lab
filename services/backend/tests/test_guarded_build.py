@@ -128,7 +128,9 @@ def test_builds_use_the_lab_builder_without_touching_the_global_one(
     monkeypatch.setattr(sys, "argv", ["guarded_build.py", "build:desktop", "pull:db"])
     assert gb.main() == 0
     (build, build_env), (pull, pull_env) = calls
-    assert build[:3] == ["docker", "compose", "--profile"] and "build" in build
+    # this copy's project on every raw compose argv (lab_env.project(); the tests see the default)
+    assert build[:5] == ["docker", "compose", "-p", "poring-lab", "--profile"] and "build" in build
+    assert pull[:5] == ["docker", "compose", "-p", "poring-lab", "--profile"] and "pull" in pull
     assert build_env is not None and build_env["BUILDX_BUILDER"] == "default"
     assert pull_env is None  # only builds pick a builder
     assert not any("buildx" in c and "use" in c for c in build)  # never `docker buildx use`
@@ -149,7 +151,8 @@ def test_run_step_is_vision_only_and_never_starts_dependencies(gb: ModuleType) -
     step = gb.parse_step("run:vision@600=python scripts/check_gpu.py")
     assert (step.kind, step.services, step.seconds) == ("run", ["vision"], 600.0)
     assert gb.run_cmd(step) == [
-        "timeout", "600", "docker", "compose", "--profile", "vision", "run", "--rm",
+        "timeout", "600", "docker", "compose", "-p", "poring-lab", "--profile", "vision", "run",
+        "--rm",
         "--name", gb.container_name(step), "--no-deps", "vision", "python", "scripts/check_gpu.py",
     ]  # fmt: skip
     for refused in ("run:gamestream=true", "run:desktop=true", "run:vision", "run:vision="):
@@ -163,7 +166,7 @@ def test_rundev_adds_only_the_vision_dev_overlay(gb: ModuleType) -> None:
     step = gb.parse_step("rundev:vision@3600=python -m poring_vision.train --smoke")
     assert (step.kind, step.services, step.seconds) == ("rundev", ["vision"], 3600.0)
     assert gb.run_cmd(step) == [
-        "timeout", "3600", "docker", "compose", "-f", "compose.yaml", "-f",
+        "timeout", "3600", "docker", "compose", "-p", "poring-lab", "-f", "compose.yaml", "-f",
         "compose.vision-dev.yaml", "--profile", "vision", "run", "--rm",
         "--name", gb.container_name(step), "--no-deps", "vision",
         "python", "-m", "poring_vision.train", "--smoke",

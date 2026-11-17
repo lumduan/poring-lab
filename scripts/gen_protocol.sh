@@ -14,6 +14,9 @@
 # Run after ANY change to poring_env/protocol.py or poring_packets/events.py; commit all of them.
 set -euo pipefail
 cd "$(dirname "$0")/.."
+# This copy's frontend-dev container (scripts/lab_project.sh: COMPOSE_PROJECT_NAME, else poring-lab)
+source scripts/lab_project.sh
+FRONTEND_DEV="$(lab_project)-frontend-dev-1"
 
 uv run poring-protocol-schema >packages/poring_env/schema/protocol.schema.json
 uv run poring-packets-schema >packages/poring_packets/schema/packets.schema.json
@@ -38,12 +41,12 @@ if [[ -d services/frontend/node_modules ]]; then
     --unreachableDefinitions --ignoreMinAndMaxItems --bannerComment "${PROJECT_BANNER}" \
     <../../packages/poring_flow/schema/project.schema.json >src/lib/flow/project.gen.ts.new &&
     mv src/lib/flow/project.gen.ts.new src/lib/flow/project.gen.ts)
-elif docker ps --format '{{.Names}}' | grep -qx poring-lab-frontend-dev-1; then
+elif docker ps --format '{{.Names}}' | grep -qx "${FRONTEND_DEV}"; then
   # This host keeps node_modules OFF the disk it shares with live capture: run json2ts inside
   # frontend-dev (node_modules on tmpfs) over stdin/stdout.
   # Same flags as package.json's gen:protocol / gen:packets / gen:flow, byte-identical output.
   json2ts() { # <schema> <out> <banner> [extra flag]
-    docker exec -i -w /app poring-lab-frontend-dev-1 corepack pnpm exec json2ts \
+    docker exec -i -w /app "${FRONTEND_DEV}" corepack pnpm exec json2ts \
       --unreachableDefinitions ${4:-} --bannerComment "$3" <"$1" >"$2.new"
     mv "$2.new" "$2"
   }

@@ -17,7 +17,9 @@ What it never does (CLAUDE.md, the setup manual):
 - writes the capture-backend lock itself (capture_backend.py is its only writer).
 
 Files: the resumable progress is `.setup/progress.json` (gitignored; never settings/ or state/);
-step logs and the stream-test picture go to RAM, `/dev/shm/poring-lab-tmp/setup/` (rule 7).
+step logs and the stream-test picture go to RAM, `/dev/shm/<project>-tmp/setup/` (rule 7; the
+lab: /dev/shm/poring-lab-tmp/setup/). Every Docker name is this copy's compose project's
+(scripts/lab_env.py: COMPOSE_PROJECT_NAME, default poring-lab), read fresh at each use.
 """
 
 from __future__ import annotations
@@ -39,9 +41,13 @@ from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Any, Protocol
 
+if str(Path(__file__).resolve().parent) not in sys.path:
+    sys.path.insert(0, str(Path(__file__).resolve().parent))
+import lab_env  # noqa: E402  (a sibling, stdlib only: this copy's compose project names)
+
 REPO = Path(__file__).resolve().parents[1]
 PROGRESS = REPO / ".setup" / "progress.json"
-SCRATCH = Path(os.environ.get("SETUP_SCRATCH", "/dev/shm/poring-lab-tmp/setup"))
+SCRATCH = Path(os.environ.get("SETUP_SCRATCH", str(lab_env.shm("tmp") / "setup")))
 PY = sys.executable
 PROGRESS_VERSION = 1
 
@@ -75,7 +81,14 @@ DOCKER_NETS = tuple(
     ipaddress.ip_network(n) for n in ("10.210.0.0/16", "10.209.255.0/24", "172.17.0.0/16")
 )
 PROFILES = ("dedicated-intel", "dedicated-nvidia", "shared-nvidia")
-PROJECT = "poring-lab"
+
+
+def project() -> str:
+    """This copy's compose project (lab_env.project(): the environment, else .env, else
+    poring-lab), read FRESH at each use, the way every guarded step's own process reads it."""
+    return lab_env.project()
+
+
 # .env names whose VALUES may be shown. Everything else is shown as "set" / "empty".
 SAFE_KEYS = frozenset(
     {
@@ -814,7 +827,7 @@ def container_state(runner: Runner, service: str) -> str:
     res = runner(
         ["docker", "inspect", "-f",
          "{{.State.Status}} {{if .State.Health}}{{.State.Health.Status}}{{else}}none{{end}}",
-         f"{PROJECT}-{service}-1"],
+         lab_env.container(service)],
         timeout=20,
     )  # fmt: skip
     return res.out.strip() if res.ok else "absent"
@@ -867,7 +880,7 @@ def install_plan(repo: Path, env: Mapping[str, str], a: Answers) -> list[Step]:
             "The rapidyaml race: set RATHENA_MAKE_JOBS=1 (`uv run python scripts/rotate_secrets.py "
             "set RATHENA_MAKE_JOBS=1`), then Retry (manual 6 step 8). " + FIX_BUILD,
             timeout=3 * 3600,
-            done=image_present(f"poring-lab/rathena:pv{pv}-prere-{prere}"),
+            done=image_present(lab_env.image("rathena", f"pv{pv}-prere-{prere}")),
         ),
         Step(
             "pull-db",
@@ -883,7 +896,7 @@ def install_plan(repo: Path, env: Mapping[str, str], a: Answers) -> list[Step]:
             guarded("build:backend"),
             FIX_BUILD,
             timeout=3 * 3600,
-            done=image_present("poring-lab/backend:local"),
+            done=image_present(lab_env.image("backend")),
         ),
         Step(
             "build-desktop",
@@ -891,15 +904,15 @@ def install_plan(repo: Path, env: Mapping[str, str], a: Answers) -> list[Step]:
             guarded("build:desktop"),
             FIX_BUILD,
             timeout=3 * 3600,
-            done=image_present("poring-lab/desktop:local"),
+            done=image_present(lab_env.image("desktop")),
         ),
         Step(
             "build-toolchain",
             "Build the rAthena toolchain (for the tables)",
-            guarded("target:rathena:build:poring-lab/rathena-build:local"),
+            guarded(f"target:rathena:build:{lab_env.image('rathena-build')}"),
             FIX_BUILD,
             timeout=3 * 3600,
-            done=image_present("poring-lab/rathena-build:local"),
+            done=image_present(lab_env.image("rathena-build")),
         ),
         Step(
             "tables",
@@ -927,7 +940,7 @@ def install_plan(repo: Path, env: Mapping[str, str], a: Answers) -> list[Step]:
             guarded("build:sniffer"),
             "It refuses without the exact length table: Retry after the tables step. " + FIX_BUILD,
             timeout=3 * 3600,
-            done=image_present("poring-lab/sniffer:local"),
+            done=image_present(lab_env.image("sniffer")),
         ),
         Step(
             "build-gamestream",
@@ -935,7 +948,7 @@ def install_plan(repo: Path, env: Mapping[str, str], a: Answers) -> list[Step]:
             guarded("build:gamestream"),
             FIX_BUILD,
             timeout=3 * 3600,
-            done=image_present("poring-lab/gamestream:local"),
+            done=image_present(lab_env.image("gamestream")),
         ),
     ]
     if a.build_vision:
@@ -947,7 +960,7 @@ def install_plan(repo: Path, env: Mapping[str, str], a: Answers) -> list[Step]:
                 "Optional: Skip it and the CPU detector runs (manual section 9). " + FIX_BUILD,
                 optional=True,
                 timeout=4 * 3600,
-                done=image_present("poring-lab/vision:local"),
+                done=image_present(lab_env.image("vision")),
             )
         )
     steps += [
@@ -1275,7 +1288,7 @@ class CheckReport:
 
 def lab_containers(runner: Runner) -> dict[str, str]:
     """{service: status} of this compose project's containers (read-only `docker ps`)."""
-    res = runner(["docker", "ps", "-a", "--filter", f"label=com.docker.compose.project={PROJECT}",
+    res = runner(["docker", "ps", "-a", "--filter", f"label=com.docker.compose.project={project()}",
                   "--format", "{{.Label \"com.docker.compose.service\"}}\t{{.Status}}"],
                  timeout=20)  # fmt: skip
     out: dict[str, str] = {}

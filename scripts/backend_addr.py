@@ -11,9 +11,16 @@ default network by NAME instead.
 from __future__ import annotations
 
 import subprocess
+import sys
+from pathlib import Path
 
-BACKEND = "poring-lab-backend-1"
-DEFAULT_NETWORK = "poring-lab_default"
+_HERE = str(Path(__file__).resolve().parent)
+if _HERE not in sys.path:
+    sys.path.insert(0, _HERE)
+import lab_env  # noqa: E402  (a sibling, stdlib only: this copy's compose project names)
+
+BACKEND = lab_env.container("backend")
+DEFAULT_NETWORK = lab_env.network("default")
 FORMAT = '{{with index .NetworkSettings.Networks "%s"}}{{.IPAddress}}{{end}}'
 
 

@@ -16,7 +16,7 @@ THE MECHANISM (doc 9.1):
 
     backend (X grab) --docker exec pipe, raw BGRA--> host recorder --PNG--> session/shard-*.tar
                                                         |
-                       raw BGRA, ONE named pipe in a RAM directory (/dev/shm/poring-lab-mediarec)
+                       raw BGRA, ONE named pipe in a RAM directory (/dev/shm/<project>-mediarec)
                                                         v
        the sidecar (media-probe image; no network, read-only, the render node only): ffmpeg
        hwupload -> scale_vaapi (BT.709 full, xv30) -> hevc_vaapi Main 4:4:4 10, CQP 20, all-intra
@@ -72,11 +72,13 @@ from pathlib import Path
 from typing import Any
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
+import lab_env  # noqa: E402  (stdlib only: this copy's compose project names)
 
 ARM = "vpp-hevc444-10-q20"  # round 3's CANDIDATE (doc 8.4); mediarec.sh's options are its own
 SERVICE = "media-rec"
-CONTAINER = "poring-lab-media-rec-1"
-CTL = Path("/dev/shm/poring-lab-mediarec")  # RAM: the job, the pipe, small status files
+CONTAINER = lab_env.container(SERVICE)
+# RAM: the job, the pipe, small status files; per copy (compose.yaml: /dev/shm/<project>-mediarec)
+CTL = lab_env.shm("mediarec")
 REC_NAME = ".media-rec"  # under the local session root: the sidecar's bitstream (disk)
 UID = 1000  # compose's user for the sidecar (the host's bot)
 FIFO, JOB, RUNNING, LOCK = "frames.fifo", "job", "running", "lock"

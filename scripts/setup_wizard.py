@@ -582,7 +582,7 @@ class Wizard:
             have = core.lab_containers(core.run_process)
             if have:
                 ui.warn(
-                    f"poring-lab containers already exist on this host ({len(have)}: "
+                    f"{core.project()} containers already exist on this host ({len(have)}: "
                     f"{', '.join(sorted(have))}). The install checks each step and skips "
                     "what is done, but it may start or rebuild services. For a status only, "
                     "quit and run ./setup.sh --check."
