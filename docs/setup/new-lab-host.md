@@ -981,6 +981,7 @@ Data, Execute SQL), or in Python (pandas is not a lab dependency: install it in 
 
 ```python
 import sqlite3, pandas as pd
+
 con = sqlite3.connect("file:data/econ/lab.sqlite?mode=ro", uri=True)  # read-only
 runs = pd.read_sql("SELECT session, map, kills, hours, kills / hours AS kills_h FROM runs", con)
 items = pd.read_sql("SELECT session, item_id, income, dropped FROM run_items", con)
