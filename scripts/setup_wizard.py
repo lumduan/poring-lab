@@ -844,8 +844,6 @@ class Wizard:
         )
         ui.p()
         ui.fixes("[yellow]KNOWN LIMIT of this Sunshine-only setup (read it):[/]", core.S2_LIMIT)
-        if self.a.win_ip != core.LAB_WIN_HOST:
-            ui.warn(core.BOT_PC_LIMIT)
 
 
 def interactive(progress: dict[str, Any]) -> int:

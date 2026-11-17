@@ -43,6 +43,7 @@ from typing import Any, Protocol
 
 if str(Path(__file__).resolve().parent) not in sys.path:
     sys.path.insert(0, str(Path(__file__).resolve().parent))
+import gpu_ready  # noqa: E402  (a sibling, stdlib only: is the GPU ready, ADR-0022 11-17)
 import lab_env  # noqa: E402  (a sibling, stdlib only: this copy's compose project names)
 
 REPO = Path(__file__).resolve().parents[1]
@@ -55,32 +56,41 @@ DEFAULT_CONSOLE_PORT = 3000
 PORT_MIN, PORT_MAX = 1024, 65535
 # The lab's own ports on this host (docs/services-and-ports.md): published on HOST_LAN_IP, or used
 # inside the compose network. The console may take none of them.
-LAB_PORTS: dict[int, str] = {
-    6900: "the rAthena login server",
-    6121: "the rAthena char server",
-    5121: "the rAthena map server",
-    8888: "the rAthena web-server",
-    8000: "the backend",
-    8001: "the backend's internal listener",
-    6080: "noVNC",
-    3306: "MariaDB",
-    5900: "x11vnc",
+# The published ones are this install's (lab_env.PORTS, ADR-0026): LAB_PORTS holds the defaults,
+# install_ports(env) a .env's own values.
+PORT_NAMES = {
+    "RATHENA_LOGIN_PORT": "the rAthena login server",
+    "RATHENA_CHAR_PORT": "the rAthena char server",
+    "RATHENA_MAP_PORT": "the rAthena map server",
+    "RATHENA_WEB_PORT": "the rAthena web-server",
+    "BACKEND_PORT": "the backend",
+    "NOVNC_PORT": "noVNC",
 }
+INNER_PORTS = {8001: "the backend's internal listener", 3306: "MariaDB", 5900: "x11vnc"}
+
+
+def install_ports(env: Mapping[str, str] | None = None) -> dict[int, str]:
+    """Every port of this install but the console's: the published ones from ``env`` (else the
+    defaults), and the ones used inside the compose network."""
+    env = env or {}
+    out = {int(env.get(k, "").strip() or lab_env.PORTS[k]): name for k, name in PORT_NAMES.items()}
+    return {**out, **INNER_PORTS}
+
+
+LAB_PORTS: dict[int, str] = install_ports()
 # Sunshine on the PC (docs/console-capture-plan.md 3.3, from Sunshine's own Network settings page).
 # TCP = capture_backend.SUNSHINE_PORTS (tested): what pairing and a stream start need.
 SUNSHINE_TCP = (47984, 47989, 48010)
 SUNSHINE_UDP = (47998, 47999, 48000)
 SUNSHINE_WEB = 47990
-# The interlock's shipped seed (config/environments.yaml windows_host, ADR-0016 signal lab_host):
-# the only game PC the bot can act for today, until the Windows host is a setting (ADR-0023
-# decision 4, not built). ➡️ Since 2026-11-17 the sniffer follows WIN_HOST
-# (poring_packets/capture.py bpf_program) and the packets only label (ADR-0016 amendment 11-17).
-LAB_WIN_HOST = "192.168.1.169"
+# ➡️ No fixed game PC any more (Batt 2026-11-17, "don't lock an IP"; ADR-0026): the shipped
+# environment set names ${WIN_HOST}, the sniffer follows WIN_HOST, and a person can change an
+# environment's Windows PC on the Settings page (ADR-0023 decision 4). LAB_WIN_HOST is gone.
 # Docker's ranges on a lab host (manual 1.1; compose pins 10.210.96/97; the default bridge).
 DOCKER_NETS = tuple(
     ipaddress.ip_network(n) for n in ("10.210.0.0/16", "10.209.255.0/24", "172.17.0.0/16")
 )
-PROFILES = ("dedicated-intel", "dedicated-nvidia", "shared-nvidia")
+PROFILES = ("dedicated-intel", "dedicated-nvidia", "dedicated-cpu", "shared-nvidia")
 
 
 def project() -> str:
@@ -95,6 +105,8 @@ SAFE_KEYS = frozenset(
         "HOST_LAN_IP", "CONSOLE_PORT", "WIN_HOST", "LAB_HOST_PROFILE", "RENDER_GID",
         "VISION_MAX_VRAM_FRACTION", "RATHENA_WEB_SERVER", "S2_REC_DIR", "FRONTEND_ORIGINS",
         "PACKETVER", "RATHENA_PRERE", "VIEWER_NETWORKS", "SESSION_SIZE", "RDP_PORT",
+        "COMPOSE_PROJECT_NAME", "LAB_STORE_DIR", "DETECTOR_DIR", "VISION_WORKER_MEM",
+        *lab_env.PORTS, *lab_env.NETS,
     }
 )  # fmt: skip
 CHECK_KEYS = (
@@ -102,6 +114,7 @@ CHECK_KEYS = (
     "VISION_MAX_VRAM_FRACTION", "RATHENA_WEB_SERVER", "S2_REC_DIR", "FRONTEND_ORIGINS",
     "DB_PASSWORD", "DB_ROOT_PASSWORD", "RATHENA_SERVER_USER", "RATHENA_SERVER_PASSWORD",
     "RATHENA_AGENT_USER", "RATHENA_GM_USER", "RDP_USER", "RDP_PASSWORD",
+    "COMPOSE_PROJECT_NAME", "LAB_STORE_DIR", "VIEWER_NETWORKS", "VISION_WORKER_MEM",
 )  # fmt: skip
 
 
@@ -311,9 +324,12 @@ def detect_gpu(root: Path = Path("/")) -> Gpu:
 
 
 def default_profile(gpu: Gpu) -> str:
-    """ADR-0022 / manual section 5: NVIDIA -> dedicated-nvidia; an Intel card or none ->
-    dedicated-intel (there is no CPU-only profile yet). shared-nvidia is never the default."""
-    return "dedicated-nvidia" if gpu.vendor == "nvidia" else "dedicated-intel"
+    """ADR-0022 / manual section 5, by the vendor alone: NVIDIA -> dedicated-nvidia, Intel ->
+    dedicated-intel, anything else -> dedicated-cpu (Amendment 2026-11-17). The wizard uses
+    gpu_recommendation, which also checks the driver and runtime. Never shared-nvidia."""
+    return {"nvidia": "dedicated-nvidia", "intel": "dedicated-intel"}.get(
+        gpu.vendor, "dedicated-cpu"
+    )
 
 
 def check_docker(runner: Runner, which: Callable[[str], str | None] = shutil.which) -> list[Check]:
@@ -453,14 +469,214 @@ def preflight(
     checks.append(check_ram(mem_total_gib(root)))
     checks.append(check_shm(runner, user))
     gpu = detect_gpu(root)
-    gpu_note = {
-        "nvidia": "profile dedicated-nvidia; the NVIDIA driver and Container Toolkit: manual 5",
-        "intel": "profile dedicated-intel; the render group: manual 5",
-        "amd": "no AMD vision image: dedicated-intel, the CPU detector runs (manual 9)",
-        "none": "dedicated-intel; the CPU detector runs (manual 9)",
-    }[gpu.vendor]
-    checks.append(Check("gpu", "GPU", "info", f"{gpu.label}: {gpu_note}"))
+    # ADR-0022 Amendment 2026-11-17 (Batt: "detect the GPU and recommend it; no GPU -> the CPU"):
+    # what a container cannot bring decides; not ready = a warning with the fixes, never a stop
+    rec = gpu_recommendation(gpu, runner, root)
+    state = "warn" if rec.fixes else "info"
+    checks.append(Check("gpu", "GPU", state, rec.summary(), "; ".join(rec.fixes + rec.notes)))
+    # ADR-0026: this copy's Docker name and subnets (a name another folder's containers use stops)
+    checks.append(check_project(runner, repo))
+    checks.append(check_subnets(runner, env_baseline(repo))[0])
     return checks, gpu
+
+
+# --- 0b. this install's names, subnets and GPU (ADR-0026, Batt 2026-11-17: nothing locked) -------
+
+
+def project_owners(runner: Runner, name: str) -> set[str]:
+    """The folders whose compose containers carry project ``name`` (compose's working_dir label)."""
+    res = runner(
+        [
+            "docker",
+            "ps",
+            "-a",
+            "--filter",
+            f"label=com.docker.compose.project={name}",
+            "--format",
+            '{{.Label "com.docker.compose.project.working_dir"}}',
+        ],
+        timeout=20,
+    )
+    return {line.strip() for line in res.out.splitlines() if line.strip()} if res.ok else set()
+
+
+def check_project(runner: Runner, repo: Path = REPO, name: str | None = None) -> Check:
+    """Batt 2026-11-17: "check first: if the name poring-lab exists, tell the user to use another".
+    Only ANOTHER folder's containers count: a re-run here finds its own."""
+    name = name or project()
+    owners = project_owners(runner, name)
+    here = str(repo.resolve())
+    other = sorted(o for o in owners if str(Path(o).resolve()) != here)
+    if other:
+        return Check(
+            "project",
+            "Docker name",
+            "fail",
+            f"'{name}' belongs to the poring-lab copy in {other[0]}",
+            "This copy needs its own name (COMPOSE_PROJECT_NAME): the wizard asks for "
+            "one; that copy is never touched.",
+            True,
+        )
+    return Check(
+        "project",
+        "Docker name",
+        "ok",
+        f"'{name}'" + (" (this folder's containers)" if owners else ""),
+    )
+
+
+def free_project_name(runner: Runner, base: str, repo: Path = REPO) -> str:
+    """``base``-2, -3, ...: the first name no other folder's containers use."""
+    for n in range(2, 100):
+        cand = f"{base}-{n}"[:63]
+        if check_project(runner, repo, cand).status == "ok":
+            return cand
+    raise SetupError("no free project name found")
+
+
+def used_subnets(runner: Runner) -> list[tuple[ipaddress.IPv4Network, str]]:
+    """Every IPv4 subnet on this host, with its owner: Docker networks (by name) and routes."""
+    out: list[tuple[ipaddress.IPv4Network, str]] = []
+    ids = runner(["docker", "network", "ls", "-q"], timeout=20)
+    if ids.ok and ids.out.split():
+        res = runner(
+            [
+                "docker",
+                "network",
+                "inspect",
+                "--format",
+                "{{.Name}}{{range .IPAM.Config}} {{.Subnet}}{{end}}",
+                *ids.out.split(),
+            ],
+            timeout=20,
+        )
+        for line in res.out.splitlines() if res.ok else []:
+            name, *nets = line.split()
+            for n in nets:
+                try:
+                    net = ipaddress.ip_network(n, strict=False)
+                except ValueError:
+                    continue
+                if isinstance(net, ipaddress.IPv4Network):
+                    out.append((net, f"Docker network {name}"))
+    routes = runner(["ip", "-4", "route"], timeout=10)
+    for line in routes.out.splitlines() if routes.ok else []:
+        parts = line.split()
+        if not parts or parts[0] == "default" or re.search(r"\bdev (br-\S+|docker0)\b", line):
+            continue  # Docker's own bridges are listed by name above
+        try:
+            net = ipaddress.ip_network(parts[0], strict=False)
+        except ValueError:
+            continue
+        if isinstance(net, ipaddress.IPv4Network):
+            out.append((net, f"route {line.strip()}"))
+    return out
+
+
+def check_subnets(
+    runner: Runner, env: Mapping[str, str], name: str | None = None
+) -> tuple[Check, dict[str, str]]:
+    """The two pinned /24s must be free on this host (rule 6), or this copy's own. Taken: the
+    proposal is the first free pair inside 10.210.0.0/16 (from 10.210.96 up)."""
+    name = name or project()
+    own = {f"Docker network {name}_default", f"Docker network {name}_agent"}
+    used = [(n, o) for n, o in used_subnets(runner) if o not in own]
+    want = {k: env.get(k, "").strip() or lab_env.NETS[k] for k in lab_env.NETS}
+
+    def taken(prefix: str) -> str | None:
+        net = ipaddress.ip_network(f"{prefix}.0/24")
+        return next((o for n, o in used if n.overlaps(net)), None)
+
+    hits = {k: t for k in want if (t := taken(want[k]))}
+    if not hits:
+        return Check(
+            "subnets",
+            "Docker subnets",
+            "ok",
+            f"{want['LAB_NET_PREFIX']}.0/24 and {want['LAB_AGENT_NET_PREFIX']}.0/24 are free",
+        ), {}
+    for x in range(96, 254):
+        pair = (f"10.210.{x}", f"10.210.{x + 1}")
+        if not taken(pair[0]) and not taken(pair[1]):
+            proposal = dict(zip(("LAB_NET_PREFIX", "LAB_AGENT_NET_PREFIX"), pair, strict=True))
+            key, owner = next(iter(hits.items()))
+            return Check(
+                "subnets",
+                "Docker subnets",
+                "warn",
+                f"{want[key]}.0/24 is taken ({owner}): this copy will use "
+                f"{pair[0]}.0/24 and {pair[1]}.0/24",
+                "",
+            ), proposal
+    return Check(
+        "subnets",
+        "Docker subnets",
+        "fail",
+        "no free /24 pair inside 10.210.0.0/16",
+        f"{MANUAL} section 1.1",
+        True,
+    ), {}
+
+
+def our_ports(runner: Runner, name: str | None = None) -> set[int]:
+    """The host ports this copy's own containers publish now (a re-run holds them itself)."""
+    res = runner(
+        [
+            "docker",
+            "ps",
+            "--filter",
+            f"label=com.docker.compose.project={name or project()}",
+            "--format",
+            "{{.Ports}}",
+        ],
+        timeout=20,
+    )
+    return {int(m) for m in re.findall(r":(\d+)->", res.out)} if res.ok else set()
+
+
+def port_moves(
+    ip: str, env: Mapping[str, str], held: set[int], binder: Callable[[str, int], str] | None = None
+) -> dict[str, tuple[int, int]]:
+    """{key: (wanted, proposal)} for each install port another program holds on ``ip`` (the
+    console's port has its own screen). A proposal: the wanted port + 1000 x k, free, unused."""
+    binder = binder or bind_state
+    wanted = {
+        k: int(env.get(k, "").strip() or v) for k, v in lab_env.PORTS.items() if k != "CONSOLE_PORT"
+    }
+    chosen = set(wanted.values())
+    out: dict[str, tuple[int, int]] = {}
+    for key, port in wanted.items():
+        if port in held or binder(ip, port) == "free":
+            continue
+        for k in range(1, 60):
+            cand = port + 1000 * k
+            if cand > PORT_MAX:
+                break
+            if cand not in chosen and cand not in LAB_PORTS and binder(ip, cand) == "free":
+                out[key] = (port, cand)
+                chosen.add(cand)
+                break
+        else:
+            out[key] = (port, 0)  # none found: the person types one
+    return out
+
+
+def gpu_recommendation(gpu: Gpu, runner: Runner, root: Path = Path("/")) -> gpu_ready.GpuReady:
+    """scripts/gpu_ready.py's recommendation for the detected GPU (ADR-0022 Amendment 11-17)."""
+
+    def run(cmd: Sequence[str]) -> tuple[int, str]:
+        res = runner(list(cmd), timeout=20)
+        return res.rc, res.out
+
+    return gpu_ready.recommend(gpu.vendor, ram_gib=mem_total_gib(root), root=root, run=run)
+
+
+def detector_ready(repo: Path) -> Callable[[Runner], bool]:
+    def check(runner: Runner) -> bool:
+        res = runner([PY, str(repo / "scripts" / "detector_setup.py"), "--check"], timeout=300)
+        return res.ok
+
+    return check
 
 
 def blocking(checks: Sequence[Check]) -> list[Check]:
@@ -532,11 +748,12 @@ def parse_port(text: str) -> tuple[int | None, str]:
     return port, port_problem(port)
 
 
-def port_problem(port: int) -> str:
+def port_problem(port: int, taken: Mapping[int, str] | None = None) -> str:
+    taken = LAB_PORTS if taken is None else taken
     if not PORT_MIN <= port <= PORT_MAX:
         return f"{port} is outside {PORT_MIN}-{PORT_MAX} (ports below 1024 are privileged)"
-    if port in LAB_PORTS:
-        return f"{port} is {LAB_PORTS[port]}'s port: pick another"
+    if port in taken:
+        return f"{port} is {taken[port]}'s port: pick another"
     return ""
 
 
@@ -606,19 +823,7 @@ def win_ip_problems(ip: str, server_ip: str, addrs: Sequence[Addr]) -> tuple[str
     if nets and not any(addr in n for n in nets):
         warnings.append(f"{ip} is not on this server's subnet ({nets[0]}): the lab expects both "
                         "on the same LAN")  # fmt: skip
-    if ip.strip() != LAB_WIN_HOST:
-        warnings.append(BOT_PC_LIMIT)
     return "", warnings
-
-
-BOT_PC_LIMIT = (
-    f"The bot can act only for a game PC at {LAB_WIN_HOST} today: the interlock's shipped "
-    "environment set names that address as the lab environment's Windows host, and a person cannot "
-    "change it yet (manual section 7, 'Known limit'; the packet sniffer itself follows this PC's "
-    "address). At another address a person can view and play through the console, but every bot "
-    f"press is refused (host_mismatch). A DHCP reservation of {LAB_WIN_HOST} for this PC avoids "
-    "it, on a network where that address is free."
-)
 
 
 def tcp_open(ip: str, port: int, timeout: float = 3.0) -> bool:
@@ -657,6 +862,13 @@ class Answers:
     win_ip: str = ""
     profile: str = ""
     build_vision: bool = False
+    # ADR-0026 (Batt 2026-11-17, nothing locked): set only when they differ from the defaults
+    project: str = ""  # COMPOSE_PROJECT_NAME, when the default belongs to another folder
+    store_dir: str = ""  # LAB_STORE_DIR
+    ports: dict[str, int] = field(default_factory=dict)  # RATHENA_*_PORT / NOVNC / BACKEND moves
+    nets: dict[str, str] = field(default_factory=dict)  # LAB_NET_PREFIX / LAB_AGENT_NET_PREFIX
+    viewer_net: str = ""  # VIEWER_NETWORKS, the server address's own LAN
+    worker_mem: str = ""  # VISION_WORKER_MEM, the GPU recommendation's (a new .env only)
 
     @classmethod
     def from_dict(cls, data: Mapping[str, Any]) -> Answers:
@@ -734,6 +946,18 @@ def planned_env(
         plan["RENDER_GID"] = str(gid)
     if a.profile.startswith("dedicated-"):
         plan["VISION_MAX_VRAM_FRACTION"] = "1.0"
+    # ADR-0026 (Batt 2026-11-17: nothing locked): this install's own values, where they differ
+    if a.project and a.project != lab_env.PROJECT_DEFAULT:
+        plan["COMPOSE_PROJECT_NAME"] = a.project
+    plan["LAB_STORE_DIR"] = (a.store_dir or current.get("LAB_STORE_DIR", "").strip()
+                             or str(home / lab_env.STORE_DEFAULT))  # fmt: skip
+    for key, port in a.ports.items():
+        plan[key] = str(port)
+    plan.update(a.nets)
+    if a.viewer_net:
+        plan["VIEWER_NETWORKS"] = a.viewer_net
+    if a.worker_mem and not current.get("VISION_WORKER_MEM", "").strip():
+        plan["VISION_WORKER_MEM"] = a.worker_mem
     origins = current.get("FRONTEND_ORIGINS", "").strip()
     if origins:  # an explicit list must name the console, or the backend refuses it
         want = console_url(a.server_ip, a.console_port)
@@ -794,6 +1018,13 @@ def write_env(
         rec.mkdir(parents=True, exist_ok=True)  # must exist and be ours before gamestream starts
     except OSError as exc:
         raise SetupError(f"cannot create S2_REC_DIR {rec}: {exc}") from None
+    # ADR-0026: the storage folder must exist before the vision worker binds it (Docker would
+    # create it root-owned); its archive/models/ takes the starter model (detector_setup.py)
+    store = Path(back.get("LAB_STORE_DIR", "").strip() or home / lab_env.STORE_DEFAULT)
+    try:
+        (store / "archive" / "models").mkdir(parents=True, exist_ok=True)
+    except OSError as exc:
+        raise SetupError(f"cannot create the storage folder {store}: {exc}") from None
     return created, changes
 
 
@@ -960,9 +1191,23 @@ def install_plan(repo: Path, env: Mapping[str, str], a: Answers) -> list[Step]:
                 "Optional: Skip it and the CPU detector runs (manual section 9). " + FIX_BUILD,
                 optional=True,
                 timeout=4 * 3600,
-                done=image_present(lab_env.image("vision")),
+                # the Intel profile builds the Intel image (compose.intel.yaml)
+                done=image_present(
+                    lab_env.image("vision-intel" if a.profile == "dedicated-intel" else "vision")
+                ),
             )
         )
+    steps.append(
+        Step(
+            "detector",
+            "Set up the CPU detector and its starter model (v1, from the teaching-kit branch)",
+            (PY, "scripts/detector_setup.py"),
+            "Read the last lines: uv could not download numpy / onnxruntime (internet), or git "
+            "could not fetch the teaching-kit branch (manual section 9).",
+            timeout=1800,
+            done=detector_ready(repo),
+        )
+    )
     steps += [
         Step(
             "start-db",
@@ -1045,6 +1290,15 @@ RECREATE_FOR: dict[str, tuple[str, ...]] = {
     "WIN_HOST": ("backend", "desktop", "gamestream"),
     "RATHENA_WEB_SERVER": ("rathena",),
     "S2_REC_DIR": ("gamestream",),
+    # ADR-0026: the install values a running copy must take (the game ports reach rathena, which
+    # takes its sniffer along; the backend's environment set suggests them)
+    "RATHENA_LOGIN_PORT": ("rathena", "backend"),
+    "RATHENA_CHAR_PORT": ("rathena", "backend"),
+    "RATHENA_MAP_PORT": ("rathena", "backend"),
+    "RATHENA_WEB_PORT": ("rathena",),
+    "BACKEND_PORT": ("backend", "frontend-dev"),
+    "NOVNC_PORT": ("desktop",),
+    "VIEWER_NETWORKS": ("backend",),
 }
 
 

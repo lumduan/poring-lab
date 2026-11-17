@@ -72,15 +72,18 @@ def test_the_constants_match_their_sources(core: ModuleType) -> None:
     assert core.SUNSHINE_TCP == cb.SUNSHINE_PORTS  # what pair / to-console test
     from poring_packets import capture
 
-    # the committed filter's address (the live sniffer follows WIN_HOST since 2026-11-17)
-    assert core.LAB_WIN_HOST == capture.LAB_CLIENT_IP
+    # ADR-0026: no fixed game PC -- the shipped set names this install's WIN_HOST by token, and
+    # the sniffer follows WIN_HOST (capture.bpf_program; its committed address is a template only)
+    assert capture.bpf_program("10.0.5.31")[3][3] != capture.bpf_program("10.0.5.32")[3][3]
     seed = yaml.safe_load((ROOT / "config" / "environments.yaml").read_text())
     lab = next(e for e in seed["environments"] if e["id"] == "lab-rathena")
-    assert lab["windows_host"] == core.LAB_WIN_HOST  # the interlock's shipped seed
+    assert lab["windows_host"] == "${WIN_HOST}"  # the interlock's shipped seed
 
 
 def test_every_published_lab_port_is_refused_for_the_console(core: ModuleType) -> None:
-    services = yaml.safe_load((ROOT / "compose.yaml").read_text())["services"]
+    # the compose ports are ${KEY:-default} since ADR-0026: read with their defaults (lab_env)
+    text = re.sub(r"\$\{([A-Z_]+_PORT):-(\d+)\}", r"\2", (ROOT / "compose.yaml").read_text())
+    services = yaml.safe_load(text)["services"]
     published = set()
     for name, spec in services.items():
         for port in (spec or {}).get("ports", []):
@@ -89,6 +92,10 @@ def test_every_published_lab_port_is_refused_for_the_console(core: ModuleType) -
                 published.add(int(host))
     assert published and published <= set(core.LAB_PORTS), published - set(core.LAB_PORTS)
     assert core.DEFAULT_CONSOLE_PORT not in core.LAB_PORTS
+    # another install's own ports are refused for its console, the defaults then free
+    other = core.install_ports({"RATHENA_LOGIN_PORT": "7900", "BACKEND_PORT": "9000"})
+    assert {7900, 9000} <= set(other) and 6900 not in other and 8000 not in other
+    assert "login server" in core.port_problem(7900, other) and core.port_problem(6900, other) == ""
 
 
 # --- 1. the server address ------------------------------------------------------------------------
@@ -192,7 +199,9 @@ def test_windows_address_rules(core: ModuleType) -> None:
     assert "THIS server" in core.win_ip_problems(server, server, addrs)[0]
     assert "not a private" in core.win_ip_problems("8.8.8.8", server, addrs)[0]
     err, warnings = core.win_ip_problems("192.168.50.20", server, addrs)
-    assert err == "" and warnings == [core.BOT_PC_LIMIT]  # the bot limit is said plainly
+    # ADR-0026 (Batt 2026-11-17, "don't lock an IP"): any game PC on the LAN, no fixed address
+    assert err == "" and warnings == []
+    assert not hasattr(core, "LAB_WIN_HOST") and not hasattr(core, "BOT_PC_LIMIT")
     err, warnings = core.win_ip_problems("10.1.1.5", server, addrs)
     assert err == "" and any("not on this server's subnet" in w for w in warnings)
     lab_addrs = [core.Addr("eno1", "192.168.1.228", 24)]
@@ -236,8 +245,8 @@ def sysfs(
         ({"card0": "0x8086"}, False, "intel", "dedicated-intel"),
         ({"card0": "0x8086", "card1": "0x10de"}, False, "nvidia", "dedicated-nvidia"),
         ({"card0": "0x8086"}, True, "nvidia", "dedicated-nvidia"),
-        ({}, False, "none", "dedicated-intel"),
-        ({"card0": "0x1002"}, False, "amd", "dedicated-intel"),
+        ({}, False, "none", "dedicated-cpu"),  # ADR-0022 Amendment 2026-11-17
+        ({"card0": "0x1002"}, False, "amd", "dedicated-cpu"),
     ],
 )
 def test_gpu_detection_and_the_default_profile(
@@ -356,7 +365,10 @@ def test_preflight_stops_off_linux_and_runs_read_only_commands(
     assert not core.blocking(checks) and gpu.vendor == "intel"
     verbs = {c[0] for c in fake.calls}
     assert verbs <= {"docker", "ip", "loginctl", "systemd-analyze"}
-    assert all(c[:2] == ("docker", "info") for c in fake.calls if c[0] == "docker")
+    # read-only docker only: info, and (ADR-0026) the project's owners and the networks' subnets
+    allowed = {("docker", "info"), ("docker", "ps"), ("docker", "network")}
+    assert all(c[:2] in allowed for c in fake.calls if c[0] == "docker")
+    assert all(c[2] in ("ls", "inspect") for c in fake.calls if c[:2] == ("docker", "network"))
 
 
 # --- 4. .env --------------------------------------------------------------------------------------
@@ -403,6 +415,7 @@ def test_the_planned_settings(core: ModuleType, tmp_path: Path) -> None:
         "S2_REC_DIR": str(tmp_path / "poring-lab-rec/.s2-h264"),
         "RENDER_GID": "991",
         "VISION_MAX_VRAM_FRACTION": "1.0",
+        "LAB_STORE_DIR": str(tmp_path / "poring-lab-store"),  # ADR-0026: always written
     }
     shared = core.planned_env(answers(core, profile="shared-nvidia"), {}, gid=None, home=tmp_path)
     assert "VISION_MAX_VRAM_FRACTION" not in shared and "RENDER_GID" not in shared
@@ -417,6 +430,31 @@ def test_the_planned_settings(core: ModuleType, tmp_path: Path) -> None:
     )
     assert "FRONTEND_ORIGINS" not in core.planned_env(answers(core), {}, gid=None, home=tmp_path)
     assert not any(k.startswith(("RDP_", "WIN_LAB")) for k in plan)  # RDP is never written
+
+
+def test_the_planned_install_values(core: ModuleType, tmp_path: Path) -> None:
+    """ADR-0026: a name, ports, subnets, the browsers' LAN and the worker's memory are written only
+    when they differ from the defaults; an existing store and worker memory are kept."""
+    a = answers(core)
+    a.project, a.store_dir, a.viewer_net, a.worker_mem = "lab2", "/srv/store", "10.0.5.0/24", "9g"
+    a.ports = {"RATHENA_LOGIN_PORT": 7900}
+    a.nets = {"LAB_NET_PREFIX": "10.210.98", "LAB_AGENT_NET_PREFIX": "10.210.99"}
+    plan = core.planned_env(a, {}, gid=None, home=tmp_path)
+    assert {k: plan[k] for k in ("COMPOSE_PROJECT_NAME", "LAB_STORE_DIR", "RATHENA_LOGIN_PORT",
+                                 "LAB_NET_PREFIX", "LAB_AGENT_NET_PREFIX", "VIEWER_NETWORKS",
+                                 "VISION_WORKER_MEM")} == {  # fmt: skip
+        "COMPOSE_PROJECT_NAME": "lab2", "LAB_STORE_DIR": "/srv/store", "RATHENA_LOGIN_PORT": "7900",
+        "LAB_NET_PREFIX": "10.210.98", "LAB_AGENT_NET_PREFIX": "10.210.99",
+        "VIEWER_NETWORKS": "10.0.5.0/24", "VISION_WORKER_MEM": "9g",
+    }  # fmt: skip
+    current = {"LAB_STORE_DIR": "/mnt/nas", "VISION_WORKER_MEM": "11g"}
+    kept = core.planned_env(answers(core), current, gid=None, home=tmp_path)
+    assert kept["LAB_STORE_DIR"] == "/mnt/nas" and "VISION_WORKER_MEM" not in kept
+    default = core.planned_env(answers(core), {}, gid=None, home=tmp_path)
+    assert "COMPOSE_PROJECT_NAME" not in default and "VIEWER_NETWORKS" not in default
+    a2 = answers(core)
+    a2.project = "poring-lab"  # the default is never written
+    assert "COMPOSE_PROJECT_NAME" not in core.planned_env(a2, {}, gid=None, home=tmp_path)
 
 
 def tree(tmp_path: Path) -> Path:
@@ -512,6 +550,7 @@ MANUAL_ORDER = [
     "scripts/gen_mapcache.py",
     "build:sniffer",
     "build:gamestream",
+    "scripts/detector_setup.py",  # ADR-0026: the CPU detector + the starter model v1
     "start:db@120",
     "start:rathena@240",
     "scripts/smoke_test.sh",
@@ -538,6 +577,7 @@ def test_the_install_follows_the_manual_one_guarded_step_at_a_time(
             "scripts/gen_mapcache.py",
             "scripts/smoke_test.sh",
             "scripts/capture_backend.py",
+            "scripts/detector_setup.py",
         ), s.cmd
         assert Path(s.cmd[0]).name != "docker" and not key(s).startswith("up:"), s.cmd
         assert s.fix and not s.optional
@@ -755,7 +795,10 @@ def test_check_is_read_only_masks_secrets_and_can_skip_container_probes(
     assert dict(rep.env)["CONSOLE_PORT"] == "3100"
     assert not any("paired" in c for call in fake.calls for c in call)  # --no-exec honoured
     assert all(call[0] in ("docker", "ip", "loginctl", "systemd-analyze") for call in fake.calls)
-    assert all(call[1] in ("info", "ps") for call in fake.calls if call[0] == "docker")
+    assert all(call[1] in ("info", "ps", "network") for call in fake.calls if call[0] == "docker")
+    assert all(
+        call[2] in ("ls", "inspect") for call in fake.calls if call[:2] == ("docker", "network")
+    )
     status = {c.key: c for c in rep.status}
     assert status["sunshine"].status == "ok" and status["svc-backend"].status == "ok"
     assert status["svc-gamestream"].status == "warn" and "Sunshine only" in status["path"].detail
@@ -844,3 +887,67 @@ def test_the_wizard_never_writes_the_lock_or_daemon_config() -> None:
         assert 'capture-backend").write' not in src and "systemctl restart" not in src.replace(
             "`sudo systemctl restart docker`", ""
         ), name
+
+
+# --- ADR-0026 (Batt 2026-11-17, nothing locked): names, subnets, ports, the GPU ---
+
+
+def test_a_name_another_folder_uses_is_refused_and_a_free_one_offered(
+    core: ModuleType, tmp_path: Path
+) -> None:
+    """Batt: "check first: if the name poring-lab exists, tell the user to use another name". Only
+    ANOTHER folder's containers count: a re-run in the same folder finds its own."""
+    fake = Fake({("docker", "ps", "-a", "--filter", "label=com.docker.compose.project=poring-lab"):
+                 (0, "/home/bot/docker/poring-lab\n/home/bot/docker/poring-lab\n")})  # fmt: skip
+    other = core.check_project(fake, tmp_path, "poring-lab")
+    assert (
+        other.status == "fail" and other.blocking and "/home/bot/docker/poring-lab" in other.detail
+    )
+    mine = core.check_project(fake, Path("/home/bot/docker/poring-lab"), "poring-lab")
+    assert mine.status == "ok" and "this folder's" in mine.detail
+    assert core.check_project(fake, tmp_path, "lab2").status == "ok"  # nobody's
+    assert core.free_project_name(fake, "poring-lab", tmp_path) == "poring-lab-2"
+
+
+def nets_fake(subnets: str, routes: str = "") -> Any:
+    return Fake({("docker", "network", "ls"): (0, "a\nb\n"),
+                 ("docker", "network", "inspect"): (0, subnets),
+                 ("ip", "-4", "route"): (0, routes)})  # fmt: skip
+
+
+def test_taken_subnets_get_the_first_free_pair(core: ModuleType) -> None:
+    own = (
+        "poring-lab_default 10.210.96.0/24\nporing-lab_agent 10.210.97.0/24\nbridge 172.17.0.0/16\n"
+    )
+    check, proposal = core.check_subnets(nets_fake(own), {}, "poring-lab")
+    assert check.status == "ok" and proposal == {}  # this copy's own networks
+    other = "poring-lab_default 10.210.96.0/24\nporing-lab_agent 10.210.97.0/24\nx 10.210.98.0/24\n"
+    check, proposal = core.check_subnets(nets_fake(other), {}, "lab2")
+    assert check.status == "warn" and "taken" in check.detail and not check.blocking
+    assert proposal == {"LAB_NET_PREFIX": "10.210.99", "LAB_AGENT_NET_PREFIX": "10.210.100"}
+    vpn = "default via 192.168.1.1 dev eno1\n10.210.96.0/22 dev wg0 scope link\n"
+    check, proposal = core.check_subnets(nets_fake("", vpn), {}, "poring-lab")
+    assert proposal == {"LAB_NET_PREFIX": "10.210.100", "LAB_AGENT_NET_PREFIX": "10.210.101"}
+
+
+def test_busy_install_ports_get_a_free_proposal(core: ModuleType) -> None:
+    busy = {6900, 6121, 8000}
+
+    def binder(ip: str, port: int) -> str:
+        return "in-use" if port in busy else "free"
+
+    moves = core.port_moves("192.168.50.10", {}, set(), binder)
+    assert moves == {"RATHENA_LOGIN_PORT": (6900, 7900), "RATHENA_CHAR_PORT": (6121, 7121),
+                     "BACKEND_PORT": (8000, 9000)}  # fmt: skip
+    assert core.port_moves("192.168.50.10", {}, busy, binder) == {}  # held by this copy itself
+    assert core.port_moves("192.168.50.10", {"BACKEND_PORT": "8100"}, set(), binder) == {
+        "RATHENA_LOGIN_PORT": (6900, 7900), "RATHENA_CHAR_PORT": (6121, 7121)}  # fmt: skip
+
+
+def test_the_gpu_recommendation_comes_from_gpu_ready(core: ModuleType, tmp_path: Path) -> None:
+    root = sysfs(tmp_path, {})
+    (root / "proc").mkdir(exist_ok=True)
+    (root / "proc/meminfo").write_text("MemTotal:       16303104 kB\n")
+    rec = core.gpu_recommendation(core.Gpu("none", False), Fake(), root)
+    assert (rec.profile, rec.build_vision) == ("dedicated-cpu", False)
+    assert "dedicated-cpu" in core.PROFILES
