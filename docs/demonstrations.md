@@ -154,6 +154,29 @@ IP from WIN_HOST, but do not tie it to the bot"; ADR-0007 note 2026-11-17, ADR-0
 | `pickup_request` + `act` from us (`pickup`) | `20261117T162456-demo-safety-check-pickup` (the Knife dragged from the Eqp tab to the floor; the scan clicked cell 101,115) | `pickup_request` 1, `pickup_result` 1, `floor_item_vanish` 1, 1 pickup act → **PASS** |
 | `npc_contact` | `20261117T162702-demo-safety-check-npc-garnet` (`--reader robust2`); NEXT x3 by Enter, each on a judged frame, then the menu's cancel clicked | **1 contact** (gid 110000895); `npc_say` 7, `npc_wait` 3, `npc_next_click` 3, `npc_menu` 1, `npc_choose` 1, `npc_close_click` 1 → **PASS** |
 
+**Re-proven again after the 2026-11-17 evening recreates** (Batt: "don't lock an IP or anything";
+ADR-0026, main 28802e4f: the game ports in the sniffer's filter, rAthena's ports from `.env`):
+- backend `recreate:backend@90` 22:28:22-22:29:57 ICT: ASSIST restored by the marker; green `ok`,
+  verified; its environment carries `COMPOSE_SUBNET` / `AGENT_NETWORKS` / `RATHENA_*_PORT` at the
+  lab's values; the shipped set's tokens resolve to 192.168.1.228:6900/6121/5121 and the Windows PC
+  192.168.1.169.
+- rathena `recreate:rathena@240` 22:31:01-22:35:05: the new entrypoint's port checks passed; its
+  line `clients will be sent to char 192.168.1.228:6121 and map 192.168.1.228:5121` (the ports now
+  from the settings).
+- sniffer `recreate:sniffer@120` 22:35:21-22:37:59, SNIFFER_COMMIT 28802e4f0a8d: self-test PASS;
+  `capture filter: host 192.168.1.169 and tcp and (port 6900 or port 6121 or port 5121)` (now from
+  WIN_HOST AND SNIFF_SERVER_PORTS; the same program); the auto GM re-login entered the Novice GM
+  (the remembered slot) and was packet-verified again at 22:37:59.
+
+| signal | positive case | result |
+|---|---|---|
+| the scrub itself | `scrub_check.py --since` the recreate (1 capture file) | user **NOT FOUND**, password **NOT FOUND**; controls: character name FOUND, 1 `login_accepted` → **PASS** |
+| `attack_request` + `act` from us | `monster-click --species red_plant` (22:4x) | 1 request, 9 acts, `pass` → **PASS** |
+| `pickup_request` + `act` from us | `20261117T224230-demo-safety-check-pickup` (the new Knife dragged from the Eqp tab; cell 102,113) | `pickup_request` 1, `pickup_result` 1, `floor_item_vanish` 1, 1 pickup act → **PASS** |
+| `npc_contact` | `20261117T224428-demo-safety-check-npc-garnet` (`--reader robust2`; NEXT x3 by Enter on judged frames, the menu's cancel clicked) | **1 contact** (gid 110000895); `npc_say` 7, `npc_wait` 3, `npc_next_click` 3, `npc_menu` 1, `npc_choose` 1, `npc_close_click` 1 → **PASS** |
+
+Evidence: NAS `scratch-archive/2026-11-17/any-host-deploy/` (19 files, SHA256SUMS verified).
+
 - ~~Still open: the banked-capture replay for the walk runs of 2026-10-07/08~~ ➡️ done 07:47–07:52
   (`guarded_build.py replay:`, its own positive controls first; results in the CORRECTION below the
   walk@10 results).

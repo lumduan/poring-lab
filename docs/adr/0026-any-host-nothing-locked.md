@@ -97,4 +97,42 @@ could list in an hour:
 
 ## Implementation (2026-11-17)
 
-Branch `feat/any-host`; the commits are listed in the merge.
+Merged to main as 28802e4f (branch `feat/any-host`, two parallel branches inside it):
+
+| Commit | What |
+|---|---|
+| 5092dadf | `scripts/lab_env.py`; compose interpolates the project name, ports, subnets, images and the storage volume; `dev.sh -p`; `.env.example`, init_env.sh |
+| e5180c85 | the shipped environment set by token; the Windows PC on the Settings page (ADR-0023 decision 4) |
+| 7b3a7ca5 | `scripts/detector_setup.py` (the CPU detector + v1 from teaching-kit) |
+| c476dadc, 7092b269 | `dedicated-cpu`; `scripts/gpu_ready.py` |
+| a40ea815 | the game ports end to end (rAthena's conf templates + entrypoint, the sniffer's filter) |
+| 2a149429, 1f780c40 | the storage folder in guarded_build and ~37 scripts (a subagent) |
+| b44dbb30, 952b8ddb | every Docker name from the project; `scripts/lab_project.sh` (a subagent) |
+| 5bb5826e, 14966a17 | a plain storage folder ships; the S2 recording default from the home |
+| f731b071, 06724a22 | guarded_build refuses vision on `dedicated-cpu`; the detect server serves the models present; the Run helper per profile |
+| 187e2862, 926a20d5 | the wizard: the name, subnet, port and GPU checks; its screens and dry run |
+| e58ac012, 6ffc7fdf | the docs; the runner kept byte-identical (its proofs pin it) |
+
+Checks before the merge: ruff and mypy clean; the full Python suite 6,311 passed, 81 skipped, 2
+failed in the worktree (both need gitignored lab data and pass in the main checkout); the frontend
+557 passed, 1 skipped, typecheck and lint clean.
+
+Proven live on the lab the same evening:
+- Before the merge the lab got its own values (`LAB_STORE_DIR=/mnt/poring-lab-datasets`,
+  `DETECTOR_DIR=/dev/shm/poring-lab-detector` in `.env`; its NFS volume in `compose.override.yaml`).
+  The merged compose config (`--no-interpolate`, the new defaults filled in) then differed from the
+  saved one ONLY by the new environment lines at the lab's values, the gamestream build argument and
+  the S2 recording default; volumes, ports, networks and images identical.
+- The backend, rathena and sniffer recreates and the four section 2a positive cases:
+  docs/demonstrations.md section 2a ("Re-proven again after the 2026-11-17 evening recreates").
+- The second-copy case, from another folder on this host (a worktree): `./setup.sh --check` said
+  `FAIL Docker name: 'poring-lab' belongs to the poring-lab copy in /home/bot/docker/poring-lab`;
+  the dry run planned the name `poring-lab-2`, the subnets 10.210.98/99, the ports 7900 / 7121 /
+  8121 / 9888 / 7080 / 9000, and no step on the lab's containers. In the lab's own folder: the name
+  and subnets are its own, nothing moves.
+
+Not covered yet (second-install-gaps.md): row U (a new NVIDIA host's GPU server has no `.pt`;
+Batt's decision), row V (the Settings page needs a third browser, by design), the runner's lab-only
+`--loot-items` path (`/dev/shm/poring-lab-detector/model`, kept: the runner is pinned by its
+proofs), the Thai-client and locale NAS shares of the Thai experiment, and the client-derived run
+data (section 8 of the manual).
