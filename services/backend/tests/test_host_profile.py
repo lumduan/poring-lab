@@ -60,7 +60,8 @@ def test_dedicated_nvidia_is_the_cuda_path_without_the_shared_rules(tmp_path: Pa
     assert shared.shared and not prof.shared
     for name in (*prof.vision_overlay, *prof.worker_overlay):
         assert (ROOT / name).is_file(), name
-    assert sorted(hp.PROFILES) == ["dedicated-intel", "dedicated-nvidia", "shared-nvidia"]
+    assert sorted(hp.PROFILES) == ["dedicated-cpu", "dedicated-intel", "dedicated-nvidia",
+                                   "shared-nvidia"]  # fmt: skip
     assert hp.DEFAULT == "shared-nvidia"  # a host is dedicated only by declaration
 
 
@@ -179,3 +180,12 @@ def test_drm_holders_are_found_and_unreadable_own_processes_are_unverifiable(
     finally:
         (proc / "13" / "fdinfo").chmod(0o755)
         (proc / "14" / "fdinfo").chmod(0o755)
+
+
+def test_the_cpu_profile_has_no_gpu_at_all() -> None:
+    """Batt 2026-11-17 ("no GPU -> use the CPU"): dedicated-cpu has no vision image, no worker, no
+    GPU lister; it is dedicated (no shared-host rules) and never a GPU profile."""
+    cpu = hp.PROFILES["dedicated-cpu"]
+    assert (cpu.accel, cpu.shared, cpu.vision_overlay, cpu.worker_overlay) == ("cpu", False, (), ())
+    assert (cpu.detect_backend, cpu.gpu_lister) == ("none", "none")
+    assert {"shared-nvidia", "dedicated-intel", "dedicated-nvidia"} == hp.GPU_PROFILES

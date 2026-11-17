@@ -16,6 +16,10 @@ capture services the shared rules protect (`dedicated_refusal`).
                       image, the NVIDIA reservation, nvidia-smi, the torch detect server) with
                       dedicated-intel's dedicated rules; its overlays (compose.nvidia.yaml,
                       compose.vision-worker.nvidia.yaml) only lift the 25 % VRAM cap. Never VM 103.
+    dedicated-cpu     a host with NO usable GPU (Batt 2026-11-17: "no GPU -> use the CPU"; an
+                      AMD card, or a card whose driver or container runtime is not ready): the
+                      dedicated rules, no vision image and no vision worker; the CPU detector
+                      serves alone (scripts/detector_setup.py). guarded_build refuses vision steps.
 
 Stdlib only: guarded_build runs under the system python3.
 """
@@ -55,7 +59,10 @@ PROFILES = {
         "dedicated-nvidia", "cuda", False, ("compose.nvidia.yaml",),
         ("compose.vision-worker.nvidia.yaml",), "torch", "nvidia-smi",
     ),
+    "dedicated-cpu": HostProfile("dedicated-cpu", "cpu", False, (), (), "none", "none"),
 }  # fmt: skip
+# The profiles that have a vision image and worker (a GPU of their own or a shared one).
+GPU_PROFILES = frozenset(n for n, p in PROFILES.items() if p.accel != "cpu")
 
 
 def dotenv_value(key: str, path: Path) -> str | None:
