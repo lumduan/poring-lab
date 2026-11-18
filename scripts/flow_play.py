@@ -570,9 +570,9 @@ class PixelIO(LiveIO):
                       f"{'ON' if r.pause_away() else 'off'}"))  # fmt: skip
         fg = h.get("foreground") or {}
         if fg:
-            out.append(f"the backend's key gate: {fg.get('state')} ({fg.get('reason')}, "
-                       f"{fg.get('mode')}, distance {fg.get('distance')}, frame age "
-                       f"{fg.get('age_ms')} ms)")  # fmt: skip
+            out.append(f"the backend's key gate, its LAST decision (not a fresh look): "
+                       f"{fg.get('state')} ({fg.get('reason')}, {fg.get('mode')}, distance "
+                       f"{fg.get('distance')}, frame age {fg.get('age_ms')} ms)")  # fmt: skip
         return out
 
     def snapshot(self, d: Path) -> list[str]:
@@ -1489,9 +1489,10 @@ ERROR_FILE = "error.txt"  # the full traceback of a fault
 TRACE_LINES = 12  # a fault's last traceback lines in the log itself
 
 
-def say(line: str) -> None:
-    """One diary line with its time (the run's log: the page shows its tail)."""
-    print(f"[{fr.ict()[11:19]}] {line}", flush=True)
+def say(line: str, out: Any = None) -> None:
+    """One diary line with its time (the run's log: the page shows its tail). ``out``: a stream
+    of its own (the pause's lines bypass the start check's captured stdout)."""
+    print(f"[{fr.ict()[11:19]}] {line}", file=out or sys.stdout, flush=True)
 
 
 def check_lines(got: Mapping[str, Any]) -> list[str]:
@@ -1526,9 +1527,12 @@ def fault_lines(tb: str, n: int = TRACE_LINES) -> list[str]:
 
 
 class PauseNotes:
-    """ro_agent.AWAY_HOOK: the pause's lines in the run's log and its session events."""
+    """ro_agent.AWAY_HOOK: the pause's lines in the run's log and its session events. They go to
+    the stream it was made with (the run's log): the start check captures stdout while it reads
+    (runner_check), and a pause during it must show at once (live test 2026-11-18 20:02)."""
 
-    def __init__(self) -> None:
+    def __init__(self, out: Any = None) -> None:
+        self.out = out or sys.stdout
         self.session: SessionLog | None = None
         self.lock = threading.Lock()
         self.count = 0
@@ -1539,11 +1543,11 @@ class PauseNotes:
             if kind == "pause":
                 self.count += 1
                 say(f"PAUSED: {info.get('why')}. The bot waits and presses nothing; it goes on by "
-                    "itself when the game is back on the screen.")  # fmt: skip
+                    "itself when the game is back on the screen.", self.out)  # fmt: skip
             else:
                 self.total_s += float(info.get("after_s") or 0.0)
                 say(f"RESUMED after {info.get('after_s')} s: the game is back on the screen; the "
-                    "bot goes on.")  # fmt: skip
+                    "bot goes on.", self.out)  # fmt: skip
             if self.session is not None:
                 self.session.ev({"kind": kind, **info})
 
