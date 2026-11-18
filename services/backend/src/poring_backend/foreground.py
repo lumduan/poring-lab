@@ -16,6 +16,13 @@ The templates live in the HUMAN-ONLY settings store (``<settings_dir>/foreground
 mounts it into the backend only), installed by ``scripts/foreground_template.py``. vision can write
 ``./data``, so a template there could be replaced by the agent.
 
+FULLSCREEN (Batt 2026-11-18, docs/planning/fullscreen-client.md): a client that fills the session
+(GAME_REGION at 0,0 and the session's size) draws no title bar. Windows hides its taskbar while a
+fullscreen window is in front and shows it when anything else takes the focus, so the evidence is
+then that the TASKBAR is absent: ``taskbar.npy`` (``taskbar@stream.npy``), its box in DESKTOP
+pixels, cut from this session while the desktop shows; a fresh frame whose box is at least
+``TASKBAR_ABSENT_MIN`` away from it passes. Missing -> ``foreground_uncalibrated``, as above.
+
 Clicks, moves, the wheel, key RELEASES and ReleaseAll are never gated. The exemption (Batt's
 answer 1): while a ``desktop`` operator window is open (ASSIST only, <= 120 s, tied to the lock SEQ)
 the agent types into its own Windows console (ro_agent console lines, capture_backend's TSCON);
@@ -46,6 +53,11 @@ log = logging.getLogger(__name__)
 
 TEMPLATE = "client_title_active"
 STREAM_SUFFIX = "@stream"
+# Fullscreen: the taskbar's template, and how far from it a frame must be to show it ABSENT (the
+# grey-thumb distance: a match is <= SIG_MATCH (6); the game under the taskbar's box measured
+# 2026-11-18, see docs/planning/fullscreen-client.md)
+TASKBAR = "taskbar"
+TASKBAR_ABSENT_MIN = 20.0
 GrabRegion = tuple[int, int, int, int]
 Grab = tuple[int, NDArray[np.uint8], str]  # (capture t_mono_ns, BGRA crop, "bus" | "x11")
 GrabFn = Callable[[GrabRegion], Grab]
@@ -61,6 +73,16 @@ class Check:
     path: str | None = None
 
 
+def fullscreen(game_region: Region | None, session: tuple[int, int] | None) -> bool:
+    """PURE: the client fills the session -- GAME_REGION at (0, 0) with the session's size -- so it
+    draws no title bar (docs/planning/fullscreen-client.md: fullscreen is derived, never a second
+    setting)."""
+    if game_region is None or session is None:
+        return False
+    r = game_region
+    return (r.x, r.y, r.w, r.h) == (0, 0, session[0], session[1])
+
+
 class ForegroundGate:
     def __init__(
         self,
@@ -69,9 +91,11 @@ class ForegroundGate:
         grab_factory: Callable[[], GrabFn],
         *,
         max_age_ns: int = int(CITED_MAX_AGE_MS * 1e6),
+        session: tuple[int, int] | None = None,
     ) -> None:
         self.dir = settings_dir / "foreground"
         self.game_region = game_region
+        self.session = session  # SESSION_SIZE (w, h); None = unknown (never fullscreen)
         self._grab_factory = grab_factory
         self._grab: GrabFn | None = None
         self.max_age_ns = max_age_ns
@@ -110,16 +134,28 @@ class ForegroundGate:
         self._cache[path] = (mtime, value)
         return value
 
+    @property
+    def fullscreen(self) -> bool:
+        """The client fills the session: GAME_REGION at (0, 0), the session's size."""
+        return fullscreen(self.game_region, self.session)
+
     def region(self) -> GrabRegion | None:
-        """The client title bar's desktop box: the template's box, relative to GAME_REGION."""
+        """The box to look at: the client title bar's (its template's box, relative to
+        GAME_REGION), or in fullscreen the taskbar's (its box in desktop pixels)."""
+        if self.game_region is None:
+            return None
+        if self.fullscreen:
+            box = self._load(self.dir / f"{TASKBAR}.json", "json")
+            return None if box is None else tuple(int(v) for v in box)  # type: ignore[return-value]
         box = self._load(self.dir / f"{TEMPLATE}.json", "json")
-        if box is None or self.game_region is None:
+        if box is None:
             return None
         dx, dy, w, h = (int(v) for v in box)
         return self.game_region.x + dx, self.game_region.y + dy, w, h
 
     def template(self, path: str) -> NDArray[np.float32] | None:
-        name = TEMPLATE + (STREAM_SUFFIX if path == "bus" else "")
+        base = TASKBAR if self.fullscreen else TEMPLATE
+        name = base + (STREAM_SUFFIX if path == "bus" else "")
         ref = self._load(self.dir / f"{name}.npy", "npy")
         return None if ref is None else np.asarray(ref, dtype=np.float32)
 
@@ -148,7 +184,9 @@ class ForegroundGate:
         if ref is None:
             return Check(False, "foreground_uncalibrated", None, age_ms, path)
         d = round(distance(grey_thumb(crop), ref), 2)
-        ok = d <= SIG_MATCH
+        # in a window the ACTIVE title bar must match; in fullscreen the taskbar must be clearly
+        # ABSENT (an unsure distance in between refuses: fail closed)
+        ok = d >= TASKBAR_ABSENT_MIN if self.fullscreen else d <= SIG_MATCH
         return Check(ok, "ok" if ok else "client_not_foreground", d, age_ms, path)
 
     async def check_async(self) -> Check:
@@ -190,7 +228,8 @@ class ForegroundGate:
             "exempt": self.exempt,
             "refused": dict(self.refused),
             "calibrated": self.calibrated(),
-            "threshold": SIG_MATCH,
+            "mode": "fullscreen" if self.fullscreen else "window",
+            "threshold": TASKBAR_ABSENT_MIN if self.fullscreen else SIG_MATCH,
             "max_age_ms": round(self.max_age_ns / 1e6),
         }
 

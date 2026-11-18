@@ -50,6 +50,7 @@ from poring_env.protocol import (
     SetMode,
     Status,
 )
+from poring_env.x11 import parse_session_size
 
 log = logging.getLogger(__name__)
 
@@ -406,6 +407,7 @@ class AppState:
                     rdp_ring=settings.rdp_ring_path,
                 ).grab
             ),
+            session=parse_session_size(settings.session_size),
         )
         self._restore_mode()
         self.verdict: Verdict = self.env_verdict(monotonic_ns())

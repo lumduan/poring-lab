@@ -353,6 +353,9 @@ def region_for(state: str) -> tuple[int, int, int, int]:
         x, y = shell_shortcut_xy()
         return x - 32, y - 34, SHORTCUT_BOX[2], SHORTCUT_BOX[3]
     meta = signature_path(state).with_suffix(".json")
+    if state in DESKTOP_BOX_STATES and meta.exists():  # Windows' own UI: desktop pixels
+        bx, by, bw, bh = json.loads(meta.read_text())["box"]
+        return bx, by, bw, bh
     x, y, w, h = game_region()
     if state == "chat_open":
         # the open input bar of the chat window's STANDARD place (Batt 2026-11-05: docked at the
@@ -623,6 +626,14 @@ AGENT_WS: dict[str, Any] = {"open_timeout": 5, "max_size": 2**20, "max_queue": N
 # Amendment 2026-11-18): a /flows Run may play in BOT as well, where the mux drops the human's input
 # and the person stops it with Stop or by switching to HUMAN. The Run helper (scripts/flow_run.py)
 # names that for its own processes only, in PORING_INPUT_MODES ("ASSIST,BOT"). HUMAN is never one.
+# Fullscreen (docs/planning/fullscreen-client.md): Windows' own UI whose signature boxes are in
+# DESKTOP pixels (not relative to GAME_REGION); the taskbar-absent rule, the backend gate's
+# (foreground.TASKBAR_ABSENT_MIN); how long an ENG reading taken before the launch stands
+DESKTOP_BOX_STATES = ("taskbar", "taskbar_client_icon")
+TASKBAR_ABSENT_MIN = 20.0
+ENG_FRESH_S = 600.0
+_ENG_AT: float | None = None
+
 MODES_ENV = "PORING_INPUT_MODES"
 MODES_DEFAULT = ("ASSIST",)
 MODES_ALLOWED = ("ASSIST", "BOT")
@@ -1102,16 +1113,56 @@ def console_secret(agent: Agent, screen: Screen, var: str, admin: bool = False) 
 
 
 def require_eng(screen: Screen) -> None:
+    """The keyboard layout is ENG (the tray's indicator) -- or Stop. Fullscreen hides the tray
+    while the client is in front: there the reading taken on the desktop just before the launch
+    (launch_client, this process, within ENG_FRESH_S) stands for it; nothing else does."""
+    global _ENG_AT
+    if fullscreen() and taskbar_hidden(screen) is True:
+        if _ENG_AT is not None and time.monotonic() - _ENG_AT <= ENG_FRESH_S:
+            return
+        raise Stop("fullscreen hides the tray: the keyboard layout was not read before the client "
+                   "went fullscreen (`ro_agent.py recover` reads it before launching): no "
+                   "credentials typed")  # fmt: skip
     if not is_state(screen, "eng"):
         to_png(screen.full(), SHOTS / "layout_not_eng.png")
         raise Stop("keyboard layout is not ENG (tray): no credentials typed")
+    _ENG_AT = time.monotonic()
+
+
+def fullscreen() -> bool:
+    """The client fills the session: GAME_REGION at (0, 0) with the session's size. It draws no
+    title bar (docs/planning/fullscreen-client.md; derived, never a setting of its own)."""
+    x, y, w, h = game_region()
+    return (x, y) == (0, 0) and (w, h) == desktop()
+
+
+def taskbar_hidden(screen: Screen, after_ns: int | None = None) -> bool | None:
+    """Fullscreen's proof that the client is in front: Windows hides its taskbar while a
+    fullscreen window is in front. True: the frame's taskbar box is at least TASKBAR_ABSENT_MIN
+    from the taskbar's template (the backend's foreground gate uses the same rule); False: the
+    taskbar shows (or is unsure: fail closed); None: no template (calibrate it first)."""
+    if not signature_path("taskbar").exists():
+        return None
+    return distance(screen, "taskbar", after_ns) >= TASKBAR_ABSENT_MIN
 
 
 def activate_client(agent: Agent, screen: Screen) -> None:
     """Click the client's own title bar, then VERIFY it is the foreground window (its active
     title-bar signature; inactive scores ~30). Another window can cover the title bar: on
     2026-10-01 a console did, the click focused the console, and a camera rotation's
-    right-clicks pasted the Windows clipboard onto its prompt (not executed; cleared)."""
+    right-clicks pasted the Windows clipboard onto its prompt (not executed; cleared).
+    FULLSCREEN: no title bar to click, and a click anywhere else lands in the game (she would
+    walk): only VERIFY -- the taskbar hidden on a fresh frame -- else Stop."""
+    if fullscreen():
+        hidden = taskbar_hidden(screen, after_ns=ns())
+        if hidden is None:
+            raise Stop("fullscreen: no taskbar template (`ro_agent.py calibrate taskbar 0 Y W 48` "
+                       "while the desktop shows): stopped")  # fmt: skip
+        if not hidden:
+            to_png(screen.full(), SHOTS / "client_not_front.png")
+            raise Stop("the fullscreen client is not in front (the taskbar shows): bring it to "
+                       "the front with its taskbar button; stopped")  # fmt: skip
+        return
     x, y, w, _ = game_region()
     clicked = ns()
     agent.click(x + w // 2, y - 15)
@@ -1487,12 +1538,35 @@ def close_client(agent: Agent, screen: Screen) -> None:  # noqa: ARG001
 def client_absent(screen: Screen) -> bool:
     """No client window at all: the strip its title bar would occupy (above the game region) is
     the bare black desktop. A lost-D3D client renders a black GAME region but still draws its
-    title bar, so this never mistakes it for a closed one (that would launch a second client)."""
+    title bar, so this never mistakes it for a closed one (that would launch a second client).
+    FULLSCREEN: there is no strip above it. Absent only when PROVEN: the taskbar shows and the
+    client's own taskbar button (``taskbar_client_icon``, cut while it runs behind another
+    window) is nowhere on it. In front, minimized-and-unsure, or no icon template: not absent."""
+    if fullscreen():
+        if taskbar_hidden(screen) is not False:
+            return False  # in front, or unsure
+        if not signature_path("taskbar_client_icon").exists():
+            return False  # cannot tell: never launch a second client
+        return not taskbar_icon_found(screen)
     x, y, w, _ = game_region()
     _, img = screen.grab(x, y - 30, w, 26)
     px = img[::2, ::4, :3].astype(np.uint16)
     luma = (px[..., 0] * 29 + px[..., 1] * 150 + px[..., 2] * 77) >> 8
     return bool((luma < 10).mean() >= 0.98)
+
+
+def taskbar_icon_found(screen: Screen) -> bool:
+    """The client's taskbar button anywhere along the taskbar row (Windows moves it with the
+    other running programs): its template slid across the row at its saved height, 2 px steps."""
+    tpl = np.load(signature_path("taskbar_client_icon")).astype(np.float32)
+    bx, by, bw, bh = region_for("taskbar_client_icon")
+    w = desktop()[0]
+    _, row = screen.grab(0, by, w, bh)
+    for x0 in range(0, max(1, w - bw + 1), 2):
+        cur = grey_thumb(np.ascontiguousarray(row[:, x0 : x0 + bw]))
+        if cur.shape == tpl.shape and float(np.abs(cur - tpl).mean()) <= SIG_MATCH:
+            return True
+    return False
 
 
 def launch_client(agent: Agent, screen: Screen) -> None:
@@ -1514,6 +1588,8 @@ def launch_client(agent: Agent, screen: Screen) -> None:
     if not visible():
         to_png(screen.full(), SHOTS / "shortcut_not_visible.png")
         raise Stop("the desktop shortcut is not visible: no double-click")
+    if fullscreen():  # the tray is about to vanish under the client: read the layout now
+        require_eng(screen)
     x, y = shortcut_xy()
     agent.move(x, y)
     time.sleep(0.1)
