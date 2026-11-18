@@ -124,6 +124,20 @@ are not scaled with the world: in the virtual frame the cursor's area is pasted 
 virtual mouse position (ro_agent knows where it put the pointer); the text cues are measured after
 the first run at 1080p.
 
+**Status, 2026-11-18 15:3x (main d6da315a):**
+- 1 the geometry: DONE (poring_env.clientview, with the panels' ghosts blanked).
+- 2 the measurements: DONE at 1920x1080 (above); 1440x900 not measured yet.
+- 3 finding panels: the login dialogs are FOUND (signature.find, a hint search for text); the
+  in-game panels are the lab's measured layout (LAB_PANELS), not yet found by their picture.
+- 4 the wiring: DONE in ro_agent (+ the HUD); the runner untouched.
+- 5 the live proof at 1920x1080 fullscreen: the login (found dialogs), GM lines, the start check
+  9 / 9, and a 2-minute run (15:31:38-15:33:40, the Run helper's own command): 30 walk clicks
+  (19 trusted), 6 strikes, 6 Knife-swap recipes, 5 kills, 51 cursor reads, the Battle Log read
+  live, the species read (cruiser, mystcase); a normal end home on the Butterfly Wing.
+- 6 the console stream's taskbar template: not yet.
+- Not yet verified at 1080p: the world's native-size text cues ("Miss"), the death dialog's
+  points (respawn_at, a centred dialog: to be found like the login ones), a window of another size.
+
 **Milestones**
 1. The geometry: the view, its vectors and their inverse, the virtual frame -- pure, tested with
    synthetic frames (no lab change).
