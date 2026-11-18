@@ -27,7 +27,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 
-import { ACTIVE, canCheck, checkBody, checkStale, checkTime, liveButtons, liveLabel, liveLine, type LiveStatus, okTail, pauseLine, PROJECT_FLOW, type ProjectRun, projectRunBody, projectRunPath, refuseWarning, REFUSALS, RUN_MODES, runBody, runCheckLines, runPath, START_PICTURES, type StartPicture, tickFor } from "@/lib/flow/liverun";
+import { ACTIVE, canCheck, checkBody, checkStale, checkTime, liveButtons, liveLabel, liveLine, type LiveStatus, okTail, pauseLine, PROJECT_FLOW, type ProjectRun, projectRunBody, projectRunPath, refuseWarning, REFUSALS, RUN_MODES, runBody, runCheckLines, runPath, tickFor } from "@/lib/flow/liverun";
 import { type ChecklistItem, checklistWithKeys, identityText, type RunKeys } from "@/lib/flow/settings";
 import { backendHttpBase } from "@/lib/ws";
 
@@ -195,10 +195,9 @@ export default function LiveRun({ live, checklist = [], minutes = null, keys = n
   const line = active ? liveLine(st?.live, minutes ?? st?.flows?.[flow]?.minutes ?? null) : null;
   const ended = st?.state === "ended" || st?.state === "failed";
   const logLines = (st?.log_tail ?? []).filter((ln) => ln.trim() !== (st?.detail ?? "").trim()); // matpilot: not twice
-  // Batt 2026-11-18: the pause (Alt+Tab), the Run's OWN start check line by line, what it saw
+  // Batt 2026-11-18: the pause (Alt+Tab) and the Run's OWN start check line by line (no picture)
   const pause = pauseLine(st?.pause);
   const ownCheck = runCheckLines(st?.run_check);
-  const pictures = START_PICTURES.filter((w) => st?.start_pictures?.[w]);
   const runKeys = keys ?? live.keys;
   // the keys Run sends, in the text too; the identity line in this install's RUN_IDENTITY
   const items = checklistWithKeys(checklist, runKeys).map((it) => (it.id === "identity" && st?.identity ? { ...it, text: identityText(st.identity) } : it));
@@ -316,13 +315,6 @@ export default function LiveRun({ live, checklist = [], minutes = null, keys = n
           </ul>
         </div>
       )}
-      {pictures.length > 0 && (
-        <div className="live-start-pictures" data-testid="live-run-start-pictures">
-          {pictures.map((w) => (
-            <StartPictureView key={w} base={live.base} which={w} stamp={st?.start_pictures?.[w] ?? ""} />
-          ))}
-        </div>
-      )}
       {ended && st?.end_png && <EndPicture base={live.base} stamp={st.end_png} />}
       {logLines.length > 0 && (
         <details className="live-run-log-box" open={!active || pause !== null}>
@@ -367,42 +359,6 @@ function EndPicture({ base, stamp }: { base: string; stamp: string }) {
       {/* eslint-disable-next-line @next/next/no-img-element -- a blob: URL of the backend's picture */}
       <img src={url} alt="The game screen when the run ended" data-testid="live-run-end-picture" />
       <figcaption className="notice-sub">the screen when the run ended ({stamp})</figcaption>
-    </figure>
-  );
-}
-
-const START_CAPTION: Record<StartPicture, string> = {
-  screen: "the whole screen when the Run's start check read it",
-  virtual: "the virtual 1280x720 client its readers read (a screen not 1280x720)",
-};
-
-/** What the Run's start check saw (Batt 2026-11-18), fetched like the end picture. */
-function StartPictureView({ base, which, stamp }: { base: string; which: StartPicture; stamp: string }) {
-  const [url, setUrl] = useState<string | null>(null);
-  useEffect(() => {
-    let alive = true;
-    let made: string | null = null;
-    void fetch(`${base}/flows/run/start/${which}.jpg`, { cache: "no-store" })
-      .then((r) => (r.ok ? r.blob() : null))
-      .then((blob) => {
-        if (!alive || !blob) return;
-        made = URL.createObjectURL(blob);
-        setUrl(made);
-      })
-      .catch(() => {});
-    return () => {
-      alive = false;
-      if (made) URL.revokeObjectURL(made);
-    };
-  }, [base, which, stamp]);
-  if (!url) return null;
-  return (
-    <figure className="live-end-picture">
-      {/* eslint-disable-next-line @next/next/no-img-element -- a blob: URL of the backend's picture */}
-      <img src={url} alt={`The game screen at the Run's start check (${which})`} data-testid={`live-run-start-${which}`} />
-      <figcaption className="notice-sub">
-        {START_CAPTION[which]} ({stamp})
-      </figcaption>
     </figure>
   );
 }

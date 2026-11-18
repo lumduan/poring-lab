@@ -111,8 +111,10 @@ and the console's `paint` and `move_interval_ms`.
 
 ## Typing a password through the console: "Secret typing" (ADR-0004 amendment c)
 
-The input log records every human key with its code, so **turn on "Secret typing" in the toolbar
-before typing or pasting a password**.
+➡️ Since 2026-11-18 (ADR-0004 amendment d) the input log never keeps a CHARACTER a person types
+(letters, digits, symbols, Space): only that a key went down and up, and when. Control keys (Alt,
+Tab, Escape, Enter, the F-keys, the arrows) keep their names. Secret typing still hides those too,
+so **turn on "Secret typing" in the toolbar before typing or pasting a password** anyway.
 - Keys still reach Windows; the log keeps type and timing only, and a paste no length or digest.
 - The button turns red for every viewer (`Status.human_secret`).
 - It turns off on click, or when that console tab disconnects.
@@ -286,9 +288,9 @@ Amendment B); a not-adopted model is never offered.
   screen** (Alt+Tab, the Start menu, a Windows pop-up; fullscreen: the taskbar shows; a window: its
   title bar is not lit): it presses nothing, the page shows "PAUSED since ...", and it plays on by
   itself 1.5 s after the game is back. Pressed while the game is away, Run waits for it before its
-  start check. The Run panel also shows the Run's OWN start check line by line, the two pictures
-  that check saw (the whole screen; the virtual 1280x720 client on a bigger screen) and the Run's
-  log (40 lines: the screen, the input mode, each check line, the pauses, a fault's traceback).
+  start check. The Run panel also shows the Run's OWN start check line by line and the Run's log
+  (40 lines: the screen, the input mode, each check line, the pauses, a fault's traceback). A Run
+  saves no picture (Batt 2026-11-18 ~22:3x: a frame can show other people's chat).
   ➡️ **Since 2026-11-18 21:19 (Batt, ADR-0020 Amendment Q) a Run plays ANY character** on an install
   whose `.env` leaves `RUN_IDENTITY` empty or `any` (the default): no name or job is compared, and
   the checklist's first line reads "a character in the game (any name, any job)". `mine` keeps the

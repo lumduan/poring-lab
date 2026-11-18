@@ -96,7 +96,6 @@ RUN_INPUT_MODES = "ASSIST,BOT"
 RUN_PAUSE_ENV = "PORING_PAUSE_AWAY"  # ro_agent.AWAY_ENV: a Run waits while the game is off screen
 LOG_TAIL_N = 40  # the run log's last lines in the status (the page's log; Batt 2026-11-18)
 LOG_LINE_MAX = 400
-START_PICTURES = {"screen": "start-screen.jpg", "virtual": "start-virtual.jpg"}  # flow_play's
 SERVE_LOG = SCRATCH / "poring-guarded-execdev-vision.log"
 WORKER = lab_env.container("vision-worker")
 PY = str(ROOT / ".venv" / "bin" / "python")
@@ -755,7 +754,6 @@ class Helper:
         self.end_png: str | None = None  # the session's end picture (GET /flows/run/end.png)
         self.run_log = RunLog()  # the Run's own check and its pauses, from its log
         self.run_log_off = 0
-        self.start_pictures: dict[str, str] = {}  # which -> its stamp (GET /flows/run/start/...)
         self.config: dict[str, Any] | None = None  # the run's values (the project's settings)
         self.config_src: dict[str, str] | None = None  # each one's level
         self.keys_src: str | None = None  # the run's keys: the flow's functions, or the settings
@@ -787,7 +785,6 @@ class Helper:
                                                                        LOG_LINE_MAX)),
                 "run_check": self.run_log.check, "pause": self.run_log.pause(),
                 "identity": run_identity(),
-                "start_pictures": dict(self.start_pictures),
                 "config": self.config, "config_src": self.config_src,
                 "keys_src": self.keys_src, "check": self.check,
                 "live": None if self.live is None else self.live.summary(),
@@ -968,9 +965,7 @@ class Helper:
             self.config, self.config_src = None, None
         self.live, self.live_off, self.end_png = Live(), 0, None
         self.run_log = RunLog(identity=run_identity())
-        self.run_log_off, self.start_pictures = 0, {}
-        for name in START_PICTURES:  # the last run's pictures are not this one's
-            (self.dir / f"start-{name}.jpg").unlink(missing_ok=True)
+        self.run_log_off = 0
         pfile = self.run_dir / PROJECT_FILE
         shutil.copyfile(self.dir / PROJECT_FILE, pfile)
         self.note(event="start", flow=PROJECT, label=self.label, request=rid, node=node,
@@ -1122,7 +1117,6 @@ class Helper:
             self.live_off = feed_new(self.live, sess / "events.jsonl", self.live_off)
         if self.run_dir is not None:
             self.run_log_off = feed_log(self.run_log, self.run_dir / "run.log", self.run_log_off)
-            self.copy_start_pictures()
         if rc is None:
             if self.state == "starting" and run_started(self.label):
                 self.state, self.detail = "running", "playing"
@@ -1154,22 +1148,6 @@ class Helper:
         self.write_status()  # the run's end shows at once; its economy record follows
         self.record()
         self.write_status()
-
-    def copy_start_pictures(self) -> None:
-        """flow_play's start pictures (what its start check saw) into the helper's folder, where
-        the backend serves them (GET /flows/run/start/{screen,virtual}.jpg), once each."""
-        if self.run_dir is None:
-            return
-        for which, name in START_PICTURES.items():
-            src = self.run_dir / name
-            if which in self.start_pictures or not src.is_file():
-                continue
-            try:
-                shutil.copyfile(src, self.dir / f"start-{which}.jpg")
-            except OSError:
-                continue
-            self.start_pictures[which] = ict()
-            self.write_status()
 
     def record(self) -> None:
         """The run's hunt sessions into data/econ/lab.sqlite (ADR-0025; round 29, Batt 2026-11-16:

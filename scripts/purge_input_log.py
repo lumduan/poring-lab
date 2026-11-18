@@ -37,7 +37,9 @@ from typing import Any
 
 ROOT = Path(__file__).resolve().parents[1]
 DATA = ROOT / "data"
-# KeyboardEvent.code values that put a character into a text field.
+# KeyboardEvent.code values that put a character into a text field. The backend's own copy is
+# poring_backend.keylog.PRINTABLE (since 2026-11-18 it never logs them for a person in the first
+# place); this script stays stdlib-only, and tests/test_purge_input_log.py keeps the two equal.
 PRINTABLE = re.compile(
     r"^(Key[A-Z]|Digit[0-9]|Numpad([0-9]|Decimal|Divide|Multiply|Subtract|Add|Comma|Equal)"
     r"|Space|Minus|Equal|BracketLeft|BracketRight|Backslash|Semicolon|Quote|Backquote|Comma"

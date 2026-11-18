@@ -41,17 +41,14 @@ export type LiveStatus = {
   // helper's state is then "busy" (or a last run's end, which keeps its words)
   busy?: string | null;
   // Batt 2026-11-18 ("log the status, the checklist and the errors more"; "Alt+Tab: only pause"):
-  // the Run's OWN start check (its log's CHECK line), its pause, what its check saw
+  // the Run's OWN start check (its log's CHECK line) and its pause (no picture: Batt 2026-11-18)
   run_check?: LiveCheck | null;
   identity?: "any" | "mine" | string; // this install's RUN_IDENTITY (ADR-0020 Amendment Q)
   pause?: RunPause | null;
-  start_pictures?: Partial<Record<StartPicture, string>>; // which -> the stamp it was copied at
 };
 
 /** A Run's pause while the game is off the screen (scripts/flow_run.py RunLog.pause). */
 export type RunPause = { paused: boolean; since: string | null; why: string | null; count: number; paused_s: number };
-export type StartPicture = "screen" | "virtual";
-export const START_PICTURES: readonly StartPicture[] = ["screen", "virtual"];
 
 /** PURE: the pause in a person's words: paused now (since when, why, what the bot does), or how
  * often it paused; null: it never paused. */

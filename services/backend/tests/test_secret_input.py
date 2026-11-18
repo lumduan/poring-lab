@@ -123,10 +123,39 @@ def test_secret_keys_are_injected_but_logged_without_codes(
     ]  # fmt: skip
     client.__exit__(None, None, None)
     keys = [r["event"] for r in lines(tmp_path) if r["event"].get("type") == "key"]
-    assert [k.get("code") for k in keys] == ["KeyA", "KeyA", None, None, "KeyB", "KeyB"]
+    # ➡️ 2026-11-18 (Batt): a typed character is never logged, secret typing on or off
+    assert [k.get("code") for k in keys] == [None] * 6
     assert [k.get("secret") for k in keys] == [None, None, True, True, None, None]
+    assert [k.get("printable") for k in keys] == [True, True, None, None, True, True]
     assert all(k.get("action") in ("down", "up") for k in keys)
-    assert "KeyQ" not in "".join(p.read_text() for p in tmp_path.rglob("*.jsonl"))
+    text = "".join(p.read_text() for p in tmp_path.rglob("*.jsonl"))
+    assert not any(c in text for c in ('"KeyQ"', '"KeyA"', '"KeyB"'))
+
+
+def test_a_persons_typed_characters_are_never_logged_their_control_keys_are(
+    lab: tuple[TestClient, RecordingInput], tmp_path: Path
+) -> None:
+    """Batt 2026-11-18 ~22:3x: "the input log keeps no character people type at all, only the
+    number of keys". A control key types no character and keeps its code (an Alt+Tab is found
+    afterwards from it); every key still reaches the game."""
+    client, fake = lab
+    codes = ["AltLeft", "Tab", "KeyP", "Digit4", "Space", "Enter", "Escape", "F1"]
+    with client.websocket_connect("/ws/input", headers={"origin": ORIGIN}) as ws:
+        for c in codes:
+            ws.send_text(key(c, "down"))
+            ws.send_text(key(c, "up"))
+        wait_health(client, lambda h: True)
+        for _ in range(100):
+            if len([e for e in fake.events if isinstance(e, Key)]) == 2 * len(codes):
+                break
+            time.sleep(0.01)
+    assert [e.code for e in fake.events if isinstance(e, Key)][::2] == codes  # all injected
+    client.__exit__(None, None, None)
+    logged = [r["event"] for r in lines(tmp_path) if r["event"].get("type") == "key"][::2]
+    assert [k.get("code") for k in logged] == [
+        "AltLeft", "Tab", None, None, None, "Enter", "Escape", "F1"
+    ]  # fmt: skip
+    assert len(logged) == len(codes)  # the count stays
 
 
 def test_status_shows_secret_typing_and_a_disconnect_clears_it(
@@ -297,10 +326,11 @@ def test_an_agent_operator_hud_reaches_viewers_and_never_the_mux_or_the_input_lo
         counters=HudCounters(units=1, det_fps=4.0),
     )
     hello = AgentHello(t_mono_ns=T, agent_id="t", version="0")
-    # the positive case: a human key goes through the same input log in this test
+    # the positive case: a human key goes through the same input log in this test (a control key:
+    # since 2026-11-18 a typed character is logged without its code)
     with client.websocket_connect("/ws/input", headers={"origin": ORIGIN}) as human:
-        human.send_text(key("KeyA", "down"))
-        human.send_text(key("KeyA", "up"))
+        human.send_text(key("F1", "down"))
+        human.send_text(key("F1", "up"))
         for _ in range(200):
             if len(fake.events) == 2:
                 break
@@ -325,11 +355,11 @@ def test_an_agent_operator_hud_reaches_viewers_and_never_the_mux_or_the_input_lo
             replies.append(reply["type"])
     assert OperatorHud.model_validate(msg) == hud  # relayed unchanged
     assert "error" not in replies and "input_ack" not in replies  # no reply to a display message
-    assert [e.code for e in injected if isinstance(e, Key)] == ["KeyA", "KeyA"]
+    assert [e.code for e in injected if isinstance(e, Key)] == ["F1", "F1"]
     assert fake.events == injected  # the HUD added nothing at the injector
     client.__exit__(None, None, None)
     on_disk = "".join(p.read_text() for p in tmp_path.rglob("*.jsonl"))
-    assert "KeyA" in on_disk  # the log was live and written ...
+    assert '"code":"F1"' in on_disk  # the log was live and written ...
     assert "operator_hud" not in on_disk and "walking to" not in on_disk  # ... and has no HUD
 
 

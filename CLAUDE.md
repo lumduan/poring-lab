@@ -444,6 +444,10 @@ Official servers and every other public server are forbidden. Start with `README
 - **Human secret typing** (ADR-0004 amendment c):
   - The console's "Secret typing" toggle (`SecretInput`, `Status.human_secret`) logs human keys
     without codes, and a paste without length or digest.
+  - ➡️ Since 2026-11-18 (ADR-0004 amendment d, Batt): a person's key that types a CHARACTER is
+    never logged with its code, Secret typing on or off (`poring_backend.keylog.is_printable`);
+    control keys keep theirs. A /flows Run saves no picture (ADR-0020 Amendment P, superseded in
+    part), unless Batt asks the agent to test-play or to record his play.
   - Any password typed or pasted through the console needs it on.
   - Human pastes log no digest and no length, in either mode (decided 2026-10-02).
   - `scripts/purge_input_log.py` removes printable human typing from old logs. The input log

@@ -163,22 +163,6 @@ def get_end_png(state: AppState = Depends(browser_gate)) -> FileResponse:
     return FileResponse(f, media_type="image/png", headers={"Cache-Control": "no-store"})
 
 
-START_PICTURES = ("screen", "virtual")  # flow_run.START_PICTURES: the Run's start pictures
-
-
-@router.get("/run/start/{which}.jpg")
-def get_start_picture(which: str, state: AppState = Depends(browser_gate)) -> FileResponse:
-    """What the last Run's start check saw (Batt 2026-11-18: "log more, so we know where a problem
-    is"): the whole screen, and the virtual 1280x720 client its readers read. The helper copies
-    them into its own folder; only these two names, a console browser only."""
-    if which not in START_PICTURES:
-        raise HTTPException(404, {"reason": "no_such_picture"})
-    f = run_dir(state) / f"start-{which}.jpg"
-    if not f.is_file():
-        raise HTTPException(404, {"reason": "no_start_picture"})
-    return FileResponse(f, media_type="image/jpeg", headers={"Cache-Control": "no-store"})
-
-
 @router.post("/run")
 def post_run(body: RunBody, request: Request,
              state: AppState = Depends(write_gate)) -> dict[str, Any]:  # fmt: skip

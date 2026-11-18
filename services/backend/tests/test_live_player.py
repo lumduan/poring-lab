@@ -855,10 +855,6 @@ class DiaryIO(FakeIO):
     def describe(self) -> list[str]:
         return ["screen: the session 1920x1080; the game = FULLSCREEN"]
 
-    def snapshot(self, d: Path) -> list[str]:
-        (d / fp.START_SCREEN).write_bytes(b"jpg")
-        return [f"pictures of what the start check saw: {fp.START_SCREEN}"]
-
 
 def test_a_refused_start_logs_each_check_line_the_screen_and_its_pictures(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
@@ -878,7 +874,10 @@ def test_a_refused_start_logs_each_check_line_the_screen_and_its_pictures(
     assert "check FAIL weight: the weight did not read" in text
     assert "check ?    cell: cannot tell [read: (237, 117)]" in text
     assert "1 of 3 lines pass; FAIL: weight; not read: cell" in text
-    assert (tmp_path / fp.START_SCREEN).exists() and io_.out == []  # nothing pressed
+    assert io_.out == []  # nothing pressed
+    # Batt 2026-11-18 ~22:3x: no picture is saved (a frame can show other people's chat)
+    assert not [p for p in tmp_path.rglob("*") if p.suffix in (".jpg", ".png")]
+    assert not hasattr(fp.LiveIO, "snapshot") and not hasattr(fp, "START_SCREEN")
     assert "refused" in out[-1]  # the helper's detail is the last line (flow_run tail 3)
     assert not any(ln.startswith("CHECK ") for ln in out)  # the machine line's prefix is not ours
 
