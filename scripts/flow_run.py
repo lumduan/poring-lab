@@ -295,16 +295,23 @@ def parse_request(text: str) -> dict[str, Any] | str:
             "keys": {k: keys[k] for k in fc.KEY_FIELDS}, "vals": vals}  # fmt: skip
 
 
-def identity_any(items: list[Any]) -> list[Any]:
-    """PURE (ADR-0020 Amendment Q): under RUN_IDENTITY=any the runner's identity line is not about
-    a name or a job -- crusader.check compared none -- so its words (the runner's: "the name plate
-    reads <the lab's character>") are replaced; a black game region still fails it."""
+def identity_any(items: list[Any], mode: str = "any") -> list[Any]:
+    """PURE (ADR-0020 Amendment Q): the runner's identity line names the lab's character in its
+    words ("the name plate reads Thief8fce"); under RUN_IDENTITY=any crusader.check compared no
+    name, under =known every character this install knows, so the words are replaced (a black
+    game region still fails under any)."""
     import crusader as cr
 
+    names = cr.known_names() if mode == "known" else []
     out = []
     for it in items:
-        if isinstance(it, dict) and it.get("id") == "identity" and it.get("ok") is not False:
-            it = {**it, "ok": True, "words": cr.IDENTITY_ANY_WORDS, "value": "any character"}
+        if isinstance(it, dict) and it.get("id") == "identity":
+            if mode == "any" and it.get("ok") is not False:
+                it = {**it, "ok": True, "words": cr.IDENTITY_ANY_WORDS, "value": "any character"}
+            elif mode == "known":
+                ok = it.get("ok") is True
+                it = {**it, "words": cr.known_words(ok, names),
+                      "value": "a known character" if ok else None}  # fmt: skip
         out.append(it)
     return out
 
@@ -321,8 +328,8 @@ def parse_check_output(text: str, identity: str | None = None) -> dict[str, Any]
                 break
             if not isinstance(got, dict) or not isinstance(got.get("items"), list):
                 break
-            if identity == "any":
-                got["items"] = identity_any(got["items"])
+            if identity in ("any", "known"):
+                got["items"] = identity_any(got["items"], identity)
             fails = [i for i in got["items"] if isinstance(i, dict) and i.get("ok") is False]
             unread = [i for i in got["items"] if isinstance(i, dict) and i.get("ok") is None]
             n = len(got["items"])

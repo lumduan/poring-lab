@@ -106,3 +106,58 @@ def test_the_helper_shows_the_mode(tmp_path: Path, monkeypatch: pytest.MonkeyPat
     assert fr.Helper(tmp_path).status()["identity"] == "mine"
     monkeypatch.setattr(r, "env", lambda: {})
     assert fr.Helper(tmp_path).status()["identity"] == "any"
+
+
+def test_known_plays_only_a_character_this_install_cut_and_refuses_another_servers(
+    monkeypatch: pytest.MonkeyPatch, r: Any
+) -> None:
+    """Batt 2026-11-18 ~22:1x: a Run was pressed twice on rog101, a character of another server;
+    under RUN_IDENTITY=known only the characters cut here (init + cut-name) play."""
+    import numpy as np
+
+    plate = np.zeros((14, 116, 3), np.int16)
+    mine = plate.copy()
+    mine[2:10, 5:40] = 200  # Thief8fce's name, as cut
+    other = plate.copy()
+    other[2:10, 60:100] = 200  # a second known character
+    chars = [("thief", "Thief8fce", mine), ("rogue2", "Rogue5a3c", other)]
+    assert (
+        cr.known_match(np.pad(mine, ((22, 0), (4, 0), (0, 0))).astype(np.uint8), chars)["who"]
+        == "Thief8fce"
+    )
+    got = cr.known_match(np.pad(other, ((22, 0), (4, 0), (0, 0))).astype(np.uint8), chars)
+    assert got["ok"] and got["who"] == "Rogue5a3c"
+    rog101 = plate.copy()
+    rog101[2:10, 20:80] = 120  # another server's character: no reference here
+    got = cr.known_match(np.pad(rog101, ((22, 0), (4, 0), (0, 0))).astype(np.uint8), chars)
+    assert got["ok"] is False and got["who"] is None and got["known"] == ["Thief8fce", "Rogue5a3c"]
+    assert cr.known_match(plate.astype(np.uint8), [])["ok"] is False  # nothing cut: nobody plays
+    monkeypatch.setattr(r, "env", lambda: {"RUN_IDENTITY": "known"})
+    monkeypatch.setattr(r, "black", lambda screen: False)
+    monkeypatch.setattr(cr, "known_chars", lambda: chars)
+    monkeypatch.setattr(
+        cr, "client_frame", lambda screen: np.pad(other, ((22, 0), (4, 0), (0, 0))).astype(np.uint8)
+    )
+    assert cr.check(object(), "rogue", "thief", db=False)["who"] == "Rogue5a3c"
+
+
+def test_known_words_name_the_installs_characters() -> None:
+    assert cr.known_words(True, ["Thief8fce", "Rogue5a3c"]).startswith(
+        "a character this install knows (its name plate is one of: Thief8fce, Rogue5a3c)"
+    )
+    no = cr.known_words(False, ["Thief8fce"])
+    assert "none of this install's characters (Thief8fce)" in no and "another server" in no
+    assert cr.identity_mode("known") == "known"
+
+
+def test_the_check_line_under_known_says_known_not_the_labs_name(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(cr, "known_names", lambda: ["Thief8fce", "Rogue5a3c"])
+    items = [{"id": "identity", "ok": False, "words": "the name plate is not Thief8fce's (52 "
+              "pixels differ): another character, or a window over it"}]  # fmt: skip
+    got = fr.parse_check_output(fr.CHECK_MARK + json.dumps({"items": items}), "known")
+    assert got["items"][0]["ok"] is False and "another server" in got["items"][0]["words"]
+    items[0].update(ok=True, words="the name plate reads Thief8fce")
+    got = fr.parse_check_output(fr.CHECK_MARK + json.dumps({"items": items}), "known")
+    assert got["items"][0]["value"] == "a known character"

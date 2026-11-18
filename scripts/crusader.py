@@ -50,6 +50,9 @@ ROOT = Path(__file__).resolve().parents[1]
 CHARS: dict[str, tuple[str, ...]] = {  # each test character's jobs, in the order it takes them
     "crusader": ("novice", "swordman", "crusader"),
     "thief": ("novice", "thief", "rogue"),  # Batt 2026-10-24 (thief-payon.md)
+    # Batt 2026-11-18 ~22:1x: "create another character, another name, a Rogue with the same
+    # settings as the old one, and Run it" (ADR-0020 Amendment Q's test of RUN_IDENTITY=known)
+    "rogue2": ("novice", "thief", "rogue"),
 }
 DATA = ROOT / "data" / "crusader"  # the Crusader's (kept for callers); data_dir(char) in general
 NAME_BOX = (4, 22, 120, 36)  # x0, y0, x1, y1, client px: Basic Info's character name line
@@ -112,15 +115,18 @@ def client_frame(screen: Any) -> Img:
 # free to create a character; teaching many at once, the same name for all would confuse"). The
 # PLAYER path only (``check(db=False)``: a Run, its start checks); a GM line (db=True) always proves
 # the lab's own character before it types (gm_line). ADR-0020 Amendment Q.
-IDENTITY_ENV = "RUN_IDENTITY"  # .env: "any" (the default of every install) | "mine"
-IDENTITY_MODES = ("any", "mine")
+IDENTITY_ENV = "RUN_IDENTITY"  # .env: "any" (the default of every install) | "known" | "mine"
+IDENTITY_MODES = ("any", "known", "mine")
 IDENTITY_ANY_WORDS = ("any character: a Run does not check the name or the job (RUN_IDENTITY=any: "
                       "each player makes their own)")  # fmt: skip
+# "known" (Batt 2026-11-18 ~22:1x, after a Run was pressed twice on another server's character,
+# rog101): any character THIS INSTALL KNOWS -- one whose name plate was cut once (init + cut-name)
+# -- plays; a character of another server has no reference here and is refused at the first line.
 
 
 def identity_mode(value: str | None) -> str:
-    """PURE: RUN_IDENTITY -> "any" | "mine". Unset or empty: "any"; an unknown word: "mine" (the
-    strict one: a typo never loosens the check)."""
+    """PURE: RUN_IDENTITY -> "any" | "known" | "mine". Unset or empty: "any"; an unknown word:
+    "mine" (the strict one: a typo never loosens the check)."""
     v = (value or "").strip().lower()
     if not v:
         return "any"
@@ -134,6 +140,44 @@ def run_identity() -> str:
     return identity_mode(r.env().get(IDENTITY_ENV))
 
 
+def known_chars() -> list[tuple[str, str, Any]]:
+    """The characters this install knows: (key, name, name plate reference) for every test
+    character with a char.json and a ref_name.npy (crusader.py --char K init / cut-name)."""
+    out = []
+    for key in CHARS:
+        d = data_dir(key)
+        if (d / "char.json").is_file() and (d / "ref_name.npy").is_file():
+            name = json.loads((d / "char.json").read_text())["name"]
+            out.append((key, str(name), np.load(d / "ref_name.npy")))
+    return out
+
+
+def known_names() -> list[str]:
+    return [name for _, name, _ in known_chars()]
+
+
+def known_match(client: Img, chars: list[tuple[str, str, Any]]) -> dict[str, Any]:
+    """PURE: the name plate against every known character's: the closest one, ok within MATCH."""
+    if not chars:
+        return {"ok": False, "why": "no character is known to this install (crusader.py --char K "
+                "init --name N, then cut-name)", "who": None, "name_diff": None}  # fmt: skip
+    plate = crop(client, NAME_BOX)
+    d, name = min((differing(plate, ref), name) for _, name, ref in chars)
+    ok = d <= MATCH
+    return {"ok": ok, "why": None if ok else "name", "who": name if ok else None,
+            "name_diff": d, "known": [n for _, n, _ in chars]}  # fmt: skip
+
+
+def known_words(ok: bool, names: list[str]) -> str:
+    """PURE: the identity line under RUN_IDENTITY=known."""
+    shown = ", ".join(names) or "none"
+    if ok:
+        return f"a character this install knows (its name plate is one of: {shown})"
+    return (f"the name plate is none of this install's characters ({shown}): another server's "
+            "character, or a window over it -- a Run plays only the ones cut here "
+            "(RUN_IDENTITY=known)")  # fmt: skip
+
+
 def check(screen: Any, job: str, char: str = "crusader", *, db: bool = True) -> dict[str, Any]:
     """The three checks on a fresh frame (no input). ``db=False`` (dungeon@9.35c, --player-mode):
     a public server has no DB of ours, so the lab DB's "who is online" check is skipped and the
@@ -143,11 +187,14 @@ def check(screen: Any, job: str, char: str = "crusader", *, db: bool = True) -> 
     reference pictures are needed (a learner's install has none)."""
     import ro_agent as r
 
-    if not db and run_identity() == "any":
-        if r.black(screen):
-            return {"ok": False, "why": "the game region is black"}
+    mode = "mine" if db else run_identity()
+    if mode in ("any", "known") and r.black(screen):
+        return {"ok": False, "why": "the game region is black"}
+    if mode == "any":
         return {"ok": True, "why": None, "who": "any", "job": job, "name_diff": None,
                 "job_diff": None}  # fmt: skip
+    if mode == "known":
+        return {**known_match(client_frame(screen), known_chars()), "job": job, "job_diff": None}
     name, name_ref, jobs = load_refs(char)
     if db:
         online = r.online_chars("gm")
