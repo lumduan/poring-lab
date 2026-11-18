@@ -67,7 +67,9 @@ def test_the_worker_steps_start_and_stop_only_the_worker(gb: ModuleType) -> None
                     "worker-stop:backend"):  # fmt: skip
         with pytest.raises(ValueError):
             gb.parse_step(refused)
-    files = ["-f", "compose.yaml", "-f", "compose.vision-worker.yaml", "--profile", "vision-worker"]
+    # this machine's compose.override.yaml goes LAST where it has one (the lab's NFS volume)
+    files = ["-f", "compose.yaml", "-f", "compose.vision-worker.yaml", *gb.local_override(),
+             "--profile", "vision-worker"]  # fmt: skip
     compose = ["docker", "compose", "-p", "poring-lab"]  # this copy's project (the default here)
     assert gb.worker_start_cmd() == [*compose, *files, "up", "-d", "--no-deps",
                                      "--no-build", "vision-worker"]  # fmt: skip

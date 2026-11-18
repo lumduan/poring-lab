@@ -18,7 +18,9 @@ sys.path.insert(0, str(ROOT / "scripts"))
 import lab_env as le  # noqa: E402
 
 NO_ENV: dict[str, str] = {}
-COMPOSE_FILES = sorted(ROOT.glob("compose*.yaml"))
+# The tracked compose files only: compose.override.yaml is this machine's own (gitignored; the lab's
+# holds its NAS address), never shipped
+COMPOSE_FILES = sorted(f for f in ROOT.glob("compose*.yaml") if f.name != "compose.override.yaml")
 
 
 def _defaults_in(text: str, key: str) -> set[str]:
@@ -144,8 +146,14 @@ def test_dev_sh_passes_the_same_project_name() -> None:
 
 def test_env_example_lists_every_install_key() -> None:
     example = (ROOT / ".env.example").read_text()
-    for key in [le.PROJECT_KEY, le.STORE_KEY, le.DETECTOR_KEY, *le.PORTS, *le.NETS,
-                "VISION_WORKER_MEM"]:
+    for key in [
+        le.PROJECT_KEY,
+        le.STORE_KEY,
+        le.DETECTOR_KEY,
+        *le.PORTS,
+        *le.NETS,
+        "VISION_WORKER_MEM",
+    ]:
         assert re.search(rf"^{key}=", example, re.M), key
 
 

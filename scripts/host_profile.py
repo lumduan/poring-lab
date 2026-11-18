@@ -13,13 +13,19 @@ capture services the shared rules protect (`dedicated_refusal`).
                       (compose.intel.yaml, compose.vision-worker.intel.yaml).
     dedicated-nvidia  a NEW host whose NVIDIA card is the lab's alone (Batt 2026-11-12: "NVIDIA on
                       a new machine still needs a profile"). shared-nvidia's CUDA path (the same
-                      image, the NVIDIA reservation, nvidia-smi, the torch detect server) with
+                      image, the NVIDIA reservation, nvidia-smi, the detect server on
+                      onnxruntime's CUDA provider since 2026-11-18: the deployed ONNX) with
                       dedicated-intel's dedicated rules; its overlays (compose.nvidia.yaml,
                       compose.vision-worker.nvidia.yaml) only lift the 25 % VRAM cap. Never VM 103.
     dedicated-cpu     a host with NO usable GPU (Batt 2026-11-17: "no GPU -> use the CPU"; an
                       AMD card, or a card whose driver or container runtime is not ready): the
                       dedicated rules, no vision image and no vision worker; the CPU detector
                       serves alone (scripts/detector_setup.py). guarded_build refuses vision steps.
+
+Every GPU profile's detect server runs the DEPLOYED ONNX, the file the CPU detector runs (ADR-0022
+Amendment 2026-11-18, Batt: "never lock a GPU to a model, users have NVIDIA, Intel and AMD"):
+OpenVINO on Intel, onnxruntime's CUDA provider on NVIDIA. The torch backend (each model's .pt)
+stays an explicit choice for the lab's own checkpoints, never a profile's default.
 
 Stdlib only: guarded_build runs under the system python3.
 """
@@ -43,13 +49,15 @@ class HostProfile:
     shared: bool  # True: R1-R3 and the IO guard (Frigate's GPU, quant's disk)
     vision_overlay: tuple[str, ...]  # compose files after compose.yaml for the vision service
     worker_overlay: tuple[str, ...]  # ... after compose.vision-worker.yaml for the worker
-    detect_backend: str  # poring_vision.detect_server --backend
+    # poring_vision.detect_server --backend: the deployed ONNX on every vendor (openvino on Intel,
+    # onnxruntime's CUDA provider on NVIDIA; ADR-0022 Amendment 2026-11-18), none = the CPU detector
+    detect_backend: str
     gpu_lister: str  # how our GPU processes are found: nvidia-smi | drm-fdinfo
 
 
 PROFILES = {
     "shared-nvidia": HostProfile(
-        "shared-nvidia", "cuda", True, (), (), "torch", "nvidia-smi"
+        "shared-nvidia", "cuda", True, (), (), "onnxruntime", "nvidia-smi"
     ),
     "dedicated-intel": HostProfile(
         "dedicated-intel", "xpu", False, ("compose.intel.yaml",),
@@ -57,7 +65,7 @@ PROFILES = {
     ),
     "dedicated-nvidia": HostProfile(
         "dedicated-nvidia", "cuda", False, ("compose.nvidia.yaml",),
-        ("compose.vision-worker.nvidia.yaml",), "torch", "nvidia-smi",
+        ("compose.vision-worker.nvidia.yaml",), "onnxruntime", "nvidia-smi",
     ),
     "dedicated-cpu": HostProfile("dedicated-cpu", "cpu", False, (), (), "none", "none"),
 }  # fmt: skip

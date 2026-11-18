@@ -753,7 +753,8 @@ class Helper:
     def detect_up(self) -> bool:
         """The vision worker and the detect server (its time box: the run's cap + 150 s), as the
         night chain starts them; False: failed (status says why). ADR-0022 Amendment 2026-11-17:
-        the backend is this host's profile's (OpenVINO on Intel, torch on NVIDIA); with none
+        the backend is this host's profile's (OpenVINO on Intel, onnxruntime's CUDA provider on
+        NVIDIA: the deployed ONNX on both, ADR-0022 Amendment 2026-11-18); with none
         (dedicated-cpu), or no model of the server's in the storage folder, the run goes on with the
         CPU detector alone (the runner falls back to it by itself)."""
         assert self.run_dir is not None
@@ -803,6 +804,14 @@ class Helper:
             if "REFUSED" in (self.run_dir / "serve.log").read_text(errors="replace"):
                 self.fail("the detect server refused", tail(self.run_dir / "serve.log", 3))
                 return False
+            if self.server.poll() is not None:
+                # ADR-0022 Amendment 2026-11-18: the server stopped before it listened (its GPU
+                # provider did not load, a card its build has no code for, ...): the run goes on
+                # with the CPU detector, as with no model; the run's serve.log says why
+                self.note(event="detect_cpu_only", why="server_exit",
+                          tail=tail(self.run_dir / "serve.log", 3))  # fmt: skip
+                self.server = None
+                return True
         self.fail("the detect server did not listen in time", [])
         return False
 

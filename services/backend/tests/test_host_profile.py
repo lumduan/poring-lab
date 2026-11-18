@@ -45,14 +45,15 @@ def test_unset_is_the_strict_shared_profile_and_a_typo_is_refused(tmp_path: Path
 
 def test_dedicated_nvidia_is_the_cuda_path_without_the_shared_rules(tmp_path: Path) -> None:
     """ADR-0022 Amendment 2026-11-12 (Batt: "NVIDIA on a new machine still needs a profile"):
-    shared-nvidia's CUDA path -- torch on cuda, nvidia-smi -- on a DEDICATED host, through its own
-    two overlays."""
+    shared-nvidia's CUDA path -- cuda, the detect server on onnxruntime's CUDA provider (the
+    deployed ONNX, ADR-0022 Amendment 2026-11-18), nvidia-smi -- on a DEDICATED host, through its
+    own two overlays."""
     env = tmp_path / ".env"
     env.write_text("HOST_LAN_IP=10.0.1.5\nLAB_HOST_PROFILE=dedicated-nvidia\n")
     prof = hp.current({}, env)
     assert prof == hp.HostProfile(
         "dedicated-nvidia", "cuda", False, ("compose.nvidia.yaml",),
-        ("compose.vision-worker.nvidia.yaml",), "torch", "nvidia-smi",
+        ("compose.vision-worker.nvidia.yaml",), "onnxruntime", "nvidia-smi",
     )  # fmt: skip
     shared = hp.PROFILES["shared-nvidia"]
     assert (prof.accel, prof.detect_backend, prof.gpu_lister) == (
@@ -65,38 +66,51 @@ def test_dedicated_nvidia_is_the_cuda_path_without_the_shared_rules(tmp_path: Pa
     assert hp.DEFAULT == "shared-nvidia"  # a host is dedicated only by declaration
 
 
+def test_no_gpu_profile_needs_a_models_pt() -> None:
+    """ADR-0022 Amendment 2026-11-18 (Batt: "never lock a GPU to a model; users have NVIDIA, Intel
+    and AMD"): every profile's detect server runs the deployed ONNX, the CPU detector's own file,
+    so a new install's v1.onnx serves on any vendor; torch (each model's .pt, the lab's training
+    runs) is never a profile's default."""
+    backends = {name: p.detect_backend for name, p in hp.PROFILES.items()}
+    assert backends == {"shared-nvidia": "onnxruntime", "dedicated-nvidia": "onnxruntime",
+                        "dedicated-intel": "openvino", "dedicated-cpu": "none"}  # fmt: skip
+
+
 def test_vm103_keeps_exactly_its_old_commands(monkeypatch: pytest.MonkeyPatch) -> None:
     gb = load_gb(monkeypatch, None)
+    ov = gb.local_override()  # this machine's compose.override.yaml, LAST, where it has one
     assert gb.PROFILE.name == "shared-nvidia"
-    assert gb.VISION_DEV == ["-f", "compose.yaml", "-f", "compose.vision-dev.yaml"]
+    assert ["-f", "compose.yaml", "-f", "compose.vision-dev.yaml", *ov] == gb.VISION_DEV
     assert gb.VISION_FILES == []
-    assert gb.VISION_WORKER == ["-f", "compose.yaml", "-f", "compose.vision-worker.yaml",
-                                "--profile", "vision-worker"]  # fmt: skip
+    assert ["-f", "compose.yaml", "-f", "compose.vision-worker.yaml", *ov,
+                                "--profile", "vision-worker"] == gb.VISION_WORKER  # fmt: skip
 
 
 def test_bot_server_adds_its_overlays_last(monkeypatch: pytest.MonkeyPatch) -> None:
     gb = load_gb(monkeypatch, "dedicated-intel")
-    assert gb.VISION_DEV == ["-f", "compose.yaml", "-f", "compose.vision-dev.yaml",
-                             "-f", "compose.intel.yaml"]  # fmt: skip
-    assert gb.VISION_FILES == ["-f", "compose.yaml", "-f", "compose.intel.yaml"]
-    assert gb.VISION_WORKER == ["-f", "compose.yaml", "-f", "compose.vision-worker.yaml",
-                                "-f", "compose.vision-worker.intel.yaml",
-                                "--profile", "vision-worker"]  # fmt: skip
+    ov = gb.local_override()
+    assert ["-f", "compose.yaml", "-f", "compose.vision-dev.yaml",
+                             "-f", "compose.intel.yaml", *ov] == gb.VISION_DEV  # fmt: skip
+    assert ["-f", "compose.yaml", "-f", "compose.intel.yaml", *ov] == gb.VISION_FILES
+    assert ["-f", "compose.yaml", "-f", "compose.vision-worker.yaml",
+                                "-f", "compose.vision-worker.intel.yaml", *ov,
+                                "--profile", "vision-worker"] == gb.VISION_WORKER  # fmt: skip
     step = gb.parse_step("rundev:vision@60=python -c pass")
     assert gb.run_cmd(step)[2:6] == ["docker", "compose", "-p", "poring-lab"]
-    assert gb.run_cmd(step)[6:12] == gb.VISION_DEV
+    assert gb.run_cmd(step)[6 : 6 + len(gb.VISION_DEV)] == gb.VISION_DEV
 
 
 def test_a_dedicated_nvidia_host_adds_its_overlays_last(monkeypatch: pytest.MonkeyPatch) -> None:
     gb = load_gb(monkeypatch, "dedicated-nvidia")
-    assert gb.VISION_DEV == ["-f", "compose.yaml", "-f", "compose.vision-dev.yaml",
-                             "-f", "compose.nvidia.yaml"]  # fmt: skip
-    assert gb.VISION_FILES == ["-f", "compose.yaml", "-f", "compose.nvidia.yaml"]
-    assert gb.VISION_WORKER == ["-f", "compose.yaml", "-f", "compose.vision-worker.yaml",
-                                "-f", "compose.vision-worker.nvidia.yaml",
-                                "--profile", "vision-worker"]  # fmt: skip
+    ov = gb.local_override()
+    assert ["-f", "compose.yaml", "-f", "compose.vision-dev.yaml",
+                             "-f", "compose.nvidia.yaml", *ov] == gb.VISION_DEV  # fmt: skip
+    assert ["-f", "compose.yaml", "-f", "compose.nvidia.yaml", *ov] == gb.VISION_FILES
+    assert ["-f", "compose.yaml", "-f", "compose.vision-worker.yaml",
+                                "-f", "compose.vision-worker.nvidia.yaml", *ov,
+                                "--profile", "vision-worker"] == gb.VISION_WORKER  # fmt: skip
     step = gb.parse_step("rundev:vision@60=python -c pass")
-    assert gb.run_cmd(step)[6:12] == gb.VISION_DEV
+    assert gb.run_cmd(step)[6 : 6 + len(gb.VISION_DEV)] == gb.VISION_DEV
 
 
 def test_a_dedicated_nvidia_host_lists_its_gpu_with_nvidia_smi(

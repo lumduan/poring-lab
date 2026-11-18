@@ -508,10 +508,45 @@ def test_the_detect_server_follows_the_host_profile(
     monkeypatch.setattr(fr.subprocess, "run", run)
     monkeypatch.setattr(hp, "current", lambda: hp.PROFILES["dedicated-cpu"])
     assert h.detect_up() is True and calls == [] and made == []
-    for name, backend in (("dedicated-intel", "openvino"), ("dedicated-nvidia", "torch")):
+    # ADR-0022 Amendment 2026-11-18: NVIDIA serves the deployed ONNX too (onnxruntime), never .pt
+    for name, backend in (("dedicated-intel", "openvino"), ("dedicated-nvidia", "onnxruntime"),
+                          ("shared-nvidia", "onnxruntime")):  # fmt: skip
         calls.clear()
         monkeypatch.setattr(hp, "current", lambda n=name: hp.PROFILES[n])
         assert h.detect_up() is True and made == []  # rc 3: no model -> CPU only
         serve = next(c for c in calls if "serve-cmd" in c)
         assert serve[serve.index("--backend") + 1] == backend, name
         assert not any("worker:vision@60" in " ".join(c) for c in calls)  # no worker started
+
+
+def test_a_detect_server_that_stops_before_it_listens_leaves_the_cpu_detector(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """ADR-0022 Amendment 2026-11-18: the server's step ended without its listening line (its GPU
+    provider did not load: onnxruntime refuses its own CPU fallback) -> the run goes on with the
+    CPU detector, noted with the log's tail; never a 120 s wait and a failed run."""
+    import types
+
+    import host_profile as hp
+
+    why = "onnxruntime runs ['CPUExecutionProvider'], not CUDAExecutionProvider: ..."
+    h, made = _helper(tmp_path, monkeypatch, 1, f"{why}\n")
+    h.run_dir = tmp_path / "run"
+    h.run_dir.mkdir()
+    h.cap_s = 600.0
+
+    def run(argv: list[str], **kw: Any) -> Any:
+        out = (
+            "python3 scripts/guarded_build.py 'execdev:vision@750=...'"
+            if "serve-cmd" in argv
+            else "true"
+        )
+        return types.SimpleNamespace(stdout=out, stderr="", returncode=0)
+
+    monkeypatch.setattr(fr.subprocess, "run", run)
+    monkeypatch.setattr(fr.time, "sleep", lambda _s: None)
+    monkeypatch.setattr(hp, "current", lambda: hp.PROFILES["dedicated-nvidia"])
+    assert h.detect_up() is True and len(made) == 1 and h.server is None
+    notes = [json.loads(x) for x in (tmp_path / "runs.jsonl").read_text().splitlines()]
+    assert notes[-1]["event"] == "detect_cpu_only" and notes[-1]["why"] == "server_exit"
+    assert why in " ".join(notes[-1]["tail"])

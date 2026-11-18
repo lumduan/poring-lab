@@ -132,7 +132,8 @@ Proven live on the lab the same evening:
   and subnets are its own, nothing moves.
 
 Not covered yet (second-install-gaps.md): row U (a new NVIDIA host's GPU server has no `.pt`;
-Batt's decision), row V (the Settings page needs a third browser, by design), the runner's lab-only
+Batt's decision ➡️ FIXED 2026-11-18, Batt "use B": the NVIDIA detect server runs the ONNX,
+ADR-0022 Amendment 2026-11-18), row V (the Settings page needs a third browser, by design), the runner's lab-only
 `--loot-items` path (`/dev/shm/poring-lab-detector/model`, kept: the runner is pinned by its
 proofs), the Thai-client and locale NAS shares of the Thai experiment, and the client-derived run
 data (section 8 of the manual).

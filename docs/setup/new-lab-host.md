@@ -426,9 +426,14 @@ and in after the group change.
 **For an NVIDIA GPU (once; every step here is (unverified) on a dedicated host: the NVIDIA path ran
 only on the old VM 103):**
 - The NVIDIA driver, release **580 or newer**. The vision image is CUDA 13.0 (torch
-  `2.14.0+cu130`, the build with sm_120 kernels for the newest NVIDIA cards); a CUDA 13.2 image refuses to start
-  on an R580 driver. `nvidia-smi` on the host must list the card and a `Driver Version: 580.` or
-  newer.
+  `2.14.0+cu130`, the build with sm_120 kernels for the newest NVIDIA cards, and onnxruntime-gpu
+  1.31.1 for the detect server); a CUDA 13.2 image refuses to start on an R580 driver.
+  `nvidia-smi` on the host must list the card and a `Driver Version: 580.` or newer.
+- A card of **compute capability 7.5 or newer** (GTX 16 / RTX 20 and newer; the RTX 50 series is
+  12.0): the image's CUDA 13 builds carry code for those only (2026-11-18: the detect server's
+  CUDA provider has sm_75, 80, 86, 89, 90a and 120a). R580 still drives older cards (GTX 10 is
+  6.1): the wizard then recommends `dedicated-cpu` and says why. `nvidia-smi
+  --query-gpu=compute_cap --format=csv` shows it.
 - The **NVIDIA Container Toolkit**, so that compose's `driver: nvidia` reservation works:
   install it from NVIDIA's own instructions, then `sudo nvidia-ctk runtime configure
   --runtime=docker` and restart Docker. That command edits `/etc/docker/daemon.json`: afterwards
@@ -441,7 +446,11 @@ only on the old VM 103):**
   ```
 
   It checks that torch sees the card, the VRAM cap, that the build has the card's sm_ kernels, and
-  that matmul + conv2d run.
+  that matmul + conv2d run; then the detect server's own path (2026-11-18): onnxruntime's CUDA
+  provider loads on the card and runs v1's ONNX from the storage folder (installed by the setup's
+  detector step), compared with the same file on its CPU provider. A line `onnxruntime fell back
+  to ['CPUExecutionProvider']` means the provider did not load: the onnxruntime warning above it
+  names the library or the device (section 13, troubleshooting).
 - **Training needs more worker memory (Batt 2026-11-12: "write it in the docs").**
   - The vision worker is capped at **6 GB** (`compose.vision-worker.yaml`: `mem_limit` ==
     `memswap_limit`, no swap). That is enough to SERVE detections.
@@ -778,8 +787,8 @@ own data and are not published: a new install runs v1 everywhere, or trains its 
 |---|---|---|---|---|---|
 | no GPU | `dedicated-cpu` (section 5; `dedicated-intel` before 2026-11-17) | the CPU detector: onnxruntime, 16 threads, in `DETECTOR_DIR` (the lab: `/dev/shm/poring-lab-detector`) | `cpu` | bot-server's CPU, quiet, 8 threads: 122-126 ms p50 a call; VM 103, 16 threads: 110 ms quiet, 194-339 ms under load | works |
 | Intel Arc | `dedicated-intel` | OpenVINO detect server IN the Intel vision worker, the CPU detector behind it | `gpu` (the default) | decision detections p95 22.2 ms on the lab's entry-level Arc card (pilot p78, 2026-11-12, rogue-xmas02.md 4CN); bare forward ~16 ms with the clock floor | the lab's live path |
-| NVIDIA | `dedicated-nvidia` (section 5) | the torch CUDA (cu130) detect server IN the CUDA vision worker, `.pt` weights, the CPU detector behind it | `gpu` (the default) | 49-52 ms a call on the old host's NVIDIA card, on a SHARED host (VM 103, paused half the time while R3 measured) | usable on a new host with `dedicated-nvidia` (2026-11-12); not yet run on a dedicated host (unverified). ⚠️ torch loads each model's `.pt`: a new install has v1's ONNX only, so its GPU server has no model until it has a `.pt`; the CPU detector serves v1 meanwhile (second-install-gaps.md U) |
-| AMD | - | designed (ADR-0022), never built | - | - | not built |
+| NVIDIA | `dedicated-nvidia` (section 5) | since 2026-11-18 the detect server on onnxruntime's CUDA provider IN the CUDA vision worker, the deployed ONNX (the CPU detector's own files: a new install serves v1), the CPU detector behind it (ADR-0022 Amendment 2026-11-18) | `gpu` (the default) | not measured on a card yet (unverified). The old torch path (`.pt`) took 49-52 ms a call on VM 103's card, on a SHARED host paused half the time while R3 measured | usable on a new host with `dedicated-nvidia`; its libraries and its boxes (CPU provider: 47 / 47, 0.0 px) were proven on bot-server, the CUDA forward itself is not yet proven on a card (unverified) |
+| AMD | - | designed (ADR-0022), never built; the same ONNX would run on onnxruntime's MIGraphX provider (a ROCm image) | - | - | not built: the CPU detector serves |
 
 OpenVINO on the CPU measured ~10 % faster than onnxruntime on bot-server's CPU
 (bot-server-migration.md 2), but it runs only inside the Intel worker, which needs a render node:
@@ -787,13 +796,18 @@ a GPU-less host uses the onnxruntime CPU detector.
 
 The detect server registers only the models whose pinned files are in the storage folder (a new
 install: v1; the lab: all of `unit_detector.GPU_WEIGHTS`), and the /flows Run helper starts the
-backend of this host's profile (OpenVINO on Intel, torch on NVIDIA, none on `dedicated-cpu`).
+backend of this host's profile (OpenVINO on Intel, onnxruntime's CUDA provider on NVIDIA, none on
+`dedicated-cpu`). Every GPU backend runs the deployed ONNX, the same file as the CPU detector: no
+GPU is tied to a model of its own (ADR-0022 Amendment 2026-11-18). A detect server that stops
+before it listens (its GPU provider did not load) leaves the run with the CPU detector, noted in
+the run's log (`detect_cpu_only`, `server_exit`).
 
 **Recommendation for a new machine: an Intel Arc with `dedicated-intel`.** It is the only GPU path
 proven end to end on a dedicated host (the cutover smoke: 302 / 302 detections served by the Arc),
 about 5x faster per call than the CPU, the image and overlays exist, and the CPU detector stays
-behind it automatically. An NVIDIA card with `dedicated-nvidia` is the other GPU path: the one the
-old VM 103 ran, not yet proven on a dedicated host. Without a GPU, the CPU detector works; it is
+behind it automatically. An NVIDIA card with `dedicated-nvidia` is the other GPU path: since
+2026-11-18 the same ONNX on onnxruntime's CUDA provider (the old VM 103 ran torch), not yet proven
+on a card (its libraries and its boxes were, on bot-server). Without a GPU, the CPU detector works; it is
 slower and the runner's grab-to-click time grows with it.
 
 **Intel graphics built into the CPU** (asked by Batt 2026-11-12, a recent desktop Core Ultra):
@@ -827,10 +841,11 @@ What to know:
   whose use_model names it. Today xmas_dun02's `xmas02gb-last-736x1280.onnx` (sha256
   `b22d972b...`, its model 2026-11-10 to 2026-11-17).
 - `GPU_WEIGHTS`: the registry of everything the detect server may load, by name, each with its
-  `.pt` (torch) and its ONNX (OpenVINO) and their sha256: v1, xmas02, xmas02gb, xmas02sk, and the
+  `.pt` (the explicit torch backend, the lab's training runs) and its ONNX (OpenVINO and
+  onnxruntime: every profile's) and their sha256: v1, xmas02, xmas02gb, xmas02sk, and the
   floor-item rounds xmas02fi to xmas02fi5 (served for evaluation only; not in MAP_MODELS).
-  A new host needs every one of their ONNX files where the server reads them, or it refuses to
-  start.
+  Since 2026-11-17 the server registers only the ones whose file is in the storage folder
+  (`unit_detector.present_models`); a file that is there but not the pinned one still refuses.
 - `--box-model map` (default) picks MAP_MODELS, `--box-model v1` is the rollback.
 - `--box-detector gpu` (default): the GPU server first; on no server, a pause, a 250-ms timeout or a
   bad reply, the CPU's boxes, never none, retrying the GPU every 5 s. A wrong sha256 or an unsafe
@@ -1194,7 +1209,8 @@ docs/thai-data-experiment.md section 3):
 | a Settings save refused | from the bot host or the game PC (use a third computer); a LAN outside 192.168.0.0/16 (section 4.1); a stale page (reload: the CSRF token is per backend start) |
 | the wizard: `Docker name: '<name>' belongs to the poring-lab copy in <folder>` | another copy of poring-lab on this host created containers with that name; this copy needs its own: take the offered `<name>-2` or type one (`COMPOSE_PROJECT_NAME`; ADR-0026). The other copy is never touched |
 | the wizard: ports moved (`RATHENA_LOGIN_PORT 6900->7900` ...) | another program (often another copy) holds them; accept, then point your game client's `clientinfo.xml` at the new LOGIN port (section 7.1) |
-| the wizard: `GPU ... NOT ready -> dedicated-cpu` | do the fixes it lists (the NVIDIA driver 580+, the NVIDIA Container Toolkit + `nvidia-ctk runtime configure`, or the render group), then re-run `./setup.sh`; meanwhile the CPU detector serves |
+| the wizard: `GPU ... NOT ready -> dedicated-cpu` | do the fixes it lists (the NVIDIA driver 580+, the NVIDIA Container Toolkit + `nvidia-ctk runtime configure`, or the render group), then re-run `./setup.sh`; meanwhile the CPU detector serves. A card older than compute capability 7.5 (GTX 10 and older) has no fix but a newer card: the CPU detector serves |
+| the run's log: `detect_cpu_only` `server_exit`, the serve log `onnxruntime runs ['CPUExecutionProvider'], not CUDAExecutionProvider` | the CUDA provider did not load in the worker: the log line above it names the library or the device. `libcuda.so.1` missing = the NVIDIA Container Toolkit did not mount the driver (`nvidia-ctk runtime configure`, restart Docker, recreate the worker); `no CUDA-capable device` = the worker has no card (the reservation). The run goes on with the CPU detector |
 | `dataset_ship`: `... is configured as a mount but is not mounted` | your storage folder is an fstab / automount NAS mount point and the NAS is down: mount it; a plain folder needs no mount (section 1.4) |
 | ro_agent refuses "mux mode is HUMAN" | the mux boots HUMAN after every backend start; a person sets ASSIST |
 | Failed to Connect to Server right after login | this client needs the server picked within ~1-2 s of the list |

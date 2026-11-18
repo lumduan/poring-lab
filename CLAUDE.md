@@ -63,6 +63,10 @@ Official servers and every other public server are forbidden. Start with `README
      capture service ever appears (`scripts/host_profile.py`). Rule 6's pinned subnets and every
      other rule bind on both hosts. `dedicated-nvidia` (ADR-0022 amendment 2026-11-12, Batt) is the
      same dedicated rules on a new host's own NVIDIA card (no VRAM cap); never VM 103.
+     ➡️ Every GPU profile's detect server runs the DEPLOYED ONNX, the CPU detector's own file
+     (ADR-0022 Amendment 2026-11-18, Batt: "never lock a GPU to a model"): OpenVINO on Intel,
+     onnxruntime-gpu's CUDA provider on NVIDIA (`--backend onnxruntime`; FP32, `use_tf32 0`).
+     The torch backend (`.pt`) is an explicit choice only, never a profile's default.
    - ➡️ **Batt 2026-11-10, bot-server: "we no longer wait for anything of the quant work: this
      machine is our own, the GPU is ours alone; use it fully."** No market-hour waits there: no SET
      hours, no market-open windows. `dataset_ship.py` gates SET hours on a SHARED host only

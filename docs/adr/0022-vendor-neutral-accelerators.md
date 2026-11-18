@@ -7,7 +7,7 @@ verdict_date: 2026-11-07
 verdict_ticket: null
 supersedes: null
 related: [0005-vision-x-access.md, 0018-component-licensing.md, ../planning/gpu-live-detector.md, ../planning/bot-server-migration.md]
-next_action: "Intel first (bot-server's Arc A380): the OpenVINO inference backend + the torch device layer, each proven on bot-server against the CPU boxes / a real training cache. NVIDIA keeps working on ubuntu-docker; a dedicated NVIDIA host uses dedicated-nvidia (Amendment 2026-11-12) and proves it there first (check_gpu, a serve test, the parity check); AMD is designed in and untested until a host has one."
+next_action: "Amendment 2026-11-18: NVIDIA detects with the deployed ONNX on onnxruntime CUDA -- first proof on a real card (Batt's new RTX 5060 server: check_gpu, the start line's providers, gpu_live_parity); AMD (MIGraphX or WebGPU) is a decision for Batt. Earlier: Intel first (bot-server's Arc A380): the OpenVINO inference backend + the torch device layer, each proven on bot-server against the CPU boxes / a real training cache. NVIDIA keeps working on ubuntu-docker; a dedicated NVIDIA host uses dedicated-nvidia (Amendment 2026-11-12) and proves it there first (check_gpu, a serve test, the parity check); AMD is designed in and untested until a host has one."
 ---
 
 # ADR-0022: Vendor-neutral accelerators (Intel, NVIDIA, AMD; chosen per host)
@@ -93,6 +93,7 @@ next_action: "Intel first (bot-server's Arc A380): the OpenVINO inference backen
   | | shared-nvidia (VM 103) | dedicated-nvidia | dedicated-intel (bot-server) |
   |---|---|---|---|
   | accelerator, detect backend, GPU lister | cuda, torch, nvidia-smi | cuda, torch, nvidia-smi | xpu, openvino, drm-fdinfo |
+  | ➡️ since Amendment 2026-11-18 | cuda, onnxruntime, nvidia-smi | cuda, onnxruntime, nvidia-smi | unchanged |
   | vision image | the CUDA image (torch 2.14.0+cu130) | the same CUDA image | the Intel image |
   | GPU in compose | the NVIDIA reservation | the same reservation | the render node + render group |
   | VRAM cap default | 0.25 (R1) | 1.0 | 1.0 |
@@ -160,9 +161,12 @@ next_action: "Intel first (bot-server's Arc A380): the OpenVINO inference backen
   the host's RAM minus 6 GiB, between 4 and 16 GiB (bot-server's 15 GiB would get 8g; the lab
   keeps its Intel overlay's 11g, Batt 2026-11-08, by leaving the key unset).
 - **The detect server and the Run helper follow the profile:** the Run helper starts the profile's
-  detect backend (torch on NVIDIA, OpenVINO on Intel, none on `dedicated-cpu`), and the detect
+  detect backend (torch on NVIDIA ➡️ onnxruntime since Amendment 2026-11-18; OpenVINO on Intel,
+  none on `dedicated-cpu`), and the detect
   server registers only the models whose pinned files are present in the storage folder (a new
   install has v1 only; the lab all eight). It closes second-install-gaps.md row N.
+  - ➡️ DECIDED 2026-11-18 (Batt: "use B"): Amendment 2026-11-18 below; NVIDIA now serves the
+    ONNX too. As written on 2026-11-17:
   - ⚠️ The torch backend (NVIDIA) loads each model's `.pt` checkpoint, the OpenVINO one (Intel) its
     ONNX. The teaching-kit branch publishes v1's ONNX only, so a NEW NVIDIA install has no model
     for its GPU server until it has a `.pt` (its own training, or a published v1 checkpoint): its
@@ -173,3 +177,74 @@ next_action: "Intel first (bot-server's Arc A380): the OpenVINO inference backen
   `scripts/detector_setup.py` into the CPU detector's folder and the storage folder's
   `archive/models/`.
 - **Unchanged:** the three existing profiles, their rules and overlays; VM 103 stays `shared-nvidia`.
+
+## Amendment 2026-11-18: every GPU detects with the deployed ONNX (NVIDIA on onnxruntime)
+- **Batt (Thai, translated), answering the 2026-11-17 report's row U:** "Use B. Never lock a GPU to
+  a model: users have NVIDIA, Intel and AMD."
+- **Why:** the torch detect backend loads each model's `.pt` training checkpoint. Only the lab has
+  those; the teaching-kit branch publishes v1's ONNX only (CLAUDE.md rule 4's scoped exception). So
+  a new NVIDIA install's GPU server had nothing to serve (second-install-gaps.md U). Publishing the
+  `.pt` (option A) would have kept a second, vendor-specific model format.
+- **What:** one model file for every backend, the deployed ONNX (the file the host's CPU detector
+  runs):
+
+  | profile | detect backend | device / provider |
+  |---|---|---|
+  | `shared-nvidia`, `dedicated-nvidia` | `onnxruntime` (new) | `cuda`: `CUDAExecutionProvider` |
+  | `dedicated-intel` | `openvino` (unchanged) | the Arc (`GPU`) |
+  | `dedicated-cpu` | none: the host's CPU detector (onnxruntime) | the CPU |
+
+  - `poring_vision.detect_server --backend onnxruntime --device cuda|cpu` (`OrtNet`);
+    `unit_detector.py serve-cmd --backend onnxruntime` (`serve_step_onnxruntime`: the same files
+    and pins as the OpenVINO step); `host_profile` sets it for both NVIDIA profiles.
+  - The torch backend stays, by explicit choice only (`--backend torch`), for the lab's own
+    checkpoints. No profile defaults to it.
+  - FP32 really: `use_tf32 0` (the CUDA provider's default runs FP32 convolutions as TF32 on Ampere
+    and newer). A faster precision goes live only after its own parity run, as OpenVINO's f16.
+  - The canvas is converted on the CPU (`to_input`, numpy), as OpenVINO's `--ov-preproc cpu`.
+    Converting on the card is a later step, after a measurement on a card.
+- **The package:** `onnxruntime-gpu[cuda,cudnn]==1.31.1` in the CUDA vision image (released
+  2026-10-26; 1.32.0 was 5 days old). `uv.lock` adds onnxruntime-gpu, protobuf 7.36.2 and
+  flatbuffers 25.12.19. Every nvidia-* version is unchanged: the package shares torch cu130's
+  cudart 13.0.96, cuBLAS 13.1.1.3, cuDNN 9.24.0.43 (cu13), cuFFT 12.0.0.61, cuRAND 10.4.0.35 and
+  NVRTC 13.0.88, so there is no second CUDA stack. The driver floor is the same (R580, CUDA 13.0).
+  The Intel image is unchanged: none of the three packages is in `requirements-intel.txt`.
+- **Fail closed, to the CPU:** onnxruntime falls back to its CPU provider in silence when the CUDA
+  one does not load, so `OrtNet` refuses to start then (rc 1, with the reason). The /flows Run
+  helper now goes on with the host's CPU detector when the server's step ends before it listens
+  (`detect_cpu_only`, `server_exit`, the log's tail), instead of failing the run after 120 s.
+- **The VRAM cap:** `VISION_MAX_VRAM_FRACTION` becomes the CUDA arenas' `gpu_mem_limit` (the card's
+  size from nvidia-ml-py), shared out among the models' sessions (one arena each), so their total
+  stays under it. A share below 1.0 whose card size cannot be read is refused (R1 on a
+  shared host never lapses). 1.0, the dedicated default, sets no cap.
+- **The oldest card:** compute capability 7.5 (GTX 16 / RTX 20 and newer). `cuobjdump` of the CUDA
+  provider shows native code for sm_75, 80, 86, 89, 90a and 120a, and no PTX; the RTX 5060
+  (sm_120) is covered natively. R580 still drives Pascal (GTX 10, 6.1), so `gpu_ready` now reads
+  `nvidia-smi --query-gpu=compute_cap` and recommends `dedicated-cpu` for an older card, with the
+  reason.
+- **`scripts/check_gpu.py`** (in the image) adds the detect server's path: the CUDA provider loads
+  on the card and runs v1's ONNX from the storage folder, compared with its CPU provider.
+- **Proven on bot-server (no NVIDIA card), 2026-11-18:**
+  1. The libraries: a scratch environment with the lock's exact versions. `preload_dlls` loaded
+     all seven CUDA 13 libraries from the nvidia wheels. `ldd` of the CUDA provider, with those
+     folders, misses ONE library: `libcuda.so.1`, the NVIDIA driver's own. The Container Toolkit
+     mounts that library on an NVIDIA host.
+  2. The silent fallback is real: that session ran `['CPUExecutionProvider']`. The server refused
+     it: `onnxruntime runs ['CPUExecutionProvider'], not CUDAExecutionProvider ...`, rc 1.
+  3. The boxes: the server (`--backend onnxruntime --device cpu`: the same code and package on the
+     CPU provider) against the host's CPU detector, with v1, the teaching-kit's 20 frames and the
+     lab's own client (`GpuDetector`). Result: 47 / 47 boxes matched, max coordinate difference
+     0.0 px, 20 / 20 frames from the server. The forward took ~124 ms on the Xeon's CPU, which is
+     not a GPU figure.
+  4. The cap: `VISION_MAX_VRAM_FRACTION=0.25` without a readable card size was refused.
+- **Not proven yet (unverified):** a forward on a real NVIDIA card: its speed, and its boxes
+  against the CPU's. The first proof is Batt's new server (an RTX 5060), in two steps:
+  `check_gpu.py`, then the detect server's start line naming
+  `"providers": ["CUDAExecutionProvider", "CPUExecutionProvider"]` and `gpu_live_parity.py`
+  against the CPU boxes.
+- **AMD: still the CPU detector; a decision for Batt.** The same ONNX would run on onnxruntime's
+  MIGraphX provider (`onnxruntime-migraphx` 1.27.1 on PyPI, in a ROCm image), or on its WebGPU
+  provider (`onnxruntime-webgpu` 1.27.0, Vulkan on Linux: one build for every vendor). Neither is
+  built or tested, because no AMD card is available here.
+- **Supersedes:** the 2026-11-17 amendment's "torch on NVIDIA" and its ⚠️ paragraph, and the
+  2026-11-12 table's detect backend (pointers added at both).

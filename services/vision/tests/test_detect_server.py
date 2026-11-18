@@ -491,6 +491,145 @@ def test_main_takes_ov_precision_and_records_it(monkeypatch: pytest.MonkeyPatch)
     assert [n[4] for n in rec.nets[2:]] == ["f16"] * len(ud.GPU_WEIGHTS)  # every served model
 
 
+class FakeOrt:
+    """onnxruntime's surface OrtNet uses (the host venv has no onnxruntime): ``loads`` = the
+    providers a session gets (onnxruntime falls back to its CPU provider when the asked one fails
+    to load); ``built`` = the providers the package was built with."""
+
+    __version__ = "0.0-fake"
+
+    def __init__(self, built: list[str], loads: list[str]) -> None:
+        self.built, self.loads = built, loads
+        self.asked: list[object] = []
+        self.preloaded: list[dict[str, bool]] = []
+        fake = self
+
+        class SessionOptions:
+            graph_optimization_level = None
+
+        class GraphOptimizationLevel:
+            ORT_ENABLE_ALL = "all"
+
+        class Io:
+            def __init__(self, name: str) -> None:
+                self.name = name
+
+        class InferenceSession:
+            def __init__(self, path: str, so: object, providers: list[object]) -> None:
+                fake.asked.append(providers)
+
+            def get_providers(self) -> list[str]:
+                return list(fake.loads)
+
+            def get_inputs(self) -> list[Io]:
+                return [Io("images")]
+
+            def get_outputs(self) -> list[Io]:
+                return [Io("output0")]
+
+            def run(self, names: list[str], feed: dict[str, np.ndarray]) -> list[np.ndarray]:
+                x = feed["images"]
+                assert x.dtype == np.float32 and x.shape == (1, 3, 8, 16)  # to_input's
+                return [np.zeros((1, 7, 42), np.float64)]
+
+        self.SessionOptions, self.GraphOptimizationLevel = SessionOptions, GraphOptimizationLevel
+        self.InferenceSession = InferenceSession
+
+    def get_available_providers(self) -> list[str]:
+        return list(self.built)
+
+    def preload_dlls(self, **kw: bool) -> None:
+        self.preloaded.append(kw)
+
+
+def test_ortnet_serves_the_onnx_only_on_the_provider_asked_for(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """ADR-0022 Amendment 2026-11-18: the deployed ONNX on onnxruntime. CUDA's libraries are
+    preloaded and the arena capped; a session that fell back to the CPU provider (its libraries or
+    the device did not load: what bot-server, without an NVIDIA driver, showed) is refused, as is
+    a package without the provider and a file that is not the pinned one."""
+    model = tmp_path / "v1.onnx"
+    model.write_bytes(b"onnx")
+    sha = ds.file_sha256(str(model))
+    cuda, cpu = ds.ORT_PROVIDERS["cuda"], ds.ORT_PROVIDERS["cpu"]
+    ok = FakeOrt([cuda, cpu], [cuda, cpu])
+    monkeypatch.setitem(sys.modules, "onnxruntime", ok)
+    net = ds.OrtNet(str(model), sha, "cuda", (8, 16), vram_bytes=1 << 30)
+    assert net.shape == (1, 7, 42) and net.providers == [cuda, cpu]
+    assert ok.asked == [[(cuda, {"device_id": 0, "use_tf32": 0, "gpu_mem_limit": 1 << 30})]]
+    assert ok.preloaded == [{"cuda": True, "cudnn": True, "msvc": False}]
+    y = net.forward(np.zeros((8, 16, 3), np.uint8))
+    assert y.dtype == np.dtype("<f4") and y.flags.c_contiguous
+    on_cpu = FakeOrt([cuda, cpu], [cpu])
+    monkeypatch.setitem(sys.modules, "onnxruntime", on_cpu)
+    assert ds.OrtNet(str(model), sha, "cpu", (8, 16)).providers == [cpu]
+    assert on_cpu.asked == [[(cpu, {})]] and on_cpu.preloaded == []  # no CUDA, no cap, on cpu
+    with pytest.raises(SystemExit, match="not CUDAExecutionProvider"):
+        ds.OrtNet(str(model), sha, "cuda", (8, 16))  # it fell back: refused, never served
+    monkeypatch.setitem(sys.modules, "onnxruntime", FakeOrt([cpu], [cpu]))
+    with pytest.raises(SystemExit, match="has no CUDAExecutionProvider"):
+        ds.OrtNet(str(model), sha, "cuda", (8, 16))
+    with pytest.raises(SystemExit, match="is not the pinned"):
+        ds.OrtNet(str(model), "0" * 64, "cpu", (8, 16))
+    with pytest.raises(SystemExit, match="onnxruntime's one of"):
+        ds.OrtNet(str(model), sha, "rocm", (8, 16))
+
+
+def test_the_vram_cap_holds_or_refuses() -> None:
+    """VISION_MAX_VRAM_FRACTION on onnxruntime's CUDA arena: none on a dedicated host (1.0), the
+    share of the card otherwise, and a refusal when the card's size is unknown (R1 never lapses)."""
+    assert ds.vram_limit(1.0, None) is None
+    assert ds.vram_limit(0.25, 8 << 30) == 2 << 30
+    for frac, total in ((0.25, None), (0.25, 0), (0.0, 8 << 30), (1.5, 8 << 30)):
+        with pytest.raises(SystemExit):
+            ds.vram_limit(frac, total)
+
+
+def test_main_runs_the_onnx_on_onnxruntime_and_records_the_mode(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """--backend onnxruntime: the device names the provider (cuda by default), the start line
+    names the providers that loaded and the arena cap; serve-cmd's step parses here."""
+    sha = "ab" * 32
+    base = ["--socket", "/detect/detect.sock", "--model", f"v1=/m/v1.onnx={sha}",
+            "--backend", "onnxruntime"]  # fmt: skip
+    rec = Recorded(monkeypatch)
+    made: list[tuple[object, ...]] = []
+
+    class Net:
+        def __init__(self, path: str, sha256: str, device: str, imgsz: tuple[int, int],
+                     vram: int | None) -> None:  # fmt: skip
+            made.append((path, sha256, device, imgsz, vram))
+            self.sha256, self.shape = sha256, (1, 7, N_ANCH)
+            self.providers = [ds.ORT_PROVIDERS[device]]
+
+    monkeypatch.setattr(ds, "OrtNet", Net)
+    monkeypatch.setattr(ds, "cuda_total_bytes", lambda index=0: 8 << 30)
+    monkeypatch.setenv("VISION_MAX_VRAM_FRACTION", "1.0")
+    assert ds.main(base) == 0
+    monkeypatch.setenv("VISION_MAX_VRAM_FRACTION", "0.25")
+    assert ds.main(base) == 0
+    assert ds.main([*base, "--device", "cpu"]) == 0
+    assert [(m[2], m[4]) for m in made] == [("cuda", None), ("cuda", 2 << 30), ("cpu", None)]
+    assert rec.servers[0]["mode"] == {"backend": "onnxruntime", "device": "cuda",
+                                      "providers": ["CUDAExecutionProvider"], "vram_limit": None,
+                                      "ov_preproc": None, "precision": "f32"}  # fmt: skip
+    for bad in (
+        [*base, "--ov-preproc", "gpu"],
+        [*base, "--ov-precision", "f16"],
+        ["--socket", "/s", "--model", f"v1=/m/v1.pt={sha}", "--device", "cuda"],
+    ):
+        with pytest.raises(SystemExit):
+            ds.main(bad)
+    step = ud.serve_step_onnxruntime(600)
+    assert ds.main(step.split("=", 1)[1].split()[3:]) == 0  # serve-cmd's step, parsed here
+    n = len(ud.GPU_WEIGHTS)  # one arena a model: the 25 % cap shared out among them
+    assert [(m[2], m[4]) for m in made[3:]] == [("cuda", (2 << 30) // n)] * n
+    assert rec.servers[-1]["mode"]["vram_limit"] == 2 << 30  # type: ignore[index]
+    assert not rec.nets  # never OpenVINO
+
+
 def test_gpu_clock_reads_the_cards_floor(tmp_path: Path) -> None:
     card = tmp_path / "card1"
     card.mkdir()

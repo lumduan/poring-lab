@@ -13,6 +13,10 @@ dependencies = [
   # Replaces ultralytics' GUI `opencv-python` (excluded at the root). <5: ultralytics has not
   # declared OpenCV 5 support yet.
   "opencv-python-headless>=4.10,<5",
+  # The detect server's onnxruntime backend (ADR-0022 Amendment 2026-11-18): the deployed ONNX on
+  # NVIDIA's CUDA provider. Built for CUDA 13 like torch cu130, whose nvidia-* wheels (cudart 13.0,
+  # cuBLAS 13, cuDNN 9 cu13, cuFFT 12, cuRAND 10, NVRTC 13) it shares: no second CUDA stack.
+  "onnxruntime-gpu[cuda,cudnn]==1.31.1",
 ]
 
 [project.scripts]

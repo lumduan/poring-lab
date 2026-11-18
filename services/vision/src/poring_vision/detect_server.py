@@ -8,6 +8,8 @@ Amendment 2026-11-07: Batt "เลือก A" and "อนุมัติให�
     python -m poring_vision.detect_server --backend openvino --device GPU --socket SOCK \\
         --model v1=<dir>/v1png-last-736x1280.onnx=<sha256> ...    # any vendor (ADR-0022)
         [--ov-preproc cpu|gpu] [--ov-precision f32|f16]
+    python -m poring_vision.detect_server --backend onnxruntime --device cuda --socket SOCK \\
+        --model v1=<dir>/v1png-last-736x1280.onnx=<sha256> ...    # the same ONNX on NVIDIA
 
 ``--ov-preproc`` (OpenVINO only; Batt 2026-11-08 "we use the GPU for detection"): where the canvas
 becomes the model's input (BGR -> RGB, HWC -> CHW, float32 / 255). ``cpu`` (the default until its
@@ -115,6 +117,16 @@ OV_PRECISIONS = ("f32", "f16")
 # forward back to back on bot-server (bot-server-migration.md 19); it goes live only after its own
 # box parity run.
 OV_PRECISION = "f32"
+# --backend onnxruntime (ADR-0022 Amendment 2026-11-18; Batt: "use B; never lock a GPU to a model,
+# users have NVIDIA, Intel and AMD"): the DEPLOYED ONNX on one of onnxruntime's execution
+# providers, so every GPU runs the very file the host's CPU detector runs; no vendor needs a model
+# of its own (the torch backend needs each model's .pt, which only the lab has). --device names
+# the provider: cuda = NVIDIA (onnxruntime-gpu in the CUDA image, CUDA 13 like torch cu130: the
+# same driver floor); cpu = onnxruntime's own CPU provider (a parity run on a host without the
+# card). FP32, the canvas converted by to_input (numpy) as OpenVINO's --ov-preproc cpu.
+ORT_PROVIDERS = {"cuda": "CUDAExecutionProvider", "cpu": "CPUExecutionProvider"}
+ORT_DEVICE_DEFAULT = "cuda"
+BACKENDS = ("torch", "openvino", "onnxruntime")
 # The card's clock floor, for the start and stats lines: at the bot's pace (a call every 0.1-0.5 s)
 # the Arc's firmware clocks down between calls, 2450 -> ~800 MHz, and a forward takes 29 instead of
 # 16 ms (bot-server-migration.md 19). The host keeps the floor at RP0
@@ -251,6 +263,90 @@ class OvNet:
         self.req.infer({0: x})
         out = self.req.get_output_tensor(0).data
         return np.ascontiguousarray(out, dtype="<f4")
+
+
+def vram_limit(fraction: float, total: int | None) -> int | None:
+    """PURE: the CUDA provider's arena cap in bytes for VISION_MAX_VRAM_FRACTION ``fraction`` of a
+    card of ``total`` bytes; None = no cap (a dedicated host's 1.0). A cap the card's size cannot
+    be read for is refused: a shared host's limit must hold (R1), never silently lapse."""
+    if not 0.0 < fraction <= 1.0:
+        raise SystemExit(f"VISION_MAX_VRAM_FRACTION {fraction}: 0 < f <= 1")
+    if fraction >= 1.0:
+        return None
+    if not total:
+        raise SystemExit(f"VISION_MAX_VRAM_FRACTION {fraction}: the card's memory is unknown "
+                         "(nvidia-ml-py), so the cap cannot be set")  # fmt: skip
+    return int(total * fraction)
+
+
+def cuda_total_bytes(index: int = 0) -> int | None:
+    """The first visible NVIDIA card's memory (nvidia-ml-py, in the CUDA image via ultralytics),
+    or None where it cannot be read."""
+    try:
+        import pynvml
+
+        pynvml.nvmlInit()
+        try:
+            handle = pynvml.nvmlDeviceGetHandleByIndex(index)
+            return int(pynvml.nvmlDeviceGetMemoryInfo(handle).total)
+        finally:
+            pynvml.nvmlShutdown()
+    except Exception:  # no library, no driver, no card: the caller decides
+        return None
+
+
+class OrtNet:
+    """The DEPLOYED ONNX itself on an onnxruntime execution provider (``device``: ORT_PROVIDERS),
+    FP32: the same file as the host's CPU detector, so only the forward differs. Refuses to start
+    when the provider did not load (onnxruntime would otherwise fall back to its CPU provider in
+    silence): the host's CPU detector then serves alone, and the start says why."""
+
+    def __init__(self, path: str, sha256: str, device: str = ORT_DEVICE_DEFAULT,
+                 imgsz: tuple[int, int] = IMGSZ,
+                 vram_bytes: int | None = None) -> None:  # fmt: skip
+        if device not in ORT_PROVIDERS:
+            raise SystemExit(f"--device {device!r}: onnxruntime's one of {list(ORT_PROVIDERS)}")
+        got = file_sha256(path)
+        if got != sha256:
+            raise SystemExit(f"{path}: sha256 {got[:12]}... is not the pinned {sha256[:12]}...")
+        import onnxruntime as ort
+
+        want = ORT_PROVIDERS[device]
+        have = ort.get_available_providers()
+        if want not in have:
+            raise SystemExit(f"this onnxruntime ({ort.__version__}) has no {want} (it has "
+                             f"{have}): the host's CPU detector serves alone")  # fmt: skip
+        opts: dict[str, Any] = {}
+        if device == "cuda":
+            # the CUDA / cuDNN libraries come from the image's nvidia-* wheels (torch cu130's):
+            # onnxruntime loads them from there itself (its own lookup, before the session)
+            preload = getattr(ort, "preload_dlls", None)
+            if preload is not None:
+                preload(cuda=True, cudnn=True, msvc=False)
+            # use_tf32 0: FP32 really (the provider's default runs FP32 convolutions as TF32 on
+            # Ampere and newer); a faster precision goes live only after its own parity run, as
+            # OpenVINO's f16 (the start line says "precision": "f32")
+            opts = {"device_id": 0, "use_tf32": 0}
+            if vram_bytes is not None:
+                opts["gpu_mem_limit"] = int(vram_bytes)
+        so = ort.SessionOptions()
+        so.graph_optimization_level = ort.GraphOptimizationLevel.ORT_ENABLE_ALL
+        self.sess = ort.InferenceSession(path, so, providers=[(want, opts)])
+        self.providers = list(self.sess.get_providers())
+        if not self.providers or self.providers[0] != want:
+            raise SystemExit(f"onnxruntime runs {self.providers}, not {want}: its libraries or "
+                             "the device did not load (the log above says which); the host's "
+                             "CPU detector serves alone")  # fmt: skip
+        self.sha256, self.device = sha256, device
+        self.inp = self.sess.get_inputs()[0].name
+        self.out = self.sess.get_outputs()[0].name
+        for _ in range(5):  # warm the kernels (cuDNN picks its algorithms); the shape: 1st call
+            y = self.forward(np.full((*imgsz, 3), 114, np.uint8))
+        self.shape = (int(y.shape[0]), int(y.shape[1]), int(y.shape[2]))
+
+    def forward(self, canvas: np.ndarray) -> np.ndarray:
+        y = self.sess.run([self.out], {self.inp: to_input(canvas)})[0]
+        return np.ascontiguousarray(y, dtype="<f4")
 
 
 class TorchNet:
@@ -611,9 +707,12 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--model", action="append", required=True, help="NAME=PATH=SHA256")
     ap.add_argument("--imgsz", type=int, nargs=2, default=list(IMGSZ))
     ap.add_argument("--max-hz", type=float, default=MAX_HZ)
-    ap.add_argument("--backend", choices=["torch", "openvino"], default="torch",
-                    help="torch: the .pt on the torch accelerator; openvino: the ONNX")  # fmt: skip
-    ap.add_argument("--device", default="GPU", help="--backend openvino's device (GPU, CPU, ...)")
+    ap.add_argument("--backend", choices=list(BACKENDS), default="torch",
+                    help="torch: the .pt on the torch accelerator; openvino and onnxruntime: the "
+                    "deployed ONNX (any vendor)")  # fmt: skip
+    ap.add_argument("--device", default=None,
+                    help="openvino's device (GPU, CPU, ...; default GPU); onnxruntime's provider "
+                    f"({', '.join(ORT_PROVIDERS)}; default {ORT_DEVICE_DEFAULT})")  # fmt: skip
     ap.add_argument("--ov-preproc", choices=list(OV_PREPROC), default=None,
                     help="--backend openvino: where the canvas becomes the model's input, "
                     f"cpu (numpy) or gpu (in the model); default {OV_PREPROC_DEFAULT}")  # fmt: skip
@@ -630,16 +729,33 @@ def main(argv: list[str] | None = None) -> int:
         ap.error("--ov-preproc is --backend openvino's (torch converts on the card already)")
     if a.backend != "openvino" and a.ov_precision is not None:
         ap.error("--ov-precision is --backend openvino's (torch runs FP32)")
+    if a.backend == "torch" and a.device is not None:
+        ap.error("--device is openvino's and onnxruntime's (torch takes the accelerator's)")
     models = parse_models(a.model)
     imgsz = (int(a.imgsz[0]), int(a.imgsz[1]))
     nets: dict[str, Net]
     if a.backend == "openvino":
         preproc = a.ov_preproc or OV_PREPROC_DEFAULT
         precision = a.ov_precision or OV_PRECISION
-        mode = {"backend": "openvino", "device": a.device, "ov_preproc": preproc,
+        ov_device = a.device or "GPU"
+        mode = {"backend": "openvino", "device": ov_device, "ov_preproc": preproc,
                 "precision": precision}  # fmt: skip
-        nets = {name: OvNet(path, sha, a.device, imgsz, precision, preproc)
+        nets = {name: OvNet(path, sha, ov_device, imgsz, precision, preproc)
                 for name, (path, sha) in models.items()}  # fmt: skip
+    elif a.backend == "onnxruntime":
+        ort_device = a.device or ORT_DEVICE_DEFAULT
+        vram = None  # the CUDA arena's cap (VISION_MAX_VRAM_FRACTION; None on a dedicated host)
+        if ort_device == "cuda":
+            frac = float(os.environ.get("VISION_MAX_VRAM_FRACTION", "0.25"))
+            vram = vram_limit(frac, cuda_total_bytes() if frac < 1.0 else None)
+        # one session (and arena) a model: the cap is shared out, so their total stays under it
+        each = None if vram is None else vram // len(models)
+        ort_nets = {name: OrtNet(path, sha, ort_device, imgsz, each)
+                    for name, (path, sha) in models.items()}  # fmt: skip
+        providers = next(iter(ort_nets.values())).providers
+        mode = {"backend": "onnxruntime", "device": ort_device, "providers": providers,
+                "vram_limit": vram, "ov_preproc": None, "precision": "f32"}  # fmt: skip
+        nets = dict(ort_nets)
     else:
         from poring_vision.gpu import configure_gpu
 

@@ -26,7 +26,12 @@ from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
 
-NVIDIA_MIN_DRIVER = 580  # CUDA 13.0 (torch 2.14.0+cu130); a CUDA 13.2 image refuses an R580 driver
+NVIDIA_MIN_DRIVER = 580  # CUDA 13.0 (torch 2.14.0+cu130, onnxruntime-gpu 1.31.1); a CUDA 13.2 image
+# refuses an R580 driver
+# The oldest card the CUDA image's builds carry code for: compute capability 7.5 (Turing: GTX 16 /
+# RTX 20 and newer). onnxruntime-gpu 1.31.1's CUDA provider has sm_75 / 80 / 86 / 89 / 90a / 120a
+# and no PTX (cuobjdump, 2026-11-18), CUDA 13 dropped older ones; R580 still drives Pascal (GTX 10).
+NVIDIA_MIN_COMPUTE = (7, 5)
 TOOLKIT_BINARIES = (
     "nvidia-container-runtime-hook",
     "nvidia-container-toolkit",
@@ -86,6 +91,18 @@ def nvidia_vram_gib(run: Runner, which: Which) -> float | None:
         return None
     sizes = [int(x) for x in re.findall(r"^\s*(\d+)\s*$", out, re.M)]
     return round(max(sizes) / 1024, 1) if sizes else None
+
+
+def nvidia_compute_caps(run: Runner, which: Which) -> list[tuple[int, int]] | None:
+    """Each visible card's compute capability (nvidia-smi --query-gpu=compute_cap: "8.9"), or
+    None where nvidia-smi cannot say."""
+    if which("nvidia-smi") is None:
+        return None
+    rc, out = run(["nvidia-smi", "--query-gpu=compute_cap", "--format=csv,noheader"])
+    if rc != 0:
+        return None
+    caps = [(int(a), int(b)) for a, b in re.findall(r"^\s*(\d+)\.(\d+)\s*$", out, re.M)]
+    return caps or None
 
 
 def docker_has_nvidia_runtime(run: Runner) -> bool | None:
@@ -167,6 +184,17 @@ def recommend(
         vram = nvidia_vram_gib(run, which)
         if vram is not None:
             found.append(f"{vram:g} GiB VRAM")
+        caps = nvidia_compute_caps(run, which)
+        if caps is not None:
+            best = max(caps)
+            found.append(f"compute capability {best[0]}.{best[1]}")
+            if best < NVIDIA_MIN_COMPUTE:
+                need = ".".join(map(str, NVIDIA_MIN_COMPUTE))
+                fixes.append(
+                    f"this card (compute capability {best[0]}.{best[1]}) is older than the "
+                    f"vision image's CUDA 13 builds support ({need}: GTX 16 / RTX 20 and newer); "
+                    "the CPU detector serves: new-lab-host.md section 5"
+                )
         ready = not fixes
         return GpuReady(
             "nvidia",
