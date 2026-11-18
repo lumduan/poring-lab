@@ -67,18 +67,42 @@ def _unit(v: float) -> float:
     return min(max(v, 0.0), 1.0) if math.isfinite(v) else 0.0
 
 
+VIRTUAL_X0 = 100_000  # ro_agent.VIRTUAL_X0 (tests/test_operator_hud.py keeps them equal)
+
+
 def _int(v: Any, lo: int, hi: int) -> int:
     f = float(v)
     return int(min(max(f, lo), hi)) if math.isfinite(f) else lo
+
+
+_VIEW: list[Any] = [0.0, None]  # (when, ro_agent.client_view()) for a virtual region
+VIEW_TTL_S = 5.0
+
+
+def virtual_view() -> Any:
+    """The view of the real client behind ro_agent's virtual one, refreshed every VIEW_TTL_S
+    (docs/planning/fullscreen-client.md section 7: the HUD's boxes come in virtual px)."""
+    import time as _time
+
+    import ro_agent as r
+
+    now = _time.monotonic()
+    if _VIEW[1] is None or now - float(_VIEW[0]) > VIEW_TTL_S:
+        _VIEW[0], _VIEW[1] = now, r.client_view()
+    return _VIEW[1]
 
 
 def norm_point(
     u: float, v: float, region: Sequence[int], desktop: Sequence[int]
 ) -> dict[str, float]:
     """A point in game-region px (the detector's and the camera model's frame) -> normalized to
-    the desktop."""
+    the desktop. A VIRTUAL region (ro_agent's 1280x720 client of a bigger screen, at its far
+    origin) is mapped to the real screen by the same vectors as the clicks."""
     gx, gy = region[0], region[1]
     dw, dh = desktop[0], desktop[1]
+    if gx >= VIRTUAL_X0:
+        fx, fy = virtual_view().to_real(u, v)
+        return {"x": _unit(fx / dw), "y": _unit(fy / dh)}
     return {"x": _unit((gx + u) / dw), "y": _unit((gy + v) / dh)}
 
 

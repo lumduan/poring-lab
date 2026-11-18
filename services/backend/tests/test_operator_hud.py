@@ -294,3 +294,22 @@ def test_a_failing_hud_socket_never_reaches_the_rule(
         assert route(None, World(), (5, 5)) == {"decline": "unit_stays"}
     finally:
         hud.disable(token)
+
+
+def test_a_virtual_region_s_points_are_mapped_like_the_clicks(
+    hud: ModuleType, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """docs/planning/fullscreen-client.md section 7: on a 1920x1080 client the runner's boxes are
+    in the virtual 1280x720 client's px (ro_agent's far origin): the HUD maps them to the screen by
+    the same view as the clicks (the world x1.5 about the centre), never clamped to its edge."""
+    import ro_agent as r
+
+    from poring_env.clientview import ClientView
+
+    assert hud.VIRTUAL_X0 == r.VIRTUAL_X0
+    view = ClientView((0, 0, 1920, 1080), "fullscreen", 1.5)
+    monkeypatch.setattr(hud, "virtual_view", lambda: view)
+    got = hud.norm_point(700, 300, (r.VIRTUAL_X0, 0, 1280, 720), (1920, 1080))
+    assert (round(got["x"] * 1920), round(got["y"] * 1080)) == (1050, 450)
+    window = hud.norm_point(700, 300, (80, 77, 1280, 720), (1440, 900))
+    assert (round(window["x"] * 1440), round(window["y"] * 900)) == (780, 377)
