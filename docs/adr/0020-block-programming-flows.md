@@ -2957,7 +2957,7 @@ once. Think ahead about such things."
   setting says. The runner (`dungeon_hunt.py`, byte-pinned) is untouched: its identity line's words
   (which name the lab's character) are replaced by the helper and the player
   (`flow_run.identity_any`).
-- ~~**The lab keeps `mine`** (its own `.env`)~~ ➡️ **SUPERSEDED 2026-11-18 ~21:0x (Batt: "any,
+- ~~**The lab keeps `mine`** (its own `.env`)~~ ➡️ **SUPERSEDED 2026-11-18 ~21:2x (Batt: "any,
   so I can test it myself too"): the lab runs `any` as well** (its `.env`, read back). The reason
   `mine` was recommended still stands as a known risk: the community client "RO Dev Serv" is on
   the same Windows PC (ADR-0006: no agent automation there), and with the packets only labelling
