@@ -25,3 +25,14 @@ def test_a_signature_is_found_at_the_exact_pixel_wherever_it_is() -> None:
 def test_a_picture_smaller_than_the_signature_is_no_match() -> None:
     ref = np.zeros((8, 36), np.float32)
     assert find(np.zeros((40, 100, 4), np.uint8), ref)[0] == float("inf")
+
+
+def test_a_text_signature_is_found_near_its_hint() -> None:
+    """Fine detail (a field's text) sampled at a misaligned coarse step looks like nothing: the
+    hint's neighbourhood is searched pixel by pixel."""
+    rng = np.random.default_rng(6)
+    text = rng.integers(0, 255, (35, 190, 4), dtype=np.uint8)  # noise: no flat area at all
+    ref = grey_thumb(text)
+    frame = rng.integers(0, 255, (1080, 1920, 4), dtype=np.uint8)
+    frame[677 : 677 + 35, 827 : 827 + 190] = text
+    assert find(frame, ref, hint=(827 + 30, 677 - 20)) == (0.0, 827, 677)

@@ -30,13 +30,20 @@ def distance(thumb: NDArray[np.float32], ref: NDArray[np.float32]) -> float:
 
 
 def find(
-    bgra: NDArray[np.uint8], ref: NDArray[np.float32], *, keep: int = 5
+    bgra: NDArray[np.uint8],
+    ref: NDArray[np.float32],
+    *,
+    keep: int = 5,
+    hint: tuple[int, int] | None = None,
+    radius: int = 48,
 ) -> tuple[float, int, int]:
     """Where in ``bgra`` the signature ``ref`` is best (distance, x, y of its box's origin): a
     coarse slide of ``ref`` over the picture's own thumbnail (``SIG_SCALE``-px steps), then a
     pixel-exact refinement around the ``keep`` best (docs/planning/fullscreen-client.md: a panel
-    found by its picture, wherever a screen size or the player put it). Infinite when it does not
-    fit."""
+    found by its picture, wherever a screen size or the player put it). ``hint``: where it is
+    expected; every pixel within ``radius`` of it is tried too -- a TEXT signature (a field, a
+    name) looks nothing like itself at a misaligned coarse step, a flat one (a frame) does.
+    Infinite when it does not fit."""
     from numpy.lib.stride_tricks import sliding_window_view
 
     th, tw = ref.shape
@@ -51,6 +58,13 @@ def find(
     coarse = np.abs(windows - ref).mean(axis=(2, 3))
     order = np.argsort(coarse, axis=None)[:keep]
     best = (float("inf"), 0, 0)
+    if hint is not None:
+        hx, hy = hint
+        for y in range(max(0, hy - radius), min(h - bh + SIG_SCALE, hy + radius + 1)):
+            for x in range(max(0, hx - radius), min(w - bw + SIG_SCALE, hx + radius + 1)):
+                d = distance(grey_thumb(bgra[y : y + bh, x : x + bw]), ref)
+                if d < best[0]:
+                    best = (d, x, y)
     for flat in order:
         gy, gx = divmod(int(flat), coarse.shape[1])
         for y in range(max(0, gy * SIG_SCALE - SIG_SCALE), gy * SIG_SCALE + SIG_SCALE + 1):
