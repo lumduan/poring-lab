@@ -37,7 +37,7 @@ import { ApiError, type CatalogueDoc, type Finding, FlowsApi, type LintDoc, type
 import type { ToolboxScope } from "@/lib/flow/blockdefs";
 import { boxStripPart } from "@/lib/flow/box";
 import { type FileMeta, newFileMeta, readFileMeta, writeFileMeta } from "@/lib/flow/file";
-import { ACTIVE, busyWhy, PROJECT_FLOW } from "@/lib/flow/liverun";
+import { ACTIVE, busyWhy, liveLabel, liveLine, PROJECT_FLOW } from "@/lib/flow/liverun";
 import { liveReady } from "@/lib/flow/liveready";
 import type { MapsDoc } from "@/lib/flow/pickers";
 import { browserStorage, hasOldFlow, KEYS, pythonDefault, readChoice, readProjectText, writeChoice, writeProjectText } from "@/lib/flow/prefs";
@@ -216,7 +216,10 @@ export default function ProjectStudio({ backendUrl, initialNode = null }: { back
   const keysR = runnerLive ? runnerKeysOn(project, node.id) : null;
   const runKeys = keysR?.ok ? keysR.keys : null;
   const projectRun = runnable ? { project, node: node.id } : null; // the hook keeps the latest in a ref
-  const live = useLiveRun(backendUrl, PROJECT_FLOW, runnable || runnerLive, runKeys, projectRun);
+  // Batt 2026-11-18 ("press Run, go to the Console, come back: it must say running"): the helper's
+  // status is read on EVERY node, so a run that goes shows (and can be stopped) whatever is open
+  const live = useLiveRun(backendUrl, PROJECT_FLOW, true, runKeys, projectRun);
+  const liveActive = ACTIVE.includes(live.st?.state ?? "");
   const runValues = runnerLive ? nodeSettings(project, node.id).values : null;
   const runWhy = !runnable && !runnerLive ? null : keysR && !keysR.ok ? `the keys: ${keysR.problems.join("; ")}` : null;
   const keysLine = keysR?.ok
@@ -756,9 +759,20 @@ export default function ProjectStudio({ backendUrl, initialNode = null }: { back
             <PlayIcon />
             <span className="button-text">{simBusy ? "Simulating…" : "Simulate"}</span>
           </button>
-          {runnable ? <LiveRunButtons live={live} blocked={editorHeld ?? runWhy ?? lintBlock} /> : <RunNotReady why={notRunWhy} />}
+          {runnable || liveActive ? <LiveRunButtons live={live} blocked={editorHeld ?? runWhy ?? lintBlock} /> : <RunNotReady why={notRunWhy} />}
         </div>
       </header>
+
+      {liveActive && live.st && (
+        <div className="studio-notices">
+          <p className="notice notice-warn live-running" role="status" data-testid="live-running">
+            <strong>Running in the game</strong> · {liveLabel(live.st)}
+            {live.st.label ? ` · ${live.st.label}` : ""}
+            {live.st.mode ? ` · the console in ${live.st.mode}` : ""}
+            {liveLine(live.st.live, null) ? ` · ${liveLine(live.st.live, null)}` : ""} · Stop (top right) ends it
+          </p>
+        </div>
+      )}
 
       {notice && (
         <div className="studio-notices">

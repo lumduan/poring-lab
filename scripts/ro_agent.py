@@ -4,7 +4,9 @@ black client, run GM validation queries and short measurement moves. There is NO
 
 Rules it enforces (CLAUDE.md, ADR-0002/0006):
   * input only through the backend's /internal/agent (source=bot), so every event passes the mux;
-  * refuses unless the mux is in ASSIST (Batt sets it); waits while a human lease is active;
+  * refuses unless the mux is in ASSIST (Batt sets it); waits while a human lease is active; a
+    /flows Run may also play in BOT (PORING_INPUT_MODES, Batt 2026-11-18; ADR-0020 Amendment
+    2026-11-18), never in HUMAN;
     stops at once (exit 3) on any refusal -- it never fights the human;
   * credentials come from .env and are typed as SENSITIVE batches (the input log keeps only counts
     and timing); they are never printed, logged or passed on a command line;
@@ -616,12 +618,35 @@ def char_events(c: str) -> list[dict[str, Any]]:
 # read through by the next _drain. test_ro_agent_ws.py reproduces both behaviours.
 AGENT_WS: dict[str, Any] = {"open_timeout": 5, "max_size": 2**20, "max_queue": None}
 
+# The mux modes an Agent may send in. ASSIST alone by default: every script of ours plays where the
+# person can take the lease at any moment. Batt 2026-11-18 ("with BOT it must run too"; ADR-0020
+# Amendment 2026-11-18): a /flows Run may play in BOT as well, where the mux drops the human's input
+# and the person stops it with Stop or by switching to HUMAN. The Run helper (scripts/flow_run.py)
+# names that for its own processes only, in PORING_INPUT_MODES ("ASSIST,BOT"). HUMAN is never one.
+MODES_ENV = "PORING_INPUT_MODES"
+MODES_DEFAULT = ("ASSIST",)
+MODES_ALLOWED = ("ASSIST", "BOT")
+
+
+def input_modes(value: str | None) -> tuple[str, ...]:
+    """PURE: PORING_INPUT_MODES -> the modes an Agent may send in (unset or empty: ASSIST alone).
+    Anything but ASSIST and BOT is refused, HUMAN above all (the person's own mode)."""
+    names = tuple(dict.fromkeys(n.strip().upper() for n in (value or "").split(",") if n.strip()))
+    bad = [n for n in names if n not in MODES_ALLOWED]
+    if bad:
+        raise Stop(f"{MODES_ENV}={value!r}: only {', '.join(MODES_ALLOWED)} ({bad} refused)")
+    return names or MODES_DEFAULT
+
 
 class Agent:
-    """One /internal/agent connection; every send checks ASSIST and waits out a human lease."""
+    """One /internal/agent connection; every send checks the mode (ASSIST; a /flows Run also BOT:
+    input_modes) and waits out a human lease (ASSIST's only: the mux drops human input in BOT)."""
+
+    modes: tuple[str, ...] = MODES_DEFAULT  # the instance's own from PORING_INPUT_MODES
 
     def __init__(self, name: str = "ro_agent", *, allow_handover: bool = False) -> None:
         self.allow_handover = allow_handover  # only scripts/capture_backend.py, mid-handover
+        self.modes = input_modes(os.environ.get(MODES_ENV))
         self._conn = connect(backend_ws(), **AGENT_WS)
         self.ws: ClientConnection = self._conn.__enter__()
         hello = {"type": "agent_hello", "t_mono_ns": ns(), "frame_id": -1, "agent_id": name,
@@ -636,9 +661,10 @@ class Agent:
         self.min_send_gap_s: float | None = None
         self._last_send = 0.0
         self._drain(1.5, want="status")
-        if self.status.get("mode") != "ASSIST":
+        if self.status.get("mode") not in self.modes:
             self.ws.close()
-            raise Stop(f"mux mode is {self.status.get('mode')}, not ASSIST: no input sent")
+            raise Stop(f"mux mode is {self.status.get('mode')}, not {' or '.join(self.modes)}: "
+                       "no input sent")  # fmt: skip
         self.backend = self._check_capture_backend()
 
     def _check_capture_backend(self) -> str:
@@ -711,14 +737,17 @@ class Agent:
             self._drain(rest)
 
     def wait_for_human(self, max_wait_s: float = 600.0) -> None:
-        """Batt holds the ASSIST lease: wait (never fight), up to max_wait_s, then stop."""
+        """Batt holds the ASSIST lease: wait (never fight), up to max_wait_s, then stop. A mode
+        this Agent may not send in (HUMAN; BOT unless input_modes names it) stops it; in BOT the
+        mux drops the human's input, so there is no lease to wait out."""
         end = time.monotonic() + max_wait_s
         while True:
             self._pre_send()
             lease = self.status.get("lease_until_ns")
-            if self.status.get("mode") != "ASSIST":
-                raise Stop(f"mux left ASSIST ({self.status.get('mode')}): stopping")
-            if not lease or lease < ns():
+            mode = self.status.get("mode")
+            if mode not in self.modes:
+                raise Stop(f"mux left {' / '.join(self.modes)} ({mode}): stopping")
+            if mode == "BOT" or not lease or lease < ns():
                 return
             if time.monotonic() > end:
                 raise Stop("the human kept the lease for 10 min: giving up")

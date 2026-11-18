@@ -199,6 +199,12 @@ export function checkTime(at: string | null | undefined): string {
   return `${p(t.getHours())}:${p(t.getMinutes())}:${p(t.getSeconds())}`;
 }
 
+/** The console modes a Run may start in (Batt 2026-11-18: "with BOT it must run too"; ADR-0020
+ * Amendment 2026-11-18): ASSIST, where the person can take the lease, and BOT, where the mux drops
+ * the person's input so watching the Console never pauses the run. Never HUMAN. The backend's
+ * RUN_MODES, the same two. */
+export const RUN_MODES: readonly string[] = ["ASSIST", "BOT"];
+
 export type LiveButtons = { canStart: boolean; canStop: boolean; why: string | null };
 
 /** Which buttons the status allows for `flow`, and why Start is off (the backend refuses the same).
@@ -211,7 +217,7 @@ export function liveButtons(st: LiveStatus | null, flow: string): LiveButtons {
   if (active) return { canStart: false, canStop: st.state !== "stopping", why: null };
   if (busyWhy(st)) return { canStart: false, canStop: false, why: busyWhy(st) }; // round 17 N5
   if (flow !== PROJECT_FLOW && (!st.flows || !(flow in st.flows))) return { canStart: false, canStop: false, why: "the Run helper does not list this flow" };
-  if (st.mode !== "ASSIST") return { canStart: false, canStop: false, why: "set the console to ASSIST first (the bot never takes over in HUMAN)" };
+  if (!RUN_MODES.includes(st.mode ?? "")) return { canStart: false, canStop: false, why: `the console is in ${st.mode ?? "an unknown mode"}: set ASSIST or BOT first (the bot never plays in HUMAN)` };
   return { canStart: true, canStop: false, why: null };
 }
 
@@ -243,7 +249,7 @@ export const REFUSALS: Record<string, string> = {
   unknown_flow: "The Run helper does not list this flow.",
   already_running: "A run is already going: press Stop first.",
   input_writer_busy: "Another input writer of ours plays (a night chain, a runner, the live block player or an A/B series): Run waits until it ends.",
-  mode_not_assist: "Set the console to ASSIST first.",
+  mode_human: "The console is in HUMAN: set ASSIST or BOT first (the bot never plays in HUMAN).",
   csrf_invalid: "The page's security token expired: reload the page and try again.",
   origin_required: "Open the console from its own address to use Run.",
   lab_host_peer: "Run is refused from the bot server itself: use your own browser on the LAN.",

@@ -373,7 +373,7 @@ def test_a_project_run_writes_the_checked_project_and_one_request(
 
     helper(tmp_path)
     body = {"project": _project(), "node": "field"}
-    assert reason(post_project(client, body)) == "mode_not_assist"  # HUMAN: nothing written
+    assert reason(post_project(client, body)) == "mode_human"  # HUMAN: nothing written
     d = tmp_path / "settings" / "flowrun"
     assert not (d / "project.json").exists() and not (d / "request.json").exists()
     assist(client)
@@ -394,6 +394,32 @@ def test_a_project_run_writes_the_checked_project_and_one_request(
     log = [json.loads(x) for x in (d / "requests.jsonl").read_text().splitlines()]
     assert log[-1]["project"] == "live_test" and "nodes" not in log[-1]  # who, what, its hash
     assert allowed and allowed[0][2]["runtime_max_s"] == 86_400
+
+
+def test_a_project_run_starts_in_bot_mode_too_and_never_in_human(
+    client: TestClient, tmp_path: Path, allowed: list[Any]
+) -> None:
+    """Batt 2026-11-18 ("with BOT it must run too"; ADR-0020 Amendment 2026-11-18): a Run starts in
+    BOT as in ASSIST -- the person watches the Console and the mux drops their input -- and is
+    refused in HUMAN, in words, with nothing written."""
+    helper(tmp_path)
+    body = {"project": _project(), "node": "field"}
+    d = tmp_path / "settings" / "flowrun"
+    mux = client.app.state.poring.mux  # type: ignore[attr-defined]
+    mux.set_mode(Mode.HUMAN, time.monotonic_ns())
+    r = post_project(client, body)
+    assert r.status_code == 409 and reason(r) == "mode_human"
+    assert "ASSIST or BOT" in r.json()["detail"]["detail"]
+    assert not (d / "request.json").exists()
+    mux.set_mode(Mode.BOT, time.monotonic_ns())
+    r = post_project(client, body)
+    assert r.status_code == 200, r.text
+    req = json.loads((d / "request.json").read_text())
+    assert (req["action"], req["flow"], req["node"]) == ("start", "project", "field")
+    assert {Mode.ASSIST, Mode.BOT} == routes_flowrun.RUN_MODES
+    running = {"helper_alive": True, "state": "running"}
+    stop = routes_flowrun.RunBody(action="stop")
+    assert routes_flowrun.refusal(stop, running, Mode.BOT) is None  # Stop always passes
 
 
 def test_a_project_with_a_hunt_core_carries_its_keys(

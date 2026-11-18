@@ -92,6 +92,37 @@ def test_paced_sends_still_wait_out_a_human_lease(ro: ModuleType) -> None:
     assert len(a.ws.sent) == 1
 
 
+def test_the_modes_an_agent_may_send_in(ro: ModuleType) -> None:
+    """Batt 2026-11-18 ("with BOT it must run too"; ADR-0020 Amendment 2026-11-18): ASSIST alone
+    by default; the Run helper's processes add BOT (PORING_INPUT_MODES); HUMAN never."""
+    assert ro.input_modes(None) == ro.input_modes("") == ("ASSIST",)
+    assert ro.input_modes("ASSIST,BOT") == ro.input_modes(" assist , bot,BOT") == ("ASSIST", "BOT")
+    for bad in ("HUMAN", "ASSIST,HUMAN", "BOTS"):
+        with pytest.raises(ro.Stop, match="refused"):
+            ro.input_modes(bad)
+    assert ro.Agent.modes == ("ASSIST",)  # an Agent made without __init__ (these fakes) too
+
+
+def test_in_bot_a_run_sends_at_once_and_human_still_stops_it(ro: ModuleType) -> None:
+    """A Run's Agent (ASSIST, BOT): in BOT the mux drops the person's input, so a lease left from
+    ASSIST is not waited out; HUMAN stops it before any input. A default Agent stops in BOT."""
+    a = agent(ro, 0.05)
+    a.modes = ro.input_modes("ASSIST,BOT")
+    stale = ro.ns() + int(5e9)
+    a.ws.q.append(json.dumps({"type": "status", "mode": "BOT", "lease_until_ns": stale}))
+    t0 = time.monotonic()
+    move(a)
+    assert len(a.ws.sent) == 1 and a.ws.sent[0] - t0 < 0.5  # no 5-s wait in BOT
+    a.ws.q.append(json.dumps({"type": "status", "mode": "HUMAN"}))
+    with pytest.raises(ro.Stop, match=r"left ASSIST / BOT \(HUMAN\)"):
+        move(a)
+    plain = agent(ro, 0.05)
+    plain.ws.q.append(json.dumps({"type": "status", "mode": "BOT"}))
+    with pytest.raises(ro.Stop, match=r"left ASSIST \(BOT\)"):
+        move(plain)
+    assert plain.ws.sent == []
+
+
 def test_stop_on_takeover_keeps_the_pacing_and_still_stops_on_a_lease(ro: ModuleType) -> None:
     import sys
 
