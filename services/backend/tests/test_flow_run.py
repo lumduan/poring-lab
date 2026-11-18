@@ -569,3 +569,63 @@ def test_a_detect_server_that_stops_before_it_listens_leaves_the_cpu_detector(
     notes = [json.loads(x) for x in (tmp_path / "runs.jsonl").read_text().splitlines()]
     assert notes[-1]["event"] == "detect_cpu_only" and notes[-1]["why"] == "server_exit"
     assert why in " ".join(notes[-1]["tail"])
+
+
+# --- the Run's log on the page (Batt 2026-11-18: "log the status, the checklist and the errors";
+# "if a user presses Alt+Tab, only pause") ------------------------------------------------------
+def test_a_run_pauses_while_the_game_is_off_the_screen() -> None:
+    import ro_agent
+
+    assert fr.RUN_PAUSE_ENV == ro_agent.AWAY_ENV
+    src = (Path(fr.__file__)).read_text()
+    assert 'RUN_PAUSE_ENV: "1"' in src  # in the Run's own environment, beside its modes
+
+
+def test_the_run_log_gives_the_runs_own_check_and_its_pauses_as_it_grows() -> None:
+    rl = fr.RunLog()
+    items = [{"id": "identity", "ok": False, "words": "the name plate is not hers"},
+             {"id": "chat", "ok": True, "words": "the chat input is closed"}]  # fmt: skip
+    rl.feed(
+        "[19:25:24] RUN flowplay-1: the project x\n"
+        + fr.CHECK_MARK
+        + json.dumps({"items": items, "ok": False})
+        + "\n[19:25:30] PAUSED: the Windows taskbar sh"
+    )
+    assert rl.check is not None and rl.check["detail"] == "1 of 2 lines fail"
+    assert rl.pause() is None  # the PAUSED line is not finished yet
+    rl.feed("ows: the game is not in front. The bot waits and presses nothing; it goes on\n")
+    assert rl.pause() == {"paused": True, "since": "19:25:30", "count": 1, "paused_s": 0.0,
+                          "why": "the Windows taskbar shows: the game is not in front"}  # fmt: skip
+    rl.feed("[19:25:42] RESUMED after 12.5 s: the game is back on the screen; the bot goes on.\n")
+    p = rl.pause()
+    assert p is not None and p["paused"] is False and p["paused_s"] == 12.5 and p["count"] == 1
+    assert p["since"] is None and p["why"] is None
+
+
+def test_the_pause_shows_on_the_live_line() -> None:
+    live = fr.Live()
+    live.feed({"kind": "pause", "why": "the Windows taskbar shows", "t_ns": 5})
+    assert live.summary()["doing"].startswith("PAUSED")
+    live.feed({"kind": "resume", "after_s": 3.0, "t_ns": 6})
+    assert "playing on" in live.summary()["doing"]
+
+
+def test_a_refusal_s_detail_is_whole_and_the_log_tail_is_longer(tmp_path: Path) -> None:
+    log = tmp_path / "run.log"
+    why = "flow_play refused before any input: the start check: " + "x" * 700
+    log.write_text("\n".join([f"line {i}" for i in range(60)] + [why]) + "\n")
+    assert fr.tail(log, 3, 4000)[-1] == why  # the helper's end detail: not cut at 240
+    assert len(fr.tail(log, fr.LOG_TAIL_N, fr.LOG_LINE_MAX)) == fr.LOG_TAIL_N
+
+
+def test_the_start_pictures_are_copied_once_for_the_page(tmp_path: Path) -> None:
+    h = fr.Helper(tmp_path)
+    h.run_dir = tmp_path / "run"
+    h.run_dir.mkdir()
+    h.copy_start_pictures()
+    assert h.start_pictures == {}
+    (h.run_dir / fr.START_PICTURES["screen"]).write_bytes(b"jpg1")
+    h.copy_start_pictures()
+    assert set(h.start_pictures) == {"screen"}
+    assert (tmp_path / "start-screen.jpg").read_bytes() == b"jpg1"
+    assert h.status()["start_pictures"] == h.start_pictures

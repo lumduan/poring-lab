@@ -56,8 +56,10 @@ import re
 import struct
 import subprocess
 import sys
+import threading
 import time
-from collections.abc import Callable, Iterator, Sequence
+import weakref
+from collections.abc import Callable, Iterator, Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -376,7 +378,13 @@ class Screen:
     def grab_meta(self, x: int, y: int, w: int, h: int) -> tuple[int, np.ndarray, int, str]:
         """(t_mono_ns, BGRA, the bus writer's frame_id or -1, "bus" | "x11"). A bus frame's t is
         its decode-complete time; an X grab's is the moment of the grab. A box at VIRTUAL_X0 is
-        cut from the virtual 1280x720 frame of the real client (client_view)."""
+        cut from the virtual 1280x720 frame of the real client (client_view). In a Run
+        (PORING_PAUSE_AWAY=1) a grab waits while the game is off the screen (away_gate)."""
+        away_gate(self)
+        return self._grab_raw(x, y, w, h)
+
+    def _grab_raw(self, x: int, y: int, w: int, h: int) -> tuple[int, np.ndarray, int, str]:
+        """grab_meta without the pause gate (the gate's own looks)."""
         if x >= VIRTUAL_X0:
             from poring_env.clientview import ClientView
 
@@ -798,6 +806,165 @@ def input_modes(value: str | None) -> tuple[str, ...]:
     return names or MODES_DEFAULT
 
 
+# --- a Run pauses while the game is off the screen (Batt 2026-11-18: "if a user presses Alt+Tab,
+# only pause; when the game is back the bot must detect the screen and play on by itself") -------
+# Every grab and every press passes ro_agent, so the gate is here, not in the (byte-pinned) runner:
+# its threads and its Battle Log subprocess all freeze in place and go on with fresh frames.
+AWAY_ENV = "PORING_PAUSE_AWAY"  # "1": this process's (and its children's) grabs and presses wait
+AWAY_CHECK_S = 0.25  # a verdict "on the screen" is reused this long (a key press looks again)
+AWAY_POLL_S = 0.25  # while away: one look this often
+AWAY_SETTLE_S = 1.5  # back: on the screen and drawn this long without a break, then the bot goes on
+AWAY_DARK = 8.0  # the client's centre darker than this (grey mean): not drawn yet (a mode switch)
+AWAY_KEY_RETRIES = 3  # a key the backend refused (the game left the screen mid-press): pause, again
+FOREGROUND_REASONS = frozenset({"client_not_foreground", "foreground_stale_frame"})
+AWAY_HOOK: Callable[[str, dict[str, Any]], None] | None = None  # "pause" / "resume" (flow_play)
+AWAY_STOP: Callable[[], str | None] | None = None  # while paused: why to stop now (Stop pressed)
+_AWAY_LOCK = threading.Lock()
+_AWAY: dict[str, Any] = {"t": -1e9, "why": None, "since": None}
+_THREAD_AGENTS: dict[int, weakref.WeakSet[Any]] = {}
+_REFS: dict[str, np.ndarray] = {}
+
+
+def pause_away() -> bool:
+    """A Run's pause is on in this process (flow_play sets it; inherited by its children)."""
+    return os.environ.get(AWAY_ENV) == "1"
+
+
+def away_verdict(full: bool, taskbar_d: float | None, title_d: float | None) -> str | None:
+    """PURE: why the game is not on the screen, or None: it is, or nothing can tell (no template
+    -- a pause needs a proof; the backend's own gate still refuses keys). Fullscreen: Windows
+    hides its taskbar while a fullscreen window is in front (the backend's rule, the same bar).
+    A window: its active title-bar signature."""
+    if full:
+        if taskbar_d is not None and taskbar_d < TASKBAR_ABSENT_MIN:
+            return ("the Windows taskbar shows: the game is not in front (Alt+Tab, the Start menu, "
+                    "a Windows pop-up or another window)")  # fmt: skip
+        return None
+    if title_d is not None and title_d > SIG_MATCH:
+        return ("the game window is not the active window (its title bar is not lit): another "
+                "window is in front")  # fmt: skip
+    return None
+
+
+def _raw_distance(screen: Screen, state: str) -> float | None:
+    """``distance`` on the raw grab path (no pause gate, no dialog search); None: no template."""
+    paths = signature_variants(state)
+    if not paths:
+        return None
+    _, img, _, _ = screen._grab_raw(*region_for(base_state(state)))
+    cur = grey_thumb(img)
+    ds = []
+    for path in paths:
+        ref = _REFS.get(str(path))
+        if ref is None:
+            ref = _REFS.setdefault(str(path), np.load(path))
+        if ref.shape == cur.shape:
+            ds.append(float(np.abs(cur - ref).mean()))
+    return min(ds) if ds else None
+
+
+def away_now(screen: Screen) -> str | None:
+    """Why the game is not on the screen now, from one look, or None (away_verdict)."""
+    full = fullscreen()
+    taskbar = _raw_distance(screen, "taskbar") if full else None
+    title = None if full else _raw_distance(screen, "client_title_active")
+    return away_verdict(full, taskbar, title)
+
+
+def client_drawn(screen: Screen) -> bool:
+    """The client's centre is not black: after a return the game redraws a beat later."""
+    x, y, w, h = real_game_region()
+    _, img, _, _ = screen._grab_raw(x + w // 2 - 160, y + h // 2 - 90, 320, 180)
+    return float(np.asarray(img)[..., :3].mean()) >= AWAY_DARK
+
+
+def away_state() -> dict[str, Any]:
+    """The pause as it stands: {"paused": bool, "why", "for_s"} (a snapshot, for a log line)."""
+    with _AWAY_LOCK:
+        since = _AWAY["since"]
+        return {"paused": since is not None, "why": _AWAY["why"],
+                "for_s": None if since is None else round(time.monotonic() - since, 1)}  # fmt: skip
+
+
+def _away_note(kind: str, info: dict[str, Any]) -> None:
+    hook = AWAY_HOOK
+    if hook is None:
+        log(f"PAUSED: {info.get('why')}" if kind == "pause" else
+            f"RESUMED after {info.get('after_s')} s: the game is back on the screen")  # fmt: skip
+        return
+    with contextlib.suppress(Exception):  # a log line never stops the run
+        hook(kind, info)
+
+
+def away_gate(screen: Screen, *, fresh: bool = False) -> None:
+    """A Run's pause (PORING_PAUSE_AWAY=1): while the game is off the screen this waits -- the
+    caller grabs and presses nothing -- and returns once the game is back AND drawn for
+    AWAY_SETTLE_S without a break. Its thread's Agents let go of what they hold at the start and
+    are read meanwhile (their websocket stays healthy). The first thread to see it notes "pause"
+    (AWAY_HOOK), the first to see it end "resume". AWAY_STOP (Stop pressed) ends the wait: Stop.
+    ``fresh``: look now, never the cached verdict (a key press: the backend refuses a key while
+    the game is not in front)."""
+    if not pause_away():
+        return
+    with _AWAY_LOCK:
+        if not fresh and _AWAY["why"] is None and time.monotonic() - _AWAY["t"] < AWAY_CHECK_S:
+            return
+    why = away_now(screen)
+    with _AWAY_LOCK:
+        _AWAY["t"], _AWAY["why"] = time.monotonic(), why
+        if why is None:
+            return
+        first = _AWAY["since"] is None
+        if first:
+            _AWAY["since"] = time.monotonic()
+    if first:
+        _away_note("pause", {"why": why, "t_wall": time.time()})
+    for a in _thread_agents():
+        a.release_quiet()
+    shown: float | None = None
+    while True:
+        stop_why = AWAY_STOP() if AWAY_STOP is not None else None
+        if stop_why:
+            raise Stop(stop_why)
+        agents = _thread_agents()
+        if agents:
+            for a in agents:
+                a._drain(AWAY_POLL_S / len(agents))
+        else:
+            time.sleep(AWAY_POLL_S)
+        if away_now(screen) is not None or not client_drawn(screen):
+            shown = None
+            continue
+        shown = shown if shown is not None else time.monotonic()
+        if time.monotonic() - shown >= AWAY_SETTLE_S:
+            break
+    with _AWAY_LOCK:
+        since = _AWAY["since"]
+        _AWAY.update(t=time.monotonic(), why=None, since=None)
+    if since is not None:
+        _away_note("resume", {"after_s": round(time.monotonic() - since, 1), "t_wall": time.time()})
+
+
+def _thread_agents() -> list[Any]:
+    return list(_THREAD_AGENTS.get(threading.get_ident(), ()))
+
+
+def is_release(e: Mapping[str, Any]) -> bool:
+    """PURE: an event that only lets go (always sent, never paused)."""
+    return e.get("type") == "release_all" or (
+        e.get("type") in ("key", "mouse_button") and e.get("action") == "up"
+    )
+
+
+def refused_for_foreground(chunk: Sequence[Mapping[str, Any]], ack: Mapping[str, Any]) -> bool:
+    """PURE: the backend refused this batch only because the game was not in front, and every
+    event of it was a key (so sending it again repeats nothing that went through)."""
+    reasons = set(ack.get("reasons") or ())
+    return (bool(reasons) and reasons <= FOREGROUND_REASONS
+            and all(e.get("type") == "key" for e in chunk)
+            and int(ack.get("dropped") or 0) == len(chunk))  # fmt: skip
+
+
 def virtual_event(ev: dict[str, Any]) -> dict[str, Any]:
     """A pointer event whose normalised position is a VIRTUAL point (x beyond 1: a caller that
     normalised a virtual pixel by the desktop, the runner's raw double-click) -> its real one."""
@@ -833,6 +1000,8 @@ class Agent:
         # at 0.05: no two inputs closer than today; only the dead wait after other work goes).
         self.min_send_gap_s: float | None = None
         self._last_send = 0.0
+        self._gate_screen: Screen | None = None  # the pause gate's own looks (made when needed)
+        _THREAD_AGENTS.setdefault(threading.get_ident(), weakref.WeakSet()).add(self)
         self._drain(1.5, want="status")
         if self.status.get("mode") not in self.modes:
             self.ws.close()
@@ -927,18 +1096,48 @@ class Agent:
             log("human lease active: waiting")
             self._drain(1.0)
 
+    def gate_screen(self) -> Screen:
+        if getattr(self, "_gate_screen", None) is None:  # a test's Agent may skip __init__
+            self._gate_screen = Screen()
+        assert self._gate_screen is not None
+        return self._gate_screen
+
+    def release_quiet(self) -> None:
+        """Let go of whatever this Agent holds (a pause's start): one release_all, never raises
+        (releases always pass the mux)."""
+        with contextlib.suppress(Exception):
+            msg = {"type": "agent_input", "t_mono_ns": ns(), "frame_id": -1, "t_capture_ns": ns(),
+                   "events": [{"type": "release_all", "t_mono_ns": ns(), "frame_id": -1}],
+                   "sensitive": False}  # fmt: skip
+            self.ws.send(json.dumps(msg))
+            self._drain(1.0, want="input_ack")
+
     def send(self, events: list[dict[str, Any]], *, sensitive: bool = False) -> None:
         events = [virtual_event(e) for e in events]
+        pausing = pause_away() and not all(is_release(e) for e in events)
+        if pausing:  # a Run: never press while the game is off the screen (away_gate)
+            down = any(e.get("type") == "key" and e.get("action") == "down" for e in events)
+            away_gate(self.gate_screen(), fresh=down)
         self.wait_for_human()
         for i in range(0, len(events), 64):
             chunk = events[i : i + 64]
             msg = {"type": "agent_input", "t_mono_ns": ns(), "frame_id": -1, "t_capture_ns": ns(),
                    "events": chunk, "sensitive": sensitive}  # fmt: skip
-            self.ws.send(json.dumps(msg))
-            self._last_send = time.monotonic()
-            ack = self._drain(3.0, want="input_ack")
-            if ack is None:
-                raise Stop("no input_ack within 3 s")
+            tries = 0
+            while True:
+                self.ws.send(json.dumps(msg))
+                self._last_send = time.monotonic()
+                ack = self._drain(3.0, want="input_ack")
+                if ack is None:
+                    raise Stop("no input_ack within 3 s")
+                if not (
+                    pausing and tries < AWAY_KEY_RETRIES and refused_for_foreground(chunk, ack)
+                ):
+                    break
+                tries += 1  # the game left the screen between the look and the key: pause, again
+                away_gate(self.gate_screen(), fresh=True)
+                self.wait_for_human()
+                msg = {**msg, "t_mono_ns": ns(), "t_capture_ns": ns()}
             if ack["dropped"]:
                 why = f"mux refused {ack['dropped']}/{len(chunk)} ({ack['reasons']}): stopping"
                 if "environment_unattested" in ack["reasons"]:
@@ -1054,6 +1253,10 @@ class Agent:
     def close(self) -> None:
         with contextlib.suppress(Exception):
             self.ws.close()
+        gate = getattr(self, "_gate_screen", None)
+        if gate is not None:
+            gate.close()
+            self._gate_screen = None
 
 
 @contextlib.contextmanager

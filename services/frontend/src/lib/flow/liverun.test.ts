@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import { busyWhy, canCheck, liveButtons, liveLabel, type LiveStatus, okTail, REFUSALS, RUN_MODES } from "./liverun.ts";
+import { busyWhy, canCheck, liveButtons, liveLabel, type LiveStatus, okTail, pauseLine, REFUSALS, RUN_MODES, runCheckLines } from "./liverun.ts";
 import { mapsReadyText, statusText } from "./words.ts";
 
 const FLOW = "xmas_dun02_rogue";
@@ -206,4 +206,23 @@ test("a ✓ line's tail is cut at the last ';' outside parentheses, never inside
     const t = okTail(w) ?? "";
     assert.equal((t.match(/\(/g) ?? []).length >= (t.match(/\)/g) ?? []).length, true, w);
   }
+});
+
+test("a Run's pause says since when, why and that it goes on by itself (Batt 2026-11-18)", () => {
+  assert.equal(pauseLine(null), null);
+  assert.equal(pauseLine({ paused: false, since: null, why: null, count: 0, paused_s: 0 }), null);
+  const now = pauseLine({ paused: true, since: "19:25:30", why: "the Windows taskbar shows: the game is not in front", count: 1, paused_s: 0 });
+  assert.match(String(now), /^PAUSED since 19:25:30: the Windows taskbar shows/);
+  assert.match(String(now), /presses nothing; it plays on by itself/);
+  assert.equal(pauseLine({ paused: false, since: null, why: null, count: 2, paused_s: 31.6 }), "Paused 2 times (32 s in all): the game was off the screen; it played on by itself each time.");
+});
+
+test("the Run's own start check: one line per item, the failing ones first", () => {
+  assert.deepEqual(runCheckLines(null), []);
+  const lines = runCheckLines({ state: "done", items: [
+    { id: "chat", ok: true, words: "the chat input is closed", value: "closed" },
+    { id: "cell", ok: null, words: "cannot tell", value: null },
+    { id: "weight", ok: false, words: "the weight did not read", value: null },
+  ] } as never);
+  assert.deepEqual(lines.map((l) => `${l.sign} ${l.id}`), ["✗ weight", "? cell", "✓ chat"]);
 });

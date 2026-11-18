@@ -282,6 +282,13 @@ Amendment B); a not-adopted model is never offered.
   BOT your input is dropped, so you can watch the run on the Console without pausing it; Stop, or
   HUMAN, ends it. A run that goes shows a "Running in the game" strip under the /flows header, and
   its Stop, on every node and after you come back from another page.
+  ➡️ **Since 2026-11-18 ~19:4x (Batt, ADR-0020 Amendment P) a Run PAUSES while the game is off the
+  screen** (Alt+Tab, the Start menu, a Windows pop-up; fullscreen: the taskbar shows; a window: its
+  title bar is not lit): it presses nothing, the page shows "PAUSED since ...", and it plays on by
+  itself 1.5 s after the game is back. Pressed while the game is away, Run waits for it before its
+  start check. The Run panel also shows the Run's OWN start check line by line, the two pictures
+  that check saw (the whole screen; the virtual 1280x720 client on a bigger screen) and the Run's
+  log (40 lines: the screen, the input mode, each check line, the pauses, a fault's traceback).
   ➡️ **Since 2026-11-13 11:3x** Run sits beside Simulate (amber; press, then press again within 4 s
   to confirm) with Stop; a "your run settings" strip sets the Fly Wing key, the Butterfly Wing key
   and the weight to go home at (defaults F8, F9, 50 %; the blocks show them); the map's exits: a bag

@@ -135,6 +135,9 @@ the first run at 1080p.
   (19 trusted), 6 strikes, 6 Knife-swap recipes, 5 kills, 51 cursor reads, the Battle Log read
   live, the species read (cruiser, mystcase); a normal end home on the Butterfly Wing.
 - 6 the console stream's taskbar template: not yet.
+- Alt+Tab (Batt 2026-11-18 ~19:2x): a fullscreen game Alt+Tabbed away shows the desktop; a Run now
+  PAUSES on it (the taskbar shows) and plays on by itself when the game is back (ADR-0020
+  Amendment P, `ro_agent.away_gate`).
 - Not yet verified at 1080p: the world's native-size text cues ("Miss"), the death dialog's
   points (respawn_at, a centred dialog: to be found like the login ones), a window of another size.
 

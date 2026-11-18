@@ -93,6 +93,10 @@ SCRATCH = Path("/dev/shm/poring-lab-tmp")
 # this helper starts get it: every other script of ours stays ASSIST-only.
 RUN_MODES_ENV = "PORING_INPUT_MODES"
 RUN_INPUT_MODES = "ASSIST,BOT"
+RUN_PAUSE_ENV = "PORING_PAUSE_AWAY"  # ro_agent.AWAY_ENV: a Run waits while the game is off screen
+LOG_TAIL_N = 40  # the run log's last lines in the status (the page's log; Batt 2026-11-18)
+LOG_LINE_MAX = 400
+START_PICTURES = {"screen": "start-screen.jpg", "virtual": "start-virtual.jpg"}  # flow_play's
 SERVE_LOG = SCRATCH / "poring-guarded-execdev-vision.log"
 WORKER = lab_env.container("vision-worker")
 PY = str(ROOT / ".venv" / "bin" / "python")
@@ -407,6 +411,12 @@ class Live:
         if k in ("hunt_start",):
             self.doing, self.block = "the hunt core starts", None
             return
+        if k == "pause":  # ro_agent.away_gate: the game off the screen (flow_play's PauseNotes)
+            self.doing, self.block = "PAUSED: the game is not on the screen", None
+            return
+        if k == "resume":
+            self.doing = "back on the screen: playing on"
+            return
         if k == "run_start" and isinstance(t, int):
             self.t0_ns = t
         elif k == "hp_read":
@@ -618,16 +628,69 @@ def busy_state(state: str, detail: str, why: str | None) -> tuple[str, str]:
     return state, detail
 
 
-def tail(path: Path, n: int = 6) -> list[str]:
+def tail(path: Path, n: int = 6, cut: int = 240) -> list[str]:
     try:
         with open(path, "rb") as fh:
             fh.seek(0, 2)
             size = fh.tell()
-            fh.seek(max(0, size - 8192))
+            fh.seek(max(0, size - 65536))
             lines = fh.read().decode("utf-8", "replace").splitlines()
     except OSError:
         return []
-    return [ln[:240] for ln in lines[-n:]]
+    return [ln[:cut] for ln in lines[-n:]]
+
+
+PAUSE_LINE = re.compile(r"^\[(\d\d:\d\d:\d\d)\] (PAUSED|RESUMED)(?: after ([0-9.]+) s)?: (.*)$")
+
+
+@dataclass
+class RunLog:
+    """PURE: what the page needs from a Run's log (flow_play's diary), fed as it grows: the Run's
+    OWN start check (its CHECK line) and the pause (its PAUSED / RESUMED lines)."""
+
+    check: dict[str, Any] | None = None
+    pauses: int = 0
+    paused_s: float = 0.0
+    since: str | None = None  # the open pause's start (ICT), None: not paused
+    why: str | None = None
+    rest: str = ""
+
+    def feed(self, text: str) -> None:
+        lines = (self.rest + text).split("\n")
+        self.rest = lines.pop()  # an unfinished last line waits for its end
+        for ln in lines:
+            if ln.startswith(CHECK_MARK) and self.check is None:
+                got = parse_check_output(ln)
+                self.check = got if got.get("state") == "done" else None
+                continue
+            m = PAUSE_LINE.match(ln)
+            if m is None:
+                continue
+            t, kind, after, words = m.groups()
+            if kind == "PAUSED":
+                self.pauses += 1
+                self.since, self.why = t, words.split(". The bot waits")[0]
+            else:
+                self.paused_s += float(after or 0.0)
+                self.since, self.why = None, None
+
+    def pause(self) -> dict[str, Any] | None:
+        if not self.pauses:
+            return None
+        return {"paused": self.since is not None, "since": self.since, "why": self.why,
+                "count": self.pauses, "paused_s": round(self.paused_s, 1)}  # fmt: skip
+
+
+def feed_log(rl: RunLog, path: Path, offset: int) -> int:
+    """Feed the run log's bytes written since ``offset``; returns the new offset."""
+    try:
+        with open(path, "rb") as fh:
+            fh.seek(offset)
+            data = fh.read(4_000_000)
+    except OSError:
+        return offset
+    rl.feed(data.decode("utf-8", "replace"))
+    return offset + len(data)
 
 
 def write_json(path: Path, data: Mapping[str, Any]) -> None:
@@ -655,6 +718,9 @@ class Helper:
         self.live: Live | None = None  # the run's live summary (its session events)
         self.live_off = 0
         self.end_png: str | None = None  # the session's end picture (GET /flows/run/end.png)
+        self.run_log = RunLog()  # the Run's own check and its pauses, from its log
+        self.run_log_off = 0
+        self.start_pictures: dict[str, str] = {}  # which -> its stamp (GET /flows/run/start/...)
         self.config: dict[str, Any] | None = None  # the run's values (the project's settings)
         self.config_src: dict[str, str] | None = None  # each one's level
         self.keys_src: str | None = None  # the run's keys: the flow's functions, or the settings
@@ -682,7 +748,10 @@ class Helper:
         return {"v": VERSION, "state": self.state, "detail": self.detail, "flow": self.flow,
                 "label": self.label, "request_id": self.request_id, "started": self.started,
                 "ended": self.ended, "rc": self.rc, "t_wall": time.time(), "busy": self.busy,
-                "log_tail": [] if log is None else player_lines(tail(log)),
+                "log_tail": [] if log is None else player_lines(tail(log, LOG_TAIL_N,
+                                                                       LOG_LINE_MAX)),
+                "run_check": self.run_log.check, "pause": self.run_log.pause(),
+                "start_pictures": dict(self.start_pictures),
                 "config": self.config, "config_src": self.config_src,
                 "keys_src": self.keys_src, "check": self.check,
                 "live": None if self.live is None else self.live.summary(),
@@ -862,6 +931,9 @@ class Helper:
         else:
             self.config, self.config_src = None, None
         self.live, self.live_off, self.end_png = Live(), 0, None
+        self.run_log, self.run_log_off, self.start_pictures = RunLog(), 0, {}
+        for name in START_PICTURES:  # the last run's pictures are not this one's
+            (self.dir / f"start-{name}.jpg").unlink(missing_ok=True)
         pfile = self.run_dir / PROJECT_FILE
         shutil.copyfile(self.dir / PROJECT_FILE, pfile)
         self.note(event="start", flow=PROJECT, label=self.label, request=rid, node=node,
@@ -874,6 +946,7 @@ class Helper:
             "PYTHONDONTWRITEBYTECODE": "1",
             "TMPDIR": str(SCRATCH),
             RUN_MODES_ENV: RUN_INPUT_MODES,
+            RUN_PAUSE_ENV: "1",  # it waits while the game is off the screen (Batt 2026-11-18)
         }  # a Run plays in ASSIST or BOT, never HUMAN
         self.stop_file = self.run_dir / STOP_NAME
         self.stop_file.unlink(missing_ok=True)
@@ -1010,13 +1083,16 @@ class Helper:
         sess = session_of(self.label, DEMO) if self.live is not None else None
         if sess is not None and self.live is not None:
             self.live_off = feed_new(self.live, sess / "events.jsonl", self.live_off)
+        if self.run_dir is not None:
+            self.run_log_off = feed_log(self.run_log, self.run_dir / "run.log", self.run_log_off)
+            self.copy_start_pictures()
         if rc is None:
             if self.state == "starting" and run_started(self.label):
                 self.state, self.detail = "running", "playing"
                 self.write_status()
             return
         self.rc, self.ended, self.runner = rc, ict(), None
-        last = tail(self.run_dir / "run.log", 3) if self.run_dir else []
+        last = tail(self.run_dir / "run.log", 3, 4000) if self.run_dir else []
         refused = next((ln for ln in last if "refused" in ln), None)
         self.state = "ended" if rc in (0, 130) else "failed"
         stopped = self.stop_t is not None or rc == 130
@@ -1041,6 +1117,22 @@ class Helper:
         self.write_status()  # the run's end shows at once; its economy record follows
         self.record()
         self.write_status()
+
+    def copy_start_pictures(self) -> None:
+        """flow_play's start pictures (what its start check saw) into the helper's folder, where
+        the backend serves them (GET /flows/run/start/{screen,virtual}.jpg), once each."""
+        if self.run_dir is None:
+            return
+        for which, name in START_PICTURES.items():
+            src = self.run_dir / name
+            if which in self.start_pictures or not src.is_file():
+                continue
+            try:
+                shutil.copyfile(src, self.dir / f"start-{which}.jpg")
+            except OSError:
+                continue
+            self.start_pictures[which] = ict()
+            self.write_status()
 
     def record(self) -> None:
         """The run's hunt sessions into data/econ/lab.sqlite (ADR-0025; round 29, Batt 2026-11-16:
