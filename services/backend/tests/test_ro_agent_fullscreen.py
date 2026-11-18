@@ -28,7 +28,7 @@ def ro(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> ModuleType:
     sig.mkdir()
     monkeypatch.setattr(module, "signature_path", lambda state: sig / f"{state}.npy")
     monkeypatch.setattr(module, "desktop", lambda: (1280, 720))
-    monkeypatch.setattr(module, "game_region", lambda: (0, 0, 1280, 720))
+    monkeypatch.setattr(module, "real_game_region", lambda: (0, 0, 1280, 720))
     monkeypatch.setattr(module, "SHOTS", tmp_path)
     monkeypatch.setattr(module, "to_png", lambda *a, **k: None)
     return module
@@ -68,10 +68,10 @@ def test_fullscreen_is_the_region_filling_the_session(
     ro: ModuleType, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     assert ro.fullscreen()
-    monkeypatch.setattr(ro, "game_region", lambda: (80, 77, 1280, 720))
+    monkeypatch.setattr(ro, "real_game_region", lambda: (80, 77, 1280, 720))
     monkeypatch.setattr(ro, "desktop", lambda: (1440, 900))
     assert not ro.fullscreen()  # the lab's window
-    monkeypatch.setattr(ro, "game_region", lambda: (0, 0, 1280, 720))
+    monkeypatch.setattr(ro, "real_game_region", lambda: (0, 0, 1280, 720))
     assert not ro.fullscreen()  # a corner of a bigger session is not fullscreen
 
 
@@ -191,7 +191,7 @@ def test_on_an_unmeasured_size_a_login_dialog_is_found_and_moves_its_points(
     server list's OK takes the same one; a dialog not found yet stops instead of guessing."""
     from poring_backend.signature import grey_thumb
 
-    monkeypatch.setattr(ro, "game_region", lambda: (0, 0, 1920, 1080))
+    monkeypatch.setattr(ro, "real_game_region", lambda: (0, 0, 1920, 1080))
     monkeypatch.setattr(ro, "desktop", lambda: (1920, 1080))
     blocks = np.random.default_rng(9).integers(0, 255, (8, 36, 4), dtype=np.uint8)
     dialog = np.ascontiguousarray(np.repeat(np.repeat(blocks, 8, 0), 8, 1)[:60, :281])
@@ -210,5 +210,89 @@ def test_on_an_unmeasured_size_a_login_dialog_is_found_and_moves_its_points(
     assert ro.region_for("service_select") == (825, 596, 281, 60)
     assert ro.layout("service_ok") == (714 + 320, 555 + 225)
     assert ro.layout("server_ok") == ro.layout("service_ok")
-    monkeypatch.setattr(ro, "game_region", lambda: (80, 77, 1280, 720))
+    monkeypatch.setattr(ro, "real_game_region", lambda: (80, 77, 1280, 720))
     assert ro.region_for("service_select") == (585, 448, 281, 60)  # measured: no vector
+
+
+# --- the virtual 1280x720 client (phase 2, milestone 4) ------------------------------------------
+
+
+def raw_screen(ro: ModuleType, frame: np.ndarray) -> Any:
+    """A Screen whose raw grabs are crops of one synthetic real frame (the virtual ones are the
+    real Screen's code, which grabs the real client through the same method)."""
+
+    class Raw(ro.Screen):  # type: ignore[misc,name-defined]
+        def __init__(self) -> None:
+            self.frame = frame
+
+        def grab_meta(self, x: int, y: int, w: int, h: int) -> Any:
+            if x >= ro.VIRTUAL_X0:
+                return super().grab_meta(x, y, w, h)
+            return 7, np.ascontiguousarray(self.frame[y : y + h, x : x + w]), 42, "bus"
+
+    return Raw()
+
+
+def test_a_1080p_client_is_seen_and_driven_through_the_virtual_one(
+    ro: ModuleType, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """At 1920x1080 the code built on 1280x720 gets the virtual client: its region at the far
+    origin, pointer positions mapped by the measured vectors (the world x1.5 about the centre, the
+    saved panels as they are, the minimap +640), grabs cut from the virtual frame."""
+    monkeypatch.setattr(ro, "real_game_region", lambda: (0, 0, 1920, 1080))
+    monkeypatch.setattr(ro, "desktop", lambda: (1920, 1080))
+    monkeypatch.setattr(ro, "_POINTER", None)
+    vx0 = ro.VIRTUAL_X0
+    assert ro.virtual_active() and ro.game_region() == (vx0, 0, 1280, 720)
+    assert ro.fullscreen()  # decided on the REAL region
+    assert ro.real_xy(vx0 + 700, 300) == (1050, 450)  # the world: 960 + 1.5 * 60, 540 - 1.5 * 60
+    assert ro.real_xy(vx0 + 10, 10) == (10, 10)  # Basic Info: its saved pixels
+    assert ro.real_xy(vx0 + 1200, 50) == (1840, 50)  # the minimap: the top-right corner's vector
+    assert ro.real_xy(37, 530) == (37, 530)  # a desktop pixel (an icon): as is
+    # the runner's raw double-click normalises a virtual pixel by the desktop: mapped in send
+    ev = {"type": "mouse_button", "x": (vx0 + 700) / 1920, "y": 300 / 1080, "action": "down"}
+    out = ro.virtual_event(ev)
+    assert (round(out["x"] * 1920), round(out["y"] * 1080)) == (1050, 450)
+    assert ro.virtual_event({"type": "key", "code": "F1"}) == {"type": "key", "code": "F1"}
+    # a grab at the far origin is the virtual frame: the world shrunk back, the panels in place
+    yy, xx = np.mgrid[0:1080, 0:1920]
+    frame = np.dstack([xx % 256, yy % 256, (xx // 256) * 16, np.full_like(xx, 255)]).astype(
+        np.uint8
+    )
+    frame[0:150, 0:230] = (11, 11, 11, 255)  # Basic Info
+    fake = raw_screen(ro, frame)
+    t, crop, fid, path = fake.grab_meta(vx0 + 0, 0, 230, 150)
+    assert (t, fid, path) == (7, 42, "bus") and (crop[..., :3] == 11).all()
+    _, world, _, _ = fake.grab_meta(vx0 + 700, 300, 1, 1)
+    assert tuple(world[0, 0]) == tuple(frame[450, 1050])
+    monkeypatch.setattr(ro, "real_game_region", lambda: (80, 77, 1280, 720))
+    monkeypatch.setattr(ro, "desktop", lambda: (1440, 900))
+    assert not ro.virtual_active() and ro.game_region() == (80, 77, 1280, 720)  # the lab window
+
+
+def test_the_pointer_s_own_picture_is_pasted_unscaled_over_the_world(
+    ro: ModuleType, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(ro, "real_game_region", lambda: (0, 0, 1920, 1080))
+    monkeypatch.setattr(ro, "desktop", lambda: (1920, 1080))
+    monkeypatch.setattr(ro, "_POINTER", None)
+    ro.real_xy(ro.VIRTUAL_X0 + 700, 300)  # the pointer went there
+    view = ro.client_view()
+    cursor = [p for p in view.panels if p.name == "cursor"]
+    assert cursor and cursor[0].virtual[:2] == (688, 288) and cursor[0].real_xy == (1038, 438)
+    ro.real_xy(ro.VIRTUAL_X0 + 10, 10)  # over Basic Info: the panel itself carries it
+    assert not [p for p in ro.client_view().panels if p.name == "cursor"]
+
+
+def test_the_login_dialogs_stay_in_real_pixels_under_the_virtual_client(
+    ro: ModuleType, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(ro, "real_game_region", lambda: (0, 0, 1920, 1080))
+    monkeypatch.setattr(ro, "desktop", lambda: (1920, 1080))
+    ro._VECTORS.clear()
+    ro._VECTORS["service_select"] = (320, 225)
+    np.save(ro.signature_path("service_select"), np.zeros((8, 36), np.float32))
+    ro.signature_path("service_select").with_suffix(".json").write_text(
+        json.dumps({"box": [505, 371, 281, 60]}))  # fmt: skip
+    assert ro.layout("service_ok") == (714 + 320, 555 + 225)  # real, never at the far origin
+    assert ro.region_for("service_select") == (825, 596, 281, 60)

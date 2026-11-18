@@ -184,12 +184,90 @@ def account(which: str) -> tuple[str, str, str]:
     return user, pw, char
 
 
-def game_region() -> tuple[int, int, int, int]:
+def real_game_region() -> tuple[int, int, int, int]:
+    """The client's REAL area in desktop pixels (.env GAME_REGION). A replaced ``game_region``
+    (a test's fixed client, a caller's) IS the client: it is returned as is."""
+    replaced = globals().get("game_region")
+    if replaced is not None and replaced is not _VIRTUAL_AWARE_GAME_REGION:
+        region: tuple[int, int, int, int] = replaced()
+        return region
     raw = env().get("GAME_REGION", "")
     if not raw:
         raise Stop("GAME_REGION is not set in .env (the client area, x,y,w,h)")
     x, y, w, h = (int(v) for v in raw.split(","))
     return x, y, w, h
+
+
+# Phase 2 (docs/planning/fullscreen-client.md section 7): a client that is not 1280x720 is seen
+# through the VIRTUAL 1280x720 client -- everything built on 1280x720 (the runner, its readers,
+# the detector) runs unchanged. It lives at a far origin, never a desktop pixel, so a point there
+# is known to be virtual: grabs there return the virtual frame, pointer positions there are mapped
+# to the screen by the view's vectors (poring_env.clientview).
+VIRTUAL_X0 = 100_000
+# The lab's interface panels in the virtual client, measured 2026-11-18 at 1920x1080: Basic Info,
+# the hotbars and the chat window stay at their SAVED pixels; the minimap sticks to the top-right.
+LAB_PANELS: tuple[tuple[str, tuple[int, int, int, int], str], ...] = (
+    ("basic_info", (0, 0, 230, 150), "saved"),
+    ("hotbar", (226, 0, 300, 40), "saved"),
+    ("hotbar2", (744, 0, 90, 36), "saved"),
+    ("chat", (0, 578, 600, 142), "saved"),
+    ("minimap", (1130, 10, 150, 160), "tr"),
+)
+# The pointer is drawn at its own size wherever it is (not scaled with the world): its area
+# around the hotspot is pasted unscaled at the virtual pointer position
+CURSOR_BOX = (-12, -12, 48, 56)
+_POINTER: tuple[float, float] | None = None  # the last virtual pointer position sent
+
+
+def client_view() -> Any:
+    """The view of the real client: the identity at 1280x720; otherwise the world scaled by the
+    client's height / 720 about its centre (measured), the lab's panels, the pointer's picture."""
+    from poring_env.clientview import VIRTUAL_H, VIRTUAL_W, ClientView, Panel
+
+    x, y, w, h = real_game_region()
+    if (w, h) == (VIRTUAL_W, VIRTUAL_H):
+        return ClientView((x, y, w, h))
+    mode = "fullscreen" if (x, y) == (0, 0) and (w, h) == desktop() else "window"
+    panels = [Panel.anchored(name, box, "tr", (w, h)) if how == "tr" else
+              Panel(name, box, (box[0], box[1])) for name, box, how in LAB_PANELS]  # fmt: skip
+    base = ClientView((x, y, w, h), mode, h / VIRTUAL_H, None, tuple(panels))
+    if _POINTER is not None and base.panel_at(*_POINTER) is None:  # over the world
+        vx, vy = _POINTER
+        cx, cy = base.to_client(vx, vy)
+        dx, dy, bw, bh = CURSOR_BOX
+        panels.append(Panel("cursor", (round(vx) + dx, round(vy) + dy, bw, bh),
+                            (round(cx) + dx, round(cy) + dy)))  # fmt: skip
+    return ClientView((x, y, w, h), mode, h / VIRTUAL_H, None, tuple(panels))
+
+
+def virtual_active() -> bool:
+    """The real client is not 1280x720: the code built on 1280x720 sees the virtual client."""
+    try:
+        _, _, w, h = real_game_region()
+    except (Stop, OSError):
+        return False
+    return (w, h) != (1280, 720)
+
+
+def game_region() -> tuple[int, int, int, int]:
+    """The client area the bot's code works in: the real one at 1280x720, else the virtual
+    1280x720 client at VIRTUAL_X0 (grabs and pointer positions there are mapped)."""
+    if virtual_active():
+        return VIRTUAL_X0, 0, 1280, 720
+    return real_game_region()
+
+
+_VIRTUAL_AWARE_GAME_REGION = game_region
+
+
+def real_xy(x: float, y: float) -> tuple[int, int]:
+    """A pointer position -> desktop pixels: a virtual one by the view's vectors, else as is."""
+    global _POINTER
+    if x >= VIRTUAL_X0:
+        _POINTER = (x - VIRTUAL_X0, y)
+        fx, fy = client_view().to_real(x - VIRTUAL_X0, y)
+        return int(round(fx)), int(round(fy))
+    return int(x), int(y)
 
 
 # --- database checks (read-only; credentials via stdin, never argv) -------------------------------
@@ -297,7 +375,19 @@ class Screen:
 
     def grab_meta(self, x: int, y: int, w: int, h: int) -> tuple[int, np.ndarray, int, str]:
         """(t_mono_ns, BGRA, the bus writer's frame_id or -1, "bus" | "x11"). A bus frame's t is
-        its decode-complete time; an X grab's is the moment of the grab."""
+        its decode-complete time; an X grab's is the moment of the grab. A box at VIRTUAL_X0 is
+        cut from the virtual 1280x720 frame of the real client (client_view)."""
+        if x >= VIRTUAL_X0:
+            from poring_env.clientview import ClientView
+
+            view = client_view()
+            rx, ry, rw, rh = view.rect
+            t, real, frame_id, path = self.grab_meta(rx, ry, rw, rh)
+            local = ClientView((0, 0, rw, rh), view.mode, view.world_scale, view.world_centre,
+                               view.panels)  # fmt: skip
+            vf = local.virtual_frame(real)
+            vx = x - VIRTUAL_X0
+            return t, np.ascontiguousarray(vf[y : y + h, vx : vx + w]), frame_id, path
         assert self.proc.stdin is not None and self.proc.stdout is not None
         self.proc.stdin.write(f"{x} {y} {w} {h}\n".encode())
         self.proc.stdin.flush()
@@ -374,8 +464,11 @@ def region_for(state: str) -> tuple[int, int, int, int]:
         return x + dx, y + dy, bw, bh
     if meta.exists():
         dx, dy, bw, bh = json.loads(meta.read_text())["box"]
-        vx, vy = _VECTORS.get(state, (0, 0)) if unmeasured_size() else (0, 0)
-        return x + dx + vx, y + dy + vy, bw, bh
+        if state in DIALOG_STATES and unmeasured_size():  # a login dialog: found, real pixels
+            rx, ry, _, _ = real_game_region()
+            vx, vy = _VECTORS.get(state, (0, 0))
+            return rx + dx + vx, ry + dy + vy, bw, bh
+        return x + dx, y + dy, bw, bh
     return x, y, w, h
 
 
@@ -505,7 +598,7 @@ def unmeasured_size() -> bool:
     """The client's size has no measured login layout (LAYOUTS): its dialogs are found. An
     unreadable GAME_REGION is never 'unmeasured' (the fixed boxes decide, as before)."""
     try:
-        _, _, w, h = game_region()
+        _, _, w, h = real_game_region()
     except (Stop, OSError):
         return False
     return (w, h) not in LAYOUTS
@@ -518,7 +611,7 @@ def find_dialog(screen: Screen, state: str, paths: Sequence[Path], after_ns: int
     if not meta.exists():
         return float("inf")
     bx, by, _, _ = json.loads(meta.read_text())["box"]
-    x, y, w, h = game_region()
+    x, y, w, h = real_game_region()  # the login dialogs: real pixels
     client = grab_after(screen, (x, y, w, h), after_ns)
     # where it is expected: moved like a dialog already found, else by the rule measured at 1080p
     # (x centred, y at 0.625 of the extra height; docs/planning/fullscreen-client.md section 7)
@@ -705,6 +798,19 @@ def input_modes(value: str | None) -> tuple[str, ...]:
     return names or MODES_DEFAULT
 
 
+def virtual_event(ev: dict[str, Any]) -> dict[str, Any]:
+    """A pointer event whose normalised position is a VIRTUAL point (x beyond 1: a caller that
+    normalised a virtual pixel by the desktop, the runner's raw double-click) -> its real one."""
+    x, y = ev.get("x"), ev.get("y")
+    if ev.get("type") not in ("mouse_move", "mouse_button") or x is None or y is None:
+        return ev
+    w, h = desktop()
+    if float(x) * w < VIRTUAL_X0:
+        return ev
+    rx, ry = real_xy(float(x) * w, float(y) * h)
+    return {**ev, "x": rx / w, "y": ry / h}
+
+
 class Agent:
     """One /internal/agent connection; every send checks the mode (ASSIST; a /flows Run also BOT:
     input_modes) and waits out a human lease (ASSIST's only: the mux drops human input in BOT)."""
@@ -822,6 +928,7 @@ class Agent:
             self._drain(1.0)
 
     def send(self, events: list[dict[str, Any]], *, sensitive: bool = False) -> None:
+        events = [virtual_event(e) for e in events]
         self.wait_for_human()
         for i in range(0, len(events), 64):
             chunk = events[i : i + 64]
@@ -889,6 +996,7 @@ class Agent:
         """A pointer move, CLAMPED into the desktop (2026-10-19, hunt-flow@43 run 4: a move above
         the desktop was dropped by the backend's validation, never acknowledged, and the run
         stopped on the missing ack). A clamp is logged with its caller, to find the source."""
+        x, y = real_xy(x, y)
         w, h = desktop()
         cx, cy = min(max(int(x), 0), w - 1), min(max(int(y), 0), h - 1)
         if (cx, cy) != (int(x), int(y)):
@@ -908,6 +1016,7 @@ class Agent:
             raise Stop(f"{what} outside the desktop at ({x}, {y}): not sent")
 
     def click(self, x: int, y: int, button: str = "left") -> None:
+        x, y = real_xy(x, y)
         self._on_desktop(x, y, "click")
         w, h = desktop()
         nx, ny = x / w, y / h
@@ -924,6 +1033,8 @@ class Agent:
         """Press at (x1, y1), move to (x2, y2) in `steps` paced moves, release. RO's camera
         (right-drag) reads motion spread over frames while the button is held, so the moves are
         30 ms apart, never one batch; the button is released even if a move is refused."""
+        x1, y1 = real_xy(x1, y1)
+        x2, y2 = real_xy(x2, y2)
         self._on_desktop(x1, y1, "drag start")
         self._on_desktop(x2, y2, "drag end")
         w, h = desktop()
@@ -1188,7 +1299,7 @@ def require_eng(screen: Screen) -> None:
 def fullscreen() -> bool:
     """The client fills the session: GAME_REGION at (0, 0) with the session's size. It draws no
     title bar (docs/planning/fullscreen-client.md; derived, never a setting of its own)."""
-    x, y, w, h = game_region()
+    x, y, w, h = real_game_region()
     return (x, y) == (0, 0) and (w, h) == desktop()
 
 
@@ -1219,7 +1330,7 @@ def activate_client(agent: Agent, screen: Screen) -> None:
             raise Stop("the fullscreen client is not in front (the taskbar shows): bring it to "
                        "the front with its taskbar button; stopped")  # fmt: skip
         return
-    x, y, w, _ = game_region()
+    x, y, w, _ = real_game_region()  # its own title bar: real pixels
     clicked = ns()
     agent.click(x + w // 2, y - 15)
     if not signature_path("client_title_active").exists():
@@ -1427,13 +1538,14 @@ def layout(name: str) -> tuple[int, int]:
         import chat_window  # the chat window's standard place (Batt 2026-11-05)
 
         return at(*chat_window.active().input_px)
-    if (w, h) not in LAYOUTS and name in DIALOG_OF_POINT:  # a found dialog: its vector
+    if name in DIALOG_OF_POINT and unmeasured_size():  # a found dialog: its vector, real pixels
         dialog = DIALOG_OF_POINT[name]
+        rx, ry, rw, rh = real_game_region()
         if dialog not in _VECTORS:
-            raise Stop(f"the {dialog} dialog was not found on this {w}x{h} client ({name})")
+            raise Stop(f"the {dialog} dialog was not found on this {rw}x{rh} client ({name})")
         bx, by = LAYOUTS[(1280, 720)][name]
         vx, vy = _VECTORS[dialog]
-        return at(bx + vx, by + vy)
+        return rx + bx + vx, ry + by + vy
     try:
         dx, dy = LAYOUTS[(w, h)][name]
     except KeyError:
@@ -1611,7 +1723,7 @@ def client_absent(screen: Screen) -> bool:
         if not signature_path("taskbar_client_icon").exists():
             return False  # cannot tell: never launch a second client
         return not taskbar_icon_found(screen)
-    x, y, w, _ = game_region()
+    x, y, w, _ = real_game_region()
     _, img = screen.grab(x, y - 30, w, 26)
     px = img[::2, ::4, :3].astype(np.uint16)
     luma = (px[..., 0] * 29 + px[..., 1] * 150 + px[..., 2] * 77) >> 8
