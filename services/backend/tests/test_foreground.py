@@ -154,6 +154,21 @@ def test_in_fullscreen_the_taskbar_must_be_absent(tmp_path: Path) -> None:
     assert g.check().ok
 
 
+def test_the_tray_box_moves_with_the_session_s_bottom_right_corner(tmp_path: Path) -> None:
+    """The tray sticks to the screen's bottom-right: cut at 1280x720, it is looked for 640 px
+    further right and 360 px lower at 1920x1080 (the session-size vector)."""
+    screen = Screen()
+    install_taskbar(tmp_path)
+    doc = tmp_path / "foreground" / "taskbar.json"
+    doc.write_text(json.dumps({"box": TRAY_BOX, "session": [1280, 720]}))
+    g = ForegroundGate(tmp_path, Region.parse("0,0,1920,1080"), lambda: screen.grab,
+                       session=(1920, 1080))  # fmt: skip
+    screen.crop = GAME_BOTTOM
+    assert g.check().ok and screen.regions[-1] == (1660, 1032, 170, 48)
+    g720 = ForegroundGate(tmp_path, Region.parse(FS_GAME), lambda: screen.grab, session=FS_SESSION)
+    assert g720.region() == tuple(TRAY_BOX)
+
+
 def test_a_window_keeps_its_title_bar_rule_with_a_session_given(tmp_path: Path) -> None:
     screen = Screen()
     install(tmp_path)
