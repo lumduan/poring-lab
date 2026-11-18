@@ -702,6 +702,13 @@ Today's xmas_dun02 pilots run on the RDP path (their recordings are named `...-r
 6. Launch the client in the session (the 1296 x 759 window = a 1:1 1280 x 720 client area in the
    1440 x 900 session), then set `GAME_REGION` (`x,y,w,h` of the client area) and `RO_SHORTCUT`
    with `rotate_secrets.py set`, and recreate the backend.
+   ➡️ **Fullscreen** (since 2026-11-18, phase 1): the client fullscreen at **1280 x 720** and the
+   session at 1280 x 720 (`SESSION_SIZE=1280x720`, `GAME_REGION=0,0,1280,720`), so the picture is
+   1:1; the typing gate then proves the client in front by the taskbar's ABSENCE (its template:
+   `ro_agent.py calibrate taskbar ...`, `foreground_template.py install fullscreen`). Any other
+   fullscreen resolution is stretched or squeezed (the game's cursor then misses the mouse) and is not
+   supported yet. The recipe and the lab's two sets of values:
+   [planning/fullscreen-client.md](../planning/fullscreen-client.md) section 5.
 
 ### 7.4 The Settings page and ASSIST (a person's acts)
 

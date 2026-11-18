@@ -60,8 +60,58 @@ take the client's size and its UI's anchors (the RO interface does not scale: it
 their pixel size, anchored to the screen's edges), the world view's scale would be measured per
 size (the detector is trained at 1280x720), and the byte-pinned runner re-proven. Weeks, not hours.
 
-## 4. Status
+## 4. Status (2026-11-18 13:3x)
 
-- [ ] the live facts in the lab at 1280x720 (1:1 picture, the taskbar hidden while in front)
-- [ ] the code (gate, ro_agent, the derived mode, the switch script, the setup), tests
-- [ ] the live proof: launch, login, the Rogue on xmas_dun02, the start check, a Run
+- [x] the live facts in the lab at 1280x720 (below)
+- [x] the code: the gate, ro_agent, the derived mode, the template installer, tests (main cfb9c2a0)
+- [x] the live proof: close + launch + login + the Rogue in game (`ro_agent.py recover gm`, rc 0),
+  GM lines through the gate, the runner's start check 9 / 9 on the fullscreen client
+- [ ] the setup wizard's "window or fullscreen" question (today the keys of section 5 by hand)
+- [ ] the console (S2) path's own taskbar cut (H.264 softens pixels; on RDP the frames come from the
+  RDP ring, a copy of X, so the same cut serves both templates)
+- [ ] a real Run by Batt (only a person presses Run)
+
+**Measured live, 2026-11-18** (the lab's RDP session switched to 1280x720):
+- `OptionInfo.lua` held `WIDTH`/`HEIGHT` 1296 / 759 -- the WINDOW's outer frame that gives a 1280x720
+  client area (rathena-client.md, 2026-10-02). A fullscreen client draws that size and squeezes it
+  into the screen: its cursor sat at ~0.976 x / 0.905 y of the mouse (the glove drawn away from the
+  pointer, Batt's recording). Set to 1280 / 720 (backup `OptionInfo.lua.bak-20261118-fs`), the
+  windowed client's service-select signature matches at (0, 0) at 2.9 (<= 6): 1:1.
+- The taskbar box: the whole bar shifts with every program opened (Windows 11 centres its
+  buttons: 15.6 between two layouts), so the box is the TRAY left of the clock (1020, 672, 170, 48):
+  0.0 for every taskbar layout seen (no client, client button, the shell in front); 49.9 with the
+  client in front at the login screen, 111.7 in game. The rule: absent at >= 20.
+- Win+D minimizes the fullscreen client and its taskbar button restores it (it took two clicks).
+- `recover gm` on the fullscreen client: Alt+F4 through the gate, the launch (ENG read on the desktop
+  first), the credentials (sensitive), character select, in game, online=1. `crusader.py` GM lines:
+  name and job crops 0 px from their references (the same pixels as the window).
+- The runner's read-only start check (the Run helper's argv, the 12:44 project): 9 / 9.
+
+## 5. Switching an install between window and fullscreen (the lab's values)
+
+| | window (the lab's standard since 2026-10-02) | fullscreen 1280x720 |
+|---|---|---|
+| `client\savedata\OptionInfo.lua` | `ISFULLSCREENMODE` 0, `WIDTH`/`HEIGHT` 1296 / 759, `Window_XPos/YPos` 72 / 46 | 1, **1280 / 720** |
+| `client\dgVoodoo.conf` `FullScreenMode` | false | true |
+| `.env` `SESSION_SIZE` | 1440x900 | **1280x720** |
+| `.env` `GAME_REGION` | 80,77,1280,720 | **0,0,1280,720** |
+| `.env` `RO_SHORTCUT` / `SHELL_SHORTCUT` (the desktop icons move with the session) | 37,543 / 37,645 | 37,568 / 112,568 |
+| the gate's templates (`foreground_template.py install ...`) | `rdp`, `stream` (the title bar) | `fullscreen`, `fullscreen-stream` (the taskbar) |
+
+The order: close the client; the client's two files; `.env` through `rotate_secrets.py set`; the
+guarded `recreate:desktop@90` and `recreate:backend@30` (a restart keeps a container's old
+environment); for fullscreen, with the desktop showing, `ro_agent.py calibrate taskbar 1020 672 170 48`
+(the tray, desktop pixels) and `calibrate taskbar_client_icon X Y 38 40` (the client's button, while it
+runs behind another window), then `install fullscreen` and `install fullscreen-stream`. The windowed
+client does not fit a 1280x720 session (1296x759 + the taskbar), so the two keys always move together.
+
+## 6. Known limits of phase 1
+
+- The keyboard layout (ENG) is read from the tray, which fullscreen hides: `launch` reads it on the
+  desktop just before the client starts, and that reading stands for the login of the same process
+  (`recover`), for 10 minutes. A separate `ro_agent.py login` on a fullscreen client refuses.
+- A fullscreen client that is not in front is never clicked into focus: ro_agent stops with the
+  reason (a click would land in the game). Its taskbar button brings it back.
+- "No client" is decided only when proven (the taskbar shown and the client's button absent): a
+  minimized client never gets a second one.
+- Only 1280x720. Phase 2 (above) is the rest.
