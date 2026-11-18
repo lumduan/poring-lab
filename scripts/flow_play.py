@@ -1442,7 +1442,7 @@ def runner_check(plan: RunnerPlan, *, run_fn: Callable[..., int] | None = None) 
     finally:
         r.Agent, r.session = saved  # type: ignore[misc]
     sys.stdout.write(buf.getvalue())
-    return fr.parse_check_output(buf.getvalue())
+    return fr.parse_check_output(buf.getvalue(), fr.run_identity())
 
 
 def generic_check(lio: PixelIO, map_: str) -> dict[str, Any]:
@@ -1454,9 +1454,10 @@ def generic_check(lio: PixelIO, map_: str) -> dict[str, Any]:
     conf = dh.CHARS_CONF["rogue"]  # flow_run.FIXED's character (the lab's Rogue)
     items: list[dict[str, Any]] = []
     got = cr.check(lio.screen, conf["job"], conf.get("data", "rogue"), db=False)
-    items.append(dh.check_item("identity", bool(got.get("ok")),
-                               "the name plate and the job read hers" if got.get("ok")
-                               else f"identity: {got.get('why')}"))  # fmt: skip
+    ok_words = (cr.IDENTITY_ANY_WORDS if got.get("who") == "any" else
+                "the name plate and the job read this install's character")  # fmt: skip
+    words = ok_words if got.get("ok") else f"identity: {got.get('why')}"
+    items.append(dh.check_item("identity", bool(got.get("ok")), words))
     m_read = dh.read_start_map(lio.frame, lio.refs, dh.PLAYER_MAP_S)
     ok, words = dh.player_map_verdict(map_, m_read, lio.refs)
     items.append(dh.check_item("cell", ok, words, None if m_read is None else m_read.map))

@@ -108,12 +108,46 @@ def client_frame(screen: Any) -> Img:
     return np.asarray(screen.grab(x0, y0, w, h)[1])[..., :3]
 
 
+# Who may play a Run (Batt 2026-11-18: "no need to lock the character's name: a user should be
+# free to create a character; teaching many at once, the same name for all would confuse"). The
+# PLAYER path only (``check(db=False)``: a Run, its start checks); a GM line (db=True) always proves
+# the lab's own character before it types (gm_line). ADR-0020 Amendment Q.
+IDENTITY_ENV = "RUN_IDENTITY"  # .env: "any" (the default of every install) | "mine"
+IDENTITY_MODES = ("any", "mine")
+IDENTITY_ANY_WORDS = ("any character: a Run does not check the name or the job (RUN_IDENTITY=any: "
+                      "each player makes their own)")  # fmt: skip
+
+
+def identity_mode(value: str | None) -> str:
+    """PURE: RUN_IDENTITY -> "any" | "mine". Unset or empty: "any"; an unknown word: "mine" (the
+    strict one: a typo never loosens the check)."""
+    v = (value or "").strip().lower()
+    if not v:
+        return "any"
+    return v if v in IDENTITY_MODES else "mine"
+
+
+def run_identity() -> str:
+    """This install's RUN_IDENTITY (its .env; read when called)."""
+    import ro_agent as r
+
+    return identity_mode(r.env().get(IDENTITY_ENV))
+
+
 def check(screen: Any, job: str, char: str = "crusader", *, db: bool = True) -> dict[str, Any]:
     """The three checks on a fresh frame (no input). ``db=False`` (dungeon@9.35c, --player-mode):
     a public server has no DB of ours, so the lab DB's "who is online" check is skipped and the
-    identity rests on the pixels alone (the name plate and the job, against this char's refs)."""
+    identity rests on the pixels alone (the name plate and the job, against this char's refs).
+    ➡️ 2026-11-18 (ADR-0020 Amendment Q): with ``db=False`` and RUN_IDENTITY=any (the default) no
+    name or job is compared -- any character plays; only a black game region still fails. No
+    reference pictures are needed (a learner's install has none)."""
     import ro_agent as r
 
+    if not db and run_identity() == "any":
+        if r.black(screen):
+            return {"ok": False, "why": "the game region is black"}
+        return {"ok": True, "why": None, "who": "any", "job": job, "name_diff": None,
+                "job_diff": None}  # fmt: skip
     name, name_ref, jobs = load_refs(char)
     if db:
         online = r.online_chars("gm")

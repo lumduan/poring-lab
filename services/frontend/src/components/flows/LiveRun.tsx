@@ -28,7 +28,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import { ACTIVE, canCheck, checkBody, checkStale, checkTime, liveButtons, liveLabel, liveLine, type LiveStatus, okTail, pauseLine, PROJECT_FLOW, type ProjectRun, projectRunBody, projectRunPath, refuseWarning, REFUSALS, RUN_MODES, runBody, runCheckLines, runPath, START_PICTURES, type StartPicture, tickFor } from "@/lib/flow/liverun";
-import { type ChecklistItem, checklistWithKeys, type RunKeys } from "@/lib/flow/settings";
+import { type ChecklistItem, checklistWithKeys, identityText, type RunKeys } from "@/lib/flow/settings";
 import { backendHttpBase } from "@/lib/ws";
 
 const POLL_MS = 2000;
@@ -200,7 +200,8 @@ export default function LiveRun({ live, checklist = [], minutes = null, keys = n
   const ownCheck = runCheckLines(st?.run_check);
   const pictures = START_PICTURES.filter((w) => st?.start_pictures?.[w]);
   const runKeys = keys ?? live.keys;
-  const items = checklistWithKeys(checklist, runKeys); // the keys Run sends, in the text too
+  // the keys Run sends, in the text too; the identity line in this install's RUN_IDENTITY
+  const items = checklistWithKeys(checklist, runKeys).map((it) => (it.id === "identity" && st?.identity ? { ...it, text: identityText(st.identity) } : it));
   const check = st?.check?.flow === flow ? st.check : null;
   const cc = canCheck(st, flow);
   const anyStale = items.some((it) => checkStale(check, flow, it.basis));
