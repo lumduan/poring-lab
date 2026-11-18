@@ -20,8 +20,10 @@ FULLSCREEN (Batt 2026-11-18, docs/planning/fullscreen-client.md): a client that 
 (GAME_REGION at 0,0 and the session's size) draws no title bar. Windows hides its taskbar while a
 fullscreen window is in front and shows it when anything else takes the focus, so the evidence is
 then that the TASKBAR is absent: ``taskbar.npy`` (``taskbar@stream.npy``), its box in DESKTOP
-pixels, cut from this session while the desktop shows; a fresh frame whose box is at least
-``TASKBAR_ABSENT_MIN`` away from it passes. Missing -> ``foreground_uncalibrated``, as above.
+pixels, cut while the desktop shows, with the session it was cut in: the tray sticks to the
+screen's bottom-right, so at another session size the box moves by the size difference (a
+vector); a fresh frame whose box is at least ``TASKBAR_ABSENT_MIN`` away from it passes.
+Missing -> ``foreground_uncalibrated``, as above.
 
 Clicks, moves, the wheel, key RELEASES and ReleaseAll are never gated. The exemption (Batt's
 answer 1): while a ``desktop`` operator window is open (ASSIST only, <= 120 s, tied to the lock SEQ)
@@ -111,7 +113,7 @@ class ForegroundGate:
 
     # --- templates --------------------------------------------------------------------------------
 
-    def _load(self, path: Path, kind: Literal["npy", "json"]) -> Any:
+    def _load(self, path: Path, kind: Literal["npy", "json", "doc"]) -> Any:
         try:
             mtime = path.stat().st_mtime
         except OSError:
@@ -123,6 +125,9 @@ class ForegroundGate:
         try:
             if kind == "npy":
                 value = np.load(path).astype(np.float32)
+            elif kind == "doc":
+                value = json.loads(path.read_text())
+                value["box"]  # noqa: B018 -- a doc without its box is no template
             else:
                 value = json.loads(path.read_text())["box"]
         except (OSError, ValueError, KeyError, EOFError, TypeError):
@@ -145,8 +150,15 @@ class ForegroundGate:
         if self.game_region is None:
             return None
         if self.fullscreen:
-            box = self._load(self.dir / f"{TASKBAR}.json", "json")
-            return None if box is None else tuple(int(v) for v in box)  # type: ignore[return-value]
+            doc = self._load(self.dir / f"{TASKBAR}.json", "doc")
+            if doc is None or self.session is None:
+                return None
+            x, y, w, h = (int(v) for v in doc["box"])
+            cut = doc.get("session")  # the tray sticks to the bottom-right: moved by the vector
+            if cut:
+                x += self.session[0] - int(cut[0])
+                y += self.session[1] - int(cut[1])
+            return x, y, w, h
         box = self._load(self.dir / f"{TEMPLATE}.json", "json")
         if box is None:
             return None

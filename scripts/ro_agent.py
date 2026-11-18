@@ -354,7 +354,13 @@ def region_for(state: str) -> tuple[int, int, int, int]:
         return x - 32, y - 34, SHORTCUT_BOX[2], SHORTCUT_BOX[3]
     meta = signature_path(state).with_suffix(".json")
     if state in DESKTOP_BOX_STATES and meta.exists():  # Windows' own UI: desktop pixels
-        bx, by, bw, bh = json.loads(meta.read_text())["box"]
+        doc = json.loads(meta.read_text())
+        bx, by, bw, bh = doc["box"]
+        cut = doc.get("session")  # the taskbar sticks to the screen's bottom (its tray: the right)
+        if cut:
+            w, h = desktop()
+            dx = w - int(cut[0]) if state == "taskbar" else 0  # its buttons are centred: slid
+            return bx + dx, by + h - int(cut[1]), bw, bh
         return bx, by, bw, bh
     x, y, w, h = game_region()
     if state == "chat_open":
@@ -401,7 +407,10 @@ def calibrate(screen: Screen, state: str, box: list[int] | None = None) -> None:
     path = signature_path(state)
     path.parent.mkdir(parents=True, exist_ok=True)
     if box is not None:
-        path.with_suffix(".json").write_text(json.dumps({"box": box}))
+        doc: dict[str, Any] = {"box": box}
+        if base_state(state) in DESKTOP_BOX_STATES:  # anchored: the session it was cut in
+            doc["session"] = list(desktop())
+        path.with_suffix(".json").write_text(json.dumps(doc))
     _, img = screen.grab(*region_for(state if box is not None else base_state(state)))
     np.save(path, grey_thumb(img))
     if state == "eng":  # full resolution, for the sliding tray search

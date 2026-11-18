@@ -55,10 +55,48 @@ and the typing gate needs the client's title bar, which fullscreen does not draw
 - The setup asks "window or fullscreen" and writes both keys; `scripts/client_display.py` switches
   an install (both keys, then the guarded recreates).
 
-**Phase 2 (a decision for Batt): other fullscreen resolutions (1920x1080, ...).** Every reader would
-take the client's size and its UI's anchors (the RO interface does not scale: its windows keep
-their pixel size, anchored to the screen's edges), the world view's scale would be measured per
-size (the detector is trained at 1280x720), and the byte-pinned runner re-proven. Weeks, not hours.
+**Phase 2 (DECIDED, Batt 2026-11-18 14:1x): every screen size, detected all the time.** Batt: "support
+it, no limit on the screen size; find a way with calculation, like vectors"; "we do not ask in the
+setup: a user may switch back and forth, the project must auto-detect all the time".
+➡️ The earlier "weeks" assumed rewriting ~500 client-relative positions and re-proving the runner.
+The vector way does it in ONE place instead (section 7).
+
+## 7. Phase 2: the virtual 1280x720 client (Batt's vector idea)
+
+**Why one scale factor is not enough.** RO does not scale its picture with the screen: at 1920x1080
+its interface windows (Basic Info, the hotbar, the chat window, the minimap) keep their pixel size
+and stay where they are anchored (a corner, an edge), while the 3D world keeps the player at the
+screen's centre and shows more (or bigger) world around her -- to be measured.
+
+**The vectors.** Every point of the client is one of:
+- a UI point: `real = anchor_real(panel) + (virtual - anchor_virtual(panel))`, a fixed-pixel vector
+  from the corner or edge its panel sticks to (scale 1: the UI does not scale);
+- a world point: `real = centre_real + k * (virtual - centre_virtual)`, a vector from the screen's
+  centre scaled by the world's measured scale `k` at that size (1 at 1280x720).
+
+**The virtual client.** One adapter turns any real frame into the 1280x720 picture the bot already
+knows (the world resampled around the centre, each panel moved by its vector to its 1280x720 place)
+and every click on that picture back into the real screen (the same vectors, inverted). Everything
+built on the 1280x720 client -- the readers, the templates, the detector, the cell projection, the
+byte-pinned runner -- then runs unchanged; nothing else is rewritten.
+
+**Detected, every frame, never asked.** The adapter finds the client in each frame: a window (its
+title bar, anywhere) or fullscreen (no taskbar, the whole frame); its size; each panel where the
+player put it (found by its own picture, not assumed: players drag windows); and builds the view.
+A switch between window and fullscreen mid-run is the next frame's view.
+
+**Milestones**
+1. The geometry: the view, its vectors and their inverse, the virtual frame -- pure, tested with
+   synthetic frames (no lab change).
+2. The measurements in the lab at three sizes (1280x720, 1440x900, 1920x1080), window and
+   fullscreen: where each panel sits (its anchor), the world's scale `k`, the login and character
+   select dialogs (centred?), the taskbar's tray (anchored to the bottom-right).
+3. The detector of the client and its panels, from frames.
+4. Wiring: the frame path (ro_agent's Screen and Agent, the backend's grab for the gate and the HUD,
+   the detector's frames) through the adapter; the runner untouched.
+5. The live proof at 1920x1080 fullscreen: login, the start check, a Run.
+6. The console (S2) stream's taskbar template (Batt: "do it if you can"), once the stream's size no
+   longer matters.
 
 ## 4. Status (2026-11-18 13:3x)
 

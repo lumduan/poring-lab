@@ -48,6 +48,14 @@ class FakeScreen:
 SCREEN = FakeScreen()
 
 
+class GrabScreen(FakeScreen):
+    def grab(self, x: int, y: int, w: int, h: int) -> tuple[int, np.ndarray]:
+        return 0, np.zeros((h, w, 4), np.uint8)
+
+
+SCREEN_GRAB = GrabScreen()
+
+
 class Clicks:
     def __init__(self) -> None:
         self.clicks: list[tuple[int, int]] = []
@@ -72,6 +80,27 @@ def test_the_taskbar_boxes_are_desktop_pixels(ro: ModuleType) -> None:
     calibrate(ro, "taskbar_client_icon", [910, 676, 38, 40])
     assert ro.region_for("taskbar") == (1020, 672, 170, 48)
     assert ro.region_for("taskbar_client_icon") == (910, 676, 38, 40)
+
+
+def test_the_taskbar_boxes_follow_the_screen_s_bottom(
+    ro: ModuleType, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Cut at 1280x720 (the session stored with the box): at 1920x1080 the tray moves by the
+    size difference; the client's button only by the height (its row is searched across)."""
+    cuts = (("taskbar", [1020, 672, 170, 48]), ("taskbar_client_icon", [910, 676, 38, 40]))
+    for state, box in cuts:
+        np.save(ro.signature_path(state), np.zeros((2, 2), np.float32))
+        ro.signature_path(state).with_suffix(".json").write_text(
+            json.dumps({"box": box, "session": [1280, 720]}))  # fmt: skip
+    monkeypatch.setattr(ro, "desktop", lambda: (1920, 1080))
+    assert ro.region_for("taskbar") == (1660, 1032, 170, 48)
+    assert ro.region_for("taskbar_client_icon") == (910, 1036, 38, 40)
+    seen: dict[str, Any] = {}
+    monkeypatch.setattr(ro, "grab_after", lambda s, region, after: seen.setdefault("r", region))
+    monkeypatch.setattr(ro, "grey_thumb", lambda img: np.zeros((2, 2), np.float32))
+    ro.calibrate(SCREEN_GRAB, "taskbar", [1660, 1032, 170, 48])
+    saved = json.loads(ro.signature_path("taskbar").with_suffix(".json").read_text())
+    assert saved == {"box": [1660, 1032, 170, 48], "session": [1920, 1080]}
 
 
 def test_activating_a_fullscreen_client_only_verifies_and_never_clicks(
