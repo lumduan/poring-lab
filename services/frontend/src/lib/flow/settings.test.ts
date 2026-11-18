@@ -14,6 +14,7 @@ import { INDENT, rowsOf } from "./layout.ts";
 import { BOX_PLAYS_THEM, GLOBAL_ID, nodeById, type Project, tab, xmasProject } from "./project.ts";
 import { matchEntries } from "./search.ts";
 import {
+  identityText,
   noteLines,
   nodeSettings,
   rowUnits,
@@ -378,4 +379,14 @@ test("round 21 (the re-measure of round 20): Global is named only where the proj
   // the two that read as fragments once fly_below left the box name their subject
   assert.equal(f("fly_rate").words, "Fly Wing when HP falls faster than");
   assert.equal(f("fly_rate_below").words, "the Fly Wing's fall rule: only while HP is under");
+});
+
+test("the identity line follows RUN_IDENTITY: any character by default (Batt 2026-11-18)", () => {
+  assert.match(identityText(null), /^a character in the game \(any name, any job/);
+  assert.equal(identityText("any"), identityText(undefined));
+  assert.match(identityText("mine"), /RUN_IDENTITY=mine/);
+  const items = startChecklist({}, "xmas_dun02");
+  const ident = items.find((it) => it.id === "identity");
+  assert.ok(ident && !/her |Thief8fce/.test(ident.text));
+  assert.ok(!items.some((it) => /\bshe\b|\bher\b/.test(it.text)), "no line assumes who plays");
 });

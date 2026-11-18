@@ -43,6 +43,7 @@ export type LiveStatus = {
   // Batt 2026-11-18 ("log the status, the checklist and the errors more"; "Alt+Tab: only pause"):
   // the Run's OWN start check (its log's CHECK line), its pause, what its check saw
   run_check?: LiveCheck | null;
+  identity?: "any" | "mine" | string; // this install's RUN_IDENTITY (ADR-0020 Amendment Q)
   pause?: RunPause | null;
   start_pictures?: Partial<Record<StartPicture, string>>; // which -> the stamp it was copied at
 };

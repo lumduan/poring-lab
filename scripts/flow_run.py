@@ -295,9 +295,24 @@ def parse_request(text: str) -> dict[str, Any] | str:
             "keys": {k: keys[k] for k in fc.KEY_FIELDS}, "vals": vals}  # fmt: skip
 
 
-def parse_check_output(text: str) -> dict[str, Any]:
+def identity_any(items: list[Any]) -> list[Any]:
+    """PURE (ADR-0020 Amendment Q): under RUN_IDENTITY=any the runner's identity line is not about
+    a name or a job -- crusader.check compared none -- so its words (the runner's: "the name plate
+    reads <the lab's character>") are replaced; a black game region still fails it."""
+    import crusader as cr
+
+    out = []
+    for it in items:
+        if isinstance(it, dict) and it.get("id") == "identity" and it.get("ok") is not False:
+            it = {**it, "ok": True, "words": cr.IDENTITY_ANY_WORDS, "value": "any character"}
+        out.append(it)
+    return out
+
+
+def parse_check_output(text: str, identity: str | None = None) -> dict[str, Any]:
     """PURE (dungeon@9.45): the check's log as its result -- its CHECK line (the items, ok,
-    refuses, the values it used), else the runner's refusal (a preamble refusal: no line read)."""
+    refuses, the values it used), else the runner's refusal (a preamble refusal: no line read).
+    ``identity`` "any": the identity line in RUN_IDENTITY=any's words (identity_any)."""
     for ln in reversed(text.splitlines()):
         if ln.startswith(CHECK_MARK):
             try:
@@ -306,6 +321,8 @@ def parse_check_output(text: str) -> dict[str, Any]:
                 break
             if not isinstance(got, dict) or not isinstance(got.get("items"), list):
                 break
+            if identity == "any":
+                got["items"] = identity_any(got["items"])
             fails = [i for i in got["items"] if isinstance(i, dict) and i.get("ok") is False]
             unread = [i for i in got["items"] if isinstance(i, dict) and i.get("ok") is None]
             n = len(got["items"])
@@ -649,6 +666,7 @@ class RunLog:
     OWN start check (its CHECK line) and the pause (its PAUSED / RESUMED lines)."""
 
     check: dict[str, Any] | None = None
+    identity: str | None = None  # RUN_IDENTITY when the Run started (its check's words)
     pauses: int = 0
     paused_s: float = 0.0
     since: str | None = None  # the open pause's start (ICT), None: not paused
@@ -660,7 +678,7 @@ class RunLog:
         self.rest = lines.pop()  # an unfinished last line waits for its end
         for ln in lines:
             if ln.startswith(CHECK_MARK) and self.check is None:
-                got = parse_check_output(ln)
+                got = parse_check_output(ln, self.identity)
                 self.check = got if got.get("state") == "done" else None
                 continue
             m = PAUSE_LINE.match(ln)
@@ -679,6 +697,16 @@ class RunLog:
             return None
         return {"paused": self.since is not None, "since": self.since, "why": self.why,
                 "count": self.pauses, "paused_s": round(self.paused_s, 1)}  # fmt: skip
+
+
+def run_identity() -> str:
+    """This install's RUN_IDENTITY ("any" | "mine"; crusader.run_identity), "mine" if unreadable."""
+    try:
+        import crusader as cr
+
+        return cr.run_identity()
+    except (OSError, ImportError, SystemExit):
+        return "mine"
 
 
 def feed_log(rl: RunLog, path: Path, offset: int) -> int:
@@ -751,6 +779,7 @@ class Helper:
                 "log_tail": [] if log is None else player_lines(tail(log, LOG_TAIL_N,
                                                                        LOG_LINE_MAX)),
                 "run_check": self.run_log.check, "pause": self.run_log.pause(),
+                "identity": run_identity(),
                 "start_pictures": dict(self.start_pictures),
                 "config": self.config, "config_src": self.config_src,
                 "keys_src": self.keys_src, "check": self.check,
@@ -931,7 +960,8 @@ class Helper:
         else:
             self.config, self.config_src = None, None
         self.live, self.live_off, self.end_png = Live(), 0, None
-        self.run_log, self.run_log_off, self.start_pictures = RunLog(), 0, {}
+        self.run_log = RunLog(identity=run_identity())
+        self.run_log_off, self.start_pictures = 0, {}
         for name in START_PICTURES:  # the last run's pictures are not this one's
             (self.dir / f"start-{name}.jpg").unlink(missing_ok=True)
         pfile = self.run_dir / PROJECT_FILE
@@ -1011,7 +1041,7 @@ class Helper:
         self.check_proc = None
         log = SCRATCH / CHECK_LABEL / "check.log"
         text = log.read_text(errors="replace") if log.exists() else ""
-        self.check.update(parse_check_output(text), rc=rc)
+        self.check.update(parse_check_output(text, run_identity()), rc=rc)
         self.note(event="check_end", request=self.check.get("request_id"), rc=rc,
                   ok=self.check.get("ok"), detail=self.check.get("detail"))  # fmt: skip
         self.write_status()

@@ -289,6 +289,11 @@ Amendment B); a not-adopted model is never offered.
   start check. The Run panel also shows the Run's OWN start check line by line, the two pictures
   that check saw (the whole screen; the virtual 1280x720 client on a bigger screen) and the Run's
   log (40 lines: the screen, the input mode, each check line, the pauses, a fault's traceback).
+  ➡️ **Since 2026-11-18 ~20:4x (Batt, ADR-0020 Amendment Q) a Run plays ANY character** on an install
+  whose `.env` leaves `RUN_IDENTITY` empty or `any` (the default): no name or job is compared, and
+  the checklist's first line reads "a character in the game (any name, any job)". `mine` keeps the
+  name plate check (the lab's own setting). Every start rule for teaching:
+  [planning/teaching-prerun.md](planning/teaching-prerun.md).
   ➡️ **Since 2026-11-13 11:3x** Run sits beside Simulate (amber; press, then press again within 4 s
   to confirm) with Stop; a "your run settings" strip sets the Fly Wing key, the Butterfly Wing key
   and the weight to go home at (defaults F8, F9, 50 %; the blocks show them); the map's exits: a bag

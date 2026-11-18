@@ -2936,3 +2936,32 @@ errors more than now, so we know where a problem is."
   PAUSED banner, the Run's own check line by line (the failing ones first), the two pictures and
   the log.
 
+## Amendment Q (2026-11-18 ~20:4x, Batt decided): a Run's start does not lock the character
+
+**Batt (translated):** "Adjust the pre-run rules first: standing in the safe spot, the character's
+name and many other things. Locked like this it is very hard when I teach others and have them
+build their own along with me. No need to lock the character's name: a user should be free to
+create a character. Teaching many people at once, if all had the same name it would confuse at
+once. Think ahead about such things."
+
+- **What was locked:** a Run's start (the runner's player start and its check, dungeon@9.35c)
+  compared the name plate and the job against the lab Rogue's reference pictures (`--char rogue`,
+  `data/thief`: Thief8fce, rogue). Any other character was refused; a learner's install has no
+  such pictures at all.
+- **Now (`RUN_IDENTITY` in `.env`):** `any` (empty = any; every new install's default): a Run
+  compares no name and no job; its identity line reads "any character" (only a black game region
+  still fails it). `mine`: as before, the install's own character only. An unknown word means
+  `mine` (a typo never loosens it).
+- **Scope:** only the PLAYER path (`crusader.check(db=False)`: a Run and its checks). A GM line
+  (`gm_line`, db=True) always proves the lab's own character before it types, whatever the
+  setting says. The runner (`dungeon_hunt.py`, byte-pinned) is untouched: its identity line's words
+  (which name the lab's character) are replaced by the helper and the player
+  (`flow_run.identity_any`).
+- **The lab keeps `mine`** (its own `.env`): the community client "RO Dev Serv" is on the same
+  Windows PC (ADR-0006: no agent automation there), and with the packets only labelling
+  (ADR-0016 Amendment 2026-11-17) the name plate is the Run's only pixel proof that the lab's
+  client is the one in front. Batt may set the lab to `any` (one line), accepting the map check
+  (the minimap's picture must be the node's map) as the remaining guard.
+- **The other start rules, one by one:** docs/planning/teaching-prerun.md (what stays a safety
+  rule, what is a setting already, what is still locked and what it needs).
+

@@ -413,15 +413,22 @@ export function withRunKeys(values: Record<string, SettingValue>, keys: RunKeys 
   return out;
 }
 
+/** PURE: the identity line in this install's RUN_IDENTITY (Batt 2026-11-18, ADR-0020 Amendment Q:
+ * "no need to lock the character's name: a user should be free to create a character"). */
+export function identityText(mode: string | null | undefined): string {
+  if (mode === "mine") return "this install's own character on screen (RUN_IDENTITY=mine: the runner compares its name plate and job)";
+  return "a character in the game (any name, any job: a Run does not check who plays)";
+}
+
 function checklistText(id: string, b: Record<string, SettingValue>, map: string): string {
   const s = (n: string) => String(b[n]);
   switch (id) {
     case "identity":
-      return "her character on screen (the runner knows her name plate and job)";
+      return identityText(null);
     case "cell":
       // dungeon@9.46: the map is read from the minimap's PICTURE (scripts/minimap_id.py), her cell
       // from its readout; the tick needs both. "?" when the picture cannot tell: you check the map
-      return `she stands on ${map} (the minimap's picture says the map), on its open ground (her cell)`;
+      return `the character stands on ${map} (the minimap's picture says the map), on its open ground (its cell)`;
     case "chat":
       return "the chat input closed (no white input bar under the chat)";
     case "weight":
