@@ -49,6 +49,28 @@ def test_install_copies_atomically_and_logs(ft: ModuleType, tmp_path: Path) -> N
     assert [entry["install"] for entry in log] == ["rdp", "stream"]
 
 
+def test_the_fullscreen_taskbar_template_installs_beside_the_title_bars(
+    ft: ModuleType, tmp_path: Path
+) -> None:
+    """docs/planning/fullscreen-client.md: a fullscreen client draws no title bar, so the gate's
+    template is the taskbar (its box in desktop pixels) -- installed the same atomic way."""
+    from poring_backend.foreground import TASKBAR
+
+    src, dest = tmp_path / "sig", tmp_path / "settings" / "foreground"
+    (tmp_path / "settings").mkdir()
+    src.mkdir()
+    (src / "taskbar.json").write_text(json.dumps({"box": [1020, 672, 170, 48]}))
+    np.save(src / "taskbar.npy", np.ones((6, 22), np.float32))  # ceil(48/8) x ceil(170/8)
+    np.save(src / "taskbar@stream.npy", np.full((6, 22), 2, np.float32))
+    assert ft.TASKBAR == TASKBAR
+    assert ft.install("fullscreen", src, dest) == 0
+    assert ft.install("fullscreen-stream", src, dest) == 0
+    for name in ("taskbar.json", "taskbar.npy", "taskbar@stream.npy"):
+        assert (dest / name).read_bytes() == (src / name).read_bytes()
+    log = [json.loads(line) for line in (dest / "install.log").read_text().splitlines()]
+    assert [entry["install"] for entry in log] == ["fullscreen", "fullscreen-stream"]
+
+
 def test_a_missing_or_mismatched_calibration_installs_nothing(ft: ModuleType,
                                                              tmp_path: Path) -> None:  # fmt: skip
     (tmp_path / "settings").mkdir()

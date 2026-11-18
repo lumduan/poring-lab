@@ -89,6 +89,80 @@ def gate(tmp_path: Path, screen: Screen) -> ForegroundGate:
     return ForegroundGate(tmp_path, Region.parse(GAME), lambda: screen.grab)
 
 
+# --- fullscreen (Batt 2026-11-18, docs/planning/fullscreen-client.md) -----------------------------
+FS_GAME, FS_SESSION = "0,0,1280,720", (1280, 720)
+TRAY_BOX = [1020, 672, 170, 48]  # the taskbar's tray, in DESKTOP pixels (cut 2026-11-18)
+
+
+def tray(seed: int) -> np.ndarray:
+    rng = np.random.default_rng(seed)
+    return rng.integers(0, 255, (48, 170, 4), dtype=np.uint8)
+
+
+TASKBAR_SHOWN, GAME_BOTTOM = tray(3), tray(4)
+
+
+def install_taskbar(settings_dir: Path, *, stream: bool = False) -> None:
+    d = settings_dir / "foreground"
+    d.mkdir(parents=True, exist_ok=True)
+    (d / "taskbar.json").write_text(json.dumps({"box": TRAY_BOX}))
+    buf = io.BytesIO()
+    np.save(buf, grey_thumb(TASKBAR_SHOWN))
+    (d / ("taskbar@stream.npy" if stream else "taskbar.npy")).write_bytes(buf.getvalue())
+
+
+def test_fullscreen_is_derived_from_the_region_filling_the_session() -> None:
+    from poring_backend.foreground import fullscreen
+
+    assert fullscreen(Region.parse(FS_GAME), FS_SESSION)
+    assert not fullscreen(Region.parse(GAME), (1440, 900))  # the window, at (80, 77)
+    assert not fullscreen(Region.parse("0,0,1280,720"), (1440, 900))  # a corner, not the session
+    assert not fullscreen(Region.parse(FS_GAME), None)  # no session size: never fullscreen
+    assert not fullscreen(None, FS_SESSION)
+
+
+def test_in_fullscreen_the_taskbar_must_be_absent(tmp_path: Path) -> None:
+    """No title bar to see: Windows hides its taskbar while a fullscreen window is in front, so
+    keys pass only when the taskbar's box is clearly NOT the taskbar (>= TASKBAR_ABSENT_MIN); the
+    taskbar shown, or a frame too close to call, refuses; no template refuses (uncalibrated)."""
+    from poring_backend.foreground import TASKBAR_ABSENT_MIN
+
+    screen = Screen()
+    g = ForegroundGate(tmp_path, Region.parse(FS_GAME), lambda: screen.grab, session=FS_SESSION)
+    assert g.fullscreen and g.check().reason == "foreground_uncalibrated"
+    install(tmp_path)  # a window's title-bar template does not count in fullscreen
+    assert g.check().reason == "foreground_uncalibrated"
+    install_taskbar(tmp_path)
+    screen.crop = GAME_BOTTOM
+    ok = g.check()
+    assert ok.ok and ok.reason == "ok" and ok.distance is not None
+    assert ok.distance >= TASKBAR_ABSENT_MIN
+    assert screen.regions[-1] == tuple(TRAY_BOX)  # desktop pixels, not relative to GAME_REGION
+    screen.crop = TASKBAR_SHOWN
+    shown = g.check()
+    assert (shown.ok, shown.reason, shown.distance) == (False, "client_not_foreground", 0.0)
+    half = (TASKBAR_SHOWN.astype(np.int16) + 6).clip(0, 255).astype(np.uint8)  # close to it
+    screen.crop = half
+    assert not g.check().ok  # unsure is never a pass
+    snap = g.snapshot()
+    assert snap["mode"] == "fullscreen" and snap["threshold"] == TASKBAR_ABSENT_MIN
+    assert snap["calibrated"] == {"rdp": True, "stream": False, "box": True}
+    screen.path = "bus"  # the console path needs its own taskbar template
+    assert g.check().reason == "foreground_uncalibrated"
+    install_taskbar(tmp_path, stream=True)
+    screen.crop = GAME_BOTTOM
+    assert g.check().ok
+
+
+def test_a_window_keeps_its_title_bar_rule_with_a_session_given(tmp_path: Path) -> None:
+    screen = Screen()
+    install(tmp_path)
+    install_taskbar(tmp_path)
+    g = ForegroundGate(tmp_path, Region.parse(GAME), lambda: screen.grab, session=(1440, 900))
+    assert not g.fullscreen and g.check().ok and screen.regions == [REGION]
+    assert g.snapshot()["mode"] == "window"
+
+
 def test_the_gate_reads_the_title_bar_box_and_matches_it(tmp_path: Path) -> None:
     screen = Screen()
     install(tmp_path)
