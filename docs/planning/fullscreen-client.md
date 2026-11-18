@@ -85,6 +85,17 @@ title bar, anywhere) or fullscreen (no taskbar, the whole frame); its size; each
 player put it (found by its own picture, not assumed: players drag windows); and builds the view.
 A switch between window and fullscreen mid-run is the next frame's view.
 
+**Measured (milestone 2), 2026-11-18 14:4x, the client fullscreen at 1920x1080 (1:1, the taskbar
+hidden: 67.6):**
+- The interface does NOT scale: the Select Service dialog is its 720p size (the 720p signature
+  matches at 2.0).
+- Its place is the 720p box moved by the vector (320, 225): x exactly centred ((1920-1280)/2), y at
+  0.625 of the extra height (not 0.5). So a panel's place is affine per axis, `fraction x size +
+  offset`; two sizes give each panel's fractions -- or the panel is simply FOUND by its picture.
+- The taskbar's tray sticks to the screen's bottom-right (the box moved by the size difference:
+  (1660, 1032) at 1080p, 1.0 shown); the desktop icons draw differently per session size (720p /
+  900p signatures 25-72 off at 1080p: `@1080` variants cut).
+
 **Milestones**
 1. The geometry: the view, its vectors and their inverse, the virtual frame -- pure, tested with
    synthetic frames (no lab change).
