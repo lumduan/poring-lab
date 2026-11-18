@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import contextlib
 import json
+import os
 import socket
 import struct
 import sys
@@ -628,6 +629,92 @@ def test_main_runs_the_onnx_on_onnxruntime_and_records_the_mode(
     assert [(m[2], m[4]) for m in made[3:]] == [("cuda", (2 << 30) // n)] * n
     assert rec.servers[-1]["mode"]["vram_limit"] == 2 << 30  # type: ignore[index]
     assert not rec.nets  # never OpenVINO
+
+
+ARC = {"name": "Intel(R) Arc(tm) A380 Graphics (DG2)", "type": "discrete", "vendor": "Intel",
+       "device_id": "0x56a5"}  # fmt: skip
+LLVMPIPE = {"name": "llvmpipe (LLVM 21.1.8, 256 bits)", "type": "cpu", "vendor": "0x10005",
+            "device_id": "0x0000"}  # fmt: skip
+
+
+def test_ortnet_on_webgpu_keeps_the_cpu_vulkan_drivers_out_and_names_the_gpus(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """ADR-0022 Amendment 2026-11-18b (AMD's path, Batt chose option (b)): before the session the
+    loader's disable list gains the CPU Vulkan drivers (a person's own entries kept); the GPUs
+    Vulkan offers are kept for the start line; Vulkan seeing no GPU refuses (bot-server with
+    lavapipe alone: the session named WebGPU and ran on the CPU, 835 ms a forward); a session that
+    fell back to the CPU provider (no adapter at all) is refused as on CUDA."""
+    from poring_vision import vulkan
+
+    model = tmp_path / "v1.onnx"
+    model.write_bytes(b"onnx")
+    sha = ds.file_sha256(str(model))
+    webgpu, cpu = ds.ORT_PROVIDERS["webgpu"], ds.ORT_PROVIDERS["cpu"]
+    monkeypatch.setenv(vulkan.DISABLE_KEY, "*mine*")
+    seen: list[str | None] = []
+
+    def devices(found: list[dict[str, str]] | None) -> object:
+        def ask() -> list[dict[str, str]] | None:
+            seen.append(os.environ.get(vulkan.DISABLE_KEY))
+            return found
+
+        return ask
+
+    monkeypatch.setattr(vulkan, "devices", devices([ARC, LLVMPIPE]))
+    ok = FakeOrt([webgpu, cpu], [webgpu, cpu])
+    monkeypatch.setitem(sys.modules, "onnxruntime", ok)
+    net = ds.OrtNet(str(model), sha, "webgpu", (8, 16))
+    assert (net.providers, net.vulkan) == ([webgpu, cpu], [ARC])
+    assert ok.asked == [[(webgpu, {})]] and ok.preloaded == []  # no CUDA preload, no arena cap
+    assert seen == ["*mine*,*lvp*,*swiftshader*"]  # set BEFORE the loader was asked
+    monkeypatch.setattr(vulkan, "devices", devices([LLVMPIPE]))
+    with pytest.raises(SystemExit, match="Vulkan sees no GPU"):
+        ds.OrtNet(str(model), sha, "webgpu", (8, 16))
+    monkeypatch.setattr(vulkan, "devices", devices(None))  # no libvulkan: the session decides
+    monkeypatch.setitem(sys.modules, "onnxruntime", FakeOrt([webgpu, cpu], [cpu]))
+    with pytest.raises(SystemExit, match="not WebGpuExecutionProvider"):
+        ds.OrtNet(str(model), sha, "webgpu", (8, 16))
+    monkeypatch.setitem(sys.modules, "onnxruntime", FakeOrt([webgpu, cpu], [webgpu, cpu]))
+    assert ds.OrtNet(str(model), sha, "webgpu", (8, 16)).vulkan is None
+    monkeypatch.setitem(sys.modules, "onnxruntime", FakeOrt([webgpu, cpu], [cpu]))
+    assert ds.OrtNet(str(model), sha, "cpu", (8, 16)).vulkan is None  # only webgpu asks
+
+
+def test_main_on_webgpu_records_the_gpus_and_refuses_a_cap_it_cannot_hold(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """--device webgpu: the start line names the GPUs Vulkan offered; WebGPU has no memory cap, so
+    a VISION_MAX_VRAM_FRACTION below 1.0 is refused rather than lapsing (its default is 1.0, the
+    AMD overlay's); unit_detector's serve step for it parses here."""
+    sha = "ab" * 32
+    base = ["--socket", "/detect/detect.sock", "--model", f"v1=/m/v1.onnx={sha}",
+            "--backend", "onnxruntime", "--device", "webgpu"]  # fmt: skip
+    rec = Recorded(monkeypatch)
+    made: list[tuple[object, ...]] = []
+
+    class Net:
+        def __init__(self, path: str, sha256: str, device: str, imgsz: tuple[int, int],
+                     vram: int | None) -> None:  # fmt: skip
+            made.append((device, vram))
+            self.sha256, self.shape = sha256, (1, 7, N_ANCH)
+            self.providers, self.vulkan = [ds.ORT_PROVIDERS[device]], [ARC]
+
+    monkeypatch.setattr(ds, "OrtNet", Net)
+    monkeypatch.delenv("VISION_MAX_VRAM_FRACTION", raising=False)
+    assert ds.main(base) == 0
+    assert rec.servers[0]["mode"] == {"backend": "onnxruntime", "device": "webgpu",
+                                      "providers": ["WebGpuExecutionProvider"], "vram_limit": None,
+                                      "ov_preproc": None, "precision": "f32",
+                                      "vulkan": [ARC]}  # fmt: skip
+    monkeypatch.setenv("VISION_MAX_VRAM_FRACTION", "0.25")
+    with pytest.raises(SystemExit, match="no memory cap"):
+        ds.main(base)
+    monkeypatch.setenv("VISION_MAX_VRAM_FRACTION", "1.0")
+    step = ud.serve_step_onnxruntime(600, "webgpu")
+    assert "--backend onnxruntime --device webgpu" in step
+    assert ds.main(step.split("=", 1)[1].split()[3:]) == 0
+    assert set(made) == {("webgpu", None)}
 
 
 def test_gpu_clock_reads_the_cards_floor(tmp_path: Path) -> None:

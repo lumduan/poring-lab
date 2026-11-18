@@ -72,9 +72,10 @@ def test_the_free_space_floor_is_batts_100_gb(
     """Batt 2026-11-06 (ADR-0010 Amendment 2026-11-06): 100 GB stays free on VM 103's shared root
     disk (120 GB since 11-05, 140 GB before); Batt 2026-11-08: 30 GB on bot-server (dedicated).
     2026-11-12: every DEDICATED profile takes the dedicated floor (dedicated-nvidia too; 2026-11-17
-    dedicated-cpu too)."""
+    dedicated-cpu too; 2026-11-18 dedicated-amd too)."""
     assert ds.MIN_FREE_BY_PROFILE == {"shared-nvidia": 100 * 10**9, "dedicated-intel": 30 * 10**9,
                                       "dedicated-nvidia": 30 * 10**9,
+                                      "dedicated-amd": 30 * 10**9,
                                       "dedicated-cpu": 30 * 10**9}  # fmt: skip
     assert ds.min_free_bytes("shared-nvidia") == 100 * 10**9
     assert ds.min_free_bytes("dedicated-intel") == 30 * 10**9

@@ -686,6 +686,12 @@ def test_the_onnxruntime_serve_step_runs_the_same_onnx_on_nvidia(
     assert ud.main(["serve-cmd", "--backend", "onnxruntime", "--device", "cpu",
                     "--seconds", "900"]) == 0  # fmt: skip
     assert " --device cpu " in capsys.readouterr().out
+    # ADR-0022 Amendment 2026-11-18b: AMD's step, the same files on the WebGPU provider (Vulkan)
+    assert ud.main(["serve-cmd", "--backend", "onnxruntime", "--device", "webgpu",
+                    "--seconds", "900"]) == 0  # fmt: skip
+    amd = ud.serve_step_onnxruntime(900, "webgpu")
+    assert capsys.readouterr().out.strip().endswith(f"'{amd}'")
+    assert " --device webgpu " in amd and amd.split(" --model ")[1:] == ov.split(" --model ")[1:]
     for bad in (
         ["--backend", "onnxruntime", "--device", "GPU"],
         ["--device", "cuda"],  # torch takes no device
