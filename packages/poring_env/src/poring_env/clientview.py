@@ -1,0 +1,187 @@
+"""The virtual 1280x720 client (docs/planning/fullscreen-client.md section 7; Batt 2026-11-18:
+"support every screen size; find a way with calculation, like vectors").
+
+Everything the bot reads and clicks was built on a 1280x720 client. RO does not scale its picture
+with the screen: its interface panels keep their pixel size, anchored to a corner or an edge, and
+the 3D world keeps the player at the centre. So a point of the client is mapped by a VECTOR:
+
+- a UI point: ``real = panel.real_xy + (virtual - panel.virtual_xy)`` -- the panel moved by its
+  anchor's vector, same size (scale 1);
+- a world point: ``real = centre_real + k * (virtual - centre_virtual)`` -- a vector from the
+  centre scaled by the world's scale ``k`` at that size (1 at 1280x720).
+
+A ``ClientView`` holds one frame's client: where it is in the frame (a window anywhere, or the
+whole frame in fullscreen), the world's scale and centre, and where each panel is. It maps a
+virtual point to the frame (clicks), a frame point back (reads), and builds the virtual 1280x720
+picture from a real frame -- so the code built on 1280x720 runs unchanged on any screen.
+
+Pure: numpy only, no X, no I/O.
+"""
+
+from __future__ import annotations
+
+from collections.abc import Sequence
+from dataclasses import dataclass
+from typing import Literal
+
+import numpy as np
+from numpy.typing import NDArray
+
+VIRTUAL_W, VIRTUAL_H = 1280, 720
+Box = tuple[int, int, int, int]  # x, y, w, h
+Anchor = Literal["tl", "tr", "bl", "br", "t", "b", "l", "r", "c"]
+Mode = Literal["window", "fullscreen"]
+
+
+def anchor_point(anchor: Anchor, w: float, h: float) -> tuple[float, float]:
+    """PURE: the anchor's point in a w x h client (tl = top-left ... c = the centre)."""
+    xs = {"l": 0.0, "c": w / 2, "r": float(w)}
+    ys = {"t": 0.0, "c": h / 2, "b": float(h)}
+    horiz = {"tl": "l", "tr": "r", "bl": "l", "br": "r", "t": "c", "b": "c", "l": "l", "r": "r",
+             "c": "c"}[anchor]  # fmt: skip
+    vert = {"tl": "t", "tr": "t", "bl": "b", "br": "b", "t": "t", "b": "b", "l": "c", "r": "c",
+            "c": "c"}[anchor]  # fmt: skip
+    return xs[horiz], ys[vert]
+
+
+@dataclass(frozen=True)
+class Panel:
+    """One interface panel: its box in the virtual client, and its top-left in the REAL client
+    (client pixels; its size is the same: RO's interface does not scale)."""
+
+    name: str
+    virtual: Box
+    real_xy: tuple[int, int]
+
+    @classmethod
+    def anchored(cls, name: str, virtual: Box, anchor: Anchor,
+                 real_size: tuple[int, int]) -> Panel:  # fmt: skip
+        """The panel at the same vector from ``anchor`` in a real client of ``real_size`` as
+        from that anchor in the virtual 1280x720 one (a panel that sticks to a corner or edge)."""
+        vx, vy, _, _ = virtual
+        ax_v, ay_v = anchor_point(anchor, VIRTUAL_W, VIRTUAL_H)
+        ax_r, ay_r = anchor_point(anchor, *real_size)
+        return cls(name, virtual, (round(ax_r + (vx - ax_v)), round(ay_r + (vy - ay_v))))
+
+    @property
+    def offset(self) -> tuple[int, int]:
+        """The panel's vector: real top-left minus virtual top-left."""
+        return self.real_xy[0] - self.virtual[0], self.real_xy[1] - self.virtual[1]
+
+    def holds_virtual(self, vx: float, vy: float) -> bool:
+        x, y, w, h = self.virtual
+        return x <= vx < x + w and y <= vy < y + h
+
+    def holds_real(self, cx: float, cy: float) -> bool:
+        x, y = self.real_xy
+        _, _, w, h = self.virtual
+        return x <= cx < x + w and y <= cy < y + h
+
+
+@dataclass(frozen=True)
+class ClientView:
+    """One frame's client. ``rect``: the client's area in the frame (frame pixels: a window's
+    client area, or the whole frame in fullscreen). ``world_scale``: real pixels per virtual pixel
+    of the 3D world. ``world_centre``: the real-client point of the virtual centre (640, 360);
+    None = the real client's centre. ``panels``: the interface panels, later ones drawn on top."""
+
+    rect: Box
+    mode: Mode = "window"
+    world_scale: float = 1.0
+    world_centre: tuple[float, float] | None = None
+    panels: tuple[Panel, ...] = ()
+
+    @property
+    def size(self) -> tuple[int, int]:
+        return self.rect[2], self.rect[3]
+
+    @property
+    def centre(self) -> tuple[float, float]:
+        if self.world_centre is not None:
+            return self.world_centre
+        return self.rect[2] / 2, self.rect[3] / 2
+
+    @property
+    def identity(self) -> bool:
+        """The client IS the virtual one: 1280x720, the world unscaled, every panel in place."""
+        return (
+            self.size == (VIRTUAL_W, VIRTUAL_H)
+            and self.world_scale == 1.0
+            and self.centre == (VIRTUAL_W / 2, VIRTUAL_H / 2)
+            and all(p.offset == (0, 0) for p in self.panels)
+        )
+
+    def panel_at(self, vx: float, vy: float) -> Panel | None:
+        """The panel drawn at a virtual point (the topmost), or None: the world."""
+        for p in reversed(self.panels):
+            if p.holds_virtual(vx, vy):
+                return p
+        return None
+
+    def to_client(self, vx: float, vy: float) -> tuple[float, float]:
+        """A virtual point -> the real CLIENT point (client pixels)."""
+        p = self.panel_at(vx, vy)
+        if p is not None:
+            dx, dy = p.offset
+            return vx + dx, vy + dy
+        cx, cy = self.centre
+        k = self.world_scale
+        return cx + k * (vx - VIRTUAL_W / 2), cy + k * (vy - VIRTUAL_H / 2)
+
+    def to_real(self, vx: float, vy: float) -> tuple[float, float]:
+        """A virtual point -> the FRAME point (where a click must land)."""
+        x, y = self.to_client(vx, vy)
+        return self.rect[0] + x, self.rect[1] + y
+
+    def to_virtual(self, fx: float, fy: float) -> tuple[float, float]:
+        """A frame point -> the virtual point (the inverse of to_real): inside a panel's real box
+        by its vector, else by the world's inverse."""
+        cx_, cy_ = fx - self.rect[0], fy - self.rect[1]
+        for p in reversed(self.panels):
+            if p.holds_real(cx_, cy_):
+                dx, dy = p.offset
+                return cx_ - dx, cy_ - dy
+        cx, cy = self.centre
+        k = self.world_scale
+        return VIRTUAL_W / 2 + (cx_ - cx) / k, VIRTUAL_H / 2 + (cy_ - cy) / k
+
+    def virtual_frame(self, frame: NDArray[np.uint8]) -> NDArray[np.uint8]:
+        """The virtual 1280x720 picture of a real frame (H, W, C): the world resampled around the
+        centre (nearest pixel; a plain crop at scale 1), then each panel copied to its virtual
+        place. Parts outside the real client are 0."""
+        x0, y0, w, h = self.rect
+        client = frame[max(0, y0) : y0 + h, max(0, x0) : x0 + w]
+        ch, cw = client.shape[:2]
+        out = np.zeros((VIRTUAL_H, VIRTUAL_W, *frame.shape[2:]), dtype=frame.dtype)
+        cx, cy = self.centre
+        k = self.world_scale
+        xs = np.floor(cx + k * (np.arange(VIRTUAL_W) + 0.5 - VIRTUAL_W / 2)).astype(np.int64)
+        ys = np.floor(cy + k * (np.arange(VIRTUAL_H) + 0.5 - VIRTUAL_H / 2)).astype(np.int64)
+        okx, oky = (xs >= 0) & (xs < cw), (ys >= 0) & (ys < ch)
+        if okx.any() and oky.any():
+            out[np.ix_(oky, okx)] = client[np.ix_(ys[oky], xs[okx])]
+        for p in self.panels:
+            vx, vy, pw, ph = p.virtual
+            rx, ry = p.real_xy
+            sx0, sy0 = max(0, rx), max(0, ry)
+            sx1, sy1 = min(cw, rx + pw), min(ch, ry + ph)
+            if sx1 <= sx0 or sy1 <= sy0:
+                continue  # the panel is off the real client
+            dx0, dy0 = vx + (sx0 - rx), vy + (sy0 - ry)
+            tx0, ty0 = max(0, dx0), max(0, dy0)
+            tx1 = min(VIRTUAL_W, dx0 + (sx1 - sx0))
+            ty1 = min(VIRTUAL_H, dy0 + (sy1 - sy0))
+            if tx1 <= tx0 or ty1 <= ty0:
+                continue
+            sy, sx = sy0 + (ty0 - dy0), sx0 + (tx0 - dx0)
+            out[ty0:ty1, tx0:tx1] = client[sy : sy + (ty1 - ty0), sx : sx + (tx1 - tx0)]
+        return out
+
+
+def anchored_view(rect: Box, mode: Mode, layout: Sequence[tuple[str, Box, Anchor]], *,
+                  world_scale: float = 1.0) -> ClientView:  # fmt: skip
+    """PURE: a view whose panels each stick to their anchor (``layout``: name, virtual box,
+    anchor) in a real client of ``rect``'s size -- the default before the panels are found."""
+    size = (rect[2], rect[3])
+    panels = tuple(Panel.anchored(name, box, anchor, size) for name, box, anchor in layout)
+    return ClientView(rect, mode, world_scale, None, panels)
