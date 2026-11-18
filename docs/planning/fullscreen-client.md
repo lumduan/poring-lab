@@ -96,6 +96,19 @@ hidden: 67.6):**
   (1660, 1032) at 1080p, 1.0 shown); the desktop icons draw differently per session size (720p /
   900p signatures 25-72 off at 1080p: `@1080` variants cut).
 
+**Measured in game at 1920x1080 fullscreen (14:5x, the same spot as a 720p frame, Geffen 119,41):**
+- **The 3D world is scaled by exactly 1.50 = 1080 / 720, about the screen's centre (offset 0, 0)**:
+  `real = (960, 540) + 1.5 x (virtual - (640, 360))` (a scale fit of the central world: 5.5 mean grey
+  difference at 1.50, >= 9.9 at 1.49 / 1.51). The camera keeps its view and draws it bigger: the
+  world's scale is the client's HEIGHT / 720 (a 16:10 screen then shows less width: outside = black).
+- **The interface keeps its size and its SAVED place**: Basic Info (0, 0) and the hotbar (230, 0)
+  as at 720p; the minimap sticks to the top-right (x 1776, i.e. +640); the chat window stays at its
+  saved pixels (y 580-720), floating mid-left -- it does NOT follow the bottom edge. So panels are
+  FOUND, not assumed (players drag windows, and RO restores them where they were).
+- The login at 1080p works end to end with the found dialogs (service, login (a `login@1080`
+  variant: the 720p signature scores 6.29 there, just over 6), character select): in game online=1.
+  It then stops at the chat-window standard check (the 720p place): the next milestones.
+
 **Milestones**
 1. The geometry: the view, its vectors and their inverse, the virtual frame -- pure, tested with
    synthetic frames (no lab change).
