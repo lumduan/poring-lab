@@ -181,3 +181,34 @@ def test_the_client_button_is_found_wherever_the_taskbar_puts_it(
 
     assert ro.taskbar_icon_found(Row(886))  # moved left by a closed program
     assert not ro.taskbar_icon_found(Row(None))
+
+
+def test_on_an_unmeasured_size_a_login_dialog_is_found_and_moves_its_points(
+    ro: ModuleType, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Phase 2: at 1920x1080 the service dialog is FOUND (here at its 1080p place, the vector
+    (320, 225) measured 2026-11-18); its check box and its OK point move by that vector, and the
+    server list's OK takes the same one; a dialog not found yet stops instead of guessing."""
+    from poring_backend.signature import grey_thumb
+
+    monkeypatch.setattr(ro, "game_region", lambda: (0, 0, 1920, 1080))
+    monkeypatch.setattr(ro, "desktop", lambda: (1920, 1080))
+    blocks = np.random.default_rng(9).integers(0, 255, (8, 36, 4), dtype=np.uint8)
+    dialog = np.ascontiguousarray(np.repeat(np.repeat(blocks, 8, 0), 8, 1)[:60, :281])
+    np.save(ro.signature_path("service_select"), grey_thumb(dialog))
+    ro.signature_path("service_select").with_suffix(".json").write_text(
+        json.dumps({"box": [505, 371, 281, 60]}))  # fmt: skip
+    frame = np.zeros((1080, 1920, 4), np.uint8)
+    frame[596 : 596 + 60, 825 : 825 + 281] = dialog
+    monkeypatch.setattr(ro, "grab_after", lambda s, region, after: frame[
+        region[1] : region[1] + region[3], region[0] : region[0] + region[2]])  # fmt: skip
+    ro._VECTORS.clear()
+    with pytest.raises(ro.Stop, match="not found"):
+        ro.layout("service_ok")
+    assert ro.distance(None, "service_select") == 0.0
+    assert ro._VECTORS["service_select"] == (320, 225)
+    assert ro.region_for("service_select") == (825, 596, 281, 60)
+    assert ro.layout("service_ok") == (714 + 320, 555 + 225)
+    assert ro.layout("server_ok") == ro.layout("service_ok")
+    monkeypatch.setattr(ro, "game_region", lambda: (80, 77, 1280, 720))
+    assert ro.region_for("service_select") == (585, 448, 281, 60)  # measured: no vector

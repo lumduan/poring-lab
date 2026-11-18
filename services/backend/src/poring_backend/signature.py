@@ -27,3 +27,36 @@ def distance(thumb: NDArray[np.float32], ref: NDArray[np.float32]) -> float:
     if thumb.shape != ref.shape:
         return float("inf")
     return float(np.abs(thumb - ref).mean())
+
+
+def find(
+    bgra: NDArray[np.uint8], ref: NDArray[np.float32], *, keep: int = 5
+) -> tuple[float, int, int]:
+    """Where in ``bgra`` the signature ``ref`` is best (distance, x, y of its box's origin): a
+    coarse slide of ``ref`` over the picture's own thumbnail (``SIG_SCALE``-px steps), then a
+    pixel-exact refinement around the ``keep`` best (docs/planning/fullscreen-client.md: a panel
+    found by its picture, wherever a screen size or the player put it). Infinite when it does not
+    fit."""
+    from numpy.lib.stride_tricks import sliding_window_view
+
+    th, tw = ref.shape
+    bh, bw = th * SIG_SCALE, tw * SIG_SCALE
+    h, w = bgra.shape[:2]
+    if h < bh - SIG_SCALE + 1 or w < bw - SIG_SCALE + 1:
+        return float("inf"), 0, 0
+    grid = grey_thumb(bgra)
+    if grid.shape[0] < th or grid.shape[1] < tw:
+        return float("inf"), 0, 0
+    windows = sliding_window_view(grid, (th, tw))
+    coarse = np.abs(windows - ref).mean(axis=(2, 3))
+    order = np.argsort(coarse, axis=None)[:keep]
+    best = (float("inf"), 0, 0)
+    for flat in order:
+        gy, gx = divmod(int(flat), coarse.shape[1])
+        for y in range(max(0, gy * SIG_SCALE - SIG_SCALE), gy * SIG_SCALE + SIG_SCALE + 1):
+            for x in range(max(0, gx * SIG_SCALE - SIG_SCALE), gx * SIG_SCALE + SIG_SCALE + 1):
+                crop = bgra[y : y + bh, x : x + bw]
+                d = distance(grey_thumb(crop), ref)
+                if d < best[0]:
+                    best = (d, x, y)
+    return best
