@@ -7,7 +7,9 @@ xmas02 with its species collapsed).
     gpu_live_parity.py --refs REFS.json --out OUT.json [--maps prt_fild08,xmas_dun02]
                        [--wait-s 240] [--soak-s 300 --soak-hz 2]
                        [--server-log STEP.log [--expect-ov-preproc cpu|gpu]
-                                              [--expect-ov-precision f32|f16]]
+                                              [--expect-ov-precision f32|f16]
+                                              [--expect-device webgpu|cuda|GPU|...]]
+                       [--socket SOCK]
 
 PARITY, per map: each frame's CPU boxes (``det.cpu.detect``) and GPU boxes (``det.detect`` with
 ``last_path == "gpu"``; a fallback -- an R3 pause window, a timeout -- is logged with its reason
@@ -19,7 +21,9 @@ times (each reply's "ms": with --ov-preproc cpu that includes its numpy input co
 THE SERVER: the hello carries no mode (the client compares it exactly), so ``--server-log`` (the
 guarded step's log, $TMPDIR/poring-guarded-execdev-vision.log) gives the server's start line, which
 is recorded; ``--expect-ov-preproc`` / ``--expect-ov-precision`` refuse to run (rc 2) unless that
-line names the mode.
+line names the mode (``--expect-device``: its device, e.g. webgpu for onnxruntime-webgpu).
+``--socket``: a detect server outside the worker (a scratch host run, ADR-0022 Amendment
+2026-11-18b); default the worker's.
 SOAK: the last map's detector at ``--soak-hz`` for ``--soak-s``, the live bot's way (the GPU,
 falling back by itself): each call's time, path and reason, so R3's OFF windows show as fallbacks
 and the ON windows as the GPU again.
@@ -107,11 +111,16 @@ def main(argv: list[str] | None = None) -> int:
                     help="refuse unless the server's start line names this mode")  # fmt: skip
     ap.add_argument("--expect-ov-precision", choices=["f32", "f16"], default=None,
                     help="refuse unless the server's start line names this precision")  # fmt: skip
+    ap.add_argument("--expect-device", default=None,
+                    help="refuse unless the server's start line names this device")  # fmt: skip
+    ap.add_argument("--socket", type=Path, default=None,
+                    help="the detect server's socket; default the worker's")  # fmt: skip
     a = ap.parse_args(argv)
     expect = {k: v for k, v in (("ov_preproc", a.expect_ov_preproc),
-                                ("precision", a.expect_ov_precision)) if v is not None}  # fmt: skip
+                                ("precision", a.expect_ov_precision),
+                                ("device", a.expect_device)) if v is not None}  # fmt: skip
     if expect and a.server_log is None:
-        ap.error("--expect-ov-preproc / --expect-ov-precision need --server-log")
+        ap.error("--expect-ov-preproc / --expect-ov-precision / --expect-device need --server-log")
     server = server_start(a.server_log) if a.server_log is not None else None
     print(json.dumps({"server": server}), flush=True)
     for key, want in expect.items():
@@ -135,7 +144,8 @@ def main(argv: list[str] | None = None) -> int:
                            "maps": {}}  # fmt: skip
     det = None
     for map_name in a.maps.split(","):
-        det = ud.for_map_gpu(map_name)
+        det = (ud.for_map_gpu(map_name) if a.socket is None
+               else ud.for_map_gpu(map_name, socket_path=a.socket))  # fmt: skip
         n_c = n_g = n_m = 0
         worst = 0.0
         ms: list[float] = []

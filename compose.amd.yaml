@@ -1,0 +1,24 @@
+# ADR-0022 Amendment 2026-11-18b: the AMD overlay for the vision service (a host whose AMD GPU is the
+# lab's alone; Batt chose option (b): the deployed ONNX through Vulkan, "one build for every vendor").
+# guarded_build adds it LAST, after compose.yaml, when the host profile is dedicated-amd
+# (LAB_HOST_PROFILE in .env; scripts/host_profile.py). Exactly three things change, and
+# tests/test_guards.py pins them (everything else -- the agent network only, no X, mem == memswap,
+# oom_score_adj, the mounts -- is compose.yaml's):
+#   - the image: poring-lab/vision-vulkan:local from services/vision/Dockerfile.vulkan;
+#   - the GPU: the AMD card's DRM render node (GPU_RENDER_NODE: the setup finds it) and the render
+#     group, instead of the NVIDIA reservation;
+#   - no VRAM cap by default (a dedicated host; WebGPU has no cap, so a share below 1.0 is refused).
+services:
+  vision:
+    build:
+      context: .
+      dockerfile: services/vision/Dockerfile.vulkan
+    image: ${COMPOSE_PROJECT_NAME:-poring-lab}/vision-vulkan:local
+    deploy: !reset {}
+    devices:
+      # the render node only: compute needs no KMS node (card*)
+      - ${GPU_RENDER_NODE:-/dev/dri/renderD128}:${GPU_RENDER_NODE:-/dev/dri/renderD128}
+    group_add:
+      - "${RENDER_GID:-991}" # the host's `render` group: getent group render
+    environment:
+      VISION_MAX_VRAM_FRACTION: ${VISION_MAX_VRAM_FRACTION:-1.0}

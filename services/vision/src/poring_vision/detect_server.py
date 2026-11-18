@@ -10,6 +10,8 @@ Amendment 2026-11-07: Batt "เลือก A" and "อนุมัติให�
         [--ov-preproc cpu|gpu] [--ov-precision f32|f16]
     python -m poring_vision.detect_server --backend onnxruntime --device cuda --socket SOCK \\
         --model v1=<dir>/v1png-last-736x1280.onnx=<sha256> ...    # the same ONNX on NVIDIA
+    python -m poring_vision.detect_server --backend onnxruntime --device webgpu --socket SOCK \
+        --model v1=<dir>/v1png-last-736x1280.onnx=<sha256> ...    # ... on AMD (Vulkan), any GPU
 
 ``--ov-preproc`` (OpenVINO only; Batt 2026-11-08 "we use the GPU for detection"): where the canvas
 becomes the model's input (BGR -> RGB, HWC -> CHW, float32 / 255). ``cpu`` (the default until its
@@ -122,9 +124,15 @@ OV_PRECISION = "f32"
 # providers, so every GPU runs the very file the host's CPU detector runs; no vendor needs a model
 # of its own (the torch backend needs each model's .pt, which only the lab has). --device names
 # the provider: cuda = NVIDIA (onnxruntime-gpu in the CUDA image, CUDA 13 like torch cu130: the
-# same driver floor); cpu = onnxruntime's own CPU provider (a parity run on a host without the
-# card). FP32, the canvas converted by to_input (numpy) as OpenVINO's --ov-preproc cpu.
-ORT_PROVIDERS = {"cuda": "CUDAExecutionProvider", "cpu": "CPUExecutionProvider"}
+# same driver floor); webgpu = any vendor's GPU through Vulkan (onnxruntime-webgpu in the Vulkan
+# image: AMD's path, ADR-0022 Amendment 2026-11-18b, Batt chose option (b); poring_vision.vulkan
+# keeps CPU Vulkan drivers out); cpu = onnxruntime's own CPU provider (a parity run on a host
+# without the card). FP32, the canvas converted by to_input (numpy) as OpenVINO's --ov-preproc cpu.
+ORT_PROVIDERS = {
+    "cuda": "CUDAExecutionProvider",
+    "webgpu": "WebGpuExecutionProvider",
+    "cpu": "CPUExecutionProvider",
+}
 ORT_DEVICE_DEFAULT = "cuda"
 BACKENDS = ("torch", "openvino", "onnxruntime")
 # The card's clock floor, for the start and stats lines: at the bot's pace (a call every 0.1-0.5 s)
@@ -295,11 +303,28 @@ def cuda_total_bytes(index: int = 0) -> int | None:
         return None
 
 
+def webgpu_devices() -> list[dict[str, str]] | None:
+    """Before a WebGPU session: keep CPU Vulkan drivers out of the loader (Dawn would pick
+    lavapipe when no GPU is reachable, and the session would still name WebGPU), then the GPUs it
+    can pick from (poring_vision.vulkan). None: the loader cannot be asked (the session decides).
+    Vulkan seeing no GPU refuses here, with what a container needs."""
+    from poring_vision import vulkan
+
+    os.environ[vulkan.DISABLE_KEY] = vulkan.without_cpu_drivers(os.environ.get(vulkan.DISABLE_KEY))
+    seen = vulkan.devices()
+    if seen is not None and not vulkan.gpus(seen):
+        raise SystemExit("Vulkan sees no GPU (the card's render node /dev/dri/renderD* and its "
+                         "group must be passed in, and the image needs Mesa's driver for it): "
+                         "the host's CPU detector serves alone")  # fmt: skip
+    return None if seen is None else vulkan.gpus(seen)
+
+
 class OrtNet:
     """The DEPLOYED ONNX itself on an onnxruntime execution provider (``device``: ORT_PROVIDERS),
     FP32: the same file as the host's CPU detector, so only the forward differs. Refuses to start
     when the provider did not load (onnxruntime would otherwise fall back to its CPU provider in
-    silence): the host's CPU detector then serves alone, and the start says why."""
+    silence): the host's CPU detector then serves alone, and the start says why. On webgpu,
+    ``vulkan`` lists the GPUs Vulkan offered it (webgpu_devices)."""
 
     def __init__(self, path: str, sha256: str, device: str = ORT_DEVICE_DEFAULT,
                  imgsz: tuple[int, int] = IMGSZ,
@@ -309,6 +334,9 @@ class OrtNet:
         got = file_sha256(path)
         if got != sha256:
             raise SystemExit(f"{path}: sha256 {got[:12]}... is not the pinned {sha256[:12]}...")
+        self.vulkan: list[dict[str, str]] | None = None
+        if device == "webgpu":
+            self.vulkan = webgpu_devices()
         import onnxruntime as ort
 
         want = ORT_PROVIDERS[device]
@@ -748,13 +776,23 @@ def main(argv: list[str] | None = None) -> int:
         if ort_device == "cuda":
             frac = float(os.environ.get("VISION_MAX_VRAM_FRACTION", "0.25"))
             vram = vram_limit(frac, cuda_total_bytes() if frac < 1.0 else None)
+        elif ort_device == "webgpu":
+            # WebGPU has no memory cap: a share below 1.0 cannot be held, so it is refused
+            frac = float(os.environ.get("VISION_MAX_VRAM_FRACTION", "1.0"))
+            if frac < 1.0:
+                raise SystemExit(
+                    f"VISION_MAX_VRAM_FRACTION {frac}: WebGPU has no memory cap, so "
+                    "a share below 1.0 cannot be held (a dedicated host: 1.0)"
+                )
         # one session (and arena) a model: the cap is shared out, so their total stays under it
         each = None if vram is None else vram // len(models)
         ort_nets = {name: OrtNet(path, sha, ort_device, imgsz, each)
                     for name, (path, sha) in models.items()}  # fmt: skip
-        providers = next(iter(ort_nets.values())).providers
-        mode = {"backend": "onnxruntime", "device": ort_device, "providers": providers,
+        first = next(iter(ort_nets.values()))
+        mode = {"backend": "onnxruntime", "device": ort_device, "providers": first.providers,
                 "vram_limit": vram, "ov_preproc": None, "precision": "f32"}  # fmt: skip
+        if ort_device == "webgpu":  # the GPUs Vulkan offered (Dawn takes the high-performance one)
+            mode["vulkan"] = first.vulkan
         nets = dict(ort_nets)
     else:
         from poring_vision.gpu import configure_gpu

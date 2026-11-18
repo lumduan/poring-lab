@@ -410,7 +410,9 @@ class Wizard:
         for note in rec.notes:
             ui.p(f"Note: {esc(note)}")
         others = [
-            x for x in ("dedicated-nvidia", "dedicated-intel", "dedicated-cpu") if x != rec.profile
+            x
+            for x in ("dedicated-nvidia", "dedicated-intel", "dedicated-amd", "dedicated-cpu")
+            if x != rec.profile
         ]
         options = [("1", f"{rec.profile}  (recommended)")]
         options += [(str(n), name) for n, name in enumerate(others, 2)]
@@ -438,6 +440,7 @@ class Wizard:
             self.a.profile = by_key[got]
         self.a.build_vision = False
         self.a.worker_mem = ""
+        self.a.render_node = ""
         if self.a.profile != "dedicated-cpu":
             ready = rec.ready and self.a.profile == rec.profile
             if not ready:
@@ -455,6 +458,7 @@ class Wizard:
             )
             self.a.build_vision = got == "2"
             self.a.worker_mem = rec.worker_mem if ready else ""
+            self.a.render_node = rec.render_node if ready else ""
         self.save()
 
     # -- 1 --

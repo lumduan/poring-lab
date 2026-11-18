@@ -1,0 +1,8 @@
+# The Vulkan vision image (ADR-0022 Amendment 2026-11-18b; Batt chose option (b) for AMD: "one build
+# for every vendor"): the detect server only. onnxruntime-webgpu runs the deployed ONNX through
+# Vulkan (Dawn); no torch, no training in this image. Compiled to requirements-vulkan.txt by
+# scripts/gen_vulkan_requirements.sh: every package the lock also has is held at the lock's version.
+# 1.27.0 (2026-06-15) is the newest release; proven on bot-server's Arc 2026-11-18 (boxes 59/59 and
+# 528/528 at 0.0 px against the CPU detector).
+onnxruntime-webgpu==1.27.0
+numpy
