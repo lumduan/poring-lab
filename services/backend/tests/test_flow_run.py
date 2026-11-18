@@ -215,6 +215,20 @@ def test_the_helper_is_busy_while_another_input_writer_of_ours_plays(tmp_path: P
     assert h.busy == "an A/B series is running (one input writer at a time)"
 
 
+def test_a_run_plays_in_assist_or_bot_and_only_the_run_does() -> None:
+    """Batt 2026-11-18 ("with BOT it must run too"; ADR-0020 Amendment 2026-11-18): the run the
+    helper starts may send in ASSIST or BOT (ro_agent reads it), never HUMAN; the helper's own
+    environment, and so every other script of ours, keeps ASSIST alone."""
+    import inspect
+
+    import ro_agent
+
+    assert fr.RUN_MODES_ENV == ro_agent.MODES_ENV
+    assert ro_agent.input_modes(fr.RUN_INPUT_MODES) == ("ASSIST", "BOT")
+    src = inspect.getsource(fr.Helper.start_project)
+    assert "RUN_MODES_ENV: RUN_INPUT_MODES" in src and "env=env" in src
+
+
 def test_a_request_is_consumed_once(tmp_path: Path) -> None:
     h = fr.Helper(tmp_path)
     (tmp_path / "request.json").write_text("not json")

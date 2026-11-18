@@ -43,14 +43,15 @@ A START runs, in order (as the night chain's run_pilot_v3.sh does):
    one and goes home on a Butterfly Wing if F8 holds one). Its two map EXITS (dungeon@9.41): a bag
    over 50 % ends the run and the Butterfly Wing takes her home; a death presses the death dialog's
    move to saved location. Its own checks refuse every unsafe start
-   (ASSIST, the interlock, her identity, her cell).
+   (ASSIST or BOT, the interlock, her identity, her cell).
 A STOP sends SIGINT to the runner's process group (a clean end, rc 130). Either way the detect
 server is ended by PID when the runner exits, and the run's session goes into data/econ/lab.sqlite.
 A PROJECT RUN (Batt 2026-11-13 ~21:4x, docs/planning/live-blocks.md stage 1): POST
 /flows/run/project writes the checked project (``project.json``, its hash in the request) and a
 request {"action": "start", "flow": "project", "node", "project_hash", "max_s"}; the helper
 checks the file's hash against the request's, copies it into the run's folder and starts the LIVE
-BLOCK PLAYER (scripts/flow_play.py play) instead of the runner -- the same busy rules, ASSIST, the
+BLOCK PLAYER (scripts/flow_play.py play) instead of the runner -- the same busy rules, ASSIST or
+BOT (Batt 2026-11-18: "with BOT it must run too"; RUN_INPUT_MODES), the
 detect server when a hunt core plays, the stop file, status.json (its flow id "project", titled
 with the project's name). A check of the flow "project" is the runner's check (PROJECT_CHECK_FLOW)
 with that project's keys and setting blocks.
@@ -86,6 +87,12 @@ import lab_env  # this copy's compose project names (same directory, stdlib only
 ROOT = Path(__file__).resolve().parents[1]
 DIR = ROOT / "settings" / "flowrun"
 SCRATCH = Path("/dev/shm/poring-lab-tmp")
+# Batt 2026-11-18 ("with BOT it must run too"; ADR-0020 Amendment 2026-11-18): a Run's input path
+# (ro_agent.Agent, ro_agent.MODES_ENV) may send in ASSIST or BOT. In BOT the mux drops the person's
+# input, so watching the Console never pauses the run; Stop, or HUMAN, ends it. Only the processes
+# this helper starts get it: every other script of ours stays ASSIST-only.
+RUN_MODES_ENV = "PORING_INPUT_MODES"
+RUN_INPUT_MODES = "ASSIST,BOT"
 SERVE_LOG = SCRATCH / "poring-guarded-execdev-vision.log"
 WORKER = lab_env.container("vision-worker")
 PY = str(ROOT / ".venv" / "bin" / "python")
@@ -862,7 +869,12 @@ class Helper:
         if has_hunt_core(doc) and not self.detect_up():
             return
         self.detail = "the player starts (its own checks first: the live set, the keys, her map)"
-        env = {**os.environ, "PYTHONDONTWRITEBYTECODE": "1", "TMPDIR": str(SCRATCH)}
+        env = {
+            **os.environ,
+            "PYTHONDONTWRITEBYTECODE": "1",
+            "TMPDIR": str(SCRATCH),
+            RUN_MODES_ENV: RUN_INPUT_MODES,
+        }  # a Run plays in ASSIST or BOT, never HUMAN
         self.stop_file = self.run_dir / STOP_NAME
         self.stop_file.unlink(missing_ok=True)
         self.stop_t = None

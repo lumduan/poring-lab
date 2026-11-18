@@ -1,16 +1,21 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import { busyWhy, canCheck, liveButtons, liveLabel, type LiveStatus, okTail, REFUSALS } from "./liverun.ts";
+import { busyWhy, canCheck, liveButtons, liveLabel, type LiveStatus, okTail, REFUSALS, RUN_MODES } from "./liverun.ts";
 import { mapsReadyText, statusText } from "./words.ts";
 
 const FLOW = "xmas_dun02_rogue";
 const ok: LiveStatus = { state: "idle", helper_alive: true, mode: "ASSIST", flows: { [FLOW]: { title: "t", minutes: 120 } } };
 
-test("Start only when the helper is alive, lists the flow, nothing runs, and the console is in ASSIST", () => {
+test("Start only when the helper is alive, lists the flow, nothing runs, and the console is in ASSIST or BOT", () => {
   assert.deepEqual(liveButtons(ok, FLOW), { canStart: true, canStop: false, why: null });
+  // Batt 2026-11-18: "with BOT it must run too" (ADR-0020 Amendment 2026-11-18); never HUMAN
+  assert.deepEqual(liveButtons({ ...ok, mode: "BOT" }, FLOW), { canStart: true, canStop: false, why: null });
+  assert.deepEqual(liveButtons({ ...ok, mode: "BOT" }, "project"), { canStart: true, canStop: false, why: null });
   assert.equal(liveButtons({ ...ok, mode: "HUMAN" }, FLOW).canStart, false);
-  assert.match(String(liveButtons({ ...ok, mode: "HUMAN" }, FLOW).why), /ASSIST/);
+  assert.match(String(liveButtons({ ...ok, mode: "HUMAN" }, FLOW).why), /in HUMAN: set ASSIST or BOT/);
+  assert.equal(liveButtons({ ...ok, mode: undefined }, FLOW).canStart, false); // no mode read: off
+  assert.deepEqual([...RUN_MODES], ["ASSIST", "BOT"]);
   assert.equal(liveButtons({ ...ok, helper_alive: false }, FLOW).canStart, false);
   assert.equal(liveButtons(ok, "other_flow").canStart, false);
   assert.equal(liveButtons(null, FLOW).canStart, false);
@@ -50,7 +55,7 @@ test("another input writer of ours playing disables Run and the check, in the he
 test("the labels and every refusal the backend gives have words", () => {
   assert.equal(liveLabel({ ...ok, state: "running" }), "playing in the game");
   assert.equal(liveLabel({ ...ok, helper_alive: false }), "the Run helper is not running");
-  for (const r of ["helper_not_running", "nothing_running", "unknown_flow", "already_running", "mode_not_assist", "csrf_invalid"]) {
+  for (const r of ["helper_not_running", "nothing_running", "unknown_flow", "already_running", "mode_human", "csrf_invalid"]) {
     assert.ok(REFUSALS[r], r);
   }
 });
@@ -165,7 +170,7 @@ test("the project run: POST /flows/run/project {project, node}; its status is th
   assert.equal(liveButtons({ ...ok, helper_alive: false }, PROJECT_FLOW).canStart, false);
   assert.deepEqual(liveButtons({ ...ok, state: "running", flow: PROJECT_FLOW }, PROJECT_FLOW), { canStart: false, canStop: true, why: null });
   // every refusal of the project run has words
-  for (const r of ["lint_errors", "not_live", "run_start_refused", "already_running", "mode_not_assist", "helper_not_running"]) assert.ok(REFUSALS[r], r);
+  for (const r of ["lint_errors", "not_live", "run_start_refused", "already_running", "mode_human", "helper_not_running"]) assert.ok(REFUSALS[r], r);
 });
 
 // matpilot round 18 (b): while the helper says busy Run is disabled, so neither page's status line

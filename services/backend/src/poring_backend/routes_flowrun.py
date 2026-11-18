@@ -12,7 +12,8 @@ press run on flows, and the bot plays by itself").
          block plays live (poring_flow.live), the run-start check's verdict allows it (a hunt
          core's own L2 binding readiness is the runner's: answered), each hunt core's keys resolve
          from that node's functions (project.runner_keys) -- then the helper's state (alive,
-         nothing running, ASSIST). Only then is the CHECKED project written
+         nothing running, ASSIST or BOT: Batt 2026-11-18, "with BOT it must run too", ADR-0020
+         Amendment 2026-11-18). Only then is the CHECKED project written
          (settings/flowrun/project.json, its canonical JSON; never one that may hold a secret) with
          ONE request {"action": "start", "flow": "project", "node", "project_hash", "max_s",
          "keys"?, "at"}. Refusals: 400 / 409 / 503 {"reason", "detail"} with reasons
@@ -20,7 +21,8 @@ press run on flows, and the bot plays by itself").
          is the old one-block runner block; real runs use hunt_loop()), lint_errors, not_live,
          run_start_refused, keys_refused, helper_not_running, already_running, input_writer_busy
          (round 17 N5: the helper's status names another input writer of ours playing, its
-         `busy`), mode_not_assist. Status stays GET /flows/run (flow id "project"); Stop is POST
+         `busy`), mode_human (the console in HUMAN: the bot never plays there). Status stays
+         GET /flows/run (flow id "project"); Stop is POST
          /flows/run {"action": "stop"}
     POST /flows/run/check  {"project": <format 3>, "node": "<map node id>"} (dungeon@9.45, Batt
          2026-11-13 "do it"; a project's since 2026-11-14): the start checklist ticked from the
@@ -69,6 +71,10 @@ router = APIRouter(prefix="/flows")
 
 HELPER_FRESH_S = 10.0  # the helper rewrites its status every 2 s: older = not running
 ACTIVE = ("starting", "running", "stopping")
+# The mux modes a Run may start in (Batt 2026-11-18: "with BOT it must run too"; ADR-0020
+# Amendment 2026-11-18): ASSIST, and BOT, where the person's input is dropped while they watch;
+# never HUMAN. The helper's processes send in the same two (scripts/flow_run.py RUN_INPUT_MODES).
+RUN_MODES = frozenset({Mode.ASSIST, Mode.BOT})
 
 
 class RunBody(BaseModel):
@@ -137,8 +143,8 @@ def refusal(body: RunBody, st: dict[str, Any], mode: Mode) -> tuple[int, str] | 
     if body.action == "check":  # dungeon@9.45: it reads the screen only (no ASSIST needed)
         checking = (st.get("check") or {}).get("state") == "checking"
         return (409, "check_running") if checking else None
-    if mode != Mode.ASSIST:
-        return 409, "mode_not_assist"
+    if mode not in RUN_MODES:
+        return 409, "mode_human"
     return None
 
 
@@ -370,8 +376,9 @@ async def post_run_project(request: Request,
         raise _refuse_run(state, 409, "already_running", "a run is going: press Stop first")
     if st.get("busy"):  # round 17 N5: another input writer of ours plays (the helper refuses too)
         raise _refuse_run(state, 409, "input_writer_busy", str(st["busy"]))
-    if state.mux.mode != Mode.ASSIST:
-        raise _refuse_run(state, 409, "mode_not_assist", f"the mux is {state.mux.mode.value}")
+    if state.mux.mode not in RUN_MODES:
+        raise _refuse_run(state, 409, "mode_human", f"the mux is {state.mux.mode.value}: set "
+                          "ASSIST or BOT")  # fmt: skip
     rid = uuid.uuid4().hex
     d.mkdir(parents=True, exist_ok=True)
     tmp = d / f".{PROJECT_FILE}.{rid}"

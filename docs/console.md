@@ -278,6 +278,10 @@ Amendment B); a not-adopted model is never offered.
   map's node ([planning/live-blocks.md](planning/live-blocks.md) section 12; the last bullet of
   this section). The history it carried stays below as written.
 - ➡️ **Since 2026-11-13 the xmas_dun02 runner view has a Run button** (`/flows?runner=xmas_dun02`, "Run in the game"): it starts the proven runner in player mode through the host helper `scripts/flow_run.py`, NOT the flow IR (ADR-0020's executor is still unbuilt). How and why: [planning/player-mode.md](planning/player-mode.md), [setup/new-lab-host.md](setup/new-lab-host.md) 11.1.
+  ➡️ **Since 2026-11-18 (Batt, ADR-0020 Amendment O) Run works in ASSIST or BOT** (never HUMAN). In
+  BOT your input is dropped, so you can watch the run on the Console without pausing it; Stop, or
+  HUMAN, ends it. A run that goes shows a "Running in the game" strip under the /flows header, and
+  its Stop, on every node and after you come back from another page.
   ➡️ **Since 2026-11-13 11:3x** Run sits beside Simulate (amber; press, then press again within 4 s
   to confirm) with Stop; a "your run settings" strip sets the Fly Wing key, the Butterfly Wing key
   and the weight to go home at (defaults F8, F9, 50 %; the blocks show them); the map's exits: a bag

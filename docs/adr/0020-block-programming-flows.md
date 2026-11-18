@@ -776,7 +776,8 @@ or no resolver is a refusal) and, given the approved hash, refuses another hash.
 - HUMAN mode pauses the run (bot input is dropped anyway). In BOT mode the human switches mode to
   take over; the switch is always available.
 - The executor never retries an input the mux refused; it backs off.
-- ASSIST first (ADR-0015). BOT mode for flows comes only when Batt decides.
+- ASSIST first (ADR-0015). BOT mode for flows comes only when Batt decides. ➡️ DECIDED
+  2026-11-18 (Amendment O): a Run plays in ASSIST or BOT, never HUMAN.
 
 ## 7. Import and export
 
@@ -2863,3 +2864,32 @@ record is [live-blocks.md](../planning/live-blocks.md) 12.13.
   recorded here only because it lands with this round). The Run helper and the A/B series call
   `econ_db.record_after_run` when a run ends. It is bounded and non-fatal; the details are in
   docs/econ/economics.md section 10.
+
+## Amendment O (2026-11-18 ~12:3x, Batt decided): a Run plays in BOT too, and /flows always shows a run that goes
+
+**Batt (translated):** the console was in BOT and Run could not be pressed (the page held it: "set
+the console to ASSIST first"). "Fix it: with BOT it must run too." And: "press Run, switch to the
+Console page: the bot must keep working; come back to Flows: it must show running."
+
+- **Why BOT matters:** in ASSIST any human input takes the lease (ADR-0002), so watching the run on
+  the Console with the mouse over the stream pauses it. In BOT the mux drops the person's input
+  (ADR-0002: only bot input passes) and the bot keeps playing while they watch. The person still
+  stops it with Stop, or by switching to HUMAN (the mux then refuses the bot's input and the run
+  stops before any input).
+- **What changed:**
+  - `ro_agent.Agent` sends in the modes `PORING_INPUT_MODES` names (`input_modes`): ASSIST alone by
+    default, so every other script of ours (pilots, the night chain, `recover`, the operator
+    windows) is unchanged; ASSIST and BOT for the processes the Run helper starts
+    (`flow_run.RUN_INPUT_MODES`); HUMAN never. In BOT there is no human lease to wait out.
+  - The backend's `POST /flows/run/project` starts in ASSIST or BOT (`RUN_MODES`); HUMAN is refused
+    as `mode_human` (it was `mode_not_assist`). Stop always passes.
+  - The page: Run is enabled in ASSIST or BOT (`lib/flow/liverun.ts` `RUN_MODES`), with the words
+    "the console is in HUMAN: set ASSIST or BOT first" otherwise; the start checklist ticks "the
+    console in ASSIST or BOT (now <mode>)".
+  - /flows reads the Run helper's status on EVERY node (it read it only on a node that could run),
+    so a run that goes shows a "Running in the game" strip under the header and its Stop button,
+    whatever node is open, after a visit to the Console or a reload.
+- **Unchanged:** the interlock gates every bot press in BOT as in ASSIST (ADR-0016); the operator
+  windows (login, desktop) stay ASSIST-only, so a run that would need a re-login in BOT ends instead
+  (fail closed); the runner (`dungeon_hunt.py`, byte-pinned) is untouched: it opens its input
+  through `ro_agent`'s session.

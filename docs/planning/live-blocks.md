@@ -186,7 +186,8 @@ player are feat/live-player's):**
 - THE REQUEST (lib/flow/liverun.ts `projectRunBody` / `projectRunPath`): `POST /flows/run/project
   {"project": <format 3>, "node": "<map node id>"}` with the CSRF header; refusals 400 / 409
   `{detail: {reason, detail}}`: `lint_errors`, `not_live`, `run_start_refused`,
-  `already_running`, `mode_not_assist`, `helper_not_running` (worded in `REFUSALS`). The status
+  `already_running`, `mode_not_assist` (➡️ `mode_human` since 2026-11-18: a Run starts in ASSIST
+  or BOT, ADR-0020 Amendment O), `helper_not_running` (worded in `REFUSALS`). The status
   stays `GET /flows/run` (flow id `project`), Stop stays `POST /flows/run {action: "stop"}`.
   `useLiveRun(..., run)` posts it on a start; the check is the runner's, as before.
 - Live readiness (lib/flow/liveready.ts): every block a run from the node reaches -- its main,

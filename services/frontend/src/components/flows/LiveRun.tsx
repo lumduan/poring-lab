@@ -27,7 +27,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 
-import { ACTIVE, canCheck, checkBody, checkStale, checkTime, liveButtons, liveLabel, liveLine, type LiveStatus, okTail, PROJECT_FLOW, type ProjectRun, projectRunBody, projectRunPath, refuseWarning, REFUSALS, runBody, runPath, tickFor } from "@/lib/flow/liverun";
+import { ACTIVE, canCheck, checkBody, checkStale, checkTime, liveButtons, liveLabel, liveLine, type LiveStatus, okTail, PROJECT_FLOW, type ProjectRun, projectRunBody, projectRunPath, refuseWarning, REFUSALS, RUN_MODES, runBody, runPath, tickFor } from "@/lib/flow/liverun";
 import { type ChecklistItem, checklistWithKeys, type RunKeys } from "@/lib/flow/settings";
 import { backendHttpBase } from "@/lib/ws";
 
@@ -257,8 +257,8 @@ export default function LiveRun({ live, checklist = [], minutes = null, keys = n
                 </li>
               );
             })}
-            <li data-tick={st?.mode === "ASSIST" ? "ok" : st ? "fail" : "none"} data-stale="false" data-testid="live-check-assist">
-              <span className="live-tick">{st?.mode === "ASSIST" ? "✓" : st ? "✗" : "·"}</span> the console in ASSIST
+            <li data-tick={RUN_MODES.includes(st?.mode ?? "") ? "ok" : st ? "fail" : "none"} data-stale="false" data-testid="live-check-assist">
+              <span className="live-tick">{RUN_MODES.includes(st?.mode ?? "") ? "✓" : st ? "✗" : "·"}</span> the console in ASSIST or BOT{st?.mode ? ` (now ${st.mode})` : ""}
             </li>
           </ul>
           <p className="notice-sub live-check-bar">
