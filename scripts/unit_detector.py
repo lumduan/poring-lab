@@ -739,8 +739,9 @@ def serve_step(seconds: int, models: Sequence[str] = tuple(GPU_WEIGHTS)) -> str:
 # onnxruntime the deployed ONNX, the one model file every vendor runs (ADR-0022 Amendment
 # 2026-11-18, Batt: "never lock a GPU to a model").
 BACKENDS = ("torch", "openvino", "onnxruntime")
-# onnxruntime's devices (detect_server.ORT_PROVIDERS): cuda = NVIDIA; cpu = its CPU provider
-ORT_DEVICES = ("cuda", "cpu")
+# onnxruntime's devices (detect_server.ORT_PROVIDERS): cuda = NVIDIA; webgpu = any GPU through
+# Vulkan (AMD's path, the Vulkan image; ADR-0022 Amendment 2026-11-18b); cpu = its CPU provider
+ORT_DEVICES = ("cuda", "webgpu", "cpu")
 ORT_DEVICE_DEFAULT = "cuda"
 
 # The deployed ONNX files on the NAS, read-only in the vision worker (/datasets): the OpenVINO
@@ -782,8 +783,8 @@ def serve_step_openvino(seconds: int, device: str = "GPU",
 def serve_step_onnxruntime(seconds: int, device: str = ORT_DEVICE_DEFAULT,
                            models: Sequence[str] = tuple(GPU_WEIGHTS)) -> str:  # fmt: skip
     """PURE: the guarded worker step running the detect server on onnxruntime (ADR-0022 Amendment
-    2026-11-18; NVIDIA's CUDA provider by default): the deployed ONNX of each model from
-    NAS_MODELS, by its pinned sha256, the same files as serve_step_openvino's."""
+    2026-11-18; NVIDIA's CUDA provider by default, webgpu on AMD): the deployed ONNX of each model
+    from NAS_MODELS, by its pinned sha256, the same files as serve_step_openvino's."""
     if device not in ORT_DEVICES:
         raise ValueError(f"device {device!r}: one of {list(ORT_DEVICES)}")
     parts = ["python", "-m", "poring_vision.detect_server", "--backend", "onnxruntime",
@@ -803,8 +804,9 @@ def main(argv: list[str] | None = None) -> int:
     sc.add_argument("--seconds", type=int, default=0)
     sc.add_argument("--backend", choices=list(BACKENDS), default="torch",
                     help="torch: each model's .pt (the lab's); openvino: the Intel worker "
-                    "(ADR-0022); onnxruntime: the deployed ONNX on NVIDIA (ADR-0022 Amendment "
-                    "2026-11-18); each a guarded execdev step in the vision worker")  # fmt: skip
+                    "(ADR-0022); onnxruntime: the deployed ONNX on NVIDIA (cuda) or AMD (webgpu; "
+                    "ADR-0022 Amendments 2026-11-18, 11-18b); each a guarded execdev step in the "
+                    "vision worker")  # fmt: skip
     sc.add_argument("--device", default=None,
                     help="openvino's device (default GPU); onnxruntime's provider "
                     f"({', '.join(ORT_DEVICES)}; default {ORT_DEVICE_DEFAULT})")  # fmt: skip

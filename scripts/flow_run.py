@@ -754,18 +754,21 @@ class Helper:
         """The vision worker and the detect server (its time box: the run's cap + 150 s), as the
         night chain starts them; False: failed (status says why). ADR-0022 Amendment 2026-11-17:
         the backend is this host's profile's (OpenVINO on Intel, onnxruntime's CUDA provider on
-        NVIDIA: the deployed ONNX on both, ADR-0022 Amendment 2026-11-18); with none
+        NVIDIA, its WebGPU provider on AMD: the deployed ONNX on all, ADR-0022 Amendments
+        2026-11-18 and 2026-11-18b), with the profile's device where it names one; with none
         (dedicated-cpu), or no model of the server's in the storage folder, the run goes on with the
         CPU detector alone (the runner falls back to it by itself)."""
         assert self.run_dir is not None
-        backend = host_profile.current().detect_backend
+        prof = host_profile.current()
+        backend = prof.detect_backend
         if backend == "none":
             self.note(event="detect_cpu_only", why="profile")
             return True  # no GPU here: the CPU detector serves
         self.detail = "building the detect server's command"
         self.write_status()
+        device = ["--device", prof.detect_device] if prof.detect_device else []
         cmd = subprocess.run([PY, "scripts/unit_detector.py", "serve-cmd", "--backend", backend,
-                              "--seconds", str(int(self.cap_s + 150))], cwd=ROOT,
+                              *device, "--seconds", str(int(self.cap_s + 150))], cwd=ROOT,
                              capture_output=True, text=True)  # fmt: skip
         if cmd.returncode == 3:  # no model for this backend in the storage folder
             self.note(event="detect_cpu_only", why="no_model")

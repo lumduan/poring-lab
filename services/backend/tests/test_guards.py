@@ -184,7 +184,7 @@ NOT_SOURCE = {
 }  # .claude: worktrees
 # Part of the vision component although it lives in scripts/: COPYed into the vision image only and
 # run there (`run:vision@600=python scripts/check_gpu.py`). Its header says so (ADR-0018).
-VISION_COMPONENT_SCRIPTS = {Path("scripts/check_gpu.py")}
+VISION_COMPONENT_SCRIPTS = {Path("scripts/check_gpu.py"), Path("scripts/check_webgpu.py")}
 
 
 def python_sources_outside_vision() -> list[Path]:
@@ -1215,6 +1215,75 @@ def test_the_intel_requirements_hold_the_locks_versions_but_the_torch_stack() ->
     differ = {n: (v, lock[n]) for n, v in req.items()
               if n in lock and n not in ("torch", "torchvision") and v != lock[n]}  # fmt: skip
     assert differ == {}
+
+
+# --- ADR-0022 Amendment 2026-11-18b: the AMD overlays and the Vulkan image (Batt: option (b)) --
+AMD_OVERLAYS = {
+    "compose.amd.yaml": "vision",
+    "compose.vision-worker.amd.yaml": "vision-worker",
+}
+RENDER_NODE = "${GPU_RENDER_NODE:-/dev/dri/renderD128}"
+
+
+@pytest.mark.parametrize(("name", "svc"), AMD_OVERLAYS.items())
+def test_the_amd_overlays_change_only_the_image_and_the_gpu(name: str, svc: str) -> None:
+    """As the Intel overlays: everything that isolates vision (the agent network only, no X, the
+    mounts, mem == memswap, oom_score_adj) stays the base file's. The AMD overlay sets the Vulkan
+    image, the card's OWN render node (GPU_RENDER_NODE: never a KMS node, never all of /dev/dri)
+    and the render group instead of the NVIDIA reservation, and no VRAM cap; nothing else (the
+    worker keeps the base file's memory cap)."""
+    import sys
+
+    sys.path.insert(0, str(ROOT / "scripts"))
+    import host_profile
+
+    prof = host_profile.PROFILES["dedicated-amd"]
+    assert (*prof.vision_overlay, *prof.worker_overlay) == tuple(AMD_OVERLAYS)
+    doc = compose(name)
+    assert set(doc) == {"services"} and list(doc["services"]) == [svc]
+    spec = doc["services"][svc]
+    keys = {"image", "deploy", "devices", "group_add", "environment"}
+    assert set(spec) == (keys | {"build"} if svc == "vision" else keys)
+    assert spec["image"] == "poring-lab/vision-vulkan:local"
+    assert spec["deploy"] == {}  # `!reset {}`: no NVIDIA reservation
+    assert spec["devices"] == [f"{RENDER_NODE}:{RENDER_NODE}"]
+    assert spec["group_add"] == ["${RENDER_GID:-991}"]
+    assert spec["environment"] == NO_VRAM_CAP
+    if svc == "vision":
+        assert spec["build"] == {"context": ".", "dockerfile": "services/vision/Dockerfile.vulkan"}
+    assert "!reset {}" in (ROOT / name).read_text()
+
+
+def test_the_vulkan_image_serves_detections_with_the_cpu_vulkan_drivers_kept_out() -> None:
+    """The Vulkan image: no packet or dataset package (ADR-0007 / ADR-0010), every wheel by hash,
+    the unprivileged agent user; Mesa's Vulkan drivers with lavapipe (Vulkan ON THE CPU, which
+    Dawn would otherwise take when no GPU is reachable) kept out of the loader; Mesa's shader
+    cache in the container's RAM; its own check script, not the CUDA one."""
+    text = (ROOT / "services" / "vision" / "Dockerfile.vulkan").read_text()
+    copies = [line for line in text.splitlines() if line.startswith("COPY")]
+    assert not [c for c in copies if "poring_packets" in c or "poring_dataset" in c]
+    assert "COPY services/vision services/vision" in copies
+    assert "COPY scripts/check_webgpu.py scripts/check_webgpu.py" in copies
+    assert "--require-hashes --no-deps -r /opt/requirements-vulkan.txt" in text
+    assert "useradd --uid 1000" in text and "\nUSER agent\n" in text
+    assert "libvulkan1 mesa-vulkan-drivers" in text
+    assert "VK_LOADER_DRIVERS_DISABLE=*lvp*,*swiftshader*" in text
+    assert "MESA_SHADER_CACHE_DIR=/dev/shm/" in text
+    assert "torch" not in _pins((ROOT / "services/vision/requirements-vulkan.txt").read_text())
+
+
+def test_the_vulkan_requirements_hold_the_locks_versions() -> None:
+    """scripts/gen_vulkan_requirements.sh: onnxruntime-webgpu 1.27.0 (its Arc proof's) and its
+    dependencies at uv.lock's versions; nothing of CUDA or torch."""
+    import tomllib
+
+    lock = {p["name"]: p["version"] for p in
+            tomllib.loads((ROOT / "uv.lock").read_text())["package"] if "version" in p}  # fmt: skip
+    req = _pins((ROOT / "services" / "vision" / "requirements-vulkan.txt").read_text())
+    assert req["onnxruntime-webgpu"] == "1.27.0"
+    assert set(req) == {"onnxruntime-webgpu", "numpy", "protobuf", "flatbuffers", "packaging"}
+    differ = {n: (v, lock[n]) for n, v in req.items() if n in lock and v != lock[n]}
+    assert differ == {} and all(n in lock for n in req if n != "onnxruntime-webgpu")
 
 
 def test_the_hardware_pages_shm_mount_is_an_empty_read_only_dir_in_the_backend_only() -> None:

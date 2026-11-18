@@ -145,11 +145,67 @@ def test_an_intel_card_needs_its_driver_and_the_render_group(tmp_path: Path) -> 
     assert other_os.ready and any("ubuntu:26.04" in n for n in other_os.notes)
 
 
-def test_amd_and_no_gpu_get_the_cpu_detector(tmp_path: Path) -> None:
-    for vendor in ("amd", "none"):
-        r = g.recommend(vendor, ram_gib=8, root=tmp_path)
-        assert (r.ready, r.profile, r.build_vision) == (False, "dedicated-cpu", False), vendor
-        assert any("CPU detector" in n for n in r.notes)
+def test_no_gpu_gets_the_cpu_detector(tmp_path: Path) -> None:
+    r = g.recommend("none", ram_gib=8, root=tmp_path)
+    assert (r.ready, r.profile, r.build_vision) == (False, "dedicated-cpu", False)
+    assert any("CPU detector" in n for n in r.notes)
+
+
+def amd_root(tmp_path: Path, driver: str | None = "amdgpu", igpu: bool = True) -> Path:
+    """An AMD card at card1 / renderD129, beside an Intel iGPU at card0 / renderD128 (a common
+    desktop): its OWN render node must be the one proposed. As sysfs: /sys/class/drm/cardN/device
+    is the PCI device, with its vendor, its driver link and drm/renderDN."""
+    cards = [("card1", "0x1002", driver, "renderD129")]
+    if igpu:
+        cards.insert(0, ("card0", "0x8086", "i915", "renderD128"))
+    (tmp_path / "dev/dri").mkdir(parents=True)
+    for card, vendor, drv, node in cards:
+        pci = tmp_path / "sys/devices" / card
+        (pci / "drm" / node).mkdir(parents=True)
+        (pci / "vendor").write_text(vendor + "\n")
+        if drv is not None:
+            (tmp_path / "drivers" / drv).mkdir(parents=True, exist_ok=True)
+            (pci / "driver").symlink_to(tmp_path / "drivers" / drv)
+        cls = tmp_path / "sys/class/drm" / card
+        cls.mkdir(parents=True)
+        (cls / "device").symlink_to(pci, target_is_directory=True)
+        (tmp_path / "dev/dri" / node).write_text("")
+    return tmp_path
+
+
+def test_an_amd_card_gets_the_vulkan_profile_with_its_own_render_node(tmp_path: Path) -> None:
+    """ADR-0022 Amendment 2026-11-18b (Batt chose option (b)): an AMD card on amdgpu, its render
+    node open to the user -> dedicated-amd, the Vulkan image, GPU_RENDER_NODE = the card's own
+    node (never the iGPU's renderD128), and the note that RADV itself is unverified."""
+    root = amd_root(tmp_path)
+    gid = (root / "dev/dri/renderD129").stat().st_gid
+    r = g.recommend("amd", ram_gib=15.0, root=root, groups=[gid])
+    assert (r.ready, r.profile, r.build_vision) == (True, "dedicated-amd", True)
+    assert (r.render_node, r.worker_mem, r.vram_fraction) == ("/dev/dri/renderD129", "9g", "1.0")
+    assert r.found == ("kernel driver amdgpu", "render node /dev/dri/renderD129")
+    assert r.fixes == () and r.notes == (g.AMD_UNVERIFIED,)
+    assert "unverified" in g.AMD_UNVERIFIED and "check_webgpu.py" in g.AMD_UNVERIFIED
+    if os.geteuid() != 0:
+        out = g.recommend("amd", ram_gib=15.0, root=root, groups=[gid + 12345])
+        assert (out.profile, out.render_node) == ("dedicated-cpu", "")
+        assert any("render group" in f for f in out.fixes)
+
+
+def test_an_amd_card_on_the_old_radeon_driver_or_none_gets_the_cpu_detector(
+    tmp_path: Path,
+) -> None:
+    """RADV (Mesa's Vulkan driver) runs on amdgpu only: the old radeon driver, or none, is a fix
+    and the CPU detector meanwhile, never a vision image that cannot reach the card."""
+    for n, (driver, words) in enumerate([("radeon", "old radeon"), (None, "no amdgpu")]):
+        root = amd_root(tmp_path / str(n), driver=driver, igpu=False)
+        gid = (root / "dev/dri/renderD129").stat().st_gid
+        r = g.recommend("amd", ram_gib=15.0, root=root, groups=[gid])
+        assert (r.ready, r.profile, r.build_vision, r.render_node) == (
+            False, "dedicated-cpu", False, ""
+        ), driver  # fmt: skip
+        assert any(words in f for f in r.fixes), r.fixes
+    bare = g.recommend("amd", ram_gib=15.0, root=tmp_path / "empty")
+    assert bare.profile == "dedicated-cpu" and any("render node" in f for f in bare.fixes)
 
 
 def test_the_worker_cap_follows_the_ram() -> None:

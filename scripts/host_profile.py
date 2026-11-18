@@ -17,15 +17,21 @@ capture services the shared rules protect (`dedicated_refusal`).
                       onnxruntime's CUDA provider since 2026-11-18: the deployed ONNX) with
                       dedicated-intel's dedicated rules; its overlays (compose.nvidia.yaml,
                       compose.vision-worker.nvidia.yaml) only lift the 25 % VRAM cap. Never VM 103.
-    dedicated-cpu     a host with NO usable GPU (Batt 2026-11-17: "no GPU -> use the CPU"; an
-                      AMD card, or a card whose driver or container runtime is not ready): the
+    dedicated-amd     a host whose AMD GPU is the lab's alone (ADR-0022 Amendment 2026-11-18b, Batt
+                      chose option (b): "one build for every vendor"). The Vulkan vision image
+                      (compose.amd.yaml, compose.vision-worker.amd.yaml): the detect server on
+                      onnxruntime-webgpu (Mesa's RADV), DETECTIONS ONLY (no torch: no training),
+                      the card's render node (GPU_RENDER_NODE), the dedicated rules.
+    dedicated-cpu     a host with NO usable GPU (Batt 2026-11-17: "no GPU -> use the CPU"; a card
+                      whose driver or container runtime is not ready): the
                       dedicated rules, no vision image and no vision worker; the CPU detector
                       serves alone (scripts/detector_setup.py). guarded_build refuses vision steps.
 
 Every GPU profile's detect server runs the DEPLOYED ONNX, the file the CPU detector runs (ADR-0022
 Amendment 2026-11-18, Batt: "never lock a GPU to a model, users have NVIDIA, Intel and AMD"):
-OpenVINO on Intel, onnxruntime's CUDA provider on NVIDIA. The torch backend (each model's .pt)
-stays an explicit choice for the lab's own checkpoints, never a profile's default.
+OpenVINO on Intel, onnxruntime's CUDA provider on NVIDIA, onnxruntime's WebGPU provider (Vulkan)
+on AMD (Amendment 2026-11-18b). The torch backend (each model's .pt) stays an explicit choice for
+the lab's own checkpoints, never a profile's default.
 
 Stdlib only: guarded_build runs under the system python3.
 """
@@ -45,7 +51,8 @@ DEFAULT = "shared-nvidia"
 @dataclass(frozen=True)
 class HostProfile:
     name: str
-    accel: str  # poring_vision.accel kind: cuda | xpu | cpu
+    # poring_vision.accel kind: cuda | xpu | cpu; vulkan = no torch in the image (detections only)
+    accel: str
     shared: bool  # True: R1-R3 and the IO guard (Frigate's GPU, quant's disk)
     vision_overlay: tuple[str, ...]  # compose files after compose.yaml for the vision service
     worker_overlay: tuple[str, ...]  # ... after compose.vision-worker.yaml for the worker
@@ -53,6 +60,8 @@ class HostProfile:
     # onnxruntime's CUDA provider on NVIDIA; ADR-0022 Amendment 2026-11-18), none = the CPU detector
     detect_backend: str
     gpu_lister: str  # how our GPU processes are found: nvidia-smi | drm-fdinfo
+    # its --device ("" = the backend's default: openvino GPU, onnxruntime cuda); webgpu on AMD
+    detect_device: str = ""
 
 
 PROFILES = {
@@ -66,6 +75,10 @@ PROFILES = {
     "dedicated-nvidia": HostProfile(
         "dedicated-nvidia", "cuda", False, ("compose.nvidia.yaml",),
         ("compose.vision-worker.nvidia.yaml",), "onnxruntime", "nvidia-smi",
+    ),
+    "dedicated-amd": HostProfile(
+        "dedicated-amd", "vulkan", False, ("compose.amd.yaml",),
+        ("compose.vision-worker.amd.yaml",), "onnxruntime", "drm-fdinfo", "webgpu",
     ),
     "dedicated-cpu": HostProfile("dedicated-cpu", "cpu", False, (), (), "none", "none"),
 }  # fmt: skip

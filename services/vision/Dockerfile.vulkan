@@ -1,0 +1,58 @@
+# syntax=docker/dockerfile:1
+# Build context: the repository root. The VULKAN vision image (ADR-0022 Amendment 2026-11-18b; Batt
+# chose option (b) for AMD: "one build for every vendor"). The detect server runs the deployed ONNX
+# on onnxruntime-webgpu, which reaches the GPU through Vulkan (Dawn): any GPU Mesa drives, AMD
+# (RADV) as Intel (ANV). The dedicated-amd profile selects it (compose.amd.yaml,
+# compose.vision-worker.amd.yaml). It serves DETECTIONS ONLY: no torch, no training here.
+#
+# The packages are requirements-vulkan.txt (scripts/gen_vulkan_requirements.sh), held at uv.lock's
+# versions. The GPU's user-space driver is Mesa's Vulkan drivers from this image's Ubuntu release;
+# its kernel driver (amdgpu, i915 / xe) is the host's, reached through the card's render node only.
+# The same package brings lavapipe, Mesa's Vulkan driver ON THE CPU: VK_LOADER_DRIVERS_DISABLE
+# (and poring_vision.vulkan, in the server itself) keeps it out, so a GPU that is not reachable
+# refuses instead of running on the CPU in silence (835 ms a forward on bot-server, 2026-11-18).
+FROM ubuntu:26.04
+
+COPY --from=ghcr.io/astral-sh/uv:0.12.20 /uv /uvx /bin/
+
+# dpkg fsyncs every file it unpacks; a build layer is committed atomically afterwards, so unsafe-io
+# is safe inside a build (as in the other vision images).
+RUN echo force-unsafe-io > /etc/dpkg/dpkg.cfg.d/docker-unsafe-io
+
+# The Vulkan loader and Mesa's Vulkan drivers: nothing else of the GPU's is in user space.
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends ca-certificates libvulkan1 mesa-vulkan-drivers \
+ && rm -rf /var/lib/apt/lists/*
+
+ENV UV_COMPILE_BYTECODE=1 \
+    UV_LINK_MODE=copy \
+    UV_PYTHON_INSTALL_DIR=/opt/uv-python \
+    UV_PYTHON_PREFERENCE=only-managed \
+    VIRTUAL_ENV=/opt/venv
+RUN uv python install 3.12 && uv venv /opt/venv --python 3.12
+
+# Every wheel by its pinned hash; --no-deps: the file IS the whole closure.
+COPY services/vision/requirements-vulkan.txt /opt/requirements-vulkan.txt
+RUN --mount=type=cache,target=/root/.cache/uv \
+    UV_CONCURRENT_DOWNLOADS=2 UV_CONCURRENT_INSTALLS=1 \
+    uv pip install --require-hashes --no-deps -r /opt/requirements-vulkan.txt
+
+# poring_vision only (the detect server; the worker runs the host's source on PYTHONPATH anyway).
+# poring_packets and poring_dataset never enter this image (ADR-0007, ADR-0010; tests/test_guards.py).
+WORKDIR /app
+COPY services/vision services/vision
+RUN --mount=type=cache,target=/root/.cache/uv \
+    uv pip install --no-deps ./services/vision
+COPY scripts/check_webgpu.py scripts/check_webgpu.py
+
+# The ubuntu base ships a default `ubuntu` user at uid 1000 (the host user owning ./data).
+RUN (userdel --remove ubuntu 2>/dev/null || true) \
+ && useradd --uid 1000 --create-home --shell /usr/sbin/nologin agent
+USER agent
+
+# Mesa's shader cache in the container's RAM (/dev/shm), never its disk layer.
+ENV PATH=/opt/venv/bin:$PATH \
+    PYTHONUNBUFFERED=1 \
+    MESA_SHADER_CACHE_DIR=/dev/shm/mesa-shader-cache \
+    VK_LOADER_DRIVERS_DISABLE=*lvp*,*swiftshader*
+CMD ["python", "scripts/check_webgpu.py"]

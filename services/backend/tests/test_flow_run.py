@@ -508,14 +508,19 @@ def test_the_detect_server_follows_the_host_profile(
     monkeypatch.setattr(fr.subprocess, "run", run)
     monkeypatch.setattr(hp, "current", lambda: hp.PROFILES["dedicated-cpu"])
     assert h.detect_up() is True and calls == [] and made == []
-    # ADR-0022 Amendment 2026-11-18: NVIDIA serves the deployed ONNX too (onnxruntime), never .pt
-    for name, backend in (("dedicated-intel", "openvino"), ("dedicated-nvidia", "onnxruntime"),
-                          ("shared-nvidia", "onnxruntime")):  # fmt: skip
+    # ADR-0022 Amendment 2026-11-18: NVIDIA serves the deployed ONNX too (onnxruntime), never .pt;
+    # Amendment 2026-11-18b: AMD on onnxruntime's WebGPU provider, the profile naming the device
+    for name, backend, device in (("dedicated-intel", "openvino", None),
+                                  ("dedicated-nvidia", "onnxruntime", None),
+                                  ("shared-nvidia", "onnxruntime", None),
+                                  ("dedicated-amd", "onnxruntime", "webgpu")):  # fmt: skip
         calls.clear()
         monkeypatch.setattr(hp, "current", lambda n=name: hp.PROFILES[n])
         assert h.detect_up() is True and made == []  # rc 3: no model -> CPU only
         serve = next(c for c in calls if "serve-cmd" in c)
         assert serve[serve.index("--backend") + 1] == backend, name
+        got = serve[serve.index("--device") + 1] if "--device" in serve else None
+        assert got == device, name  # the backend's default device unless the profile names one
         assert not any("worker:vision@60" in " ".join(c) for c in calls)  # no worker started
 
 

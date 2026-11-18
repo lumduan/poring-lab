@@ -70,4 +70,10 @@ def test_a_server_in_another_mode_is_refused_before_any_work(
     assert "precision 'f16'" in capsys.readouterr().err
     with pytest.raises(SystemExit):
         glp.main([*base, "--expect-ov-precision", "f16"])  # it needs the log
+    # ADR-0022 Amendment 2026-11-18b: a WebGPU run refuses a server on another device
+    log = step_log(tmp_path, {**START, "backend": "onnxruntime", "device": "cuda"})
+    assert glp.main([*base, "--server-log", str(log), "--expect-device", "webgpu"]) == 2
+    assert "device 'webgpu'" in capsys.readouterr().err
+    with pytest.raises(SystemExit):
+        glp.main([*base, "--expect-device", "webgpu"])  # it needs the log
     assert not (tmp_path / "o.json").exists()

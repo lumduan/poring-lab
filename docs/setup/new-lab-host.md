@@ -387,19 +387,25 @@ A host profile tells the guards what this machine has (`scripts/host_profile.py`
 
 **The wizard chooses for you (since 2026-11-17, ADR-0022 Amendment 2026-11-17):** it finds the GPU,
 checks what a container cannot bring (the NVIDIA driver's release and the Container Toolkit; the
-Intel kernel driver and your render group) and RECOMMENDS a profile, the vision image and the
-worker's memory. Anything not ready, an AMD card, or no GPU -> `dedicated-cpu` (the CPU detector),
-together with the fixes that would make the GPU usable. You may still choose otherwise.
+Intel kernel driver and your render group; the AMD card's `amdgpu` driver and its own render node)
+and RECOMMENDS a profile, the vision image and the worker's memory. Anything not ready, or no GPU
+-> `dedicated-cpu` (the CPU detector), together with the fixes that would make the GPU usable (an
+AMD card went there too before 2026-11-18; now a ready one gets `dedicated-amd`, ADR-0022
+Amendment 2026-11-18b). You may still choose otherwise.
 
 | Profile | For | What it switches |
 |---|---|---|
 | `shared-nvidia` | the old VM 103: an NVIDIA GPU beside Frigate and Ollama, a disk beside live quant capture | GPU sharing rules R1-R3 (they need Frigate's stats), the IO guard on capture cgroups, SET-hour gates for shipping, a 100 GB recorder floor; the CUDA vision image |
 | `dedicated-intel` | bot-server: an Intel Arc card, nothing else on the machine | no R1-R3, the IO guard watches nothing, no market gates, a 30 GB recorder floor; the Intel vision image (`compose.intel.yaml`, `compose.vision-worker.intel.yaml`: the render node, `PORING_ACCEL=xpu`, the worker capped at 11 GB) |
+| `dedicated-amd` | a machine whose AMD GPU is the lab's alone (ADR-0022 Amendment 2026-11-18b) | the same dedicated rules as `dedicated-intel`; the Vulkan vision image (`compose.amd.yaml`, `compose.vision-worker.amd.yaml`: the card's own render node `GPU_RENDER_NODE`, the render group, no VRAM cap; the worker at `VISION_WORKER_MEM`). It SERVES DETECTIONS only (onnxruntime-webgpu): no torch, so no training on it |
 | `dedicated-cpu` | a machine with no usable GPU (ADR-0022 Amendment 2026-11-17) | the dedicated rules; no vision image, no vision worker (guarded_build refuses vision steps); the CPU detector serves alone (section 9) |
 | `dedicated-nvidia` | a new machine whose NVIDIA card is the lab's alone (ADR-0022 Amendment 2026-11-12). Never VM 103 | the same dedicated rules as `dedicated-intel` (no R1-R3, the IO guard watches nothing, no market gates, a 30 GB recorder floor); the CUDA vision image and the NVIDIA reservation of `shared-nvidia`, GPU processes listed with `nvidia-smi`. Its overlays (`compose.nvidia.yaml`, `compose.vision-worker.nvidia.yaml`) change only the VRAM cap's default, 0.25 -> 1.0; the worker stays capped at 6 GB |
 
 **Which to choose:**
 - **An Intel Arc machine used only by the lab:** `dedicated-intel`.
+- **An AMD machine used only by the lab:** `dedicated-amd` (since 2026-11-18). The wizard writes
+  `GPU_RENDER_NODE`, the card's own render node, so an Intel iGPU beside it is never the one the
+  worker gets.
 - **A machine with no usable GPU:** `dedicated-cpu` (since 2026-11-17; before it, such a host had
   to declare `dedicated-intel` and never start vision). Never leave it unset: the default
   `shared-nvidia` would apply the old VM's market gates and its 100 GB floor.
@@ -422,6 +428,30 @@ clinfo -l                            # lists the Arc
 
 The host packages are for host-side checks only; the vision image carries its own runtime. Log out
 and in after the group change.
+
+**For an AMD GPU (once; ADR-0022 Amendment 2026-11-18b. The path is proven on an Intel Arc
+through the same image and code; on an AMD card it is (unverified) until a first AMD host):**
+- The **`amdgpu` kernel driver** (any recent Ubuntu loads it for GCN 2 / Polaris and newer).
+  `lspci -k | grep -A3 -i vga` must say `Kernel driver in use: amdgpu`. The old `radeon` driver
+  does not work with Mesa's Vulkan driver (RADV): GCN 1.0 / 1.1 cards need the kernel options
+  `amdgpu.si_support=1 radeon.si_support=0` (or `cik_`); older cards use the CPU detector.
+- The card's **render node** and your membership in its group: `sudo usermod -aG render,video
+  "$USER"`, log out and in. `ls -l /sys/class/drm/card*/device/drm` shows which `renderD*` is the
+  AMD card's; the wizard finds it and writes it as `GPU_RENDER_NODE`.
+- Nothing else on the host: the Vulkan image carries the Vulkan loader, Mesa's drivers and
+  onnxruntime-webgpu. Build it (`build:vision`, section 6; about 1 GB), then check the card from
+  inside it:
+
+  ```bash
+  python3 scripts/guarded_build.py 'run:vision@300=python scripts/check_webgpu.py'
+  ```
+
+  It checks that Vulkan sees a GPU (with lavapipe, Mesa's Vulkan driver that runs on the CPU,
+  kept out), that onnxruntime's WebGPU provider runs v1's ONNX from the storage folder with every
+  node on the card, and compares it with the CPU provider. At the first Run the serve log's start
+  line names the card: `"vulkan": [{"name": "AMD Radeon ...", "type": "discrete", ...}]`.
+- The worker serves detections only. Training needs torch on the card, which this image does not
+  have (an AMD training image, ROCm, is not built).
 
 **For an NVIDIA GPU (once; every step here is (unverified) on a dedicated host: the NVIDIA path ran
 only on the old VM 103):**
@@ -788,7 +818,7 @@ own data and are not published: a new install runs v1 everywhere, or trains its 
 | no GPU | `dedicated-cpu` (section 5; `dedicated-intel` before 2026-11-17) | the CPU detector: onnxruntime, 16 threads, in `DETECTOR_DIR` (the lab: `/dev/shm/poring-lab-detector`) | `cpu` | bot-server's CPU, quiet, 8 threads: 122-126 ms p50 a call; VM 103, 16 threads: 110 ms quiet, 194-339 ms under load | works |
 | Intel Arc | `dedicated-intel` | OpenVINO detect server IN the Intel vision worker, the CPU detector behind it | `gpu` (the default) | decision detections p95 22.2 ms on the lab's entry-level Arc card (pilot p78, 2026-11-12, rogue-xmas02.md 4CN); bare forward ~16 ms with the clock floor | the lab's live path |
 | NVIDIA | `dedicated-nvidia` (section 5) | since 2026-11-18 the detect server on onnxruntime's CUDA provider IN the CUDA vision worker, the deployed ONNX (the CPU detector's own files: a new install serves v1), the CPU detector behind it (ADR-0022 Amendment 2026-11-18) | `gpu` (the default) | not measured on a card yet (unverified). The old torch path (`.pt`) took 49-52 ms a call on VM 103's card, on a SHARED host paused half the time while R3 measured | usable on a new host with `dedicated-nvidia`; its libraries and its boxes (CPU provider: 47 / 47, 0.0 px) were proven on bot-server, the CUDA forward itself is not yet proven on a card (unverified) |
-| AMD | - | designed (ADR-0022), never built; the same ONNX would run on onnxruntime's MIGraphX provider (a ROCm image) | - | - | not built: the CPU detector serves |
+| AMD | `dedicated-amd` (section 5) | since 2026-11-18 the detect server on onnxruntime's WebGPU provider (Vulkan, Mesa's RADV) IN the Vulkan vision worker, the deployed ONNX, the CPU detector behind it (ADR-0022 Amendment 2026-11-18b) | `gpu` (the default) | not measured on an AMD card (unverified). The same code on bot-server's Arc (through Mesa's Intel driver): 68-80 ms a call vs the CPU detector's 133 ms, boxes 59 / 59 and 528 / 528 at 0.0 px | usable on a new host with `dedicated-amd`; an AMD card itself is not yet proven (unverified) |
 
 OpenVINO on the CPU measured ~10 % faster than onnxruntime on bot-server's CPU
 (bot-server-migration.md 2), but it runs only inside the Intel worker, which needs a render node:
@@ -796,8 +826,8 @@ a GPU-less host uses the onnxruntime CPU detector.
 
 The detect server registers only the models whose pinned files are in the storage folder (a new
 install: v1; the lab: all of `unit_detector.GPU_WEIGHTS`), and the /flows Run helper starts the
-backend of this host's profile (OpenVINO on Intel, onnxruntime's CUDA provider on NVIDIA, none on
-`dedicated-cpu`). Every GPU backend runs the deployed ONNX, the same file as the CPU detector: no
+backend of this host's profile (OpenVINO on Intel, onnxruntime's CUDA provider on NVIDIA, its
+WebGPU provider on AMD, none on `dedicated-cpu`). Every GPU backend runs the deployed ONNX, the same file as the CPU detector: no
 GPU is tied to a model of its own (ADR-0022 Amendment 2026-11-18). A detect server that stops
 before it listens (its GPU provider did not load) leaves the run with the CPU detector, noted in
 the run's log (`detect_cpu_only`, `server_exit`).
@@ -1209,8 +1239,9 @@ docs/thai-data-experiment.md section 3):
 | a Settings save refused | from the bot host or the game PC (use a third computer); a LAN outside 192.168.0.0/16 (section 4.1); a stale page (reload: the CSRF token is per backend start) |
 | the wizard: `Docker name: '<name>' belongs to the poring-lab copy in <folder>` | another copy of poring-lab on this host created containers with that name; this copy needs its own: take the offered `<name>-2` or type one (`COMPOSE_PROJECT_NAME`; ADR-0026). The other copy is never touched |
 | the wizard: ports moved (`RATHENA_LOGIN_PORT 6900->7900` ...) | another program (often another copy) holds them; accept, then point your game client's `clientinfo.xml` at the new LOGIN port (section 7.1) |
-| the wizard: `GPU ... NOT ready -> dedicated-cpu` | do the fixes it lists (the NVIDIA driver 580+, the NVIDIA Container Toolkit + `nvidia-ctk runtime configure`, or the render group), then re-run `./setup.sh`; meanwhile the CPU detector serves. A card older than compute capability 7.5 (GTX 10 and older) has no fix but a newer card: the CPU detector serves |
+| the wizard: `GPU ... NOT ready -> dedicated-cpu` | do the fixes it lists (the NVIDIA driver 580+, the NVIDIA Container Toolkit + `nvidia-ctk runtime configure`, the `amdgpu` driver for an AMD card, or the render group), then re-run `./setup.sh`; meanwhile the CPU detector serves. A card older than compute capability 7.5 (GTX 10 and older) has no fix but a newer card: the CPU detector serves |
 | the run's log: `detect_cpu_only` `server_exit`, the serve log `onnxruntime runs ['CPUExecutionProvider'], not CUDAExecutionProvider` | the CUDA provider did not load in the worker: the log line above it names the library or the device. `libcuda.so.1` missing = the NVIDIA Container Toolkit did not mount the driver (`nvidia-ctk runtime configure`, restart Docker, recreate the worker); `no CUDA-capable device` = the worker has no card (the reservation). The run goes on with the CPU detector |
+| the serve log: `Vulkan sees no GPU`, or `onnxruntime runs ['CPUExecutionProvider'], not WebGpuExecutionProvider` (an AMD host) | the worker reaches no GPU through Vulkan: `GPU_RENDER_NODE` is not the AMD card's node, the render group (`RENDER_GID`) is wrong, or the card is not on `amdgpu`; `scripts/check_webgpu.py` (section 5) says which. CPU Vulkan drivers (lavapipe) are kept out on purpose, so it never runs on the CPU under the GPU's name. The run goes on with the CPU detector |
 | `dataset_ship`: `... is configured as a mount but is not mounted` | your storage folder is an fstab / automount NAS mount point and the NAS is down: mount it; a plain folder needs no mount (section 1.4) |
 | ro_agent refuses "mux mode is HUMAN" | the mux boots HUMAN after every backend start; a person sets ASSIST |
 | Failed to Connect to Server right after login | this client needs the server picked within ~1-2 s of the list |

@@ -251,7 +251,10 @@ def sysfs(
         ({"card0": "0x8086", "card1": "0x10de"}, False, "nvidia", "dedicated-nvidia"),
         ({"card0": "0x8086"}, True, "nvidia", "dedicated-nvidia"),
         ({}, False, "none", "dedicated-cpu"),  # ADR-0022 Amendment 2026-11-17
-        ({"card0": "0x1002"}, False, "amd", "dedicated-cpu"),
+        ({"card0": "0x1002"}, False, "amd", "dedicated-amd"),  # Amendment 2026-11-18b
+        # an Intel iGPU beside an AMD card: the AMD card (the iGPU is no detector)
+        ({"card0": "0x8086", "card1": "0x1002"}, False, "amd", "dedicated-amd"),
+        ({"card0": "0x1002", "card1": "0x10de"}, False, "nvidia", "dedicated-nvidia"),
     ],
 )
 def test_gpu_detection_and_the_default_profile(
@@ -457,6 +460,13 @@ def test_the_planned_install_values(core: ModuleType, tmp_path: Path) -> None:
     assert kept["LAB_STORE_DIR"] == "/mnt/nas" and "VISION_WORKER_MEM" not in kept
     default = core.planned_env(answers(core), {}, gid=None, home=tmp_path)
     assert "COMPOSE_PROJECT_NAME" not in default and "VIEWER_NETWORKS" not in default
+    # ADR-0022 Amendment 2026-11-18b: the AMD card's own render node, only when it is proposed
+    assert "GPU_RENDER_NODE" not in default
+    amd = answers(core, profile="dedicated-amd")
+    amd.render_node = "/dev/dri/renderD129"
+    assert core.planned_env(amd, {}, gid=None, home=tmp_path)["GPU_RENDER_NODE"] == (
+        "/dev/dri/renderD129"
+    )
     a2 = answers(core)
     a2.project = "poring-lab"  # the default is never written
     assert "COMPOSE_PROJECT_NAME" not in core.planned_env(a2, {}, gid=None, home=tmp_path)
@@ -948,6 +958,22 @@ def test_busy_install_ports_get_a_free_proposal(core: ModuleType) -> None:
     assert core.port_moves("192.168.50.10", {}, busy, binder) == {}  # held by this copy itself
     assert core.port_moves("192.168.50.10", {"BACKEND_PORT": "8100"}, set(), binder) == {
         "RATHENA_LOGIN_PORT": (6900, 7900), "RATHENA_CHAR_PORT": (6121, 7121)}  # fmt: skip
+
+
+def test_the_vision_image_the_setup_waits_for_is_the_profiles_overlay_image(
+    core: ModuleType,
+) -> None:
+    """The build step is done when the image the profile's overlay names exists: vision-intel on
+    Intel, vision-vulkan on AMD (Amendment 2026-11-18b), the CUDA image otherwise."""
+    import host_profile as hp
+
+    repo = Path(__file__).resolve().parents[3]
+    image = re.compile(r"^\s*image: \$\{COMPOSE_PROJECT_NAME:-poring-lab\}/(\S+):local", re.M)
+    for name in sorted(hp.GPU_PROFILES):
+        overlay = [image.search((repo / f).read_text()) for f in hp.PROFILES[name].vision_overlay]
+        named = [m[1] for m in overlay if m] or ["vision"]  # none: compose.yaml's CUDA image
+        assert core.VISION_IMAGES.get(name, "vision") == named[-1], name
+    assert "dedicated-amd" in core.PROFILES
 
 
 def test_the_gpu_recommendation_comes_from_gpu_ready(core: ModuleType, tmp_path: Path) -> None:

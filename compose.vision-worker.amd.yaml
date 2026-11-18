@@ -1,0 +1,17 @@
+# ADR-0022 Amendment 2026-11-18b: the AMD overlay for the long-lived vision worker, the worker's twin
+# of compose.amd.yaml. guarded_build adds it LAST, after compose.vision-worker.yaml, when the host
+# profile is dedicated-amd. The same three changes, nothing else (tests/test_guards.py): the Vulkan
+# image, the AMD card's render node + the render group instead of the NVIDIA reservation, no VRAM
+# cap by default. The worker's memory stays compose.vision-worker.yaml's (VISION_WORKER_MEM: the
+# setup proposes it from the host's RAM); it only serves detections here.
+services:
+  vision-worker:
+    image: ${COMPOSE_PROJECT_NAME:-poring-lab}/vision-vulkan:local
+    deploy: !reset {}
+    devices:
+      # the render node only: compute needs no KMS node (card*)
+      - ${GPU_RENDER_NODE:-/dev/dri/renderD128}:${GPU_RENDER_NODE:-/dev/dri/renderD128}
+    group_add:
+      - "${RENDER_GID:-991}" # the host's `render` group: getent group render
+    environment:
+      VISION_MAX_VRAM_FRACTION: ${VISION_MAX_VRAM_FRACTION:-1.0}

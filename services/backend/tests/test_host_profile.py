@@ -61,8 +61,8 @@ def test_dedicated_nvidia_is_the_cuda_path_without_the_shared_rules(tmp_path: Pa
     assert shared.shared and not prof.shared
     for name in (*prof.vision_overlay, *prof.worker_overlay):
         assert (ROOT / name).is_file(), name
-    assert sorted(hp.PROFILES) == ["dedicated-cpu", "dedicated-intel", "dedicated-nvidia",
-                                   "shared-nvidia"]  # fmt: skip
+    assert sorted(hp.PROFILES) == ["dedicated-amd", "dedicated-cpu", "dedicated-intel",
+                                   "dedicated-nvidia", "shared-nvidia"]  # fmt: skip
     assert hp.DEFAULT == "shared-nvidia"  # a host is dedicated only by declaration
 
 
@@ -71,9 +71,27 @@ def test_no_gpu_profile_needs_a_models_pt() -> None:
     and AMD"): every profile's detect server runs the deployed ONNX, the CPU detector's own file,
     so a new install's v1.onnx serves on any vendor; torch (each model's .pt, the lab's training
     runs) is never a profile's default."""
-    backends = {name: p.detect_backend for name, p in hp.PROFILES.items()}
-    assert backends == {"shared-nvidia": "onnxruntime", "dedicated-nvidia": "onnxruntime",
-                        "dedicated-intel": "openvino", "dedicated-cpu": "none"}  # fmt: skip
+    backends = {name: (p.detect_backend, p.detect_device) for name, p in hp.PROFILES.items()}
+    assert backends == {"shared-nvidia": ("onnxruntime", ""),
+                        "dedicated-nvidia": ("onnxruntime", ""),
+                        "dedicated-intel": ("openvino", ""),
+                        "dedicated-amd": ("onnxruntime", "webgpu"),
+                        "dedicated-cpu": ("none", "")}  # fmt: skip
+
+
+def test_the_amd_profile_is_the_vulkan_image_with_the_dedicated_rules() -> None:
+    """ADR-0022 Amendment 2026-11-18b (Batt chose option (b), "one build for every vendor"): an AMD
+    host serves the deployed ONNX on onnxruntime's WebGPU provider (Vulkan) from the Vulkan image
+    (no torch: accel "vulkan", detections only), its GPU processes found by DRM fdinfo (amdgpu),
+    the dedicated rules; its overlays exist and it is a GPU profile (a worker of its own)."""
+    amd = hp.PROFILES["dedicated-amd"]
+    assert amd == hp.HostProfile(
+        "dedicated-amd", "vulkan", False, ("compose.amd.yaml",),
+        ("compose.vision-worker.amd.yaml",), "onnxruntime", "drm-fdinfo", "webgpu",
+    )  # fmt: skip
+    for name in (*amd.vision_overlay, *amd.worker_overlay):
+        assert (ROOT / name).is_file(), name
+    assert "dedicated-amd" in hp.GPU_PROFILES
 
 
 def test_vm103_keeps_exactly_its_old_commands(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -98,6 +116,20 @@ def test_bot_server_adds_its_overlays_last(monkeypatch: pytest.MonkeyPatch) -> N
     step = gb.parse_step("rundev:vision@60=python -c pass")
     assert gb.run_cmd(step)[2:6] == ["docker", "compose", "-p", "poring-lab"]
     assert gb.run_cmd(step)[6 : 6 + len(gb.VISION_DEV)] == gb.VISION_DEV
+
+
+def test_an_amd_host_adds_its_overlays_last(monkeypatch: pytest.MonkeyPatch) -> None:
+    """ADR-0022 Amendment 2026-11-18b: the Vulkan image and the card's render node for every
+    vision step (build, run, the worker), the overlay after the base files."""
+    gb = load_gb(monkeypatch, "dedicated-amd")
+    ov = gb.local_override()
+    assert ["-f", "compose.yaml", "-f", "compose.vision-dev.yaml",
+                             "-f", "compose.amd.yaml", *ov] == gb.VISION_DEV  # fmt: skip
+    assert ["-f", "compose.yaml", "-f", "compose.amd.yaml", *ov] == gb.VISION_FILES
+    assert ["-f", "compose.yaml", "-f", "compose.vision-worker.yaml",
+                                "-f", "compose.vision-worker.amd.yaml", *ov,
+                                "--profile", "vision-worker"] == gb.VISION_WORKER  # fmt: skip
+    assert gb.cpu_profile_refusal([gb.parse_step("build:vision")]) is None
 
 
 def test_a_dedicated_nvidia_host_adds_its_overlays_last(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -203,7 +235,9 @@ def test_the_cpu_profile_has_no_gpu_at_all() -> None:
     cpu = hp.PROFILES["dedicated-cpu"]
     assert (cpu.accel, cpu.shared, cpu.vision_overlay, cpu.worker_overlay) == ("cpu", False, (), ())
     assert (cpu.detect_backend, cpu.gpu_lister) == ("none", "none")
-    assert {"shared-nvidia", "dedicated-intel", "dedicated-nvidia"} == hp.GPU_PROFILES
+    assert {"shared-nvidia", "dedicated-intel", "dedicated-nvidia", "dedicated-amd"} == (
+        hp.GPU_PROFILES
+    )
 
 
 def test_a_cpu_host_refuses_every_vision_step_but_a_stop(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -228,7 +262,7 @@ def test_a_cpu_host_refuses_every_vision_step_but_a_stop(monkeypatch: pytest.Mon
         "recreate:sniffer@120",
     ):
         assert gb.cpu_profile_refusal([gb.parse_step(step)], cpu) is None, step
-    for name in ("dedicated-intel", "dedicated-nvidia", "shared-nvidia"):
+    for name in ("dedicated-intel", "dedicated-nvidia", "dedicated-amd", "shared-nvidia"):
         assert (
             gb.cpu_profile_refusal([gb.parse_step("worker:vision@60")], hp.PROFILES[name]) is None
         )

@@ -7,7 +7,10 @@ the host kernel). So the check is what a container cannot fix:
     NVIDIA  the driver (release >= NVIDIA_MIN_DRIVER: the vision image is CUDA 13.0) and the NVIDIA
             Container Toolkit (what compose's `driver: nvidia` reservation needs), plus the VRAM;
     Intel   a render node (/dev/dri/renderD*), the user in its group, the i915/xe kernel driver;
-    AMD     no vision image for it yet: the CPU detector;
+    AMD     the amdgpu kernel driver (Mesa's Vulkan driver RADV needs it; never the old radeon
+            one), the AMD card's OWN render node and the user in its group (ADR-0022 Amendment
+            2026-11-18b: the Vulkan image, onnxruntime-webgpu); the node is proposed as
+            GPU_RENDER_NODE, so an Intel iGPU beside the card is never the one passed in;
     none    the CPU detector.
 Anything not ready -> the recommendation is dedicated-cpu (it always works) WITH the fixes that
 would make the GPU usable; the person may still choose the GPU profile. The proof that the GPU path
@@ -39,6 +42,14 @@ TOOLKIT_BINARIES = (
     "nvidia-container-cli",
 )
 INTEL_DRIVERS = ("i915", "xe")
+AMD_VENDOR = "0x1002"
+AMD_DRIVER = "amdgpu"  # RADV runs on amdgpu only; "radeon" is the pre-GCN cards' (and GCN 1.0/1.1's
+# unless the kernel is told amdgpu.si_support=1 / amdgpu.cik_support=1)
+AMD_UNVERIFIED = (
+    "the Vulkan image's GPU path (onnxruntime-webgpu) is proven on an Intel Arc through the same "
+    "code; on an AMD card (Mesa's RADV) it is unverified until a first AMD host: "
+    "scripts/check_webgpu.py in the worker proves it (manual section 5)"
+)
 # The worker's cap: what the host can spare beside the backend, desktop and the runner (~4-6 GB,
 # docs/setup/new-lab-host.md section 5), between 4 and 16 GiB.
 HOST_RESERVE_GIB, WORKER_MIN_GIB, WORKER_MAX_GIB = 6, 4, 16
@@ -59,6 +70,7 @@ class GpuReady:
     worker_mem: str = ""  # VISION_WORKER_MEM proposal ("" = leave the overlay's default)
     vram_fraction: str = ""  # VISION_MAX_VRAM_FRACTION proposal
     notes: tuple[str, ...] = field(default_factory=tuple)
+    render_node: str = ""  # GPU_RENDER_NODE proposal ("" = the overlay's default)
 
     def summary(self) -> str:
         head = {"nvidia": "an NVIDIA GPU", "intel": "an Intel GPU", "amd": "an AMD GPU"}.get(
@@ -125,10 +137,40 @@ def intel_driver(root: Path = Path("/")) -> str | None:
     return None
 
 
-def render_group_ok(root: Path = Path("/"), groups: Sequence[int] | None = None) -> bool | None:
-    """The user may open the render node (in its group). None: there is no render node."""
+def vendor_card(root: Path, vendor: str) -> Path | None:
+    """The first DRM card (/sys/class/drm/cardN) of PCI vendor ``vendor``, or None."""
+    drm = root / "sys/class/drm"
+    if not drm.is_dir():
+        return None
+    for card in sorted(drm.iterdir()):
+        if re.fullmatch(r"card\d+", card.name) and _read(card / "device/vendor").strip() == vendor:
+            return card
+    return None
+
+
+def card_driver(card: Path) -> str | None:
+    link = card / "device/driver"
+    return os.path.basename(os.path.realpath(link)) if link.exists() else None
+
+
+def card_render_node(card: Path) -> str | None:
+    """The render node of the card's own PCI device (/dev/dri/renderDN), or None."""
+    drm = card / "device/drm"
+    if not drm.is_dir():
+        return None
+    names = sorted(p.name for p in drm.iterdir() if p.name.startswith("renderD"))
+    return f"/dev/dri/{names[0]}" if names else None
+
+
+def render_group_ok(root: Path = Path("/"), groups: Sequence[int] | None = None,
+                    node: str | None = None) -> bool | None:  # fmt: skip
+    """The user may open the render node ``node`` (default: the first one) (in its group).
+    None: there is no render node."""
     dri = root / "dev/dri"
-    nodes = sorted(dri.glob("renderD*")) if dri.is_dir() else []
+    if node is not None:
+        nodes = [root / node.lstrip("/")] if (root / node.lstrip("/")).exists() else []
+    else:
+        nodes = sorted(dri.glob("renderD*")) if dri.is_dir() else []
     if not nodes:
         return None
     mine = set(os.getgroups() if groups is None else groups)
@@ -246,17 +288,46 @@ def recommend(
             tuple(notes),
         )
     if vendor == "amd":
+        found, fixes = [], []
+        card = vendor_card(root, AMD_VENDOR)
+        drv = None if card is None else card_driver(card)
+        if drv == AMD_DRIVER:
+            found.append(f"kernel driver {drv}")
+        elif drv == "radeon":
+            fixes.append(
+                "this card runs the old radeon kernel driver; Mesa's Vulkan driver (RADV) needs "
+                "amdgpu (GCN 1.0 / 1.1 cards: amdgpu.si_support=1 / amdgpu.cik_support=1; older "
+                "cards: the CPU detector): new-lab-host.md section 5"
+            )
+        else:
+            fixes.append(
+                "the AMD GPU has no amdgpu kernel driver loaded: new-lab-host.md section 5"
+            )
+        node = None if card is None else card_render_node(card)
+        member = None if node is None else render_group_ok(root, groups, node)
+        if member is None:
+            fixes.append("no render node for the AMD card (/dev/dri/renderD*): new-lab-host.md "
+                         "section 5")  # fmt: skip
+        elif not member:
+            fixes.append(
+                "add yourself to the render group (`sudo usermod -aG render,video "
+                "$USER`, then log out and in): new-lab-host.md section 5"
+            )
+        else:
+            found.append(f"render node {node}")
+        ready = not fixes
         return GpuReady(
             "amd",
-            False,
-            "dedicated-cpu",
-            False,
-            ("no AMD vision image yet",),
-            (),
+            ready,
+            "dedicated-amd" if ready else "dedicated-cpu",
+            ready,
+            tuple(found),
+            tuple(fixes),
             None,
-            "",
-            "",
-            ("the CPU detector serves (manual section 9)",),
+            mem if ready else "",
+            "1.0" if ready else "",
+            (AMD_UNVERIFIED,),
+            node if ready and node else "",
         )
     return GpuReady(
         "none",

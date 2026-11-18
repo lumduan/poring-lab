@@ -67,6 +67,9 @@ Official servers and every other public server are forbidden. Start with `README
      (ADR-0022 Amendment 2026-11-18, Batt: "never lock a GPU to a model"): OpenVINO on Intel,
      onnxruntime-gpu's CUDA provider on NVIDIA (`--backend onnxruntime`; FP32, `use_tf32 0`).
      The torch backend (`.pt`) is an explicit choice only, never a profile's default.
+     ➡️ AMD (Amendment 2026-11-18b, Batt chose option (b)): profile `dedicated-amd`, the Vulkan
+     image, onnxruntime-webgpu (`--device webgpu`); CPU Vulkan drivers (lavapipe) kept out of the
+     loader. Intel stays on OpenVINO (WebGPU measured ~3x slower on the Arc).
    - ➡️ **Batt 2026-11-10, bot-server: "we no longer wait for anything of the quant work: this
      machine is our own, the GPU is ours alone; use it fully."** No market-hour waits there: no SET
      hours, no market-open windows. `dataset_ship.py` gates SET hours on a SHARED host only

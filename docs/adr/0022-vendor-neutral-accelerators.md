@@ -7,7 +7,7 @@ verdict_date: 2026-11-07
 verdict_ticket: null
 supersedes: null
 related: [0005-vision-x-access.md, 0018-component-licensing.md, ../planning/gpu-live-detector.md, ../planning/bot-server-migration.md]
-next_action: "Amendment 2026-11-18: NVIDIA detects with the deployed ONNX on onnxruntime CUDA -- first proof on a real card (Batt's new RTX 5060 server: check_gpu, the start line's providers, gpu_live_parity); AMD (MIGraphX or WebGPU) is a decision for Batt. Earlier: Intel first (bot-server's Arc A380): the OpenVINO inference backend + the torch device layer, each proven on bot-server against the CPU boxes / a real training cache. NVIDIA keeps working on ubuntu-docker; a dedicated NVIDIA host uses dedicated-nvidia (Amendment 2026-11-12) and proves it there first (check_gpu, a serve test, the parity check); AMD is designed in and untested until a host has one."
+next_action: "Amendment 2026-11-18b: AMD detects through Vulkan (onnxruntime-webgpu, the Vulkan image, dedicated-amd): proven on bot-server's Arc through the same code, RADV unproven until a first AMD host (check_webgpu.py, the start line's vulkan list, gpu_live_parity --expect-device webgpu). Amendment 2026-11-18: NVIDIA detects with the deployed ONNX on onnxruntime CUDA -- first proof on a real card (Batt's new RTX 5060 server: check_gpu, the start line's providers, gpu_live_parity). Intel stays on OpenVINO (3x faster than WebGPU on the Arc)."
 ---
 
 # ADR-0022: Vendor-neutral accelerators (Intel, NVIDIA, AMD; chosen per host)
@@ -29,7 +29,8 @@ next_action: "Amendment 2026-11-18: NVIDIA detects with the deployed ONNX on onn
    onnxruntime.
    - A GPU runtime runs the same file: OpenVINO for Intel (GPU or CPU); onnxruntime with the
      CUDA / TensorRT provider for NVIDIA, or ROCm / MIGraphX for AMD; torch (today's path) stays
-     an option.
+     an option. ➡️ AMD: onnxruntime's WebGPU provider (Vulkan), not ROCm (Amendment
+     2026-11-18b).
    - The detect server picks its backend with `--backend` and `--device`. Its protocol (frames
      in, the head's raw output out) and the host's decode do not change.
    - So the boxes match across vendors by construction: the same file, the same decode, only the
@@ -52,7 +53,8 @@ next_action: "Amendment 2026-11-18: NVIDIA detects with the deployed ONNX on onn
    R1-R3 do not apply (no Frigate), and the IO guard has no capture to protect.
 4. **Images per vendor:** the CUDA image stays for NVIDIA. An Intel image (the compute runtime +
    OpenVINO + torch-xpu) and an AMD one (ROCm) are built when a host needs them. The vision code
-   stays one tree.
+   stays one tree. ➡️ The AMD image is the Vulkan image (onnxruntime-webgpu, Mesa), not ROCm, and
+   serves detections only (Amendment 2026-11-18b).
 5. **Unchanged:**
    - the AGPL boundary (ADR-0018): ultralytics only inside `services/vision`;
    - ADR-0005's isolation: frames in, numbers out; no X, no input;
@@ -63,7 +65,8 @@ next_action: "Amendment 2026-11-18: NVIDIA detects with the deployed ONNX on onn
   host means writing its profile and proving parity there, not changing code.
 - The NVIDIA-only checks (`check_gpu.py` sm_120, nvidia-smi in R3) become the NVIDIA case of the
   host profile. R3 stays exactly as it is on ubuntu-docker.
-- AMD is designed in but unproven: no host here has an AMD GPU.
+- AMD is designed in but unproven: no host here has an AMD GPU. ➡️ Amendment 2026-11-18b builds
+  it (the Vulkan image, proven on the Arc through the same code; RADV itself still unproven).
 
 ## Implementation (2026-11-07)
 - Decision 3, the host profile: `scripts/host_profile.py`, named by `LAB_HOST_PROFILE` in `.env`.
@@ -141,7 +144,8 @@ next_action: "Amendment 2026-11-18: NVIDIA detects with the deployed ONNX on onn
   recommend it to the user; with no GPU, use the CPU instead." The wider decision is ADR-0026
   (any host, nothing locked).
 - **A fourth profile, `dedicated-cpu`** (`scripts/host_profile.py`): a host with NO usable GPU (none,
-  an AMD card, or a card whose driver or container runtime is not ready). The dedicated rules,
+  an AMD card, or a card whose driver or container runtime is not ready). ➡️ An AMD card ready for
+  it gets `dedicated-amd` since Amendment 2026-11-18b. The dedicated rules,
   accelerator `cpu`, no vision image, no vision worker, no GPU lister; the CPU detector serves alone.
   guarded_build refuses every vision step there with that reason. It closes
   second-install-gaps.md row D's "a CPU-only profile still open".
@@ -152,7 +156,7 @@ next_action: "Amendment 2026-11-18: NVIDIA detects with the deployed ONNX on onn
   |---|---|---|---|
   | NVIDIA | the driver's release >= 580 (`/proc/driver/nvidia/version`; the image is CUDA 13.0) and the NVIDIA Container Toolkit is installed (its runtime hook / `nvidia-ctk`) | `dedicated-nvidia`, build the vision image, VRAM share 1.0, the worker's memory from the RAM | `dedicated-cpu`, with the fixes (update the driver; install the toolkit + `nvidia-ctk runtime configure`) |
   | Intel | the i915/xe kernel driver is loaded and the user is in the render node's group | `dedicated-intel`, the same | `dedicated-cpu`, with the fixes; a note when the host is not Ubuntu 26.04 (the Intel image's runtime must match the host's driver) |
-  | AMD | (no vision image for AMD yet) | `dedicated-cpu` | |
+  | AMD | (no vision image for AMD yet) ➡️ SUPERSEDED by Amendment 2026-11-18b: the amdgpu kernel driver and the card's own render node in the user's group | `dedicated-cpu` ➡️ `dedicated-amd`, the Vulkan image, `GPU_RENDER_NODE` | `dedicated-cpu`, with the fixes |
   | none | | `dedicated-cpu` | |
 
   The person may still choose the GPU profile against the recommendation; the real proof is
@@ -242,9 +246,71 @@ next_action: "Amendment 2026-11-18: NVIDIA detects with the deployed ONNX on onn
   `check_gpu.py`, then the detect server's start line naming
   `"providers": ["CUDAExecutionProvider", "CPUExecutionProvider"]` and `gpu_live_parity.py`
   against the CPU boxes.
-- **AMD: still the CPU detector; a decision for Batt.** The same ONNX would run on onnxruntime's
+- **AMD: still the CPU detector; a decision for Batt.** ➡️ DECIDED the same day: Batt chose the
+  WebGPU option, built in Amendment 2026-11-18b below. The same ONNX would run on onnxruntime's
   MIGraphX provider (`onnxruntime-migraphx` 1.27.1 on PyPI, in a ROCm image), or on its WebGPU
   provider (`onnxruntime-webgpu` 1.27.0, Vulkan on Linux: one build for every vendor). Neither is
   built or tested, because no AMD card is available here.
 - **Supersedes:** the 2026-11-17 amendment's "torch on NVIDIA" and its ⚠️ paragraph, and the
   2026-11-12 table's detect backend (pointers added at both).
+
+## Amendment 2026-11-18b: AMD detects through Vulkan (onnxruntime-webgpu)
+- **Batt (Thai, translated), answering the 2026-11-18 report's AMD decision:** "I choose B" (the
+  WebGPU / Vulkan option: "one build for every vendor; measure it on our Arc first, and if both
+  the speed and the boxes are good, it becomes the AMD path").
+- **The measurement on bot-server's Arc A380, 2026-11-18** (`onnxruntime-webgpu` 1.27.0 of
+  2026-06-15, the newest; Mesa 26.0.8's Vulkan drivers; a scratch environment in RAM):
+  - every node of v1 on the WebGPU provider (260 nodes, `session.disable_cpu_ep_fallback`);
+  - the raw head against the CPU provider on the teaching-kit's 20 frames: max difference 0.00012,
+    424 / 424 anchors over 0.25 either side;
+  - THE BOXES, the 11-08 instrument (`gpu_live_parity.py`, `latency-200-refs`, the lab's own
+    client against the host's CPU detector, the server's own `--device webgpu` code): prt_fild08 /
+    v1 59 / 59, xmas_dun02 / xmas02sk 528 / 528, max coordinate difference 0.0 px, no fallback;
+    the 60-s soak at 2 Hz 120 / 120 calls on the GPU;
+  - the speed, one call (client) / the server's forward: WebGPU 68-80 / 65-74 ms (the session
+    itself 46 ms back to back, 51 ms at 2 Hz; the rest is the numpy input conversion on the
+    Xeon). The CPU detector on the same frames, as the bot runs it: 133 ms. OpenVINO on the same
+    card: ~22 ms. So WebGPU is ~1.8x faster than the CPU detector it replaces on AMD, and ~3x
+    slower than OpenVINO: **Intel stays on OpenVINO**; WebGPU becomes AMD's path.
+  - The tensor layout option (`preferredLayout` NCHW / NHWC) changes nothing (46.5 / 46.8 ms).
+- **A trap found, closed:** Mesa ships **lavapipe**, a Vulkan driver that runs ON THE CPU. With no
+  GPU reachable, Dawn takes it: the session still names `WebGpuExecutionProvider` first, and a
+  forward takes 835 ms (the card's clock stayed at 0). So:
+  - `poring_vision.vulkan` adds the CPU drivers (`*lvp*`, `*swiftshader*`) to the loader's
+    `VK_LOADER_DRIVERS_DISABLE` (a person's own entries kept) before any session; the image sets
+    it too. With only lavapipe left, the WebGPU provider then finds no adapter, onnxruntime falls
+    back to its CPU provider, and `OrtNet` refuses that, as on CUDA (rc 1, the reason);
+  - it also lists the GPUs the loader sees (ctypes, stdlib only), so the start line says which
+    (`"vulkan": [{"name": "Intel(R) Arc(tm) A380 Graphics (DG2)", "type": "discrete", ...}]`), and
+    a list with no GPU refuses before the session is made.
+  - Seen both ways on the host: only Intel's driver -> the Arc (46 ms); only lavapipe, disabled ->
+    the CPU fallback, refused; only AMD's driver on a host without an AMD card -> no adapter.
+- **What was built:**
+  - `--backend onnxruntime --device webgpu` (`OrtNet`; `unit_detector` `ORT_DEVICES`). WebGPU has
+    no memory cap, so a `VISION_MAX_VRAM_FRACTION` below 1.0 is refused rather than lapsing.
+  - **The Vulkan vision image** (`services/vision/Dockerfile.vulkan`, `vision-vulkan:local`):
+    Ubuntu 26.04, `libvulkan1` + `mesa-vulkan-drivers`, `onnxruntime-webgpu` and its dependencies
+    by hash at uv.lock's versions (`requirements-vulkan.txt`, `scripts/gen_vulkan_requirements.sh`),
+    poring_vision. **Detections only**: no torch, so no training on an AMD host. Mesa's shader
+    cache in the container's RAM. Its own check, `scripts/check_webgpu.py` (Vulkan sees a GPU;
+    the WebGPU provider runs v1's ONNX with every node on it; against the CPU provider).
+  - **A fifth profile, `dedicated-amd`**: accelerator `vulkan` (no torch), the overlays
+    `compose.amd.yaml` / `compose.vision-worker.amd.yaml` (the Vulkan image, the card's render
+    node `GPU_RENDER_NODE` and the render group instead of the NVIDIA reservation, no VRAM cap),
+    the detect server on `onnxruntime` / `webgpu` (`HostProfile.detect_device`, which the /flows
+    Run helper passes), GPU processes by DRM fdinfo (amdgpu), the dedicated rules.
+  - **The setup** (`gpu_ready`): an AMD card is ready when its kernel driver is `amdgpu` (Mesa's
+    RADV needs it; the old `radeon` driver is a fix: `amdgpu.si_support=1` / `cik_support=1` for
+    GCN 1.0 / 1.1, older cards the CPU detector) and the user is in its OWN render node's group.
+    The node is proposed as `GPU_RENDER_NODE`, so an Intel iGPU beside the card is never the one
+    passed in. `setup_core.detect_gpu` now prefers NVIDIA, then AMD, then Intel (an Intel iGPU sits
+    beside many AMD cards). The wizard offers `dedicated-amd`; the build step waits for
+    `vision-vulkan`.
+  - `gpu_live_parity.py --socket` (a server outside the worker) and `--expect-device`.
+- **Proven:** the measurement above (the same code and package, on the host).
+- **Not proven (unverified): an AMD card.** RADV itself, its speed and its boxes wait for a first
+  AMD host: `check_webgpu.py` in its worker, then the detect server's start line naming the
+  card under `"vulkan"`, then `gpu_live_parity.py --expect-device webgpu`.
+- **Not done:** the input conversion on the card (~17 ms a call on bot-server's Xeon: a later
+  step after a measurement); the Intel overlays still pass `/dev/dri/renderD128` itself
+  (second-install-gaps.md row Y).

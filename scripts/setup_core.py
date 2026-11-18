@@ -90,7 +90,9 @@ SUNSHINE_WEB = 47990
 DOCKER_NETS = tuple(
     ipaddress.ip_network(n) for n in ("10.210.0.0/16", "10.209.255.0/24", "172.17.0.0/16")
 )
-PROFILES = ("dedicated-intel", "dedicated-nvidia", "dedicated-cpu", "shared-nvidia")
+PROFILES = (
+    "dedicated-intel", "dedicated-nvidia", "dedicated-amd", "dedicated-cpu", "shared-nvidia",
+)  # fmt: skip
 
 
 def project() -> str:
@@ -99,6 +101,9 @@ def project() -> str:
     return lab_env.project()
 
 
+# The vision image each GPU profile builds (its overlay's `image:`); the CUDA one otherwise.
+VISION_IMAGES = {"dedicated-intel": "vision-intel", "dedicated-amd": "vision-vulkan"}
+
 # .env names whose VALUES may be shown. Everything else is shown as "set" / "empty".
 SAFE_KEYS = frozenset(
     {
@@ -106,6 +111,7 @@ SAFE_KEYS = frozenset(
         "VISION_MAX_VRAM_FRACTION", "RATHENA_WEB_SERVER", "S2_REC_DIR", "FRONTEND_ORIGINS",
         "PACKETVER", "RATHENA_PRERE", "VIEWER_NETWORKS", "SESSION_SIZE", "RDP_PORT",
         "COMPOSE_PROJECT_NAME", "LAB_STORE_DIR", "DETECTOR_DIR", "VISION_WORKER_MEM",
+        "GPU_RENDER_NODE",
         *lab_env.PORTS, *lab_env.NETS,
     }
 )  # fmt: skip
@@ -115,6 +121,7 @@ CHECK_KEYS = (
     "DB_PASSWORD", "DB_ROOT_PASSWORD", "RATHENA_SERVER_USER", "RATHENA_SERVER_PASSWORD",
     "RATHENA_AGENT_USER", "RATHENA_GM_USER", "RDP_USER", "RDP_PASSWORD",
     "COMPOSE_PROJECT_NAME", "LAB_STORE_DIR", "VIEWER_NETWORKS", "VISION_WORKER_MEM",
+    "GPU_RENDER_NODE",
 )  # fmt: skip
 
 
@@ -304,7 +311,8 @@ PCI_VENDORS = {"0x8086": "intel", "0x10de": "nvidia", "0x1002": "amd"}
 
 def detect_gpu(root: Path = Path("/")) -> Gpu:
     """From sysfs only (no lspci): each DRM card's PCI vendor, plus the NVIDIA driver's proc file
-    (its cards may have no DRM node). NVIDIA wins over Intel (an Intel iGPU sits beside many)."""
+    (its cards may have no DRM node). NVIDIA wins, then AMD, then Intel: an Intel iGPU sits beside
+    many NVIDIA and AMD cards (ADR-0022 Amendment 2026-11-18b)."""
     found: set[str] = set()
     drm = root / "sys/class/drm"
     if drm.is_dir():
@@ -317,7 +325,7 @@ def detect_gpu(root: Path = Path("/")) -> Gpu:
         found.add("nvidia")
     dri = root / "dev/dri"
     render = dri.is_dir() and any(p.name.startswith("renderD") for p in dri.iterdir())
-    for vendor in ("nvidia", "intel", "amd"):
+    for vendor in ("nvidia", "amd", "intel"):
         if vendor in found:
             return Gpu(vendor, render)
     return Gpu("none", render)
@@ -325,9 +333,10 @@ def detect_gpu(root: Path = Path("/")) -> Gpu:
 
 def default_profile(gpu: Gpu) -> str:
     """ADR-0022 / manual section 5, by the vendor alone: NVIDIA -> dedicated-nvidia, Intel ->
-    dedicated-intel, anything else -> dedicated-cpu (Amendment 2026-11-17). The wizard uses
-    gpu_recommendation, which also checks the driver and runtime. Never shared-nvidia."""
-    return {"nvidia": "dedicated-nvidia", "intel": "dedicated-intel"}.get(
+    dedicated-intel, AMD -> dedicated-amd (Amendment 2026-11-18b), anything else -> dedicated-cpu
+    (Amendment 2026-11-17). The wizard uses gpu_recommendation, which also checks the driver and
+    runtime. Never shared-nvidia."""
+    return {"nvidia": "dedicated-nvidia", "intel": "dedicated-intel", "amd": "dedicated-amd"}.get(
         gpu.vendor, "dedicated-cpu"
     )
 
@@ -875,6 +884,7 @@ class Answers:
     nets: dict[str, str] = field(default_factory=dict)  # LAB_NET_PREFIX / LAB_AGENT_NET_PREFIX
     viewer_net: str = ""  # VIEWER_NETWORKS, the server address's own LAN
     worker_mem: str = ""  # VISION_WORKER_MEM, the GPU recommendation's (a new .env only)
+    render_node: str = ""  # GPU_RENDER_NODE, the GPU recommendation's (the AMD card's own node)
 
     @classmethod
     def from_dict(cls, data: Mapping[str, Any]) -> Answers:
@@ -964,6 +974,8 @@ def planned_env(
         plan["VIEWER_NETWORKS"] = a.viewer_net
     if a.worker_mem and not current.get("VISION_WORKER_MEM", "").strip():
         plan["VISION_WORKER_MEM"] = a.worker_mem
+    if a.render_node:
+        plan["GPU_RENDER_NODE"] = a.render_node
     origins = current.get("FRONTEND_ORIGINS", "").strip()
     if origins:  # an explicit list must name the console, or the backend refuses it
         want = console_url(a.server_ip, a.console_port)
@@ -1197,10 +1209,9 @@ def install_plan(repo: Path, env: Mapping[str, str], a: Answers) -> list[Step]:
                 "Optional: Skip it and the CPU detector runs (manual section 9). " + FIX_BUILD,
                 optional=True,
                 timeout=4 * 3600,
-                # the Intel profile builds the Intel image (compose.intel.yaml)
-                done=image_present(
-                    lab_env.image("vision-intel" if a.profile == "dedicated-intel" else "vision")
-                ),
+                # the Intel profile builds the Intel image (compose.intel.yaml), the AMD one the
+                # Vulkan image (compose.amd.yaml)
+                done=image_present(lab_env.image(VISION_IMAGES.get(a.profile, "vision"))),
             )
         )
     steps.append(
