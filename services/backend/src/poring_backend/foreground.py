@@ -22,7 +22,8 @@ fullscreen window is in front and shows it when anything else takes the focus, s
 then that the TASKBAR is absent: ``taskbar.npy`` (``taskbar@stream.npy``), its box in DESKTOP
 pixels, cut while the desktop shows, with the session it was cut in: the tray sticks to the
 screen's bottom-right, so at another session size the box moves by the size difference (a
-vector); a fresh frame whose box is at least ``TASKBAR_ABSENT_MIN`` away from it passes. Missing -> ``foreground_uncalibrated``, as above.
+vector); a fresh frame whose box is at least ``TASKBAR_ABSENT_MIN`` away from it passes.
+Missing -> ``foreground_uncalibrated``, as above.
 
 Clicks, moves, the wheel, key RELEASES and ReleaseAll are never gated. The exemption (Batt's
 answer 1): while a ``desktop`` operator window is open (ASSIST only, <= 120 s, tied to the lock SEQ)
