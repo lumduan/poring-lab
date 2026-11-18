@@ -105,3 +105,18 @@ def test_a_panel_drawn_over_another_wins() -> None:
     p = view.panel_at(60, 60)
     assert p is not None and p.name == "b"
     assert view.to_real(60, 60) == (510, 510)
+
+
+def test_a_panel_leaves_no_shrunk_ghost_in_the_world() -> None:
+    """The lab's chat window stays at its SAVED pixels (0, 580) in 1080p, lying ON the world: shrunk
+    by the world transform it would show again near virtual (0, 387); that place in the world layer
+    is blanked, the panel itself pasted at its virtual place (measured live 2026-11-18)."""
+    chat = Panel("chat", (0, 580, 600, 140), (0, 580))
+    view = ClientView((0, 0, 1920, 1080), "fullscreen", 1.5, None, (chat,))
+    frame = np.full((1080, 1920, 3), 90, dtype=np.uint8)
+    frame[580:720, 0:600] = 33
+    out = view.virtual_frame(frame)
+    gy = int(360 + (580 - 540) / 1.5)  # where the ghost would be: 386
+    assert (out[gy + 5, 10] == 0).all()  # blanked, not 33
+    assert (out[600, 10] == 33).all()  # the panel at its virtual place
+    assert (out[100, 640] == 90).all()  # the world elsewhere

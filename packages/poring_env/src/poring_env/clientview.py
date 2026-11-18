@@ -160,6 +160,19 @@ class ClientView:
         okx, oky = (xs >= 0) & (xs < cw), (ys >= 0) & (ys < ch)
         if okx.any() and oky.any():
             out[np.ix_(oky, okx)] = client[np.ix_(ys[oky], xs[okx])]
+        # a panel sits ON the world in the real frame: the world layer shows it again, shrunk, as a
+        # ghost where the world transform puts its real box. The world behind it is unknown: blank
+        for p in self.panels:
+            rx, ry = p.real_xy
+            _, _, pw, ph = p.virtual
+            gx0 = VIRTUAL_W / 2 + (rx - cx) / k
+            gy0 = VIRTUAL_H / 2 + (ry - cy) / k
+            gx1 = VIRTUAL_W / 2 + (rx + pw - cx) / k
+            gy1 = VIRTUAL_H / 2 + (ry + ph - cy) / k
+            x0_, x1_ = max(0, int(np.floor(gx0))), min(VIRTUAL_W, int(np.ceil(gx1)))
+            y0_, y1_ = max(0, int(np.floor(gy0))), min(VIRTUAL_H, int(np.ceil(gy1)))
+            if x1_ > x0_ and y1_ > y0_ and not self.identity:
+                out[y0_:y1_, x0_:x1_] = 0
         for p in self.panels:
             vx, vy, pw, ph = p.virtual
             rx, ry = p.real_xy
