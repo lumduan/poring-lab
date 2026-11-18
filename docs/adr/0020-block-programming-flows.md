@@ -2926,15 +2926,22 @@ errors more than now, so we know where a problem is."
   session, the client's rect, fullscreen or a window, the virtual client and its scale), whether the
   game is on the screen (with the taskbar's or title bar's distance), the console's input mode, the
   backend's key gate; then ONE LINE PER CHECK ITEM (OK / FAIL / ?, its words and what it read), a
-  summary ("6 of 9 lines pass; FAIL: ..."), the pictures the check saw (`start-screen.jpg`, and
-  `start-virtual.jpg` on a screen not 1280x720), PAUSED / RESUMED lines, and a fault's traceback
+  summary ("6 of 9 lines pass; FAIL: ..."), ~~the pictures the check saw (`start-screen.jpg`, and
+  `start-virtual.jpg` on a screen not 1280x720)~~, PAUSED / RESUMED lines, and a fault's traceback
   (its last 12 lines in the log, the whole one in `error.txt`).
 - **The page:** the Run helper's status carries the Run's OWN check (`run_check`, from the log's
   CHECK line), the pause (`pause`: paused now since when and why, or how often and how long) and
-  the start pictures (served by `GET /flows/run/start/{screen,virtual}.jpg`); the log tail is 40
-  lines (it was 6) and a refusal's detail is whole (it was cut at 240 characters). /flows shows a
-  PAUSED banner, the Run's own check line by line (the failing ones first), the two pictures and
-  the log.
+  ~~the start pictures (served by `GET /flows/run/start/{screen,virtual}.jpg`)~~; the log tail is
+  40 lines (it was 6) and a refusal's detail is whole (it was cut at 240 characters). /flows shows
+  a PAUSED banner, the Run's own check line by line (the failing ones first), ~~the two pictures~~
+  and the log.
+- ➡️ **SUPERSEDED IN PART 2026-11-18 ~22:3x (Batt): a Run saves NO picture.** "Store no pictures at
+  all, known character or not": a frame can show other people's chat (a password someone typed in
+  the game), and the Run's start pictures had already caught another server's screen (rog101's,
+  21:55 and 21:57; deleted with the rest, 14 files). The pictures, their copy in the helper, the
+  route and the page's view are removed (main after 53e6e840). **The exception (Batt, same
+  evening):** when Batt asks the agent to test-play itself, or to record his play, pictures and
+  video may be taken in full.
 
 ## Amendment Q (2026-11-18, Batt decided; built and live 21:19, commit 9eed37b1): a Run's start does not lock the character
 

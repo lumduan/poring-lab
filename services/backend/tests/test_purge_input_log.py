@@ -117,3 +117,17 @@ def test_a_backend_still_appending_continues_after_the_rewrite(
     assert all(json.loads(line) for line in lines)  # no torn or interleaved line
     assert json.loads(lines[-1])["event"]["x"] == 0.9
     assert sum('"x":0.1' in line for line in lines) == 1
+
+
+def test_the_purge_and_the_backend_agree_on_what_types_a_character() -> None:
+    """The backend logs no character a person types (poring_backend.keylog, Batt 2026-11-18); this
+    stdlib-only script removes the same keys from logs written before that."""
+    from poring_backend import keylog
+
+    spec = importlib.util.spec_from_file_location(
+        "purge_input_log_p", SCRIPTS / "purge_input_log.py"
+    )
+    assert spec and spec.loader
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    assert mod.PRINTABLE.pattern == keylog.PRINTABLE.pattern

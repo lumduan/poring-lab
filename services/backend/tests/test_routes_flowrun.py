@@ -573,20 +573,10 @@ def test_a_tick_without_a_safety_step_is_refused_with_its_words(
     assert "leaves out step_survive(), a SAFETY step" in first
 
 
-def test_the_start_pictures_are_served_by_name_only(client: TestClient, tmp_path: Path) -> None:
-    """Batt 2026-11-18: what the Run's start check saw, on the page (the helper copies them)."""
+def test_no_start_picture_is_served(client: TestClient, tmp_path: Path) -> None:
+    """Batt 2026-11-18 ~22:3x: no picture of a Run's start is kept, so none is served either (even a
+    file left in the helper's folder)."""
     helper(tmp_path)
-    assert client.get("/flows/run/start/screen.jpg", headers=H).status_code == 404
     (tmp_path / "settings" / "flowrun" / "start-screen.jpg").write_bytes(b"\xff\xd8jpg")
-    r = client.get("/flows/run/start/screen.jpg", headers=H)
-    assert r.status_code == 200 and r.headers["content-type"] == "image/jpeg"
-    assert r.content == b"\xff\xd8jpg"
-    assert client.get("/flows/run/start/project.jpg", headers=H).status_code == 404
-    assert client.get("/flows/run/start/..%2Fend.jpg", headers=H).status_code == 404
-
-
-def test_the_start_pictures_names_are_the_helpers() -> None:
-    sys.path.insert(0, str(Path(__file__).resolve().parents[3] / "scripts"))
-    import flow_run
-
-    assert set(routes_flowrun.START_PICTURES) == set(flow_run.START_PICTURES)
+    assert client.get("/flows/run/start/screen.jpg", headers=H).status_code == 404
+    assert not hasattr(routes_flowrun, "START_PICTURES")

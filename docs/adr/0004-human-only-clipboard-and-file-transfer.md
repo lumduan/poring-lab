@@ -391,6 +391,23 @@ verifier.**
 - Until Batt decides, **use Secret typing for any password paste**. The NAS-password paste of the
   Thai copy must be made with it on.
 
+## Amendment 2026-11-18 (d): a person's typed characters are never logged
+
+**Batt, 2026-11-18 ~22:3x (translated), on making the project public:** "the input log keeps no
+character people type at all, only the number of keys". His worry: other people's secrets (an ID
+password that is also an email password) must never land in a file of ours, and he cannot make
+every user remember Secret typing.
+
+- `poring_backend.keylog.is_printable`: a key whose `KeyboardEvent.code` puts a CHARACTER into a
+  text field (letters, digits, symbols, Space, the numpad's) is logged for a person WITHOUT its
+  code, Secret typing on or off (`"printable": true`; its action and timing stay, so the count
+  does). A control key (Alt, Tab, Escape, Enter, the F-keys, the arrows, Backspace) keeps its code:
+  it types no character, and it is how a person's Alt+Tab was found afterwards (2026-11-18 19:16).
+- Secret typing still drops every code (the control keys' too) while it is on.
+- The bot's own keys are unchanged (its credentials were already one summary line).
+- `scripts/purge_input_log.py` (stdlib-only) keeps its own copy of the same rule, pinned equal by
+  `test_purge_input_log.py`; it removes such keys from logs written before this.
+
 ## Exceptions log (each one explicit, by Batt, in the conversation)
 
 - **2026-10-03 15:31 ICT, Part C (C4), Batt: "The exe is in \\tsclient\transfer now. Proceed with

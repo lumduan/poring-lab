@@ -440,10 +440,6 @@ class LiveIO:
         status, the checklist and the errors, so we know where a problem is")."""
         return []
 
-    def snapshot(self, d: Path) -> list[str]:
-        """Save what the start check saw into the run's folder; the diary's line(s)."""
-        return []
-
     def close(self) -> None:
         pass
 
@@ -574,26 +570,6 @@ class PixelIO(LiveIO):
                        f"{fg.get('state')} ({fg.get('reason')}, {fg.get('mode')}, distance "
                        f"{fg.get('distance')}, frame age {fg.get('age_ms')} ms)")  # fmt: skip
         return out
-
-    def snapshot(self, d: Path) -> list[str]:
-        from PIL import Image
-
-        r, np = self.r, self.np
-        saved: list[str] = []
-        with contextlib.suppress(Exception):  # a picture never stops the run
-            w, h = r.desktop()
-            _, real, _, _ = self.screen._grab_raw(0, 0, w, h)
-            img = Image.fromarray(np.ascontiguousarray(np.asarray(real)[..., 2::-1]))
-            img.resize((w // 2, h // 2)).save(d / START_SCREEN, quality=80)
-            saved.append(f"{START_SCREEN} (the whole screen, half size)")
-        if r.virtual_active():
-            with contextlib.suppress(Exception):
-                _, v, _, _ = self.screen._grab_raw(*r.game_region())
-                Image.fromarray(np.ascontiguousarray(np.asarray(v)[..., 2::-1])).save(
-                    d / START_VIRTUAL, quality=85
-                )
-                saved.append(f"{START_VIRTUAL} (the virtual 1280x720 client the readers read)")
-        return [f"pictures of what the start check saw: {'; '.join(saved) or 'none saved'}"]
 
     def close(self) -> None:
         if self.agent is not None:
@@ -1488,8 +1464,9 @@ def check_refusal(got: Mapping[str, Any]) -> str | None:
 
 # --- the run's diary (Batt 2026-11-18: "when Run is pressed, log the status, the checklist and
 # the errors more than now, so we know where a problem is") ----------------------------------------
-START_SCREEN = "start-screen.jpg"  # the run's folder: the whole screen when the check read it
-START_VIRTUAL = "start-virtual.jpg"  # ... and the virtual client the readers read (not 1280x720)
+# ➡️ 2026-11-18 ~22:3x (Batt: "store no pictures at all, known character or not"): the start
+# check's pictures (start-screen.jpg / start-virtual.jpg) are no longer saved: a frame can show
+# other people's chat (a password typed in the game). ADR-0020 Amendment P, superseded in part.
 ERROR_FILE = "error.txt"  # the full traceback of a fault
 TRACE_LINES = 12  # a fault's last traceback lines in the log itself
 
@@ -1583,7 +1560,7 @@ def play(prep: Prepared, lio: LiveIO, *, label: str, stop_file: Path | None,
          run_dir: Path | None = None) -> int:  # fmt: skip
     """The run: the start check (reads), the input path, the UI gate, the runtime, the end.
     0: it played and ended; 2: refused before any input. Its diary (say): the environment, each
-    check line, the pictures the check saw, the pauses, a fault's traceback."""
+    check line, the pauses, a fault's traceback (no picture is saved: Batt 2026-11-18)."""
     checker = checker or default_checker
     say(f"RUN {label}: the project {prep.project.name} from {prep.node} (map {prep.map}), the "
         f"time box {prep.cap_s // 60} min")  # fmt: skip
@@ -1598,9 +1575,6 @@ def play(prep: Prepared, lio: LiveIO, *, label: str, stop_file: Path | None,
         return 2
     for ln in check_lines(got):
         say(ln)
-    if run_dir is not None:
-        for ln in lio.snapshot(run_dir):
-            say(ln)
     say(check_summary(got))
     why = check_refusal(got)
     if why is not None:

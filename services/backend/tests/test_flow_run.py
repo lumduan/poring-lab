@@ -618,14 +618,9 @@ def test_a_refusal_s_detail_is_whole_and_the_log_tail_is_longer(tmp_path: Path) 
     assert len(fr.tail(log, fr.LOG_TAIL_N, fr.LOG_LINE_MAX)) == fr.LOG_TAIL_N
 
 
-def test_the_start_pictures_are_copied_once_for_the_page(tmp_path: Path) -> None:
+def test_no_start_picture_is_kept_or_offered(tmp_path: Path) -> None:
+    """Batt 2026-11-18 ~22:3x: "store no pictures at all, known character or not" (a frame can
+    show other people's chat, a password typed in the game)."""
     h = fr.Helper(tmp_path)
-    h.run_dir = tmp_path / "run"
-    h.run_dir.mkdir()
-    h.copy_start_pictures()
-    assert h.start_pictures == {}
-    (h.run_dir / fr.START_PICTURES["screen"]).write_bytes(b"jpg1")
-    h.copy_start_pictures()
-    assert set(h.start_pictures) == {"screen"}
-    assert (tmp_path / "start-screen.jpg").read_bytes() == b"jpg1"
-    assert h.status()["start_pictures"] == h.start_pictures
+    assert "start_pictures" not in h.status() and not hasattr(h, "copy_start_pictures")
+    assert not hasattr(fr, "START_PICTURES")

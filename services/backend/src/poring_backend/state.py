@@ -25,6 +25,7 @@ from poring_backend.grabsource import GrabSource
 from poring_backend.hardware import HardwareMonitor
 from poring_backend.input_log import InputLog, InputLogRecord, wall_clock_iso
 from poring_backend.interlock import Interlock, Verdict, Window, load_config
+from poring_backend.keylog import is_printable
 from poring_backend.latency import InputRecord, LatencyRecorder
 from poring_backend.mode_restore import read_verdict
 from poring_backend.mux import Decision, InputMux, Routed, Source
@@ -718,15 +719,21 @@ class AppState:
             self.broadcast_status()
 
     def redact_human(self, source: Source, event: dict[str, Any]) -> dict[str, Any]:
-        """A human key while secret typing is on: type, action and timing only, never the code."""
-        if source is not Source.HUMAN or not self.human_secret or event.get("type") != "key":
+        """A human key while secret typing is on: type, action and timing only, never the code.
+        ➡️ 2026-11-18 (Batt: "the input log keeps no character people type at all, only the
+        number of keys"): with it off too, a key that types a CHARACTER (keylog.is_printable) is
+        logged without its code; a control key keeps its code."""
+        if source is not Source.HUMAN or event.get("type") != "key":
             return event
+        if not self.human_secret and not is_printable(str(event.get("code", ""))):
+            return event
+        mark = "secret" if self.human_secret else "printable"
         return {
             "type": "key",
             "action": event.get("action"),
             "t_mono_ns": event.get("t_mono_ns"),
             "frame_id": event.get("frame_id"),
-            "secret": True,
+            mark: True,
         }
 
     def broadcast_status(self) -> None:
