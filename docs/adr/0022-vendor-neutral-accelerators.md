@@ -307,7 +307,21 @@ next_action: "Amendment 2026-11-18b: AMD detects through Vulkan (onnxruntime-web
     beside many AMD cards). The wizard offers `dedicated-amd`; the build step waits for
     `vision-vulkan`.
   - `gpu_live_parity.py --socket` (a server outside the worker) and `--expect-device`.
-- **Proven:** the measurement above (the same code and package, on the host).
+- **Proven:** the measurement above (the same code and package, on the host), and the image itself
+  in containers on the Arc (2026-11-18 11:24-11:27 ICT, guarded steps under
+  `LAB_HOST_PROFILE=dedicated-amd`; the lab's live Intel image and worker untouched):
+  1. `build:vision` with `compose.amd.yaml`: `vision-vulkan:local`, 949 MB, 84 s (the Intel image
+     is 11.8 GB);
+  2. `run:vision ... check_webgpu.py`: PASS. Vulkan sees the Arc (discrete) with the CPU drivers
+     kept out; every node of v1 on WebGPU, max |WebGPU - CPU| 0.006 on a random input, 44.3 ms a
+     forward; no file written on the container's disk (the shader cache is in its RAM);
+  3. the same with `GPU_RENDER_NODE=/dev/null` (no GPU reachable): rc 1, both checks FAIL with the
+     reason ("no GPU among []"; "the WebGPU provider did not start ... its retry on the CPU
+     provider is refused"): never lavapipe under the GPU's name;
+  4. the detect server from the image's own install: listening within 4 s with v1 and xmas02sk,
+     `"device": "webgpu"`, `"providers": ["WebGpuExecutionProvider", "CPUExecutionProvider"]`,
+     `"vulkan": [{"name": "Intel(R) Arc(tm) A380 Graphics (DG2)", "type": "discrete", ...}]`;
+     stopped by its 25-s time box.
 - **Not proven (unverified): an AMD card.** RADV itself, its speed and its boxes wait for a first
   AMD host: `check_webgpu.py` in its worker, then the detect server's start line naming the
   card under `"vulkan"`, then `gpu_live_parity.py --expect-device webgpu`.
