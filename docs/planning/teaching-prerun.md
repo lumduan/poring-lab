@@ -7,7 +7,7 @@ verdict_date: null
 verdict_ticket: null
 supersedes: null
 related: [../adr/0020-block-programming-flows.md, ../adr/0023-learner-mode.md, ../adr/0006-sanctioned-test-environments.md, fullscreen-client.md, player-mode.md]
-next_action: "Step 1 BUILT (any character: RUN_IDENTITY, ADR-0020 Amendment Q; the lab runs any too since 2026-11-18 ~21:0x). Batt tests one step at a time; the next ones in section 4 wait for him."
+next_action: "Step 1 BUILT (any character: RUN_IDENTITY, ADR-0020 Amendment Q; the lab runs any too since 2026-11-18 ~21:2x). Batt tests one step at a time; the next ones in section 4 wait for him."
 ---
 
 # A Run's start rules, for teaching
@@ -62,7 +62,7 @@ Not checked before the run, but assumed by it (a learner meets them in the first
   black game region still fails. A GM line always checks the lab's character.
 - The identity line reads "any character: a Run does not check the name or the job" on the
   page's checklist, in the Run's own check and in its log.
-- ~~The lab keeps `mine`~~ ➡️ SUPERSEDED 2026-11-18 ~21:0x (Batt: "any, so I can test it myself
+- ~~The lab keeps `mine`~~ ➡️ SUPERSEDED 2026-11-18 ~21:2x (Batt: "any, so I can test it myself
   too"): the lab runs `any` too. The known risk: the community client shares its Windows PC
   (ADR-0006), and the name plate was the Run's only pixel proof that the lab's client is in front;
   the map and start-cell checks remain (ADR-0020 Amendment Q). `mine` again is one line.
