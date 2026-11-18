@@ -289,7 +289,7 @@ Amendment B); a not-adopted model is never offered.
   start check. The Run panel also shows the Run's OWN start check line by line, the two pictures
   that check saw (the whole screen; the virtual 1280x720 client on a bigger screen) and the Run's
   log (40 lines: the screen, the input mode, each check line, the pauses, a fault's traceback).
-  ➡️ **Since 2026-11-18 ~20:4x (Batt, ADR-0020 Amendment Q) a Run plays ANY character** on an install
+  ➡️ **Since 2026-11-18 21:19 (Batt, ADR-0020 Amendment Q) a Run plays ANY character** on an install
   whose `.env` leaves `RUN_IDENTITY` empty or `any` (the default): no name or job is compared, and
   the checklist's first line reads "a character in the game (any name, any job)". `mine` keeps the
   name plate check. The lab runs `any` too (Batt 2026-11-18 ~21:2x, to test it himself). Every
