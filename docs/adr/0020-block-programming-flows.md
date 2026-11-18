@@ -2957,11 +2957,15 @@ once. Think ahead about such things."
   setting says. The runner (`dungeon_hunt.py`, byte-pinned) is untouched: its identity line's words
   (which name the lab's character) are replaced by the helper and the player
   (`flow_run.identity_any`).
-- **The lab keeps `mine`** (its own `.env`): the community client "RO Dev Serv" is on the same
-  Windows PC (ADR-0006: no agent automation there), and with the packets only labelling
-  (ADR-0016 Amendment 2026-11-17) the name plate is the Run's only pixel proof that the lab's
-  client is the one in front. Batt may set the lab to `any` (one line), accepting the map check
-  (the minimap's picture must be the node's map) as the remaining guard.
+- ~~**The lab keeps `mine`** (its own `.env`)~~ ➡️ **SUPERSEDED 2026-11-18 ~21:0x (Batt: "any,
+  so I can test it myself too"): the lab runs `any` as well** (its `.env`, read back). The reason
+  `mine` was recommended still stands as a known risk: the community client "RO Dev Serv" is on
+  the same Windows PC (ADR-0006: no agent automation there), and with the packets only labelling
+  (ADR-0016 Amendment 2026-11-17) the name plate was the Run's only pixel proof that the lab's
+  client is the one in front. The guards that remain at a Run's start: the map check (the
+  minimap's picture must be the node's map, xmas_dun02) and the start cell on that map's open
+  ground; so a Run pressed while the community client stands on xmas_dun02's open ground would
+  now start. `mine` again is one line.
 - **The other start rules, one by one:** docs/planning/teaching-prerun.md (what stays a safety
   rule, what is a setting already, what is still locked and what it needs).
 
