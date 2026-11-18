@@ -520,9 +520,13 @@ def find_dialog(screen: Screen, state: str, paths: Sequence[Path], after_ns: int
     bx, by, _, _ = json.loads(meta.read_text())["box"]
     x, y, w, h = game_region()
     client = grab_after(screen, (x, y, w, h), after_ns)
+    # where it is expected: moved like a dialog already found, else by the rule measured at 1080p
+    # (x centred, y at 0.625 of the extra height; docs/planning/fullscreen-client.md section 7)
+    vx, vy = next(iter(_VECTORS.values()), ((w - 1280) // 2, round(0.625 * (h - 720))))
     best = (float("inf"), 0, 0)
     for path in paths:
-        best = min(best, sig_find(client, np.load(path).astype(np.float32)))
+        ref = np.load(path).astype(np.float32)
+        best = min(best, sig_find(client, ref, hint=(bx + vx, by + vy)))
     d, fx, fy = best
     if d <= SIG_MATCH:
         _VECTORS[state] = (fx - bx, fy - by)
