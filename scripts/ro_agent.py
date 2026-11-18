@@ -57,7 +57,7 @@ import struct
 import subprocess
 import sys
 import time
-from collections.abc import Callable, Iterator
+from collections.abc import Callable, Iterator, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -67,6 +67,7 @@ from websockets.sync.client import ClientConnection, connect
 
 from poring_backend.capture_lock import read_lock, read_window
 from poring_backend.signature import SIG_MATCH, grey_thumb
+from poring_backend.signature import find as sig_find
 
 if str(Path(__file__).resolve().parent) not in sys.path:
     sys.path.insert(0, str(Path(__file__).resolve().parent))
@@ -373,7 +374,8 @@ def region_for(state: str) -> tuple[int, int, int, int]:
         return x + dx, y + dy, bw, bh
     if meta.exists():
         dx, dy, bw, bh = json.loads(meta.read_text())["box"]
-        return x + dx, y + dy, bw, bh
+        vx, vy = _VECTORS.get(state, (0, 0)) if unmeasured_size() else (0, 0)
+        return x + dx + vx, y + dy + vy, bw, bh
     return x, y, w, h
 
 
@@ -494,7 +496,37 @@ def distance(screen: Screen, state: str, after_ns: int | None = None) -> float:
         ref = np.load(path)
         if cur.shape == ref.shape:
             best = min(best, float(np.abs(cur - ref).mean()))
+    if best > SIG_MATCH and base_state(state) in DIALOG_STATES and unmeasured_size():
+        best = min(best, find_dialog(screen, base_state(state), paths, after_ns))
     return best
+
+
+def unmeasured_size() -> bool:
+    """The client's size has no measured login layout (LAYOUTS): its dialogs are found. An
+    unreadable GAME_REGION is never 'unmeasured' (the fixed boxes decide, as before)."""
+    try:
+        _, _, w, h = game_region()
+    except (Stop, OSError):
+        return False
+    return (w, h) not in LAYOUTS
+
+
+def find_dialog(screen: Screen, state: str, paths: Sequence[Path], after_ns: int | None) -> float:
+    """Find a login-screen dialog anywhere in the client by its picture; remember its vector from
+    its 1280x720 box (the box saved at calibration). The distance of the best place."""
+    meta = signature_path(state).with_suffix(".json")
+    if not meta.exists():
+        return float("inf")
+    bx, by, _, _ = json.loads(meta.read_text())["box"]
+    x, y, w, h = game_region()
+    client = grab_after(screen, (x, y, w, h), after_ns)
+    best = (float("inf"), 0, 0)
+    for path in paths:
+        best = min(best, sig_find(client, np.load(path).astype(np.float32)))
+    d, fx, fy = best
+    if d <= SIG_MATCH:
+        _VECTORS[state] = (fx - bx, fy - by)
+    return d
 
 
 def is_state(screen: Screen, state: str, after_ns: int | None = None) -> bool:
@@ -639,6 +671,17 @@ AGENT_WS: dict[str, Any] = {"open_timeout": 5, "max_size": 2**20, "max_queue": N
 # DESKTOP pixels (not relative to GAME_REGION); the taskbar-absent rule, the backend gate's
 # (foreground.TASKBAR_ABSENT_MIN); how long an ENG reading taken before the launch stands
 DESKTOP_BOX_STATES = ("taskbar", "taskbar_client_icon")
+# Phase 2 (docs/planning/fullscreen-client.md section 7): on a client size with no measured login
+# layout, each login-screen dialog is FOUND by its own picture (signature.find); its vector from its
+# 1280x720 place then moves its checks and its click points. The server list is the service list's
+# twin (the same OK at the same place), so its OK takes the service dialog's vector.
+DIALOG_STATES = ("service_select", "login", "server_select", "char_select", "char_make")
+DIALOG_OF_POINT = {
+    "service_ok": "service_select", "server_ok": "service_select", "server_row": "service_select",
+    "id": "login", "password": "login", "login_button": "login",
+    "slot1": "char_select", "char_name": "char_make", "char_create": "char_make",
+}  # fmt: skip
+_VECTORS: dict[str, tuple[int, int]] = {}
 TASKBAR_ABSENT_MIN = 20.0
 ENG_FRESH_S = 600.0
 _ENG_AT: float | None = None
@@ -1380,6 +1423,13 @@ def layout(name: str) -> tuple[int, int]:
         import chat_window  # the chat window's standard place (Batt 2026-11-05)
 
         return at(*chat_window.active().input_px)
+    if (w, h) not in LAYOUTS and name in DIALOG_OF_POINT:  # a found dialog: its vector
+        dialog = DIALOG_OF_POINT[name]
+        if dialog not in _VECTORS:
+            raise Stop(f"the {dialog} dialog was not found on this {w}x{h} client ({name})")
+        bx, by = LAYOUTS[(1280, 720)][name]
+        vx, vy = _VECTORS[dialog]
+        return at(bx + vx, by + vy)
     try:
         dx, dy = LAYOUTS[(w, h)][name]
     except KeyError:
