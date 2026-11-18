@@ -2936,7 +2936,7 @@ errors more than now, so we know where a problem is."
   PAUSED banner, the Run's own check line by line (the failing ones first), the two pictures and
   the log.
 
-## Amendment Q (2026-11-18 ~20:4x, Batt decided): a Run's start does not lock the character
+## Amendment Q (2026-11-18, Batt decided; built and live 21:19, commit 9eed37b1): a Run's start does not lock the character
 
 **Batt (translated):** "Adjust the pre-run rules first: standing in the safe spot, the character's
 name and many other things. Locked like this it is very hard when I teach others and have them
