@@ -167,7 +167,7 @@ def test_rundev_adds_only_the_vision_dev_overlay(gb: ModuleType) -> None:
     assert (step.kind, step.services, step.seconds) == ("rundev", ["vision"], 3600.0)
     assert gb.run_cmd(step) == [
         "timeout", "3600", "docker", "compose", "-p", "poring-lab", "-f", "compose.yaml", "-f",
-        "compose.vision-dev.yaml", "--profile", "vision", "run", "--rm",
+        "compose.vision-dev.yaml", *gb.local_override(), "--profile", "vision", "run", "--rm",
         "--name", gb.container_name(step), "--no-deps", "vision",
         "python", "-m", "poring_vision.train", "--smoke",
     ]  # fmt: skip

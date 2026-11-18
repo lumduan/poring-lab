@@ -18,7 +18,9 @@ sys.path.insert(0, str(ROOT / "scripts"))
 import lab_env as le  # noqa: E402
 
 NO_ENV: dict[str, str] = {}
-COMPOSE_FILES = sorted(ROOT.glob("compose*.yaml"))
+# The tracked compose files only: compose.override.yaml is this machine's own (gitignored; the lab's
+# holds its NAS address), never shipped
+COMPOSE_FILES = sorted(f for f in ROOT.glob("compose*.yaml") if f.name != "compose.override.yaml")
 
 
 def _defaults_in(text: str, key: str) -> set[str]:
