@@ -933,3 +933,19 @@ def test_a_run_turns_the_pause_on_and_stop_ends_it(
     assert r.AWAY_STOP() is None
     stop.write_text("")
     assert "Stop was pressed while the run was paused" in r.AWAY_STOP()
+
+
+def test_a_pause_during_the_start_check_shows_in_the_log_at_once(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """Live test 2026-11-18 20:02: the start check captures stdout while it reads (runner_check);
+    the PAUSED line written then reached the log only after the check, 83 s late."""
+    import contextlib
+    import io
+
+    notes = fp.PauseNotes()  # made with the run's real stdout (enable_pause, before the check)
+    buf = io.StringIO()
+    with contextlib.redirect_stdout(buf):
+        notes("pause", {"why": "the Windows taskbar shows"})
+    assert "PAUSED: the Windows taskbar shows" in capsys.readouterr().out
+    assert buf.getvalue() == ""
