@@ -53,6 +53,32 @@ def test_an_nvidia_card_with_driver_and_toolkit_is_recommended(tmp_path: Path) -
     assert r.summary().startswith("an NVIDIA GPU ready; driver 580.95")
 
 
+def test_a_card_older_than_the_cuda_builds_gets_the_cpu_detector(tmp_path: Path) -> None:
+    """2026-11-18: R580 still drives Pascal (GTX 10), but the CUDA image's builds carry code for
+    compute capability 7.5 and newer only (onnxruntime-gpu 1.31.1: sm_75 ... sm_120a, no PTX). An
+    RTX 5060 (12.0) is ready; a GTX 1080 (6.1) falls back to the CPU and says why."""
+
+    def smi(cap: str) -> g.Runner:
+        def run(cmd: Sequence[str]) -> tuple[int, str]:
+            if cmd[0] == "nvidia-smi":
+                return (0, f"{cap}\n") if "--query-gpu=compute_cap" in cmd else (0, "8151\n")
+            return (0, '{"nvidia":{},"runc":{}}')
+
+        return run
+
+    root = nvidia_root(tmp_path)
+    which = which_of("nvidia-ctk", "nvidia-smi")
+    new = g.recommend("nvidia", ram_gib=15.6, root=root, run=smi("12.0"), which=which)
+    assert (new.ready, new.profile) == (True, "dedicated-nvidia")
+    assert "compute capability 12.0" in new.found and not new.fixes
+    old = g.recommend("nvidia", ram_gib=15.6, root=root, run=smi("6.1"), which=which)
+    assert (old.ready, old.profile, old.build_vision) == (False, "dedicated-cpu", False)
+    assert len(old.fixes) == 1 and "compute capability 6.1" in old.fixes[0]
+    assert "GTX 16 / RTX 20 and newer" in old.fixes[0]
+    assert g.nvidia_compute_caps(smi("7.5\n8.6"), which) == [(7, 5), (8, 6)]
+    assert g.nvidia_compute_caps(smi("[N/A]"), which) is None  # unknown: no verdict from it
+
+
 def test_an_old_driver_or_no_toolkit_falls_back_to_the_cpu_with_the_fixes(tmp_path: Path) -> None:
     old = g.recommend(
         "nvidia",

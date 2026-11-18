@@ -667,6 +667,45 @@ def test_the_openvino_serve_step_runs_in_the_worker_and_pins_each_onnx(
         ud.main(["serve-cmd", "--backend", "openvino"])  # a time box is required
 
 
+def test_the_onnxruntime_serve_step_runs_the_same_onnx_on_nvidia(
+    capsys: pytest.CaptureFixture[str],
+    monkeypatch: pytest.MonkeyPatch,
+    every_model_in_the_store: Path,
+) -> None:
+    """ADR-0022 Amendment 2026-11-18 (Batt: "use B; never lock a GPU to a model"): NVIDIA's step
+    serves the deployed ONNX, the very files (and pins) of the OpenVINO step, on onnxruntime's
+    CUDA provider; a new install with only v1's ONNX in its storage folder serves v1 (no .pt)."""
+    step = ud.serve_step_onnxruntime(900)
+    assert step.startswith("execdev:vision@900=python -m poring_vision.detect_server --backend "
+                           "onnxruntime --device cuda --socket /detect/detect.sock")  # fmt: skip
+    ov = ud.serve_step_openvino(900)
+    assert step.split(" --model ")[1:] == ov.split(" --model ")[1:]  # the same files and pins
+    assert ud.main(["serve-cmd", "--backend", "onnxruntime", "--seconds", "900"]) == 0
+    assert capsys.readouterr().out.strip() == (
+        f"python3 scripts/guarded_build.py --threshold 30 --sustain 30 '{step}'")  # fmt: skip
+    assert ud.main(["serve-cmd", "--backend", "onnxruntime", "--device", "cpu",
+                    "--seconds", "900"]) == 0  # fmt: skip
+    assert " --device cpu " in capsys.readouterr().out
+    for bad in (
+        ["--backend", "onnxruntime", "--device", "GPU"],
+        ["--device", "cuda"],  # torch takes no device
+        ["--backend", "onnxruntime", "--ov-preproc", "gpu"],
+    ):
+        with pytest.raises(SystemExit):
+            ud.main(["serve-cmd", "--seconds", "900", *bad])
+    with pytest.raises(ValueError):
+        ud.serve_step_onnxruntime(900, "rocm")
+    # a new install: v1's ONNX alone (scripts/detector_setup.py), no .pt anywhere
+    for w in ud.GPU_WEIGHTS.values():
+        ud.host_path(w.path, every_model_in_the_store).unlink()
+        if w is not ud.GPU_WEIGHTS["v1"]:
+            ud.host_path(f"{ud.NAS_MODELS}/{w.onnx}", every_model_in_the_store).unlink()
+    assert ud.present_models("onnxruntime") == ("v1",) == ud.present_models("openvino")
+    assert ud.present_models("torch") == ()
+    assert ud.main(["serve-cmd", "--backend", "onnxruntime", "--seconds", "900"]) == 0
+    assert capsys.readouterr().out.count(" --model ") == 1
+
+
 def test_serve_cmd_passes_ov_preproc_and_keeps_the_default(
     capsys: pytest.CaptureFixture[str],
 ) -> None:

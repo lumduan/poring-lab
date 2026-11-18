@@ -714,8 +714,9 @@ def host_path(worker_path: str, store: Path | None = None) -> Path:
 
 def present_models(backend: str, store: Path | None = None) -> tuple[str, ...]:
     """ADR-0022 Amendment 2026-11-17: the GPU_WEIGHTS names whose file for ``backend`` is in the
-    storage folder (torch: the .pt; openvino: the deployed ONNX). A new install has v1's ONNX only
-    (scripts/detector_setup.py); the lab all of them. The server still checks each sha256."""
+    storage folder (torch: the .pt; openvino and onnxruntime: the deployed ONNX). A new install has
+    v1's ONNX only (scripts/detector_setup.py); the lab all of them. The server still checks each
+    sha256."""
     out = []
     for name, w in GPU_WEIGHTS.items():
         rel = w.path if backend == "torch" else f"{NAS_MODELS}/{w.onnx}" if w.onnx else ""
@@ -732,6 +733,15 @@ def serve_step(seconds: int, models: Sequence[str] = tuple(GPU_WEIGHTS)) -> str:
         parts += ["--model", f"{m}={w.path}={w.sha256}"]
     return f"execdev:vision@{int(seconds)}=" + " ".join(parts)
 
+
+# The detect server's backends (poring_vision.detect_server --backend; host_profile's
+# detect_backend): torch runs each model's .pt (the lab's training runs only), openvino and
+# onnxruntime the deployed ONNX, the one model file every vendor runs (ADR-0022 Amendment
+# 2026-11-18, Batt: "never lock a GPU to a model").
+BACKENDS = ("torch", "openvino", "onnxruntime")
+# onnxruntime's devices (detect_server.ORT_PROVIDERS): cuda = NVIDIA; cpu = its CPU provider
+ORT_DEVICES = ("cuda", "cpu")
+ORT_DEVICE_DEFAULT = "cuda"
 
 # The deployed ONNX files on the NAS, read-only in the vision worker (/datasets): the OpenVINO
 # detect server runs IN the Intel worker (Batt 2026-11-07, after the cutover: the image has OpenVINO
@@ -769,6 +779,21 @@ def serve_step_openvino(seconds: int, device: str = "GPU",
     return f"execdev:vision@{int(seconds)}=" + " ".join(parts)
 
 
+def serve_step_onnxruntime(seconds: int, device: str = ORT_DEVICE_DEFAULT,
+                           models: Sequence[str] = tuple(GPU_WEIGHTS)) -> str:  # fmt: skip
+    """PURE: the guarded worker step running the detect server on onnxruntime (ADR-0022 Amendment
+    2026-11-18; NVIDIA's CUDA provider by default): the deployed ONNX of each model from
+    NAS_MODELS, by its pinned sha256, the same files as serve_step_openvino's."""
+    if device not in ORT_DEVICES:
+        raise ValueError(f"device {device!r}: one of {list(ORT_DEVICES)}")
+    parts = ["python", "-m", "poring_vision.detect_server", "--backend", "onnxruntime",
+             "--device", device, "--socket", SERVER_SOCKET]  # fmt: skip
+    for m in models:
+        w = GPU_WEIGHTS[m]
+        parts += ["--model", f"{m}={NAS_MODELS}/{w.onnx}={w.onnx_sha256}"]
+    return f"execdev:vision@{int(seconds)}=" + " ".join(parts)
+
+
 def main(argv: list[str] | None = None) -> int:
     import argparse
 
@@ -776,10 +801,13 @@ def main(argv: list[str] | None = None) -> int:
     sub = ap.add_subparsers(dest="cmd", required=True)
     sc = sub.add_parser("serve-cmd", help="print the guarded_build command for the detect server")
     sc.add_argument("--seconds", type=int, default=0)
-    sc.add_argument("--backend", choices=["torch", "openvino"], default="torch",
-                    help="torch: the CUDA build (NVIDIA); openvino: the Intel worker (ADR-0022); "
-                    "both a guarded execdev step in the vision worker")  # fmt: skip
-    sc.add_argument("--device", default="GPU", help="openvino's device")
+    sc.add_argument("--backend", choices=list(BACKENDS), default="torch",
+                    help="torch: each model's .pt (the lab's); openvino: the Intel worker "
+                    "(ADR-0022); onnxruntime: the deployed ONNX on NVIDIA (ADR-0022 Amendment "
+                    "2026-11-18); each a guarded execdev step in the vision worker")  # fmt: skip
+    sc.add_argument("--device", default=None,
+                    help="openvino's device (default GPU); onnxruntime's provider "
+                    f"({', '.join(ORT_DEVICES)}; default {ORT_DEVICE_DEFAULT})")  # fmt: skip
     sc.add_argument("--ov-preproc", choices=list(OV_PREPROC), default=None,
                     help="--backend openvino: the server's input conversion, cpu (numpy) or gpu "
                     "(compiled into the model); default " + OV_PREPROC_DEFAULT)  # fmt: skip
@@ -794,16 +822,28 @@ def main(argv: list[str] | None = None) -> int:
             ap.error("--ov-preproc is --backend openvino's (torch converts on the card already)")
         if a.backend != "openvino" and a.ov_precision is not None:
             ap.error("--ov-precision is --backend openvino's (torch runs FP32)")
+        if a.backend == "torch" and a.device is not None:
+            ap.error("--device is openvino's and onnxruntime's")
+        if a.backend == "onnxruntime" and a.device not in (None, *ORT_DEVICES):
+            ap.error(f"--device for onnxruntime: one of {list(ORT_DEVICES)}")
         models = present_models(a.backend)
         if not models:
             print(f"no model for the {a.backend} detect server in the storage folder "
                   f"({lab_env.store_dir()}): the CPU detector serves alone "
                   "(scripts/detector_setup.py installs v1)", file=sys.stderr)  # fmt: skip
             return 3
-        step = (serve_step_openvino(a.seconds, a.device, models,
-                                    ov_preproc=a.ov_preproc or OV_PREPROC_DEFAULT,
-                                    ov_precision=a.ov_precision or OV_PRECISION_DEFAULT)
-                if a.backend == "openvino" else serve_step(a.seconds, models))  # fmt: skip
+        if a.backend == "openvino":
+            step = serve_step_openvino(
+                a.seconds,
+                a.device or "GPU",
+                models,
+                ov_preproc=a.ov_preproc or OV_PREPROC_DEFAULT,
+                ov_precision=a.ov_precision or OV_PRECISION_DEFAULT,
+            )
+        elif a.backend == "onnxruntime":
+            step = serve_step_onnxruntime(a.seconds, a.device or ORT_DEVICE_DEFAULT, models)
+        else:
+            step = serve_step(a.seconds, models)
         print(f"python3 scripts/guarded_build.py --threshold 30 --sustain 30 '{step}'")
     return 0
 

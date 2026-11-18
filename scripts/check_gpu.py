@@ -14,7 +14,10 @@ poring_vision.gpu.configure_gpu -- the card is shared with Frigate and Ollama) i
 allocation over it is refused by torch's allocator before it reaches the driver, a small one is
 fine; the build is CUDA 13.0 with sm_120 kernels (RTX 5060 Ti = compute capability 12.0 -- a cu126
 wheel would fail with "no kernel image is available"); real kernels run (matmul + conv2d, fp32 and
-fp16); and an ultralytics YOLO model built from its YAML runs a forward pass on the GPU.
+fp16); an ultralytics YOLO model built from its YAML runs a forward pass on the GPU; and the detect
+server's own path (ADR-0022 Amendment 2026-11-18): onnxruntime's CUDA provider loads on the card
+(never its silent CPU fallback) and runs v1's deployed ONNX from the storage folder, compared with
+the same file on onnxruntime's CPU provider (the real box parity: gpu_live_parity.py, on frames).
 No weights are baked into the image: an audit hook REPORTS (never fails on) any network fetch or new
 file a check causes -- e.g. ultralytics downloading something at run time (Batt, 2026-10-03).
 """
@@ -28,6 +31,10 @@ from pathlib import Path
 
 EXPECTED_CUDA = "13.0"
 EXPECTED_ARCH = "sm_120"
+# the starter model every install has (scripts/detector_setup.py; unit_detector.GPU_WEIGHTS v1), in
+# the storage folder the vision containers mount read-only at /datasets
+V1_ONNX = Path("/datasets/archive/models/v1png-last-736x1280.onnx")
+ORT_MAX_DIFF = 1.0  # a sanity bound (wrong kernels give garbage), not the box parity
 results: list[tuple[str, bool, str]] = []
 NETWORK: list[str] = []  # every outbound connection / URL request, in order
 WATCHED = [Path(os.environ.get("YOLO_CONFIG_DIR", "/tmp/ultralytics")), Path.home() / ".cache",
@@ -144,6 +151,33 @@ def main() -> int:
         torch.cuda.synchronize()
         first = out[0] if isinstance(out, (list, tuple)) else out
         return f"ultralytics {ultralytics.__version__}, output {tuple(first.shape)}"
+
+    @check("onnxruntime CUDA provider on the card (the detect server's path, v1's ONNX)")
+    def _() -> str:
+        import numpy as np
+        import onnxruntime as ort
+
+        assert V1_ONNX.is_file(), f"{V1_ONNX} missing: scripts/detector_setup.py installs v1"
+        ort.preload_dlls(cuda=True, cudnn=True, msvc=False)
+        cuda = ("CUDAExecutionProvider", {"device_id": 0, "use_tf32": 0})
+        gpu = ort.InferenceSession(str(V1_ONNX), providers=[cuda])
+        got = gpu.get_providers()
+        assert got[0] == "CUDAExecutionProvider", f"onnxruntime fell back to {got} (log above)"
+        cpu = ort.InferenceSession(str(V1_ONNX), providers=["CPUExecutionProvider"])
+        name = gpu.get_inputs()[0].name
+        h, w = gpu.get_inputs()[0].shape[2:4]
+        x = np.random.default_rng(0).random((1, 3, int(h), int(w)), dtype=np.float32)
+        yg, yc = gpu.run(None, {name: x})[0], cpu.run(None, {name: x})[0]
+        t0 = time.perf_counter()
+        for _ in range(10):
+            gpu.run(None, {name: x})
+        ms = (time.perf_counter() - t0) * 100.0
+        diff = float(np.max(np.abs(yg.astype(np.float64) - yc)))
+        assert yg.shape == yc.shape and diff <= ORT_MAX_DIFF, f"{yg.shape}: CUDA vs CPU {diff:g}"
+        return (
+            f"onnxruntime {ort.__version__}, {got}; output {tuple(yg.shape)}, max |CUDA - "
+            f"CPU| {diff:.2g}; {ms:.1f} ms a forward"
+        )
 
     if torch.cuda.is_available():
         used = torch.cuda.max_memory_allocated(0) / 2**20
