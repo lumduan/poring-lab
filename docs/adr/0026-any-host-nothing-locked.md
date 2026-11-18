@@ -71,7 +71,9 @@ could list in an hour:
    - The GPU: what a container cannot bring is checked (the NVIDIA driver release and the Container
      Toolkit; the Intel kernel driver and the render group). Not ready, or no GPU, or AMD -> the
      recommendation is the new `dedicated-cpu` profile (the CPU detector), WITH the fixes that
-     would make the GPU usable. ADR-0022 amendment 2026-11-17.
+     would make the GPU usable. ADR-0022 amendment 2026-11-17. ➡️ AMD since 2026-11-18: a ready
+     card (amdgpu, its render node) gets `dedicated-amd`, the Vulkan image (ADR-0022 Amendment
+     2026-11-18b; Batt chose option (b)).
    - The sizes: the vision worker's memory from the host's RAM.
    - The starter detector model: v1 (`v1.onnx` of the teaching-kit branch, published 2026-11-06),
      sha256-pinned; `scripts/detector_setup.py` sets up the CPU detector with it.
