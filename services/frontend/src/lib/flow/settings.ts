@@ -417,6 +417,7 @@ export function withRunKeys(values: Record<string, SettingValue>, keys: RunKeys 
  * "no need to lock the character's name: a user should be free to create a character"). */
 export function identityText(mode: string | null | undefined): string {
   if (mode === "mine") return "this install's own character on screen (RUN_IDENTITY=mine: the runner compares its name plate and job)";
+  if (mode === "known") return "a character this install knows on screen (RUN_IDENTITY=known: its name plate was cut here once; another server's character is refused)";
   return "a character in the game (any name, any job: a Run does not check who plays)";
 }
 

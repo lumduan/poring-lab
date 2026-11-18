@@ -54,6 +54,21 @@ Not checked before the run, but assumed by it (a learner meets them in the first
 | 17 | The Rogue's Knife swap | a Rogue skill's trick; another job gains nothing but loses nothing | switch it off (knife_swap) |
 | 18 | Words that assume who plays ("she stands on xmas_dun02", "her cell") | the block titles and the runner's lines | wording (4e) |
 
+**The game's language (Batt 2026-11-18 ~22:1x, restating 10-26 and 11-11: "I do not want
+poring-lab tied to the English interface only: Korean, Thai and others too; the project is public,
+people may try it on rAthena servers in other languages").** No cue may read English UI text: cues
+come from sprites, shapes, colours, places and digits; only the console's own UI stays English.
+The first non-English client a Run saw was rog101's (Thai, 21:55 and 21:57; another server's
+character, refused before any input). Known English-bound pieces and what to verify:
+
+| # | Piece | Bound to the language how | Status |
+|---|---|---|---|
+| 19 | The Battle Log reader (`battle_log.py`) | an English line grammar ("inflicts ... damage points") | KNOWN (gef10-eyes-loot.md section 4); bare_steal reads a line's COLOUR instead |
+| 20 | The chat window's tab check | the tab LABELS' pictures ("Battle Log", "Chat") | KNOWN: per language, or by place and order instead of label |
+| 21 | Screen signatures (login, dialogs, death dialog) | pictures cut on the English client | `state@locale` variants exist (`signature_variants`); each language needs its cut |
+| 22 | The job line (cut-job pictures) | the job's NAME in the client's language | not compared under RUN_IDENTITY=any / known |
+| 23 | Basic Info's weight, the hotbar counts, the minimap's picture | digits and pictures, maybe anchored on labels or places | TO VERIFY on a Thai client: rog101's start check read none of them (its layout differed too) |
+
 ## 2. Step 1, built 2026-11-18 (ADR-0020 Amendment Q)
 
 - `RUN_IDENTITY` in `.env`: `any` (empty = any) for every new install; `mine` for an install that
@@ -62,6 +77,12 @@ Not checked before the run, but assumed by it (a learner meets them in the first
   black game region still fails. A GM line always checks the lab's character.
 - The identity line reads "any character: a Run does not check the name or the job" on the
   page's checklist, in the Run's own check and in its log.
+- ➡️ **2026-11-18 ~22:1x (Batt chose it): the lab runs `known`** -- any character THIS install
+  knows (its name plate cut once: `crusader.py --char K init --name N`, then `cut-name`); another
+  server's character has no reference here and is refused at the first line. The reason: a Run
+  was pressed twice (21:55, 21:57) while rog101, a character of another server, was in front;
+  under `any` only its different interface stopped it. Batt also wants the bot on rog101's
+  server: that is an ADR-0006 decision of its own, not made by this.
 - ~~The lab keeps `mine`~~ ➡️ SUPERSEDED 2026-11-18 ~21:2x (Batt: "any, so I can test it myself
   too"): the lab runs `any` too. The known risk: the community client shares its Windows PC
   (ADR-0006), and the name plate was the Run's only pixel proof that the lab's client is in front;

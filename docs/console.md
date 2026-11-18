@@ -292,8 +292,9 @@ Amendment B); a not-adopted model is never offered.
   ➡️ **Since 2026-11-18 21:19 (Batt, ADR-0020 Amendment Q) a Run plays ANY character** on an install
   whose `.env` leaves `RUN_IDENTITY` empty or `any` (the default): no name or job is compared, and
   the checklist's first line reads "a character in the game (any name, any job)". `mine` keeps the
-  name plate check. The lab runs `any` too (Batt 2026-11-18 ~21:2x, to test it himself). Every
-  start rule for teaching:
+  name plate check; `known` plays any character this install cut once (the lab's since
+  2026-11-18 ~22:1x: another server's character is refused at the first line). Every start rule
+  for teaching:
   [planning/teaching-prerun.md](planning/teaching-prerun.md).
   ➡️ **Since 2026-11-13 11:3x** Run sits beside Simulate (amber; press, then press again within 4 s
   to confirm) with Stop; a "your run settings" strip sets the Fly Wing key, the Butterfly Wing key

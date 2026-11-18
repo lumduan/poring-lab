@@ -2966,6 +2966,16 @@ once. Think ahead about such things."
   minimap's picture must be the node's map, xmas_dun02) and the start cell on that map's open
   ground; so a Run pressed while the community client stands on xmas_dun02's open ground would
   now start. `mine` again is one line.
+  ➡️ **SUPERSEDED AGAIN 2026-11-18 ~22:1x (Batt chose it): the lab runs `known`.** The risk
+  happened: at 21:55 and 21:57 Run was pressed while rog101, a character that is not in the lab's
+  DB (another server's), was in front; under `any` the identity line passed it and only its
+  different (Thai) interface and minimap refused the start, before any input. `known` = any
+  character THIS install knows: its name plate matches one cut here (`crusader.CHARS` with a
+  `ref_name.npy`: `crusader.py --char K init --name N`, then `cut-name`); no job compared. A
+  character of another server has no reference here and fails the first line ("the name plate is
+  none of this install's characters ..."). Learners' installs stay on `any` (the default). Batt
+  also wants the bot on rog101's server: an ADR-0006 decision of its own (which server, its
+  permission), not made by this amendment.
 - **The other start rules, one by one:** docs/planning/teaching-prerun.md (what stays a safety
   rule, what is a setting already, what is still locked and what it needs).
 

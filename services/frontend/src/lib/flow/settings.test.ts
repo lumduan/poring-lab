@@ -385,6 +385,7 @@ test("the identity line follows RUN_IDENTITY: any character by default (Batt 202
   assert.match(identityText(null), /^a character in the game \(any name, any job/);
   assert.equal(identityText("any"), identityText(undefined));
   assert.match(identityText("mine"), /RUN_IDENTITY=mine/);
+  assert.match(identityText("known"), /RUN_IDENTITY=known: its name plate was cut here once/);
   const items = startChecklist({}, "xmas_dun02");
   const ident = items.find((it) => it.id === "identity");
   assert.ok(ident && !/her |Thief8fce/.test(ident.text));
