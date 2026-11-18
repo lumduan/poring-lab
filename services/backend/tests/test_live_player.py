@@ -848,3 +848,88 @@ def test_the_box_takeovers_name_real_settings_and_follow_the_plan() -> None:
     # the lint document carries it per node (the pages read it)
     lint = pj.lint_doc(one, world=None, resolver=None)
     assert set(lint["box"]) == {"xmas_dun02"} and lint["box"]["xmas_dun02"] == doc
+
+
+# --- the run's diary (Batt 2026-11-18: "log the status, the checklist and the errors more") ------
+class DiaryIO(FakeIO):
+    def describe(self) -> list[str]:
+        return ["screen: the session 1920x1080; the game = FULLSCREEN"]
+
+    def snapshot(self, d: Path) -> list[str]:
+        (d / fp.START_SCREEN).write_bytes(b"jpg")
+        return [f"pictures of what the start check saw: {fp.START_SCREEN}"]
+
+
+def test_a_refused_start_logs_each_check_line_the_screen_and_its_pictures(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    p = prep(tmp_path, [press("F2")])
+    got = {"items": [{"id": "identity", "ok": True, "words": "the name plate reads hers"},
+                     {"id": "weight", "ok": False, "words": "the weight did not read"},
+                     {"id": "cell", "ok": None, "words": "cannot tell",
+                      "value": "(237, 117)"}]}  # fmt: skip
+    io_ = DiaryIO()
+    assert fp.play(p, io_, label="t10", stop_file=None, demo=tmp_path / "demo",
+                   checker=lambda _p, _i: got, run_dir=tmp_path) == 2  # fmt: skip
+    out = capsys.readouterr().out.splitlines()
+    text = "\n".join(out)
+    assert "screen: the session 1920x1080; the game = FULLSCREEN" in text
+    assert "check OK   identity: the name plate reads hers" in text
+    assert "check FAIL weight: the weight did not read" in text
+    assert "check ?    cell: cannot tell [read: (237, 117)]" in text
+    assert "1 of 3 lines pass; FAIL: weight; not read: cell" in text
+    assert (tmp_path / fp.START_SCREEN).exists() and io_.out == []  # nothing pressed
+    assert "refused" in out[-1]  # the helper's detail is the last line (flow_run tail 3)
+    assert not any(ln.startswith("CHECK ") for ln in out)  # the machine line's prefix is not ours
+
+
+def test_a_fault_logs_its_traceback_and_keeps_it_whole_in_the_run_folder(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    p = prep(tmp_path, [press("F2")])
+
+    class Boom(DiaryIO):
+        def open(self) -> None:
+            raise ValueError("the hotbar template is missing")
+
+    demo = tmp_path / "demo"
+    demo.mkdir()
+    fp.play(p, Boom(), label="t11", stop_file=None, demo=demo, checker=ok_check, run_dir=tmp_path)
+    text = capsys.readouterr().out
+    assert "ERROR: ValueError: the hotbar template is missing" in text
+    assert "  | ValueError: the hotbar template is missing" in text  # its traceback, in the log
+    assert "ValueError" in (tmp_path / fp.ERROR_FILE).read_text()
+
+
+def test_the_pause_notes_log_each_pause_and_return_and_sum_them(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    notes = fp.PauseNotes()
+    demo = tmp_path / "demo"
+    demo.mkdir()
+    notes.session = fp.SessionLog(demo, "t12")
+    notes("pause", {"why": "the Windows taskbar shows", "t_wall": 1.0})
+    notes("resume", {"after_s": 12.5, "t_wall": 2.0})
+    text = capsys.readouterr().out
+    assert "PAUSED: the Windows taskbar shows. The bot waits and presses nothing" in text
+    assert "RESUMED after 12.5 s: the game is back on the screen" in text
+    assert notes.summary() == {"pauses": 1, "paused_s": 12.5}
+    notes.session.close()
+    kinds = [e["kind"] for e in events(demo)]
+    assert kinds == ["pause", "resume"]
+
+
+def test_a_run_turns_the_pause_on_and_stop_ends_it(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import ro_agent as r
+
+    monkeypatch.setenv(r.AWAY_ENV, "")  # recorded as unset: teardown takes enable_pause's "1" away
+    monkeypatch.setattr(r, "AWAY_HOOK", None)
+    monkeypatch.setattr(r, "AWAY_STOP", None)
+    stop = tmp_path / "STOP"
+    notes = fp.enable_pause(stop)
+    assert r.pause_away() and r.AWAY_HOOK is notes
+    assert r.AWAY_STOP() is None
+    stop.write_text("")
+    assert "Stop was pressed while the run was paused" in r.AWAY_STOP()

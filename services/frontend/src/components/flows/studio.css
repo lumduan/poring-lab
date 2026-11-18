@@ -425,6 +425,21 @@
   border: 1px solid var(--border);
   border-radius: 0.3rem;
 }
+/* Batt 2026-11-18: the Run's pause (Alt+Tab), its own start check, what it saw, its log */
+.live-pause {
+  font-weight: 600;
+}
+.live-start-pictures {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+.live-run-log {
+  max-height: 22rem;
+  overflow: auto;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
 
 /* THE FLOWS ROW (Batt 2026-11-13: "on /flows I don't see this flow's name"): every flow by name, always
    in view under the header; the one shown is pressed */

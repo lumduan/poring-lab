@@ -129,7 +129,9 @@ import io
 import json
 import os
 import sys
+import threading
 import time
+import traceback
 from collections.abc import Callable, Generator, Mapping, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -433,6 +435,15 @@ class LiveIO:
         None: unread). This interface reads none (unknown); PixelIO reads the pixels."""
         return {k: None for k in keys}
 
+    def describe(self) -> list[str]:
+        """The run's environment in a person's words (the start diary; Batt 2026-11-18: "log the
+        status, the checklist and the errors, so we know where a problem is")."""
+        return []
+
+    def snapshot(self, d: Path) -> list[str]:
+        """Save what the start check saw into the run's folder; the diary's line(s)."""
+        return []
+
     def close(self) -> None:
         pass
 
@@ -527,6 +538,62 @@ class PixelIO(LiveIO):
     def release(self) -> None:
         if self.agent is not None:
             self.agent.send([{"type": "release_all", "t_mono_ns": self.r.ns(), "frame_id": -1}])
+
+    def describe(self) -> list[str]:
+        r = self.r
+        out: list[str] = []
+        try:
+            w, h = r.desktop()
+            x, y, cw, ch = r.real_game_region()
+            full = r.fullscreen()
+            seen = (f"the bot sees it through the virtual 1280x720 client (the world "
+                    f"x{ch / 720:.2f} about the centre, the panels at their saved places)"
+                    if r.virtual_active() else "the bot sees it 1:1")  # fmt: skip
+            out.append(f"screen: the session {w}x{h}; the game at {x},{y} {cw}x{ch} = "
+                       f"{'FULLSCREEN' if full else 'a window'}; {seen}")  # fmt: skip
+            sig = "taskbar" if full else "client_title_active"
+            d = r._raw_distance(self.screen, sig)
+            why = r.away_verdict(full, d if full else None, None if full else d)
+            rule = (f"the taskbar box reads {d:.1f} from the taskbar's picture; hidden from "
+                    f"{r.TASKBAR_ABSENT_MIN:.0f}" if full else
+                    f"its title bar reads {d:.1f} from its lit picture; lit up to {r.SIG_MATCH:.0f}"
+                    ) if d is not None else "no template: it cannot tell"  # fmt: skip
+            out.append(("the game is on the screen" if why is None else
+                        f"the game is NOT on the screen: {why} -- the run waits for it, pressing "
+                        "nothing") + f" ({rule})")  # fmt: skip
+        except (SystemExit, OSError, ValueError) as e:  # r.Stop: GAME_REGION unset
+            out.append(f"screen: not read ({e})")
+        h = r.backend_health()
+        modes = ", ".join(r.input_modes(os.environ.get(r.MODES_ENV)))
+        out.append(f"input: the console is in {h.get('mode') or '?'}; a Run sends in {modes}"
+                   + (f"; the pause while the game is off the screen is "
+                      f"{'ON' if r.pause_away() else 'off'}"))  # fmt: skip
+        fg = h.get("foreground") or {}
+        if fg:
+            out.append(f"the backend's key gate: {fg.get('state')} ({fg.get('reason')}, "
+                       f"{fg.get('mode')}, distance {fg.get('distance')}, frame age "
+                       f"{fg.get('age_ms')} ms)")  # fmt: skip
+        return out
+
+    def snapshot(self, d: Path) -> list[str]:
+        from PIL import Image
+
+        r, np = self.r, self.np
+        saved: list[str] = []
+        with contextlib.suppress(Exception):  # a picture never stops the run
+            w, h = r.desktop()
+            _, real, _, _ = self.screen._grab_raw(0, 0, w, h)
+            img = Image.fromarray(np.ascontiguousarray(np.asarray(real)[..., 2::-1]))
+            img.resize((w // 2, h // 2)).save(d / START_SCREEN, quality=80)
+            saved.append(f"{START_SCREEN} (the whole screen, half size)")
+        if r.virtual_active():
+            with contextlib.suppress(Exception):
+                _, v, _, _ = self.screen._grab_raw(*r.game_region())
+                Image.fromarray(np.ascontiguousarray(np.asarray(v)[..., 2::-1])).save(
+                    d / START_VIRTUAL, quality=85
+                )
+                saved.append(f"{START_VIRTUAL} (the virtual 1280x720 client the readers read)")
+        return [f"pictures of what the start check saw: {'; '.join(saved) or 'none saved'}"]
 
     def close(self) -> None:
         if self.agent is not None:
@@ -1414,16 +1481,121 @@ def check_refusal(got: Mapping[str, Any]) -> str | None:
     return None
 
 
+# --- the run's diary (Batt 2026-11-18: "when Run is pressed, log the status, the checklist and
+# the errors more than now, so we know where a problem is") ----------------------------------------
+START_SCREEN = "start-screen.jpg"  # the run's folder: the whole screen when the check read it
+START_VIRTUAL = "start-virtual.jpg"  # ... and the virtual client the readers read (not 1280x720)
+ERROR_FILE = "error.txt"  # the full traceback of a fault
+TRACE_LINES = 12  # a fault's last traceback lines in the log itself
+
+
+def say(line: str) -> None:
+    """One diary line with its time (the run's log: the page shows its tail)."""
+    print(f"[{fr.ict()[11:19]}] {line}", flush=True)
+
+
+def check_lines(got: Mapping[str, Any]) -> list[str]:
+    """PURE: the start check, one line per item in a person's words (never the machine's CHECK
+    line's prefix: the helper parses that one)."""
+    out = []
+    for it in got.get("items") or []:
+        mark = {True: "OK  ", False: "FAIL"}.get(it.get("ok"), "?   ")
+        value = it.get("value")
+        out.append(f"check {mark} {it.get('id')}: {it.get('words')}"
+                   + ("" if value in (None, "") else f" [read: {value}]"))  # fmt: skip
+    return out
+
+
+def check_summary(got: Mapping[str, Any]) -> str:
+    """PURE: the check in one line: how many lines, which fail or did not read."""
+    items = list(got.get("items") or [])
+    bad = [str(i.get("id")) for i in items if i.get("ok") is False]
+    unread = [str(i.get("id")) for i in items if i.get("ok") is None]
+    head = f"the start check: {len(items) - len(bad) - len(unread)} of {len(items)} lines pass"
+    return (
+        head
+        + (f"; FAIL: {', '.join(bad)}" if bad else "")
+        + (f"; not read: {', '.join(unread)}" if unread else "")
+    )
+
+
+def fault_lines(tb: str, n: int = TRACE_LINES) -> list[str]:
+    """PURE: a traceback's last ``n`` lines for the log, each marked (a person's log shows them;
+    lines starting with "/" or "{" are dropped from the page's tail, so none does)."""
+    return [f"  | {ln}" for ln in tb.rstrip().splitlines()[-n:]]
+
+
+class PauseNotes:
+    """ro_agent.AWAY_HOOK: the pause's lines in the run's log and its session events."""
+
+    def __init__(self) -> None:
+        self.session: SessionLog | None = None
+        self.lock = threading.Lock()
+        self.count = 0
+        self.total_s = 0.0
+
+    def __call__(self, kind: str, info: Mapping[str, Any]) -> None:
+        with self.lock:
+            if kind == "pause":
+                self.count += 1
+                say(f"PAUSED: {info.get('why')}. The bot waits and presses nothing; it goes on by "
+                    "itself when the game is back on the screen.")  # fmt: skip
+            else:
+                self.total_s += float(info.get("after_s") or 0.0)
+                say(f"RESUMED after {info.get('after_s')} s: the game is back on the screen; the "
+                    "bot goes on.")  # fmt: skip
+            if self.session is not None:
+                self.session.ev({"kind": kind, **info})
+
+    def summary(self) -> dict[str, Any]:
+        return {"pauses": self.count, "paused_s": round(self.total_s, 1)}
+
+
+STOP_WHILE_PAUSED = "Stop was pressed while the run was paused (the game off the screen)"
+
+
+def enable_pause(stop_file: Path | None) -> PauseNotes:
+    """A Run pauses while the game is off the screen (ro_agent.away_gate): on in this process and
+    its children; Stop ends a pause."""
+    import ro_agent as r
+
+    os.environ[r.AWAY_ENV] = "1"
+    notes = PauseNotes()
+    r.AWAY_HOOK = notes
+    r.AWAY_STOP = lambda: (STOP_WHILE_PAUSED if stop_file is not None and stop_file.exists()
+                           else None)  # fmt: skip
+    return notes
+
+
 # --- play -----------------------------------------------------------------------------------------
 def play(prep: Prepared, lio: LiveIO, *, label: str, stop_file: Path | None,
          demo: Path = DEMO, checker: Callable[[Prepared, LiveIO], dict[str, Any]] | None = None,
-         hunt: HuntCore | None = None) -> int:  # fmt: skip
+         hunt: HuntCore | None = None, pause: PauseNotes | None = None,
+         run_dir: Path | None = None) -> int:  # fmt: skip
     """The run: the start check (reads), the input path, the UI gate, the runtime, the end.
-    0: it played and ended; 2: refused before any input."""
+    0: it played and ended; 2: refused before any input. Its diary (say): the environment, each
+    check line, the pictures the check saw, the pauses, a fault's traceback."""
     checker = checker or default_checker
-    got = checker(prep, lio)
+    say(f"RUN {label}: the project {prep.project.name} from {prep.node} (map {prep.map}), the "
+        f"time box {prep.cap_s // 60} min")  # fmt: skip
+    for ln in lio.describe():
+        say(ln)
+    say("the start check reads the screen (it presses nothing)")
+    try:
+        got = checker(prep, lio)
+    except SystemExit as e:  # a Stop while it waited for the game (Stop pressed) or a grab's
+        say(f"the start check stopped: {e}")
+        print(refuse(f"the start check: {e}"), flush=True)
+        return 2
+    for ln in check_lines(got):
+        say(ln)
+    if run_dir is not None:
+        for ln in lio.snapshot(run_dir):
+            say(ln)
+    say(check_summary(got))
     why = check_refusal(got)
     if why is not None:
+        say("REFUSED before any input: nothing was pressed (the lines marked FAIL say why)")
         print(refuse(f"the start check: {why}"), flush=True)
         return 2
     if stop_file is not None and stop_file.exists():
@@ -1435,6 +1607,8 @@ def play(prep: Prepared, lio: LiveIO, *, label: str, stop_file: Path | None,
     try:
         lio.open()  # the ONE input path (refuses unless ASSIST and the lock is steady)
         lio.ui_clear()
+        if pause is not None:
+            pause.session = log
         player = LivePlayer(prep, lio, log, stop_file=stop_file,
                             hunt=hunt or HuntCore(label, stop_file))  # fmt: skip
         log.ev({"kind": "run_start", "player": "flow_play", "version": VERSION,
@@ -1447,10 +1621,21 @@ def play(prep: Prepared, lio: LiveIO, *, label: str, stop_file: Path | None,
         words = player.words
     except SystemExit as e:  # ro_agent.Stop outside a block (the Agent, the UI gate, a grab)
         end, words = "input_refused", f"stopped by the input path or the screen: {str(e)[:300]}"
+        say(f"STOPPED by the input path or the screen: {e}")
+        for ln in fault_lines(traceback.format_exc(), 6):  # where it came from
+            print(ln, flush=True)
         with contextlib.suppress(BaseException):
             lio.release()
     except Exception as e:  # noqa: BLE001 -- a fault: release, record, end (never a silent stop)
         end, words = "error", f"{type(e).__name__}: {str(e)[:300]}"
+        tb = traceback.format_exc()
+        say(f"ERROR: {type(e).__name__}: {e}")
+        for ln in fault_lines(tb):
+            print(ln, flush=True)
+        if run_dir is not None:
+            with contextlib.suppress(OSError):
+                (run_dir / ERROR_FILE).write_text(tb)
+                say(f"the whole traceback: {ERROR_FILE} in the run's folder")
         with contextlib.suppress(BaseException):
             lio.release()
     except KeyboardInterrupt:
@@ -1462,7 +1647,11 @@ def play(prep: Prepared, lio: LiveIO, *, label: str, stop_file: Path | None,
         elapsed = 0.0 if player is None else player.t
         text = end_words(end, words, elapsed, None if player is None else player.flow_stop)
         log.ev({"kind": "run_end", "reason": end, "words": text,
-                "keys": [] if player is None else player.keys_sent})  # fmt: skip
+                "keys": [] if player is None else player.keys_sent,
+                **({} if pause is None else pause.summary())})  # fmt: skip
+        if pause is not None and pause.count:
+            say(f"paused {pause.count} time(s), {pause.total_s:.0f} s in all (the game off the "
+                "screen)")  # fmt: skip
         log.close()
         print(f"flow_play: {text}", flush=True)
         lio.close()
@@ -1511,7 +1700,9 @@ def main(argv: Sequence[str] | None = None) -> int:
         print(json.dumps(prep.doc(), indent=1))
         return 0
     os.environ.setdefault("TMPDIR", "/dev/shm/poring-lab-tmp")
-    return play(prep, PixelIO(), label=a.label, stop_file=a.stop_file)
+    pause = enable_pause(a.stop_file)  # before the check: a Run waits for the game, never misreads
+    run_dir = a.stop_file.parent if a.stop_file is not None else None
+    return play(prep, PixelIO(), label=a.label, stop_file=a.stop_file, pause=pause, run_dir=run_dir)
 
 
 if __name__ == "__main__":

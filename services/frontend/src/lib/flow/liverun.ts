@@ -40,7 +40,37 @@ export type LiveStatus = {
   // block player, an A/B series; scripts/flow_run.py writer_busy), in its words; null: none. The
   // helper's state is then "busy" (or a last run's end, which keeps its words)
   busy?: string | null;
+  // Batt 2026-11-18 ("log the status, the checklist and the errors more"; "Alt+Tab: only pause"):
+  // the Run's OWN start check (its log's CHECK line), its pause, what its check saw
+  run_check?: LiveCheck | null;
+  pause?: RunPause | null;
+  start_pictures?: Partial<Record<StartPicture, string>>; // which -> the stamp it was copied at
 };
+
+/** A Run's pause while the game is off the screen (scripts/flow_run.py RunLog.pause). */
+export type RunPause = { paused: boolean; since: string | null; why: string | null; count: number; paused_s: number };
+export type StartPicture = "screen" | "virtual";
+export const START_PICTURES: readonly StartPicture[] = ["screen", "virtual"];
+
+/** PURE: the pause in a person's words: paused now (since when, why, what the bot does), or how
+ * often it paused; null: it never paused. */
+export function pauseLine(p: RunPause | null | undefined): string | null {
+  if (!p || p.count <= 0) return null;
+  if (p.paused) return `PAUSED since ${p.since ?? "?"}: ${p.why ?? "the game is not on the screen"}. The bot waits and presses nothing; it plays on by itself when the game is back on the screen.`;
+  return `Paused ${p.count} time${p.count === 1 ? "" : "s"} (${Math.round(p.paused_s)} s in all): the game was off the screen; it played on by itself each time.`;
+}
+
+/** PURE: the Run's own start check, one line per item, the failing ones first. */
+export function runCheckLines(c: LiveCheck | null | undefined): { id: string; mark: "ok" | "fail" | "unread"; sign: string; words: string; value: string | null }[] {
+  if (!c || !Array.isArray(c.items)) return [];
+  const rank = { fail: 0, unread: 1, ok: 2 } as const;
+  return c.items
+    .map((it) => {
+      const mark: "ok" | "fail" | "unread" = it.ok === true ? "ok" : it.ok === false ? "fail" : "unread";
+      return { id: it.id, mark, sign: mark === "ok" ? "✓" : mark === "fail" ? "✗" : "?", words: it.words, value: it.value ?? null };
+    })
+    .sort((a, b) => rank[a.mark] - rank[b.mark]);
+}
 
 /** PURE: why Run (``what`` "run") or the check (``what`` "check") waits: another input writer of
  * ours plays (null: none). matpilot round 18 (c): "Check the game"'s title said "Run waits": it is

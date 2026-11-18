@@ -2893,3 +2893,46 @@ Console page: the bot must keep working; come back to Flows: it must show runnin
   windows (login, desktop) stay ASSIST-only, so a run that would need a re-login in BOT ends instead
   (fail closed); the runner (`dungeon_hunt.py`, byte-pinned) is untouched: it opens its input
   through `ro_agent`'s session.
+
+## Amendment P (2026-11-18 ~19:4x, Batt decided): a Run PAUSES while the game is off the screen, and its log says where a problem is
+
+**Batt (translated), after five Run presses at 19:18-19:25 were refused with eight unrelated-looking
+lines:** "Alt+Tab first: if a user presses it, only pause; when they come back the bot must detect
+the screen and play on by itself. And when Run is pressed, log the status, the checklist and the
+errors more than now, so we know where a problem is."
+
+- **What happened (the input log):** 19:16:22 a human Alt+Tab in the fullscreen game; the start
+  checks then read the Windows desktop (the hotbar empty, Basic Info and the minimap unreadable, no
+  name plate) and refused, before any input, with no word that the game was not on the screen.
+- **The pause (`ro_agent.away_gate`):** every grab and every press of ours passes `ro_agent`, so the
+  gate is there and the runner (`dungeon_hunt.py`, byte-pinned) is untouched: its threads and its
+  Battle Log subprocess freeze in place together and go on with fresh frames.
+  - On only in a Run: `PORING_PAUSE_AWAY=1`, set by the Run helper's environment and by
+    `flow_play` (inherited by its children). The login, the desktop steps and every other script
+    never pause.
+  - "Off the screen": fullscreen, the Windows taskbar shows (the backend's own rule:
+    `TASKBAR_ABSENT_MIN`); a window, its title bar is not lit (`client_title_active`). No template:
+    no pause (a pause needs a proof; the backend's key gate still refuses keys).
+  - While away nothing is grabbed or pressed; the thread's Agents let go of what they hold
+    (`release_all`) and keep reading their websocket. The game is "back" once it is on the screen
+    AND drawn (its centre not black) for 1.5 s without a break. A key the backend refused because
+    the game left between the look and the press (`client_not_foreground`) waits and goes again
+    (an all-key batch only, at most 3 times). Stop ends a pause (the stop file).
+  - At the start the same gate makes the Run's start check WAIT for the game instead of misreading
+    the desktop.
+  - The cost: the character stands still while away (monsters may hit her; nothing can be pressed
+    for her). The run's time box keeps counting.
+- **The Run's log (flow_play's diary, `run.log`):** each line timed: the project, the screen (the
+  session, the client's rect, fullscreen or a window, the virtual client and its scale), whether the
+  game is on the screen (with the taskbar's or title bar's distance), the console's input mode, the
+  backend's key gate; then ONE LINE PER CHECK ITEM (OK / FAIL / ?, its words and what it read), a
+  summary ("6 of 9 lines pass; FAIL: ..."), the pictures the check saw (`start-screen.jpg`, and
+  `start-virtual.jpg` on a screen not 1280x720), PAUSED / RESUMED lines, and a fault's traceback
+  (its last 12 lines in the log, the whole one in `error.txt`).
+- **The page:** the Run helper's status carries the Run's OWN check (`run_check`, from the log's
+  CHECK line), the pause (`pause`: paused now since when and why, or how often and how long) and
+  the start pictures (served by `GET /flows/run/start/{screen,virtual}.jpg`); the log tail is 40
+  lines (it was 6) and a refusal's detail is whole (it was cut at 240 characters). /flows shows a
+  PAUSED banner, the Run's own check line by line (the failing ones first), the two pictures and
+  the log.
+
