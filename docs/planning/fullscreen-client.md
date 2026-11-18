@@ -109,6 +109,21 @@ hidden: 67.6):**
   variant: the 720p signature scores 6.29 there, just over 6), character select): in game online=1.
   It then stops at the chat-window standard check (the 720p place): the next milestones.
 
+**The wiring (milestone 4), one chokepoint, the runner untouched.** Every frame the runner and its
+helpers read goes through ro_agent's `Screen` and `game_region()`; every input through its `Agent`.
+So the virtual client lives inside ro_agent:
+- `game_region()` returns the virtual client at a far origin (x >= 100000: never a desktop pixel)
+  whenever the real client is not 1280x720; the real one stays `real_game_region()`;
+- `Screen.grab` of a box at that origin returns that box of the virtual frame;
+- every pointer position at that origin (move, click, drag, and the runner's raw double-click
+  through `Agent.send`) is mapped to the real screen by the view's vectors;
+- the login dialogs stay in REAL pixels (found by their picture, as above);
+- Windows' own UI (the taskbar, the desktop icons, the shell) keeps real pixels.
+**Native-size things inside the world** (the cursor, floor-item labels, "Miss", the small HP bars)
+are not scaled with the world: in the virtual frame the cursor's area is pasted unscaled at the
+virtual mouse position (ro_agent knows where it put the pointer); the text cues are measured after
+the first run at 1080p.
+
 **Milestones**
 1. The geometry: the view, its vectors and their inverse, the virtual frame -- pure, tested with
    synthetic frames (no lab change).
