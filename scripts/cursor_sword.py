@@ -51,38 +51,73 @@ CLEAR_SWORD_MAX = 0.60  # ... and the SWORD recall stays below this: CLEAR
 PICKUP_MIN = 0.90  # PICKUP recall at or above (and SWORD below SWORD_MIN): the hand, CLEAR
 WALK_SUBSET = 16  # every 16th WALK prototype (the arrow over many backgrounds): ~31 of 491
 HALF = cr.CROP // 2
+CLASSES = ("sword", "pickup", "walk")
+
+# ➡️ 2026-11-19 (Batt: "yes, fix cause C"): THIS CLIENT's own WALK arrows, learned at a Run's
+# start by cursor_learn (64 x 64 BGR crops, the cursor's pixels only, and their masks). Held in
+# this process's memory, never written (Batt 2026-11-18: no pictures). Batt's Thai client draws
+# the arrow in other colours than the lab's references: its walk recall read 0.53-0.93 (the
+# lab's 0.94-0.99), so most of his scan cells read "unknown".
+LEARNED: list[tuple[Any, Any]] = []
+LEARN_MIN = 3  # fewer learned crops than this: not used (one odd capture is no reference)
+
+
+def learned_refs() -> cr.RobustRefs | None:
+    """The learned WALK arrows as references, or None (fewer than LEARN_MIN)."""
+    if len(LEARNED) < LEARN_MIN:
+        return None
+    a = np.stack([np.asarray(x)[..., :3] for x, _ in LEARNED])
+    m = np.stack([np.asarray(y, dtype=bool) for _, y in LEARNED])
+    got = cr.RobustRefs(a, m, ["walk"] * len(LEARNED))
+    return got if len(got) else None
+
+
+def _pairs(refs: cr.RobustRefs, name: str, drop: set[int], subset: int) -> tuple[Any, Any]:
+    """Every (prototype, shift) pair of class ``name`` (every ``subset``-th prototype)."""
+    n_s = len(refs.shifts)
+    if name not in refs.classes:
+        return np.zeros(0, np.int64), np.zeros(0, np.int64)
+    c = refs.classes.index(name)
+    ks = [int(k) for k in refs.by_class[c] if int(refs.ref[k]) not in drop][::subset]
+    return (np.repeat(np.array(ks, dtype=np.int64), n_s),
+            np.tile(np.arange(n_s, dtype=np.int64), len(ks)))  # fmt: skip
 
 
 class SwordRefs:
     """The SWORD, PICKUP and (a subset of) WALK prototypes of cursor_robust's references, with
-    every (prototype, shift) pair precomputed per class."""
+    every (prototype, shift) pair precomputed per class; ``extra``: more references (this
+    client's learned arrows, every one), each class's recall the best over both."""
 
-    def __init__(self, refs: cr.RobustRefs, exclude_ref: Sequence[int] = ()) -> None:
-        self.refs = refs
+    def __init__(self, refs: cr.RobustRefs, exclude_ref: Sequence[int] = (),
+                 extra: cr.RobustRefs | None = None) -> None:  # fmt: skip
+        self.refs, self.extra = refs, extra
         drop = {int(x) for x in exclude_ref}
-        n_s = len(refs.shifts)
-        self.pairs: dict[str, tuple[Any, Any]] = {}
-        for name in ("sword", "pickup", "walk"):
-            c = refs.classes.index(name)
-            ks = [int(k) for k in refs.by_class[c] if int(refs.ref[k]) not in drop]
-            if name == "walk":
-                ks = ks[::WALK_SUBSET]
-            kk = np.repeat(np.array(ks, dtype=np.int64), n_s)
-            ss = np.tile(np.arange(n_s, dtype=np.int64), len(ks))
-            self.pairs[name] = (kk, ss)
+        self.pairs: dict[str, tuple[Any, Any]] = {
+            name: _pairs(refs, name, drop, WALK_SUBSET if name == "walk" else 1)
+            for name in CLASSES}  # fmt: skip
+        self.extra_pairs: dict[str, tuple[Any, Any]] = (
+            {name: _pairs(extra, name, set(), 1) for name in CLASSES} if extra is not None else {}
+        )
 
     @classmethod
     def load(cls, path: Path = cr.REFS_V3) -> SwordRefs:
-        return cls(cr.RobustRefs.load(path))
+        """The lab's references, with this client's learned arrows when there are (LEARNED)."""
+        return cls(cr.RobustRefs.load(path), extra=learned_refs())
 
     def recalls(self, crop: Any) -> dict[str, float]:
         """The best colour recall per class on a 64 x 64 crop centred on the pointer."""
-        planes = self.refs._planes(np.asarray(crop)[..., :3])
+        c3 = np.asarray(crop)[..., :3]
+        planes = self.refs._planes(c3)
         out = {}
         for name, (kk, ss) in self.pairs.items():
             got = self.refs._rec(planes, kk, ss)
-            out[name] = round(float(got.max()) if len(got) else 0.0, 3)
-        return out
+            out[name] = float(got.max()) if len(got) else 0.0
+        if self.extra is not None:
+            planes2 = self.extra._planes(c3)
+            for name, (kk, ss) in self.extra_pairs.items():
+                if len(kk):
+                    out[name] = max(out[name], float(self.extra._rec(planes2, kk, ss).max()))
+        return {name: round(v, 3) for name, v in out.items()}
 
 
 def verdict(rec: dict[str, float]) -> str:
