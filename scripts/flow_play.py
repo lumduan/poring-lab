@@ -1576,6 +1576,47 @@ def player_owns_the_start(dh: Any, warn: Callable[[str], None]) -> Iterator[None
         dh.player_weight_refused, dh.PLAYER_MAP_UNREAD = saved_weight, saved_map
 
 
+# Batt 2026-11-19 ("digits first"): before another client's digits are read, the log says WHY its
+# weight did not read -- the reader's own reason and the symbols it saw (numbers, no picture), so a
+# learner's refused or warned Run shows where the client differs.
+WEIGHT_WHY = {
+    "no_window": "no Basic Info paper where the weight line should be",
+    "no_label": "the 'Weight :' label is not the lab's (another font, size or language)",
+    "rect_too_small": "the line is cut short",
+    "layout": "the symbols do not form N / M",
+    "cut_off": "the numbers run past the line's end",
+    "unexplained_ink": "ink no digit explains (another font, or a badge over the line)",
+    "tail_mismatch": "the zeny text is not where it should follow the numbers",
+    "ambiguous": "a digit looks like two (another font)",
+    "leading_zero": "a number starts with 0",
+    "incomplete_templates": "this install's weight glyphs are not cut",
+    "rect_outside_frame": "the line is outside the frame",
+}
+
+
+def weight_diagnosis(lio: LiveIO) -> list[str]:
+    """The weight reader's own verdict on a fresh frame, in words (the runner's line only says
+    "did not read"): its reason, the symbols it read, where it found the label."""
+    try:
+        import gm_state
+        import ro_agent as r
+
+        from poring_env import weight as wt
+
+        path = gm_state._path()
+        gpath = (r.ROOT / wt.DEFAULT_TEMPLATES if path == "rdp"
+                 else gm_state._root(path) / wt.DEFAULT_TEMPLATES.name)  # fmt: skip
+        rd = wt.read_weight(lio.frame(), wt.load_weight_glyphs(gpath))
+    except Exception as e:  # noqa: BLE001 -- the log says so; the start goes on as decided
+        return [f"the weight reader did not run ({type(e).__name__})"]
+    seen = "".join(g.symbol for g in rd.glyphs) or "-"
+    margin = min((g.margin for g in rd.glyphs), default=None)
+    near = "" if margin is None else f", the closest call {margin:.2f}"
+    why = WEIGHT_WHY.get(rd.reason, rd.reason)
+    return [f"the weight reader says {rd.reason} ({why}): the symbols read {seen!r}, the label at "
+            f"{rd.label_at}{near}"]  # fmt: skip
+
+
 def weight_red(lio: LiveIO) -> bool:
     """The weight line drawn red on a fresh frame (the runner's own cue, dungeon_hunt
     overweight_red); False when it cannot be read (a fake IO, no frame)."""
@@ -1761,6 +1802,8 @@ def play(prep: Prepared, lio: LiveIO, *, label: str, stop_file: Path | None,
         say(ln)
     say(check_summary(got))
     if any(fr.weight_unread(i) for i in got.get("items") or []):
+        for ln in weight_diagnosis(lio):
+            say(ln)
         got = red_weight(got, weight_red(lio))
     why = check_refusal(got)
     if why is not None:
