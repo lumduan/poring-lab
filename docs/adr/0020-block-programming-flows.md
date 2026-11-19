@@ -3123,3 +3123,50 @@ simple."
   (RAM, rule 7's 4 GB budget). The sessions measured so far were short (0.5-3 MB each); the
   first endurance run should watch `/dev/shm` and the input log's growth.
 
+## Amendment U (2026-11-19, Batt decided ~15:2x ICT): a Logs tab, one time limit to set, a retry after a code error
+
+- **What Batt said** (Thai, translated): "it runs now, but it walks to fight for a while and then
+  stops by itself. First, add a Logs tab at the bottom of /flows, next to Hunt rules: I tried many
+  times, the bot plays and then stops and I cannot see why. It should also tell the bot's status:
+  what it thinks, what it will do, is it attacking a monster." "Every time it stops on an error of
+  the code -- not a logic error, a death or the game dropping out -- when it comes back the bot
+  should check the character and run on by itself if she is ready to hunt; make it a retry
+  option." And on the time limit: "where did you set this? If I want to change it myself, make a
+  UI."
+- **Why it stopped (fixed first, 26e9fe75).** 4 of 4 Runs (flowplay-11191458..1510) ended "no
+  frame newer than the action within 1.5 s" on a healthy stream (p95 73 ms). The bot's view
+  re-searched his never-found hotbar every 15 s INSIDE a screen grab, 1.7 s on a 1920x1080 frame
+  here, and the fresh-frame wait raised on its deadline. A search after the first now runs in a
+  background thread, a missing window is searched for half as often per miss (up to 120 s), and
+  only a grab begun after the deadline proves a frozen stream. Live: the wait's max fell from
+  1.32 s to 0.28 s.
+- **The Logs tab** (`components/flows/RunPanels.tsx` LogsPanel, after Hunt rules). It shows:
+  - the Run's state and counts (doing, HP, cell, time, kills, loot, Knife, potions, Fly Wings,
+    retries);
+  - "what she does", newest first: the Run helper's `Live.story`, the session events in words
+    (`flow_run.event_words`: walks and why, the monster's recipe, strikes, kills, loot, presses,
+    scans, the hunt core's start and end, retries, pauses), the last 80, HP when it moves 10
+    points;
+  - the Run's whole log tail (`LOG_TAIL_N` 300, was 40).
+  Display only: it decides nothing.
+- **Run options** (`RunOptionsBox`, at the top of Before Run and Logs):
+  - ONE time limit for the Run. A choice (no limit, 30 min ... 2 days, another time in hours and
+    minutes) writes the project's `max_runtime_s`, and sets every hunt block `minutes` to 0, so
+    the hunt core follows the Run's time box (`lib/flow/runoptions.ts` withTimeLimit). The strip
+    says the time a Run will play (`effectiveLimitS`). Saved with the project.
+  - The retry after a code error: this bot server's option (`poring_env.runoptions`,
+    `settings/flowrun/options.json`; GET `/flows/run/options`, PUT behind the same human-only
+    write gate as Run). Retry off, or 1-20 times, waiting 10-300 s before the check. Default: 3
+    times after 20 s.
+- **The retry** (`flow_play.LivePlayer._retry_due` / `_retry`).
+  - Retried: a Python error escaping the hunt core (HuntCore.play now catches it, logs the
+    traceback, marks `retryable`), or a frozen picture (`ro_agent.FrozenStream`).
+  - Never retried: a refusal or any other Stop, Stop pressed, a death (or HP 0), the time box, a
+    box event's halt.
+  - Before a retry the player waits the option's seconds (Stop still ends it), runs the START
+    CHECK again (reads only, the same verdict rules), and plays the hunt core again only when the
+    check passes and her HP is not 0. Otherwise the run ends, its words naming the error and why
+    there was no retry. The options are read at each retry, so a change applies to the Run that
+    is playing.
+  - Records: `retry`, `retry_go`, `retry_refused` (the Logs tab's lines).
+

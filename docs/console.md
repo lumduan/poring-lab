@@ -381,6 +381,14 @@ Amendment B); a not-adopted model is never offered.
   ➡️ 2026-11-19 (Batt, ADR-0020 Amendment T): no time limit unless one is set -- the project's
   run settings `max_runtime_s` and the hunt block's `minutes` take 0 or empty for "no time limit",
   the new default, and the line then shows the elapsed time alone)
+  ➡️ 2026-11-19 ~15:2x (Batt, ADR-0020 Amendment U): the bottom panes end with **Logs** (after Hunt
+  rules): the Run's state and counts, "what she does" newest first (her walks and why, the
+  monster's recipe, strikes, kills, loot, presses, retries; the last 80 lines) and the Run's log
+  (its last 300 lines, "follow the end"). Before Run and Logs both open with **Run options**: one
+  time limit for the whole Run (no limit ... 2 days, or hours and minutes; the hunt block's
+  `minutes` follows it at 0) and "after a code error": end the Run, or check her and hunt on up to
+  N times after a wait (this bot server's setting; a death, Stop, the time limit, a full bag, the
+  game off the screen or a refusal never retries)
   and the block she is on is highlighted as Simulate does (a click on a tab or a block stops
   following until "follow the run"). The end is in plain words ("Stopped by you after 10 min. She
   flew home on a Butterfly Wing. 23 kills …") with the end picture (GET /flows/run/end.png, the

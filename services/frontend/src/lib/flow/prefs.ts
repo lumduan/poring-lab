@@ -14,6 +14,7 @@ export const KEYS = {
   paths: "poring-lab.flows.path-pane.v1",
   hunt: "poring-lab.flows.hunt-pane.v1",
   run: "poring-lab.flows.run-pane.v1", // the Run pane (a flow whose map holds the runner's block)
+  logs: "poring-lab.flows.logs-pane.v1", // the Logs pane (Batt 2026-11-19)
   flow: "poring-lab.flows.flow.v1",
   world: "poring-lab.flows.world.v1", // the static data the last flow is linted and simulated on
   // the last flow's saved name and the GitHub file it came from (file.ts FileMeta); never the world
