@@ -43,6 +43,19 @@ function Plate({ c }: { c: RememberedCharacter }) {
 }
 
 type Row = { id: string; name: string };
+type Loaded = { view?: RunIdentityView; error?: string };
+
+/** The section's data (no React state here: the page's effect applies it). */
+async function fetchIdentity(base: string): Promise<Loaded> {
+  try {
+    const r = await fetch(`${base}/settings/run-identity`, { cache: "no-store" });
+    const body = await r.json().catch(() => null);
+    if (!r.ok) return { error: identityReasonText(body?.detail?.reason ?? `http_${r.status}`) };
+    return { view: body as RunIdentityView };
+  } catch {
+    return { error: "The backend did not answer." };
+  }
+}
 
 /** Settings: who may play a Run -- the mode and the characters remembered here (ADR-0020
  * Amendment R). Only a person at a LAN computer can change it; a Save applies to the next check
@@ -63,23 +76,19 @@ export default function RunIdentitySettings({ backendUrl }: { backendUrl: string
     setRows(v.characters.map((c) => ({ id: c.id, name: c.name })));
   }, []);
 
-  const reload = useCallback(async () => {
-    try {
-      const r = await fetch(`${base}/settings/run-identity`, { cache: "no-store" });
-      const body = await r.json().catch(() => null);
-      if (!r.ok) {
-        setNote({ tone: "error", text: identityReasonText(body?.detail?.reason ?? `http_${r.status}`) });
-        return;
-      }
-      take(body as RunIdentityView);
-    } catch {
-      setNote({ tone: "error", text: "The backend did not answer." });
-    }
-  }, [base, take]);
+  const apply = useCallback(
+    (l: Loaded) => {
+      if (l.error) setNote({ tone: "error", text: l.error });
+      if (l.view) take(l.view);
+    },
+    [take],
+  );
+
+  const reload = useCallback(() => fetchIdentity(base).then(apply), [base, apply]);
 
   useEffect(() => {
-    void reload();
-  }, [reload]);
+    void fetchIdentity(base).then(apply);
+  }, [base, apply]);
 
   /** One write with the CSRF token (a stale token is fetched again once). */
   const send = useCallback(
