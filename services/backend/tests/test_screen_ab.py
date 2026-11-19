@@ -128,3 +128,48 @@ def test_inconclusive_under_two_valid_runs() -> None:
     v = sa.verdict([_run(130), _run(130, minutes=5)], [_run(130), _run(131)], 20)
     assert v["lines"]["kills_h"]["verdict"] == "INCONCLUSIVE"
     assert v["verdict"] == "INCONCLUSIVE"
+
+
+def test_diag_of_counts_the_runner_records() -> None:
+    s = 1_000_000_000
+    ev = [
+        {"t_ns": 0, "kind": "run_start"},
+        {
+            "t_ns": 1 * s,
+            "kind": "box_target",
+            "verdicts": ["unknown", "sword"],
+            "struck": True,
+            "det_ms": 20.0,
+            "settle_ms": 1500,
+        },
+        {
+            "t_ns": 2 * s,
+            "kind": "box_target",
+            "verdicts": ["unknown"],
+            "struck": False,
+            "det_ms": 30.0,
+            "settle_ms": 2500,
+        },
+        {"t_ns": 3 * s, "kind": "strike", "end": "damage"},
+        {"t_ns": 4 * s, "kind": "strike", "end": "bound"},
+        {"t_ns": 5 * s, "kind": "kill", "by": "exp_line"},
+        {"t_ns": 6 * s, "kind": "scan", "verdicts": {"unknown": 3, "clear": 1}},
+        {"t_ns": 7 * s, "kind": "loot_step", "picks": 1, "hovers": 4},
+        {"t_ns": 8 * s, "kind": "escape", "why": "garm"},
+        {"t_ns": 3600 * s, "kind": "run_end"},
+    ]
+    d = sa.diag_of(ev)
+    assert d["minutes"] == 60.0
+    assert d["kills_h"] == 1.0 and d["strikes_per_kill"] == 2.0
+    assert d["cursor_box"] == {"sword": 0.333, "unknown": 0.667}
+    assert d["cursor_scan"] == {"clear": 0.25, "unknown": 0.75}
+    assert d["struck_share"] == 0.5
+    assert d["strike_end"] == {"bound": 0.5, "damage": 0.5}
+    assert d["picks_per_step"] == 1.0 and d["hovers_per_step"] == 4.0
+    assert d["escapes_h"] == {"garm": 1.0}
+    assert d["det_ms_median"] == 25.0 and d["settle_ms_median"] == 2000.0
+
+
+def test_diag_of_empty_is_safe() -> None:
+    d = sa.diag_of([])
+    assert d["kills_h"] is None and d["cursor_box"] == {} and d["strikes_per_kill"] is None

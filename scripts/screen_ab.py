@@ -14,6 +14,7 @@ script's.
     screen_ab.py plan  --label s11scr-1080 --screen 1080 --runs 3 --minutes 20
     screen_ab.py run   --label s11scr-1080 --screen 1080 --runs 3 --minutes 20
     screen_ab.py score --a s11scr-720 --b s11scr-1080 [--json] [--no-econ-update]
+    screen_ab.py diag  s11scr-1080 s11scr-720      (the runner's records per run; reported)
 """
 
 from __future__ import annotations
@@ -164,6 +165,103 @@ def verdict(a_runs: Sequence[Mapping[str, Any]], b_runs: Sequence[Mapping[str, A
     return {"verdict": overall, "lines": lines, "valid": [len(va), len(vb)]}
 
 
+# --- pure: the diagnostics (REPORTED only; where a screen size can move the play) ---------------
+def _med(xs: Sequence[float]) -> float | None:
+    return round(statistics.median(xs), 1) if xs else None
+
+
+def diag_of(events: Sequence[Mapping[str, Any]]) -> dict[str, Any]:
+    """PURE: one hunt session's play from the runner's own records (events.jsonl): the cursor's
+    reads on box targets and scans, the strikes and how they ended, the targets missed or out of
+    reach, the loot hovers and picks, the escapes by cause, the detection time. Per hour where a
+    rate, else shares; the packets' truth (kills, loot) is the score's, not this."""
+    t = [int(e["t_ns"]) for e in events if isinstance(e.get("t_ns"), int)]
+    hours = (max(t) - min(t)) / 3.6e12 if len(t) > 1 else 0.0
+    kinds: dict[str, int] = {}
+    verdicts: dict[str, int] = {}
+    scan_v: dict[str, int] = {}
+    strike_end: dict[str, int] = {}
+    escapes: dict[str, int] = {}
+    det_ms: list[float] = []
+    settle_ms: list[float] = []
+    bt = struck = 0
+    loot_steps = picks = hovers = 0
+    for e in events:
+        k = str(e.get("kind"))
+        kinds[k] = kinds.get(k, 0) + 1
+        if k == "box_target":
+            bt += 1
+            struck += bool(e.get("struck"))
+            for v in e.get("verdicts") or []:
+                verdicts[str(v)] = verdicts.get(str(v), 0) + 1
+            if isinstance(e.get("det_ms"), (int, float)):
+                det_ms.append(float(e["det_ms"]))
+            if isinstance(e.get("settle_ms"), (int, float)):
+                settle_ms.append(float(e["settle_ms"]))
+        elif k == "scan":
+            for v, n in (e.get("verdicts") or {}).items():
+                scan_v[str(v)] = scan_v.get(str(v), 0) + int(n)
+        elif k == "strike":
+            strike_end[str(e.get("end"))] = strike_end.get(str(e.get("end")), 0) + 1
+        elif k == "escape":
+            w = str(e.get("why"))
+            escapes[w] = escapes.get(w, 0) + 1
+        elif k == "loot_step":
+            loot_steps += 1
+            picks += int(e.get("picks") or 0)
+            hovers += int(e.get("hovers") or 0)
+
+    def per_h(n: int) -> float | None:
+        return round(n / hours, 1) if hours > 0 else None
+
+    def share(d: Mapping[str, int]) -> dict[str, float]:
+        tot = sum(d.values())
+        return {k: round(n / tot, 3) for k, n in sorted(d.items())} if tot else {}
+
+    kills = kinds.get("kill", 0)
+    strikes = kinds.get("strike", 0)
+    return {
+        "minutes": round(hours * 60, 1),
+        "kills_h": per_h(kills), "strikes_per_kill": round(strikes / kills, 2) if kills else None,
+        "strike_end": share(strike_end),
+        "box_targets_h": per_h(bt), "struck_share": round(struck / bt, 3) if bt else None,
+        "cursor_box": share(verdicts), "cursor_scan": share(scan_v),
+        "box_miss_h": per_h(kinds.get("box_miss", 0)),
+        "reach_skip_h": per_h(kinds.get("reach_skip", 0)),
+        "box_ignored_h": per_h(kinds.get("box_ignored", 0)),
+        "stall_h": per_h(kinds.get("stall", 0)),
+        "miss_cue_h": per_h(kinds.get("miss_cue", 0)),
+        "loot_steps_h": per_h(loot_steps),
+        "picks_per_step": round(picks / loot_steps, 2) if loot_steps else None,
+        "hovers_per_step": round(hovers / loot_steps, 1) if loot_steps else None,
+        "loot_clicks_h": per_h(kinds.get("loot_click", 0)),
+        "escapes_h": {k: per_h(n) for k, n in sorted(escapes.items())},
+        "det_ms_median": _med(det_ms), "settle_ms_median": _med(settle_ms),
+    }  # fmt: skip
+
+
+def read_events(path: Path) -> list[dict[str, Any]]:
+    out = []
+    for ln in path.read_text(errors="replace").splitlines():
+        try:
+            e = json.loads(ln)
+        except ValueError:
+            continue
+        if isinstance(e, dict):
+            out.append(e)
+    return out
+
+
+def diag_label(label: str, demo: Path = s2.DEMO) -> list[dict[str, Any]]:
+    """Every hunt session of a run's label (its demo folders), diagnosed."""
+    out = []
+    for d in sorted(demo.glob(f"*-{label}-hunt*")):
+        ev = d / "events.jsonl"
+        if ev.is_file():
+            out.append({"session": d.name, **diag_of(read_events(ev))})
+    return out
+
+
 # --- the live parts -----------------------------------------------------------------------------
 def dotenv() -> dict[str, str]:
     """`.env`'s keys (ro_agent's reader: the file, not this process's environment)."""
@@ -218,12 +316,24 @@ def main(argv: Sequence[str] | None = None) -> int:
         p.add_argument("--screen", required=True, choices=sorted(SCREENS))
         p.add_argument("--runs", type=int, default=3)
         p.add_argument("--minutes", type=int, default=20)
+    dg = sub.add_parser("diag", help="the runner's own records, per run (REPORTED only)")
+    dg.add_argument("labels", nargs="+", help="run labels (or series labels: every run of it)")
+    dg.add_argument("--demo", type=Path, default=s2.DEMO, help="the sessions' folder (an archive)")
     sc = sub.add_parser("score")
     sc.add_argument("--a", required=True, help="the 720 block's label")
     sc.add_argument("--b", required=True, help="the 1080 block's label")
     sc.add_argument("--json", action="store_true")
     sc.add_argument("--no-econ-update", action="store_true")
     a = ap.parse_args(argv)
+    if a.cmd == "diag":
+        for label in a.labels:
+            folder = SCRATCH / label
+            names = ([r["label"] for r in json.loads((folder / "series.json").read_text())["runs"]]
+                     if (folder / "series.json").is_file() else [label])  # fmt: skip
+            for name in names:
+                for d in diag_label(name, a.demo):
+                    print(json.dumps({"label": name, **d}), flush=True)
+        return 0
     if a.cmd == "score":
         blocks = {}
         for side, label in (("A", a.a), ("B", a.b)):
