@@ -230,8 +230,8 @@ Two candidates, NOT adopted (each its own block, after B2):
     valid runs  2 (of 3)         3 (of 5)
 
 - Reported:
-  - false boss Fly Wings: B 28 of 30 (three runs, about 59 min); A 6 of 11 (two runs, about
-    39 min);
+  - false boss Fly Wings: B 28 of 30 (three runs, about 59 min); A 6 of 10 (the two valid
+    runs, about 39 min; with r03A, 6 of 11);
   - s10ab's B runs (11-17, before): 114.7-145.9 kills/h; Batt's bar: 228.5 kills/h.
 - So at 1080 the bot kills 44 % fewer an hour. The causes, in the order of the time they cost:
   1. the false alarms (about 28 an hour, each a Fly Wing plus 30 s with no box engagement): both
