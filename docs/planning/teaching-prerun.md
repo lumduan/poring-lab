@@ -37,10 +37,10 @@ byte-pinned: `start_check`, `run()`), the player (`scripts/flow_play.py`), the h
 | 5 | The map: the minimap's picture is the node's map | | unchanged: the project's map node, the user's choice | the project |
 | 6 | The start cell: on the map's open ground, reaching its search area | | unchanged: the walk plans from it | needed (see 4c) |
 | 7 | The bag under WEIGHT_MAX (48 %) | | a setting (block), 10-90 % | setting |
-| 8 | Fly Wings on fly_key, at least PLAYER_MIN_WINGS (5) | | a setting, 1-99 (the run's escape: never 0) | setting + safety |
-| 9 | Heal items on heal_key, at least PLAYER_MIN_HEALS (5) | | the COUNT a setting (0-99); the ITEM fixed: White Potion (or the Christmas candies with heal_candy) | still LOCKED (see 4a) |
-| 10 | Butterfly Wings on home_key | | never refuses | setting |
-| 11 | The Knife on knife_key, the dagger worn | | only with the knife_swap switch on | setting |
+| 8 | Fly Wings on fly_key, at least PLAYER_MIN_WINGS (5) | | ➡️ 2026-11-19: a WARNING only, the Run starts (below) | the player's own |
+| 9 | Heal items on heal_key, at least PLAYER_MIN_HEALS (5) | | ➡️ 2026-11-19: a WARNING only, the Run starts (below); which item counts is still 4a | the player's own |
+| 10 | Butterfly Wings on home_key | | never refuses | the player's own |
+| 11 | The Knife on knife_key, the dagger worn | | ➡️ 2026-11-19: a WARNING; a run whose Knife / dagger slots do not read right plays WITHOUT the Knife swap | the player's own |
 | 12 | The keys (F1 heal, F8 fly, F9 home, F4 knife, F5 dagger) | | settings (the project's functions) | setting |
 
 Not checked before the run, but assumed by it (a learner meets them in the first minutes):
@@ -53,6 +53,25 @@ Not checked before the run, but assumed by it (a learner meets them in the first
 | 16 | The character's numbers: max HP 5070, max SP 530 (`--char rogue`) | the HP-rate escape (fly_rate, HP per second) uses the max HP | still LOCKED (4b) |
 | 17 | The Rogue's Knife swap | a Rogue skill's trick; another job gains nothing but loses nothing | switch it off (knife_swap) |
 | 18 | Words that assume who plays ("she stands on xmas_dun02", "her cell") | the block titles and the runner's lines | wording (4e) |
+
+**The hotbar is the player's own (Batt 2026-11-19 ~11:0x):** "do not lock the bot over this: it is
+the user's own business"; "without Fly Wings the bot dies: the user learns and improves -- or a user
+may use an item with a teleport skill"; "do not lock this". Built: the start check's hotbar lines
+(wings, heals, home, knife, dagger) WARN and the Run starts (`flow_run.hotbar_warnings`; the Run log
+marks them WARN); inside the live player the runner's own start refusals on them
+(`player_stock_refused`, `player_slots_refused`) become warnings (`flow_play.hotbar_is_the_players`,
+for the run only: the runner file is unchanged, its CLI keeps its rules); a run whose Knife or dagger
+line fails plays without the Knife swap (`flow_play.knife_swap_off`: swapping from an unknown weapon
+state could equip anything). In the run nothing new: an unread count never ends it (a teleport-skill
+key has no count), a count read 0 still ends it (the end's own escape).
+
+**A death ends the hunt (Batt 2026-11-19 ~11:0x):** "we have the death and the respawn at Geffen on
+the maps; but here simply: if she died -- the dialog is up and her HP is 0 -- do not enter the
+hunting loop again; very simple." The lab client's death dialog is recognised and its respawn plays
+as before; on any client her HP reading 0 % for 3 s with no dialog recognised ends the run as
+"dead" -- no respawn press, no hunting on (`flow_play.Hp0Watch`, in the hunt core's tick hook and
+in the player's own reads). The HP is read from Basic Info's digits (the lab font: the client's own
+digits are the next step).
 
 **The game's language (Batt 2026-11-18 ~22:1x, restating 10-26 and 11-11: "I do not want
 poring-lab tied to the English interface only: Korean, Thai and others too; the project is public,

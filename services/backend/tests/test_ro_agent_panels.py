@@ -57,14 +57,18 @@ class Found:
 
 def test_each_found_window_is_its_lab_box_moved_by_its_vector(ro: ModuleType) -> None:
     got = ro.panel_places(Found((40, 60)), Found((500, 300)),
-                          {"left": 30, "text_top": 580, "bottom": 700, "lines": 6})  # fmt: skip
+                          {"left": 30, "text_top": 579, "bottom": 700, "lines": 6})  # fmt: skip
     assert got["basic_info"]["real_xy"] == [40, 60]
     assert got["basic_info"]["virtual"] == [0, 0, 230, 150]
     assert got["hotbar"]["real_xy"] == [496, 300]  # the lab box starts 4 px left of the origin
     assert got["chat"]["virtual"] == [0, 578, 600, 142] and got["chat"]["real_xy"] == [30, 559]
-    nine = ro.panel_places(None, None, {"left": 0, "text_top": 0, "bottom": 700, "lines": 9})
+    nine = ro.panel_places(None, None, {"left": 0, "text_top": 537, "bottom": 700, "lines": 9})
     assert nine["chat"]["virtual"] == [0, 536, 600, 184]  # its own height, its bottom on 719
     assert nine["chat"]["real_xy"] == [0, 517] and set(nine) == {"chat"}
+    # Batt 2026-11-19: "do not limit the width" -- a wider window keeps its own width
+    wide = ro.panel_places(None, None, {"left": 10, "right": 769, "text_top": 607, "bottom": 700,
+                                        "lines": 4})  # fmt: skip
+    assert wide["chat"]["virtual"] == [0, 606, 763, 114] and wide["chat"]["real_xy"] == [10, 587]
     assert ro.panel_places(None, None, {"left": 1, "text_top": 2, "bottom": None,
                                         "lines": None, "obscured": True}) == {}  # fmt: skip
 

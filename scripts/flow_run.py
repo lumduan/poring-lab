@@ -326,6 +326,29 @@ def identity_any(items: list[Any], mode: str = "any") -> list[Any]:
     return out
 
 
+# Batt 2026-11-19: "do not lock the bot over the hotbar: it is the user's own business ... without
+# Fly Wings the bot dies; the user learns and improves -- or a user may use an item with a
+# teleport skill" and "do not lock this". The start check's HOTBAR lines (the counts and what each
+# role's key shows) WARN, they never refuse: the runner's words say "a person first", the line says
+# the Run starts anyway (flow_play also lets the runner's own start pass them, and plays without
+# the Knife swap when its slots do not read right).
+HOTBAR_LINES = ("wings", "heals", "home", "knife", "dagger")
+HOTBAR_WARN = ("a WARNING only: the Run starts anyway (what the hotbar holds is the player's own "
+               "choice)")  # fmt: skip
+
+
+def hotbar_warnings(items: list[Any]) -> list[Any]:
+    """PURE: the hotbar lines never refuse; a failed one says it is a warning."""
+    out = []
+    for it in items:
+        if isinstance(it, dict) and it.get("id") in HOTBAR_LINES:
+            it = {**it, "refuses": False}
+            if it.get("ok") is False and HOTBAR_WARN not in str(it.get("words")):
+                it["words"] = f"{it.get('words')} -- {HOTBAR_WARN}"
+        out.append(it)
+    return out
+
+
 def parse_check_output(text: str, identity: str | None = None) -> dict[str, Any]:
     """PURE (dungeon@9.45): the check's log as its result -- its CHECK line (the items, ok,
     refuses, the values it used), else the runner's refusal (a preamble refusal: no line read).
@@ -340,6 +363,9 @@ def parse_check_output(text: str, identity: str | None = None) -> dict[str, Any]
                 break
             if identity in ("any", "known"):
                 got["items"] = identity_any(got["items"], identity)
+            got["items"] = hotbar_warnings(got["items"])
+            got["refuses"] = any(isinstance(i, dict) and i.get("ok") is False
+                                 and i.get("refuses", True) for i in got["items"])  # fmt: skip
             fails = [i for i in got["items"] if isinstance(i, dict) and i.get("ok") is False]
             unread = [i for i in got["items"] if isinstance(i, dict) and i.get("ok") is None]
             n = len(got["items"])

@@ -432,7 +432,8 @@ def test_a_check_runs_and_its_result_goes_into_the_status(
     st = json.loads((tmp_path / "status.json").read_text())
     ck = st["check"]
     assert ck["state"] == "done" and ck["ok"] is False and ck["refuses"] is True
-    assert ck["items"] == items and ck["flow"] == "project" and "T" in ck["at"]
+    # Batt 2026-11-19: the hotbar lines warn, never refuse (fr.hotbar_warnings)
+    assert ck["items"] == fr.hotbar_warnings(items) and ck["flow"] == "project" and "T" in ck["at"]
     assert ck["keys_src"] == "the flow's functions" and ck["keys"] == KEYS
     assert ck["used"] == {"fly_key": "F3"} and ck["detail"] == "1 of 2 lines fail"
     assert st["state"] == "idle" and h.runner is None  # a check is no run

@@ -3040,3 +3040,31 @@ settable in Settings."
   names) and the terminal steps no longer bound `known`; the page holds up to 50 characters.
 - **Known limit:** a name line is a picture of one screen size; after a change between window and
   fullscreen (or another skin) the character must be remembered again (the page says so).
+
+## Amendment S (2026-11-19, Batt decided ~11:0x): the hotbar is the player's own; a death by HP ends the hunt
+
+**Batt (translated):** "Do not lock the bot over this: it is the user's own business." "Without Fly
+Wings the bot dies: the user learns and improves -- or a user may use an item with a teleport
+skill." "Do not lock this." And: "We have the death and the respawn at Geffen on the maps; but here
+simply: if she died -- the dialog is up and her HP is 0 -- do not enter the hunting loop again; very
+simple."
+
+- **The start check's hotbar lines warn, never refuse:** wings, heals, home, knife, dagger
+  (`flow_run.HOTBAR_LINES`, `hotbar_warnings`: their `refuses` is false and a failed one says "a
+  WARNING only: the Run starts anyway"); the Run log marks them WARN; `flow_play.check_refusal`
+  never refuses on them; the page's Run warning lists only refusing lines.
+- **The runner's own start (byte-pinned, unchanged on disk):** inside the live player only,
+  `player_stock_refused` and `player_slots_refused` are swapped for the run's duration for
+  versions that log the same words as a WARNING and return None (`hotbar_is_the_players`, restored
+  after, a fault included). The runner's CLI (the night chain, A/B series) keeps its rules.
+- **The Knife swap:** a run whose Knife or dagger line fails plays WITHOUT the Knife swap
+  (`knife_swap_off`: the plan's `knife_swap` off, so no `--bare-steal`), with a WARNING line --
+  swapping from an unknown weapon state could equip anything; the player's choice stays theirs.
+- **Unchanged in the run:** an unread count never ends it (a teleport-skill key has no count); a
+  count read 0 still ends it (stock_out / stock_keep: the end's own escape).
+- **A death:** the lab client's death dialog is recognised and the runner's death exit (or the
+  box's respawn function) presses the respawn, as before (dungeon@9.41; the built-in `dead`).
+  On ANY client, her HP reading 0 % for `DEAD_HP0_S` (3 s) with no dialog recognised ends the run
+  as "dead" -- no respawn press (another client's button may sit elsewhere: the dialog is the
+  person's), no hunting on (`flow_play.Hp0Watch`: the hunt core's tick hook stops the runner; the
+  player's own reads halt). Language-neutral: a number, not a word.
