@@ -109,7 +109,10 @@ export type LiveSummary = {
   steals: number;
   potions: number;
   flies: number;
-  end: { reason?: string; home?: boolean; dead?: boolean; respawned?: boolean };
+  end: { reason?: string; home?: boolean; dead?: boolean; respawned?: boolean; words?: string };
+  // 2026-11-19 (Batt: a Logs tab -- what she does, is she attacking): the last events in words
+  retries?: number;
+  story?: { t_s: number | null; words: string }[];
 };
 
 /** PURE: the live line while she plays: HP, what she does, the counts, the time (of the time box). */

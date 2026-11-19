@@ -580,3 +580,26 @@ def test_no_start_picture_is_served(client: TestClient, tmp_path: Path) -> None:
     (tmp_path / "settings" / "flowrun" / "start-screen.jpg").write_bytes(b"\xff\xd8jpg")
     assert client.get("/flows/run/start/screen.jpg", headers=H).status_code == 404
     assert not hasattr(routes_flowrun, "START_PICTURES")
+
+
+# --- Batt 2026-11-19: the retry option after a code error (poring_env.runoptions) -----------------
+def test_the_retry_option_is_read_by_the_page_and_changed_behind_the_write_gate(
+    client: TestClient, tmp_path: Path
+) -> None:
+    got = client.get("/flows/run/options", headers=H)
+    assert got.status_code == 200
+    doc = got.json()
+    assert (doc["retry_max"], doc["retry_wait_s"], doc["saved"]) == (3, 20, False)
+    assert doc["bounds"] == {"retry_max": [0, 20], "retry_wait_s": [5, 600]}
+    body = {"retry_max": 5, "retry_wait_s": 60}
+    assert client.put("/flows/run/options", headers=H, json=body).status_code == 403  # no token
+    tok = routes_settings.csrf_token(client.app.state.poring)  # type: ignore[attr-defined]
+    hx = {**H, "x-csrf-token": tok}
+    ok = client.put("/flows/run/options", headers=hx, json=body)
+    assert ok.status_code == 200 and ok.json()["retry_max"] == 5 and ok.json()["saved"]
+    f = tmp_path / "settings" / "flowrun" / "options.json"
+    assert json.loads(f.read_text()) == {"v": 1, "retry_max": 5, "retry_wait_s": 60}
+    for bad in ({"retry_max": 21, "retry_wait_s": 20}, {"retry_max": 1, "retry_wait_s": 1},
+                {"retry_max": 1, "retry_wait_s": 20, "more": 1}):  # fmt: skip
+        assert client.put("/flows/run/options", headers=hx, json=bad).status_code == 422, bad
+    assert json.loads(f.read_text())["retry_max"] == 5  # a refused change leaves the file

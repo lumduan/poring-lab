@@ -1709,3 +1709,28 @@
     z-index: 90;
   }
 }
+
+/* the Logs tab (Batt 2026-11-19): what she does, and the Run's log */
+.logs-story {
+  margin: 0;
+  padding-left: 1.2rem;
+  max-height: 18rem;
+  overflow: auto;
+  font-size: 0.9rem;
+}
+.logs-story li {
+  margin: 0.1rem 0;
+}
+.logs-pre {
+  margin: 0;
+  max-height: 24rem;
+  overflow: auto;
+  padding: 0.5rem;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text);
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}

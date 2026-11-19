@@ -32,6 +32,8 @@ import FlowFileDialogs, { type FileDialog, type Opened, useFileShortcuts } from 
 import CodeView from "@/components/flows/CodeView";
 import NodeInspector from "@/components/maps/NodeInspector";
 import LiveRun, { LiveRunButtons, RunNotReady, useLiveRun } from "@/components/flows/LiveRun";
+import { LogsPanel, RunOptionsBox } from "@/components/flows/RunPanels";
+import { effectiveLimitS } from "@/lib/flow/runoptions";
 import { DEFAULT_SIM, FlowSettings, HuntRulesPanel, LintPanel, PathPanel, scenarioOf, type SimForm, SimulatePanel } from "@/components/flows/Panels";
 import { ApiError, type CatalogueDoc, type Finding, FlowsApi, type LintDoc, type PythonFiles, type SimDoc, sitePath, type WorldSource } from "@/lib/flow/api";
 import type { ToolboxScope } from "@/lib/flow/blockdefs";
@@ -91,7 +93,7 @@ const NOTICE_MS = 12_000;
 const VIEWS = ["blocks", "python"] as const;
 const OPEN_CLOSED = ["open", "closed"] as const;
 const WORLDS = ["local", "sample"] as const;
-type Pane = "inspect" | "lint" | "simulate" | "paths" | "hunt" | "run";
+type Pane = "inspect" | "lint" | "simulate" | "paths" | "hunt" | "run" | "logs";
 const PANES: [Pane, string][] = [
   ["run", "Before Run"], // matpilot 2026-11-13 #4: one button is "Run" (the game); this is its checklist
   ["inspect", "Inspect"],
@@ -99,6 +101,7 @@ const PANES: [Pane, string][] = [
   ["simulate", "Results"],
   ["paths", "Path map"],
   ["hunt", "Hunt rules"],
+  ["logs", "Logs"], // Batt 2026-11-19: the Run's state, what she does, its whole log
 ];
 type Notice = { text: string; tone: "ok" | "warn" | "error"; undo: { project: Project; world: WorldSource; file: FileMeta } | null };
 const NO_EDITOR: EditorState = { ready: false, failed: false, issues: [], loose: [], canUndo: false, canRedo: false };
@@ -996,6 +999,12 @@ export default function ProjectStudio({ backendUrl, initialNode = null }: { back
                 )}
                 {p === "paths" && <PathPanel server={project.target.server} sim={simDoc} stale={simStale} world={world} api={api} />}
                 {p === "hunt" && huntRules && <HuntRulesPanel rules={huntRules} l1={catalogue?.blocks.hunt?.badge ?? "unknown"} />}
+                {p === "logs" && (
+                  <div className="run-pane" data-testid="run-pane-logs">
+                    <RunOptionsBox project={project} onProject={(f) => replace(f, { keepView: true })} live={live} />
+                    <LogsPanel live={live} />
+                  </div>
+                )}
                 {p === "run" && !runnable && (
                   <div className="run-pane" data-testid="run-pane-not-ready">
                     <p>
@@ -1022,6 +1031,7 @@ export default function ProjectStudio({ backendUrl, initialNode = null }: { back
                 {p === "run" && runnable && !runnerLive && (
                   <div className="run-pane" data-testid="run-pane-blocks">
                     <p className="muted">Run (the amber button at the top) plays this project in the game from {node.id}, box by box, where she stands (the live block player; player mode, no GM line).</p>
+                    <RunOptionsBox project={project} onProject={(f) => replace(f, { keepView: true })} live={live} />
                     <LiveRun live={live} check={false} blocked={editorHeld ?? runWhy ?? lintBlock} held={editorHeld} />
                   </div>
                 )}
@@ -1032,7 +1042,8 @@ export default function ProjectStudio({ backendUrl, initialNode = null }: { back
                       {/* round 22: Global named only where the project has one */}
                       {globalOf(project) ? " (its own first, then Global's)" : ""}: {keysLine}.
                     </p>
-                    <LiveRun live={live} checklist={startChecklist(runValues, runnerMap, runKeys ?? undefined)} minutes={Number(runValues.minutes)} keys={runKeys} blocked={editorHeld ?? runWhy ?? lintBlock ?? (runnable ? null : notRunWhy)} held={editorHeld} global={globalOf(project) !== undefined} />
+                    <RunOptionsBox project={project} onProject={(f) => replace(f, { keepView: true })} live={live} />
+                    <LiveRun live={live} checklist={startChecklist(runValues, runnerMap, runKeys ?? undefined)} minutes={Math.round(effectiveLimitS(project) / 60) || null} keys={runKeys} blocked={editorHeld ?? runWhy ?? lintBlock ?? (runnable ? null : notRunWhy)} held={editorHeld} global={globalOf(project) !== undefined} />
                     {/* live-blocks.md 12 (Batt 2026-11-14: "make them ALL blocks"): the settings are blocks */}
                     <p className="muted" data-testid="run-pane-settings">
                       Its settings are BLOCKS: one per setting in the tabs {SETTING_TABS.filter((g) => tabs.some((t) => t.name === g)).join(", ") || "of its groups"} ({SETTING_TABS.map((g) => groupOf(g)?.title ?? g).join("; ")}). {globalOf(project) ? "This node's block replaces Global's; a deleted one falls back to Global's, else the default." : "A deleted block falls back to the default."} A Run and the check send the project: the blocks you see are what the runner gets (the Lint pane names any it cannot take, or does not use).

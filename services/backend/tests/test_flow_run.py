@@ -622,7 +622,7 @@ def test_the_pause_shows_on_the_live_line() -> None:
 def test_a_refusal_s_detail_is_whole_and_the_log_tail_is_longer(tmp_path: Path) -> None:
     log = tmp_path / "run.log"
     why = "flow_play refused before any input: the start check: " + "x" * 700
-    log.write_text("\n".join([f"line {i}" for i in range(60)] + [why]) + "\n")
+    log.write_text("\n".join([f"line {i}" for i in range(fr.LOG_TAIL_N + 20)] + [why]) + "\n")
     assert fr.tail(log, 3, 4000)[-1] == why  # the helper's end detail: not cut at 240
     assert len(fr.tail(log, fr.LOG_TAIL_N, fr.LOG_LINE_MAX)) == fr.LOG_TAIL_N
 
@@ -670,3 +670,38 @@ def test_a_check_first_finds_the_game_s_windows_and_a_failure_is_only_a_note(
     h.find_panels({})
     last = json.loads((tmp_path / "runs.jsonl").read_text().splitlines()[-1])
     assert last == {"t": last["t"], "event": "find_panels", "rc": None, "why": "TimeoutExpired"}
+
+
+# --- Batt 2026-11-19: the Logs tab -- what she does, in words ----------------------------------
+def test_the_story_says_what_she_does_in_words() -> None:
+    lv = fr.Live()
+    t0 = 1_000_000_000_000
+    feed = [
+        {"kind": "run_start", "t_ns": t0},
+        {"kind": "hp_read", "pct": 98, "pos": [201, 21], "t_ns": t0 + 1},
+        {"kind": "walk", "to": [199, 28], "why": "search", "clicked": True, "t_ns": t0 + 2 * 10**9},
+        {"kind": "hp_read", "pct": 95, "t_ns": t0 + 3 * 10**9},  # under HP_STEP: no line
+        {"kind": "recipe", "species": "Myst Case", "knife": True, "t_ns": t0 + 4 * 10**9},
+        {"kind": "strike", "end": "damage", "t_ns": t0 + 5 * 10**9},
+        {"kind": "kill", "by": "exp_line", "t_ns": t0 + 6 * 10**9},
+        {"kind": "hp_read", "pct": 70, "t_ns": t0 + 7 * 10**9},
+        {"kind": "press", "what": "potion", "key": "F1", "t_ns": t0 + 8 * 10**9},
+        {"kind": "retry", "n": 1, "of": 3, "error": "FrozenStream", "t_ns": t0 + 9 * 10**9},
+        {"kind": "box_watch", "t_ns": t0 + 10 * 10**9},  # bookkeeping: no line
+    ]
+    for e in feed:
+        lv.feed(e)
+    words = [x["words"] for x in lv.story]
+    assert words == ["HP 98 %", "walks to (199, 28), searching for monsters",
+                     "a Myst Case: the Knife swap first", "strikes: a hit", "a kill (exp_line)",
+                     "HP 70 %", "presses F1: a potion",
+                     "RETRY 1 of 3 after a code error: FrozenStream"]  # fmt: skip
+    assert [x["t_s"] for x in lv.story][:3] == [0, 2, 4]
+    sm = lv.summary()
+    assert sm["retries"] == 1 and sm["story"] == lv.story and sm["doing"].startswith("RETRY 1")
+    for i in range(fr.STORY_N + 5):
+        lv.feed({"kind": "kill", "t_ns": t0 + i})
+    assert len(lv.story) == fr.STORY_N  # the last lines only
+    assert fr.event_words({"kind": "walk", "to": [1, 2], "clicked": False}) == (
+        "walks to (1, 2) (the click was not sent)")  # fmt: skip
+    assert fr.LOG_TAIL_N == 300
