@@ -117,6 +117,7 @@ CHECK_MARK = "CHECK "  # dungeon_hunt.CHECK_MARK: the check's result line (test_
 # looks); one at a time; time-boxed.
 PLATE_FILE = "plate.json"
 PLATE_TIMEOUT_S = 15.0
+PANELS_TIMEOUT_S = 8.0  # 4f: the check's find of the game's windows (ro_agent.py find-panels)
 
 # The runner's fixed part, as the night chain ran it (docs/records/pilot-chain/run_pilot_v3.sh +
 # pilot_rec2.sh's BASE) WITHOUT --clear-map (a GM line: --player-mode refuses it), --seed fixed.
@@ -1038,6 +1039,7 @@ class Helper:
         argv = check_command(flow, vals)
         self.note(event="check", flow=flow.id, request=rid, keys=self.check["keys"],
                   keys_src=keys_src)  # fmt: skip
+        self.find_panels(env)  # 4f: the game's windows, before the check reads them
         with open(d / "check.log", "wb") as fh:
             self.check_proc = subprocess.Popen(argv, cwd=ROOT, env=env, stdout=fh,
                                                stderr=subprocess.STDOUT, stdin=subprocess.DEVNULL,
@@ -1088,6 +1090,20 @@ class Helper:
             self.plate_result(rid, why)
         self.note(event="plate_end", request=rid, rc=rc,
                   ok=bool(isinstance(got, dict) and got.get("ok")))  # fmt: skip
+
+    def find_panels(self, env: Mapping[str, str]) -> None:
+        """4f (teaching-prerun.md): find the game's windows before the check (`ro_agent.py
+        find-panels`, pixels only), so a client whose windows sit elsewhere -- even a 1280x720
+        window -- is read through the virtual client (the check reads ro_agent's shared find).
+        At most PANELS_TIMEOUT_S; a failure is a note and the check goes on (the lab's places)."""
+        argv = [PY, str(ROOT / "scripts" / "ro_agent.py"), "find-panels"]
+        try:
+            got = subprocess.run(argv, cwd=ROOT, env=dict(env), capture_output=True, text=True,
+                                 timeout=PANELS_TIMEOUT_S, stdin=subprocess.DEVNULL)  # fmt: skip
+            self.note(event="find_panels", rc=got.returncode,
+                      lines=[ln for ln in got.stdout.splitlines()[1:] if ln][:6])  # fmt: skip
+        except (OSError, subprocess.TimeoutExpired) as e:
+            self.note(event="find_panels", rc=None, why=f"{type(e).__name__}")
 
     def check_tick(self) -> None:
         p = self.check_proc

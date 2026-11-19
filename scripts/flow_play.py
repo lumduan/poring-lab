@@ -542,14 +542,27 @@ class PixelIO(LiveIO):
             w, h = r.desktop()
             x, y, cw, ch = r.real_game_region()
             full = r.fullscreen()
-            seen = (f"the bot sees it through the virtual 1280x720 client (the world "
-                    f"x{ch / 720:.2f} about the centre, the panels at their saved places)"
-                    if r.virtual_active() else "the bot sees it 1:1")  # fmt: skip
-            out.append(f"screen: the session {w}x{h}; the game at {x},{y} {cw}x{ch} = "
-                       f"{'FULLSCREEN' if full else 'a window'}; {seen}")  # fmt: skip
             sig = "taskbar" if full else "client_title_active"
             d = r._raw_distance(self.screen, sig)
             why = r.away_verdict(full, d if full else None, None if full else d)
+            # 4f (teaching-prerun.md): the windows found by their shape, BEFORE the view is told:
+            # a window found off its lab place makes even a 1280x720 client virtual
+            windows: list[str] = []
+            if why is None:
+                try:
+                    r.find_panels(self.screen)
+                    windows = r.panels_words()
+                    self.region = r.game_region()  # moved windows make even 1280x720 virtual
+                except Exception as e:  # noqa: BLE001 -- the log says it; the lab's places stay
+                    windows = [f"the windows: not found ({type(e).__name__}: {e}); the lab's "
+                               "places are assumed"]  # fmt: skip
+            else:
+                windows = ["the windows: not looked for (the game is not on the screen)"]
+            seen = (f"the bot sees it through the virtual 1280x720 client (the world "
+                    f"x{ch / 720:.2f} about the centre, each window moved to its lab place)"
+                    if r.virtual_active() else "the bot sees it 1:1")  # fmt: skip
+            out.append(f"screen: the session {w}x{h}; the game at {x},{y} {cw}x{ch} = "
+                       f"{'FULLSCREEN' if full else 'a window'}; {seen}")  # fmt: skip
             rule = (f"the taskbar box reads {d:.1f} from the taskbar's picture; hidden from "
                     f"{r.TASKBAR_ABSENT_MIN:.0f}" if full else
                     f"its title bar reads {d:.1f} from its lit picture; lit up to {r.SIG_MATCH:.0f}"
@@ -557,6 +570,7 @@ class PixelIO(LiveIO):
             out.append(("the game is on the screen" if why is None else
                         f"the game is NOT on the screen: {why} -- the run waits for it, pressing "
                         "nothing") + f" ({rule})")  # fmt: skip
+            out.extend(windows)
         except (SystemExit, OSError, ValueError) as e:  # r.Stop: GAME_REGION unset
             out.append(f"screen: not read ({e})")
         h = r.backend_health()
