@@ -758,14 +758,41 @@ def drop_pictures(label: str, root: Path = fr.DEMO) -> int:
     return n
 
 
+def learn_cursor(player: LivePlayer) -> None:
+    """ADR-0020 Amendment V (Batt 2026-11-19, "fix cause C"): before the Run's first hunt core,
+    learn this client's own walk arrow (cursor_learn: moves only; in memory, never saved). A
+    failure is a warning: the lab's references alone, as before."""
+    import cursor_learn as cl
+    import ro_agent as r
+
+    try:
+        res = cl.learn(player.io.agent, player.io.screen, r)
+    except SystemExit:
+        raise  # a Stop (ro_agent.Stop) ends the hunt core as any Stop
+    except Exception as e:
+        words = f"{type(e).__name__}: {str(e)[:200]}"
+        say(f"WARNING (the Run plays on): the cursor's walk arrow was not learned: {words}")
+        player.rec.ev({"kind": "cursor_learned", "used": False, "error": words})
+        return
+    say(cl.words(res))
+    player.rec.ev({"kind": "cursor_learned", **res})
+
+
 class HuntCore:
     """A dungeon_hunt block, played by the runner IN THIS PROCESS (one input writer)."""
 
     def __init__(self, label: str, stop_file: Path | None,
                  run_fn: Callable[..., int] | None = None,
-                 args_fn: Callable[[Sequence[str]], Any] | None = None) -> None:  # fmt: skip
+                 args_fn: Callable[[Sequence[str]], Any] | None = None,
+                 learn_fn: Callable[[LivePlayer], None] | None = None) -> None:  # fmt: skip
         self.label, self.stop_file = label, stop_file
         self.run_fn, self.args_fn = run_fn, args_fn
+        # the cursor is learned once per Run, before the real runner's first hunt core (a test's
+        # own run_fn learns only with its own learn_fn)
+        self.learn_fn = (
+            learn_fn if learn_fn is not None else (learn_cursor if run_fn is None else None)
+        )
+        self.learned = False
         self.n = 0
 
     def play(self, player: LivePlayer, plan: RunnerPlan) -> HuntResult:
@@ -801,6 +828,9 @@ class HuntCore:
         import ro_agent as r
 
         try:
+            if self.learn_fn is not None and not self.learned:
+                self.learned = True
+                self.learn_fn(player)
             a = args_fn(argv)
             with player_owns_the_start(dh, warn):  # never refuses on them (Batt 2026-11-19)
                 res.rc = run_fn(a, hook=hook, session=(player.io.agent, player.io.screen), **box)

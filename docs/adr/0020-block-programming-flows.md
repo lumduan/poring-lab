@@ -3179,3 +3179,37 @@ simple."
     is playing.
   - Records: `retry`, `retry_go`, `retry_refused` (the Logs tab's lines).
 
+
+## Amendment V (2026-11-19, Batt decided before 19:23 ICT): a Run learns the client's own walk arrow
+
+Batt, on the open cause C of his Thai client's Run: "yes, fix cause C". The cursor readers
+(`cursor_sword`) tell the client's cursor by its COLOURS against the lab client's references.
+His client draws the same walk arrow in other colours (walk recall 0.53-0.93 where the lab's
+reads 0.94-0.99), so most of his scan cells read "unknown": 4-7 "clear" of 40-59 per Run, the
+lab client 60-76 %. An "unknown" hover waits out its whole read time, and the runner checks the
+no-entry ring only on a "clear" one.
+
+- **What it does** (`scripts/cursor_learn.py`, called by `flow_play.HuntCore` once per Run,
+  before the first hunt core): MOVES ONLY, never a click or a key.
+  - The pointer is parked; each point's crop is grabbed twice (what changes is animated
+    scenery).
+  - 8 points ~3-4 cells around her are hovered in two motions, 3 crops each, cut from the REAL
+    client around the real pointer: the pixels the readers see there (the virtual view pastes
+    the pointer's own box unscaled, `ro_agent.CURSOR_BOX`).
+  - The cursor's pixels are |A - B| (`walk6.cursor_mask`).
+- **A crop is kept only as the WALK arrow, by SHAPE alone.** The shape F against the lab's
+  prototypes must be >= 0.95, every other class 0.15 lower, and the lab's SWORD must read under
+  0.60 on it, so a sword over a monster is never learned as the arrow.
+  - Pre-registered on the lab's 645 references, leave-one-out: 421 of 491 walk arrows pass,
+    0 of the 154 sword / hand / talk / no-entry / warp references do (`test_cursor_learn`).
+- **Where the learned arrows go.** At least 3 kept crops (the cursor's pixels only) join the
+  readers' references in this process (`cursor_sword.LEARNED`; the runner's `SwordRefs.load`
+  takes them). Each class's recall is the best of the lab's and the learned.
+  - In memory for the Run only, NEVER written (Batt 2026-11-18: no pictures).
+- **What it never does.**
+  - It never refuses a Run: a scrolling scene or too few kept crops leave the lab's references
+    alone, as before, with a warning in the Run's log.
+  - Box targets still strike only on a SWORD read ("clear" and "unknown" both mean no strike),
+    so a learned arrow adds no strike.
+  - The sword and the pickup hand are not learned: the sword reads on his client (0.83 against
+    0.75), and the hand is expected to (~0.94 against 0.90) since the cursor box fix.
