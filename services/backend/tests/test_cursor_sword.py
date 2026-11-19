@@ -56,3 +56,29 @@ def test_leave_one_out_on_the_references() -> None:
             assert v != "sword", (i, cls[i], v)
         if cls[i] == "pickup":
             assert v == "clear", (i, v)
+
+
+def test_the_check_traces_its_reads_only_when_asked(tmp_path, monkeypatch) -> None:  # type: ignore[no-untyped-def]
+    """s11scr 2026-11-20: PORING_CURSOR_TRACE appends one line per check (every read's ms and
+    recalls); unset, nothing is written."""
+    import json
+
+    import cursor_sword as csw
+
+    class Agent:
+        def move(self, x: int, y: int) -> None:
+            pass
+
+    class Refs:
+        def recalls(self, crop):  # type: ignore[no-untyped-def]
+            return {"sword": 0.9, "pickup": 0.1, "walk": 0.2}
+
+    monkeypatch.setattr(csw, "crop_at", lambda *a: None)
+    monkeypatch.delenv(csw.TRACE_ENV, raising=False)
+    out = csw.check(Agent(), None, Refs(), 0, 0, 10.0, 20.0, wait_s=0.1)  # type: ignore[arg-type]
+    assert out["verdict"] == "sword" and not list(tmp_path.iterdir())
+    path = tmp_path / "trace.jsonl"
+    monkeypatch.setenv(csw.TRACE_ENV, str(path))
+    csw.check(Agent(), None, Refs(), 0, 0, 10.0, 20.0, wait_s=0.1)  # type: ignore[arg-type]
+    row = json.loads(path.read_text().splitlines()[0])
+    assert row["verdict"] == "sword" and row["u"] == 10.0 and row["reads"][0][1:] == [0.9, 0.1, 0.2]

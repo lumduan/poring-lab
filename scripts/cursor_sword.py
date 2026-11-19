@@ -34,6 +34,9 @@ Client pixels (the references) stay in data/; this module holds code only.
 
 from __future__ import annotations
 
+import contextlib
+import json
+import os
 import sys
 import time
 from collections.abc import Sequence
@@ -51,6 +54,9 @@ CLEAR_SWORD_MAX = 0.60  # ... and the SWORD recall stays below this: CLEAR
 PICKUP_MIN = 0.90  # PICKUP recall at or above (and SWORD below SWORD_MIN): the hand, CLEAR
 WALK_SUBSET = 16  # every 16th WALK prototype (the arrow over many backgrounds): ~31 of 491
 HALF = cr.CROP // 2
+# Opt-in trace of every check's reads (ms since the first motion, then the sword / pickup / walk
+# recalls), one JSON line per check, appended to this file: never set in a normal Run.
+TRACE_ENV = "PORING_CURSOR_TRACE"
 CLASSES = ("sword", "pickup", "walk")
 
 # ➡️ 2026-11-19 (Batt: "yes, fix cause C"): THIS CLIENT's own WALK arrows, learned at a Run's
@@ -157,12 +163,33 @@ def check(agent: Any, screen: Any, sw: SwordRefs, gx0: int, gy0: int, u: float, 
     agent.move(gx0 + round(u), gy0 + round(v))
     seen: list[str] = []
     rec: dict[str, float] = {}
+    trace = os.environ.get(TRACE_ENV)
+    recs: list[list[float]] = []
     while True:
         rec = sw.recalls(crop_at(screen, gx0, gy0, u, v))
         seen.append(verdict(rec))
+        if trace:
+            recs.append(
+                [round((time.monotonic() - t0) * 1e3), *(round(rec[c], 3) for c in CLASSES)]
+            )
         dec = series(seen)
         if dec != "unknown" or time.monotonic() - t0 >= wait_s:
             break
         time.sleep(gap_s)
-    return {"verdict": dec, "reads": seen, "ms": round((time.monotonic() - t0) * 1e3),
-            "rec": rec}  # fmt: skip
+    out = {"verdict": dec, "reads": seen, "ms": round((time.monotonic() - t0) * 1e3), "rec": rec}
+    if trace:  # s11scr 2026-11-20: every read's recalls, for the 1080 "unknown" study (opt-in)
+        with contextlib.suppress(OSError), open(trace, "a") as fh:
+            fh.write(
+                json.dumps(
+                    {
+                        "t": round(time.time(), 3),
+                        "u": round(u, 1),
+                        "v": round(v, 1),
+                        "wait_s": wait_s,
+                        "verdict": dec,
+                        "reads": recs,
+                    }
+                )
+                + "\n"
+            )
+    return out
