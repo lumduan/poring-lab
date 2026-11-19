@@ -1376,14 +1376,12 @@ class Helper:
             self.detail = end_words(self.live, stopped, rc)  # matpilot: the end in plain words
             if self.flow == PROJECT and self.live.end.get("words"):  # the player's own words
                 self.detail = str(self.live.end["words"])
-        png = (sess / "end.png") if sess is not None else None
+        # ➡️ 2026-11-19 (Batt 2026-11-18: "store no pictures at all"): the end picture (the whole
+        # screen) is no longer copied here nor shown; flow_play removes the runner's pictures as
+        # each hunt core ends (drop_pictures). end_png stays None (the page's slot is inert).
         self.end_png = None
-        if png is not None and png.is_file():  # the backend serves it (GET /flows/run/end.png)
-            try:
-                shutil.copyfile(png, self.dir / "end.png")
-                self.end_png = self.ended
-            except OSError:
-                pass
+        with contextlib.suppress(OSError):
+            (self.dir / "end.png").unlink(missing_ok=True)  # an older Run's copy
         self.stop_t = None
         self.note(event="end", label=self.label, rc=rc, detail=self.detail)
         self.end_server()

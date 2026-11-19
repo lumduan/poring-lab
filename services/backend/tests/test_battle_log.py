@@ -207,6 +207,34 @@ def test_a_format_file_is_checked() -> None:
         bl.lang_from_formats({"events": {"explosion": {"pattern": [{"lit": "boom"}]}}})
 
 
+def test_a_client_in_another_script_reads_by_its_anchors() -> None:
+    """2026-11-19, Batt's Thai client: the glyphs read its brackets, names, quoted digits, "EXP"
+    and "Job", never its words (each run of them '?'). Its lines as this host read them on his
+    18:03 Run (the shapes; no client text): a hit, a kill's base and job EXP. English stays
+    first and unchanged; a fully unread line types nothing."""
+    gen = bl.en_formats()
+    en = bl.with_anyscript(bl.lang_from_formats(gen))
+    assert [a.code for a in en.alts] == [bl.ANYSCRIPT]
+
+    def c(t: str, alts: bool = True) -> dict[str, Any]:
+        return bl.classify(t, "yellow", en, alts=alts)
+
+    assert c("[?vst Case] ???????????? '232'") == {"type": "damage", "name_read": "?vst Case",
+                                                   "name": None, "n": 232}  # fmt: skip
+    assert c("[Cruiser] ???????????? '260' ?")["n"] == 260  # an unread speck may follow
+    assert c("E?P '0' ??") == {"type": "base_exp", "n": 0}  # Base 99: EXP '0' at each kill
+    assert c("Job E?P '2838' ??") == {"type": "job_exp", "n": 2838}  # not base: "Job E?P"
+    for unread in ("? ? ? ?", "??", "[?vst Case] ? ? ? ?", "? Jellopy 1 ?"):
+        assert c(unread)["type"] == "other", unread
+    assert c("[Cruiser] wubwub '260'")["type"] == "other"  # read letters are no unread run
+    assert c("[?vst Case] ???????????? '232'", alts=False)["type"] == "other"  # en alone
+    dm = [e["lit"] for e in gen["events"]["damage"]["pattern"] if "lit" in e]
+    ours = f"[{bl.SPECIES[0]}] {dm[0]} '200' {' '.join(dm[1:])}."
+    assert c(ours) == bl.classify(ours, "yellow", en, alts=False)  # English: its own reading
+    assert bl.with_anyscript(en.alts[0]) is en.alts[0]  # never its own alternative
+    assert bl.parse_pattern([{"unread": "words"}]) == (bl.Elem("unread", text="words"),)
+
+
 def test_glyphs_must_be_cut_for_the_languages_band() -> None:
     """Templates cut at another band height (another language's render) are refused."""
     with pytest.raises(ValueError):

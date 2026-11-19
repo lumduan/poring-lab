@@ -736,6 +736,28 @@ class DriveHook(HuntHook):
         return got
 
 
+# ➡️ 2026-11-19 (Batt 2026-11-18: "store no pictures at all, known character or not"): the
+# byte-pinned runner still saves pictures in its session folder -- end.png (the WHOLE screen, the
+# chat included), up to 40 strike frames, up to 40 ring crops, a name tag per strike (no cap: a
+# multi-day Run fills /dev/shm). A Run removes them as each hunt core ends; the numbers stay.
+RUNNER_PICTURES = ("end.png", "strike-*.jpg", "ring-*.png", "tags/tag-*.npy")
+
+
+def drop_pictures(label: str, root: Path = fr.DEMO) -> int:
+    """Remove the runner's pictures (RUNNER_PICTURES) from the session folder(s) named for
+    ``label`` (<time>-...-<label>); how many were removed."""
+    n = 0
+    for sess in root.glob(f"*-{label}"):
+        if not sess.is_dir():
+            continue
+        for pat in RUNNER_PICTURES:
+            for p in sess.glob(pat):
+                with contextlib.suppress(OSError):
+                    p.unlink()
+                    n += 1
+    return n
+
+
 class HuntCore:
     """A dungeon_hunt block, played by the runner IN THIS PROCESS (one input writer)."""
 
@@ -757,7 +779,8 @@ class HuntCore:
         if left_min < 1.0:
             res.error = "under a minute of the time box left: the hunt core does not start"
             return res
-        argv = plan.argv(f"{self.label}-hunt{self.n}", self.stop_file, left_min)
+        core_label = f"{self.label}-hunt{self.n}"
+        argv = plan.argv(core_label, self.stop_file, left_min)
         box = plan.box_kwargs()  # stage 2-4a: only what the box plays (none: the CLI's run)
         player.rec.ev({"kind": "hunt_start", "node": player.node_path, "n": self.n,
                        "flow": plan.flow_id, "keys": plan.keys, "argv": argv,
@@ -789,6 +812,8 @@ class HuntCore:
             say(f"ERROR in the hunt core: {res.error}")
             for ln in fault_lines(traceback.format_exc()):
                 print(ln, flush=True)
+        if n_pics := drop_pictures(core_label):
+            say(f"the hunt core's pictures removed ({n_pics}): a Run keeps no picture")
         player.rec.ev({"kind": "hunt_end", "n": self.n, "reason": res.reason, "error": res.error,
                        "home": res.home, "respawned": res.respawned, "dead": res.dead,
                        "ticks": res.ticks, "survive_calls": res.survive_calls,

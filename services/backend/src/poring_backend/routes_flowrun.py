@@ -198,7 +198,10 @@ def put_run_options(body: OptionsBody, request: Request,
 @router.get("/run/end.png")
 def get_end_png(state: AppState = Depends(browser_gate)) -> FileResponse:
     """The last run's end picture (matpilot 2026-11-13: "show end.png as an image, not a server
-    path"): the helper copies it into its own folder at the run's end. A console browser only."""
+    path"): the helper copies it into its own folder at the run's end. A console browser only.
+    ➡️ INTENTIONALLY INERT since 2026-11-19 (Batt 2026-11-18: "store no pictures at all"): the
+    helper no longer copies one (flow_run) and a Run removes the runner's pictures, so this
+    answers 404 no_end_picture."""
     f = run_dir(state) / "end.png"
     if not f.is_file():
         raise HTTPException(404, {"reason": "no_end_picture"})

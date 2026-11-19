@@ -216,8 +216,15 @@ LAB_PANELS: tuple[tuple[str, tuple[int, int, int, int], str], ...] = (
     ("minimap", (1130, 10, 150, 160), "tr"),
 )
 # The pointer is drawn at its own size wherever it is (not scaled with the world): its area
-# around the hotspot is pasted unscaled at the virtual pointer position
-CURSOR_BOX = (-12, -12, 48, 56)
+# around the hotspot is pasted unscaled at the virtual pointer position.
+# ➡️ 2026-11-19 (Batt's clips: "the cursor was a hand when it scanned, but it did not click"): the
+# box was the WALK arrow's (-12, -12, 48, 56). The other shapes reach further from the hotspot --
+# measured on the v3 references' supports: pickup hand x -18..+11, y -15..+8; sword x -20..+28,
+# y -21..+31; warp x -32..+31 -- so the hand lost its left and top edge to the shrunk world and
+# its colour recall stayed under cursor_sword.PICKUP_MIN (0.80-0.82 on his client; 145 of its
+# 207 missed pixels were in the cut-off zone): no loot click at all. The box is now the cursor
+# readers' whole 64 x 64 crop plus their +-2 px shift search, centred on the hotspot.
+CURSOR_BOX = (-34, -34, 68, 68)
 _POINTER: tuple[float, float] | None = None  # the last virtual pointer position sent
 
 # The interface windows, FOUND by their shape (teaching-prerun.md 4f, fullscreen-client.md

@@ -315,6 +315,7 @@ export default function LiveRun({ live, checklist = [], minutes = null, keys = n
           </ul>
         </div>
       )}
+      {/* INTENTIONALLY INERT since 2026-11-19 (Batt: "store no pictures at all"): end_png stays null */}
       {ended && st?.end_png && <EndPicture base={live.base} stamp={st.end_png} />}
       {logLines.length > 0 && (
         <details className="live-run-log-box" open={!active || pause !== null}>
