@@ -75,7 +75,7 @@ import shutil
 import signal
 import subprocess
 import time
-from collections.abc import Mapping, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
@@ -790,6 +790,27 @@ def end_words(live: Live, stopped: bool, rc: int | None) -> str:
     return f"{how} after {mins} min. {where} {did}"
 
 
+def copy_ps_lines(root: Path = ROOT, ps: str | None = None,
+                  cwd_of: Callable[[str], str] | None = None) -> list[str]:  # fmt: skip
+    """The `ps -eo pid=,args=` lines of THIS copy's processes: those whose working folder is
+    ``root`` or inside it (2026-11-19, ADR-0026: two copies on one host; another copy's Run is its
+    own input writer, on its own Windows, and never makes this one busy). ``ps`` / ``cwd_of``:
+    the tests' own process list and folders."""
+    if ps is None:
+        ps = subprocess.run(["ps", "-eo", "pid=,args="], capture_output=True, text=True).stdout
+    read = cwd_of or (lambda pid: os.readlink(f"/proc/{pid}/cwd"))
+    out = []
+    for ln in ps.splitlines():
+        pid, _, args = ln.strip().partition(" ")
+        try:
+            cwd = Path(read(pid))
+        except OSError:  # gone, or another user's: not ours
+            continue
+        if cwd == root or root in cwd.parents:
+            out.append(args.strip())
+    return out
+
+
 def busy_reason(ps_lines: Sequence[str]) -> str | None:
     """PURE: why a new run must not start (another input writer of ours), from `ps -eo args`.
     The A/B series (scripts/stage*_ab.py) call it before each of their runs, so it never counts
@@ -1003,8 +1024,7 @@ class Helper:
             self.busy = None
             return
         if ps_lines is None:
-            ps = subprocess.run(["ps", "-eo", "args"], capture_output=True, text=True).stdout
-            ps_lines = ps.splitlines()
+            ps_lines = copy_ps_lines()
         self.busy = writer_busy(ps_lines)
         self.state, self.detail = busy_state(self.state, self.detail, self.busy)
 
@@ -1121,8 +1141,7 @@ class Helper:
         then the player (its own checks before any input)."""
         rid = str(req["id"])
         self.check_cancel("Run was pressed: the player's own start checks decide")
-        ps = subprocess.run(["ps", "-eo", "args"], capture_output=True, text=True).stdout
-        why = writer_busy(ps.splitlines())
+        why = writer_busy(copy_ps_lines())
         doc: dict[str, Any] | None = None
         if why is None:
             doc, why = read_project(self.dir / PROJECT_FILE, str(req["project_hash"]))
@@ -1188,8 +1207,7 @@ class Helper:
         if self.check_proc is not None:
             self.detail = "a check is already reading the game screen"
             return
-        ps = subprocess.run(["ps", "-eo", "args"], capture_output=True, text=True).stdout
-        why = writer_busy(ps.splitlines())
+        why = writer_busy(copy_ps_lines())
         vals: dict[str, Any] = {}
         keys_src = fc.KEYS_SRC["flow" if keys else "config"]
         if why is None:
