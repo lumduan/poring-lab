@@ -73,10 +73,13 @@ def test_the_numbers_are_the_modules_own(doc: dict[str, Any]) -> None:
     assert p["derived.potions"]["value"] == dh.potions_target(strat, conf)
     assert p["PATROL_START.x"]["value"] == dh.PATROL_START["xmas_dun02"][0][0]
     assert p["cmd.garm_confirm"]["value"] == 2  # the base's --garm-confirm 2
-    # the Run button's cap (scripts/flow_run.py FLOWS; Batt 2026-11-13: until Stop, at most 2 h)
+    # the Run button's cap (scripts/flow_run.py FLOWS): none since 2026-11-19 (Batt; was 2 h), so
+    # the byte-pinned runner gets NO_LIMIT_MINUTES
+    import flow_config as fc
     import flow_run as fr
 
-    assert p["cmd.minutes"]["value"] == float(fr.FLOWS["xmas_dun02_rogue"].minutes) == 120.0
+    assert fr.FLOWS["xmas_dun02_rogue"].minutes == 0
+    assert p["cmd.minutes"]["value"] == float(fc.NO_LIMIT_MINUTES)
     # the outline defines each constant with that value
     for pid, v in p.items():
         name = pid.split(".")[-1]

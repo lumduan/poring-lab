@@ -113,7 +113,9 @@ def verdict(
         reasons += _patrol_route(flow)
     if runtime_max_s is None:
         reasons.append("no configured maximum run time")
-    elif flow.max_runtime_s > runtime_max_s and not any(f.rule == "runtime_max" for f in findings):
+    elif ir.runtime_over(flow.max_runtime_s, runtime_max_s) and not any(
+        f.rule == "runtime_max" for f in findings
+    ):
         reasons.append(
             f"max_runtime_s {flow.max_runtime_s} is above the configured maximum {runtime_max_s}"
         )

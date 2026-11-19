@@ -142,6 +142,13 @@ def box_difference(b: Mapping[str, Any], c: Mapping[str, Any]) -> str | None:
     for d in (b, c):
         d.pop("name", None)
         d.pop("description", None)
+        # the run's length is the harness's (--max-s = minutes * 60), not an arm's: since
+        # 2026-11-19 (Batt: no time limit unless set) the ready-made B holds 0 for both, the
+        # pinned C its old 7200 s / 120 min
+        d.pop("max_runtime_s", None)
+        for node in d.get("nodes") or []:
+            for tab in node.get("tabs") or []:
+                (tab.get("vars") or {}).pop("minutes", None)
     if b != c:
         return "C differs from B in more than its two cookies' recipes (an A/B changes one thing)"
     return None

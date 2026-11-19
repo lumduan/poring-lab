@@ -243,11 +243,12 @@ export function exitOf(kind: AuthoredExit, to_block: string, to_entry: string): 
   return { kind, warp: null, npc: null, options: [], item: null, to_block, to_entry, timeout_s: 120 };
 }
 
-/** Batt's default run time for a new flow (ADR-0020 #17, 4 h) until the configured one arrives
- * (`CatalogueDoc.runtime_limits.default_s`, set on the Settings page). */
-export const RUNTIME_DEFAULT_S = 14_400;
-/** MW1's schema SANITY cap (ir.MAX_RUNTIME_S, 7 days); the policy maximum is configured (#17). */
-export const MAX_RUNTIME_CAP_S = 604_800;
+/** A new flow's run time (ADR-0020 #17) until the configured one arrives
+ * (`CatalogueDoc.runtime_limits.default_s`): 0 = NO TIME LIMIT (Batt 2026-11-19: "if it is not
+ * set, it runs on with no time limit"; was 4 h). */
+export const RUNTIME_DEFAULT_S = 0;
+/** The schema SANITY cap (ir.MAX_RUNTIME_S, 365 days); a policy maximum, if any, is configured. */
+export const MAX_RUNTIME_CAP_S = 31_536_000;
 
 export function emptyFlow(name = "new_flow", maxRuntimeS = RUNTIME_DEFAULT_S): Flow {
   return {
@@ -344,12 +345,15 @@ export function runSettings<F extends { max_runtime_s: number; where_budget: num
   whereBudget: string,
   maxS: number | null,
 ): { ok: true; flow: F } | { ok: false; error: string } {
-  const cap = maxS ?? MAX_RUNTIME_CAP_S;
-  if (!/^[0-9]{1,6}$/.test(maxRuntimeS.trim()) || Number(maxRuntimeS) < 1 || Number(maxRuntimeS) > cap) {
-    return { ok: false, error: `max_runtime_s: whole seconds, 1..${cap}${maxS ? " (the configured maximum)" : ""}` };
+  // 0 or empty = no time limit (Batt 2026-11-19); under a configured maximum it runs to it
+  const cap = maxS || MAX_RUNTIME_CAP_S;
+  const raw = maxRuntimeS.trim() === "" ? "0" : maxRuntimeS.trim();
+  const secs = Number(raw);
+  if (!/^[0-9]{1,8}$/.test(raw) || secs > cap) {
+    return { ok: false, error: `max_runtime_s: whole seconds, 0..${cap}${maxS ? " (the configured maximum)" : ""} (0 or empty = no time limit)` };
   }
   if (!/^[0-9]{1,4}$/.test(whereBudget.trim()) || Number(whereBudget) > 1000) {
     return { ok: false, error: "where_budget: a whole number, 0..1000" };
   }
-  return { ok: true, flow: { ...clone(flow), max_runtime_s: Number(maxRuntimeS), where_budget: Number(whereBudget) } };
+  return { ok: true, flow: { ...clone(flow), max_runtime_s: secs, where_budget: Number(whereBudget) } };
 }

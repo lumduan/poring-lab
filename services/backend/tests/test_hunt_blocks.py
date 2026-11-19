@@ -27,7 +27,7 @@ HUNT = (FIX / "project_xmas_dun02_hunt.json").read_text()
 
 
 def _prep(text: str) -> fp.Prepared:
-    got = fp.prepare(text, NODE, 7200)
+    got = fp.prepare(text, NODE, 0)  # no configured maximum (Batt 2026-11-19)
     assert not isinstance(got, str), got
     return got
 

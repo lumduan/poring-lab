@@ -393,7 +393,7 @@ def test_a_project_run_writes_the_checked_project_and_one_request(
     assert fr.parse_request(json.dumps(req)) == {k: req[k] for k in req if k != "at"}
     log = [json.loads(x) for x in (d / "requests.jsonl").read_text().splitlines()]
     assert log[-1]["project"] == "live_test" and "nodes" not in log[-1]  # who, what, its hash
-    assert allowed and allowed[0][2]["runtime_max_s"] == 86_400
+    assert allowed and allowed[0][2]["runtime_max_s"] == 0  # no maximum (Batt 2026-11-19)
 
 
 def test_a_project_run_starts_in_bot_mode_too_and_never_in_human(

@@ -49,6 +49,12 @@ VAR_NAMES: dict[str, str] = {
 }
 
 
+# The hunt core's time box (the "minutes" setting): at most 7 days; 0 = no limit, given to the
+# byte-pinned runner as NO_LIMIT_MINUTES (its --minutes is a float with no "none"): 10 years
+MINUTES_MAX = 10_080
+NO_LIMIT_MINUTES = 5_256_000
+
+
 @dataclass(frozen=True)
 class Field:
     name: str  # a Run setting ("fly_key") or a runner constant ("LOOT_TRIM_HOVERS", "vt.D0_PX")
@@ -587,7 +593,19 @@ SWITCHES: tuple[Field, ...] = (
         warn="after a death she stays where she fell, and the run ends there",
     ),  # fmt: skip
     # the start
-    Field("minutes", "start", "int", "the time box", 5, 600, 1, "--minutes", "min"),
+    # Batt 2026-11-19: no fixed run length -- 0 = no time limit (Stop, a death, a full bag or
+    # another end stops it); a person may set up to 7 days
+    Field(
+        "minutes",
+        "start",
+        "int",
+        "the time box (0 = no limit)",
+        0,
+        MINUTES_MAX,
+        1,
+        "--minutes",
+        "min",
+    ),  # fmt: skip
     # the fight
     Field(
         "engage_screen",
@@ -1077,7 +1095,7 @@ DEFAULTS: dict[str, Any] = {
     "READ_HZ": 5.0,
     "BOX_FRESH_S": 1.5,
     # every TECHNIQUE (2026-11-13 ~15:2x): the night chain's base, as it ran (4DQ)
-    "minutes": 120,
+    "minutes": 0,  # Batt 2026-11-19: no time limit unless a person sets one (the base ran 120)
     "knife_swap": True,
     "bare_ready": True,
     "steal_cue": "popup",
@@ -1462,7 +1480,10 @@ def clash(vals: Mapping[str, Any]) -> str | None:
 
 
 def flag_value(f: Field, v: Any) -> str:
-    """A value as the runner's flag takes it (a share with two decimals, as 9.41 did)."""
+    """A value as the runner's flag takes it (a share with two decimals, as 9.41 did; the time box
+    0 = no limit: the runner's --minutes has no "none", so NO_LIMIT_MINUTES)."""
+    if f.name == "minutes" and not v:
+        return str(NO_LIMIT_MINUTES)
     if f.kind == "share":
         return f"{float(v):.2f}"
     if f.kind == "int":

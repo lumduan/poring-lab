@@ -94,8 +94,13 @@ def test_the_box_difference_is_the_two_cookie_recipes_alone() -> None:
     three = _plain(_d(ONE), ("attack_cookie", "attack_cookie_xmas", "attack_mystcase"))
     assert "more than its two cookies' recipes" in str(ab.box_difference(b, three))
     bent = _d(NOSWAP)
-    bent["max_runtime_s"] = 60
+    bent["where_budget"] = 3
     assert "more than its two cookies' recipes" in str(ab.box_difference(b, bent))
+    # the run's length is the harness's --max-s: the arms' own time fields are not compared
+    # (2026-11-19: the ready-made B holds no time limit, the pinned C its old 7200 s / 120 min)
+    timed = _d(NOSWAP)
+    timed["max_runtime_s"] = 60
+    assert ab.box_difference(b, timed) is None
     noloot = _d(NOSWAP)
     next(x for x in _defs(noloot, "monsters") if x["name"] == "attack_cookie")["body"].pop()
     assert "strike(t), wait_kill(t), loot(t)" in str(ab.box_difference(b, noloot))

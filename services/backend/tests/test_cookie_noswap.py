@@ -57,7 +57,7 @@ KNIFE, PLAIN = list(rc.KNIFE_SHAPE), list(rc.PLAIN_SHAPE)
 
 
 def _prep(path: Path) -> fp.RunnerPlan:
-    got = fp.prepare(path.read_text(), NODE, 7200)
+    got = fp.prepare(path.read_text(), NODE, 0)  # no configured maximum (Batt 2026-11-19)
     assert isinstance(got, fp.Prepared), got
     return got.runners[NODE]
 
@@ -77,11 +77,16 @@ def test_the_no_swap_box_is_the_one_box_but_its_two_cookie_recipes(tmp_path: Pat
     assert pj.runner_keys(pj.from_json(text), NODE).keys == pj.runner_keys(
         pj.from_json(ONE.read_text()), NODE).keys  # fmt: skip
     b, n = _prep(ONE), _prep(NOSWAP)
-    assert n.argv("L", Path("/S"), None) == b.argv("L", Path("/S"), None)
+    # under the harness's time box (stage6_ab: --max-s = minutes * 60) the two commands are one:
+    # since 2026-11-19 the ready-made B holds no time limit (0), the pinned C its old 120 min
+    assert n.argv("L", Path("/S"), 45.0) == b.argv("L", Path("/S"), 45.0)
     kb, kn = b.box_kwargs(), n.box_kwargs()
     assert {k: v for k, v in kn.items() if k != "box_recipes"} == {
         k: v for k, v in kb.items() if k != "box_recipes"}  # fmt: skip
-    assert (n.keys, n.vals, n.loop, n.default_species) == (b.keys, b.vals, None, ())
+    untimed = lambda v: {k: x for k, x in v.items() if k != "minutes"}  # noqa: E731
+    assert (n.keys, untimed(n.vals), n.loop, n.default_species) == (
+        b.keys, untimed(b.vals), None, ())  # fmt: skip
+    assert (n.vals["minutes"], b.vals["minutes"]) == (120, 0)
     assert {sp: (r["steps"], r["knife"], r["priority"]) for sp, r in kn["box_recipes"].items()} == {
         "mystcase": (KNIFE, True, 1.0), "cruiser": (KNIFE, True, 1.0),
         "cookie": (PLAIN, False, 1.0), "cookie_xmas": (PLAIN, False, 1.0)}  # fmt: skip

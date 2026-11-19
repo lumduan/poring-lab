@@ -103,8 +103,9 @@ def test_catalogue_and_sample(make: Make) -> None:
     assert r.status_code == 200, r.text
     doc = r.json()
     assert doc["blocks"]["open_window"]["badge"] == "verified_rdp"
-    # #17: the configured run-time limits (flows_settings.runtime_limits; Batt's defaults for now)
-    assert doc["runtime_limits"] == {"default_s": 14_400, "max_s": 86_400}
+    # #17: the configured run-time limits (flows_settings.runtime_limits): since 2026-11-19 (Batt)
+    # no time limit by default and no maximum (0 = none)
+    assert doc["runtime_limits"] == {"default_s": 0, "max_s": 0}
     assert "basic_info" in doc["windows"] and "walk_to" in doc["palette"]
     # Amendment C (2026-11-13): the hotbar key block, the runner block and where it may run
     (key,) = doc["blocks"]["press_key"]["spec"]["params"]
@@ -142,7 +143,7 @@ def test_the_old_flow_body_is_refused_with_a_clear_400(make: Make, route: str) -
     assert r.json()["detail"]["errors"][0].startswith("the flow format changed: a project")
 
 
-def test_lint_simulate_python(make: Make) -> None:
+def test_lint_simulate_python(make: Make, monkeypatch: pytest.MonkeyPatch) -> None:
     client = make()
     proj = project()
     r = post(client, "lint", {"project": proj, "world": "sample"})
@@ -161,11 +162,21 @@ def test_lint_simulate_python(make: Make) -> None:
     assert {f["severity"] for f in lint["findings"] if f["rule"] == "bindings"} == {"readiness"}
     assert lint["run"]["allowed"] is False and "readiness item" in lint["run"]["summary"]
     assert "no configured maximum run time" not in lint["run"]["reasons"]  # the routes give one
+    # no maximum (Batt 2026-11-19): a long run, and no time limit at all (0), lint clean of it
+    for secs in (90_000, 0):
+        doc = post(client, "lint", {"project": {**proj, "max_runtime_s": secs}, "world": "sample"})
+        assert not [f for f in doc.json()["findings"] if f["rule"] == "runtime_max"], secs
+    # a configured maximum (a person's, if one is ever set) still reports a run above it
+    import poring_backend.routes_flows as rf
+
+    monkeypatch.setattr(rf, "runtime_limits", lambda _state: (0, 86_400))
     too_long = post(client, "lint", {"project": {**proj, "max_runtime_s": 90_000},
                                      "world": "sample"})  # fmt: skip
     assert "max_runtime_s 90000 is above the configured maximum 86400 (the Settings page)" in [
         f["text"] for f in too_long.json()["findings"]
     ]
+    none = post(client, "lint", {"project": {**proj, "max_runtime_s": 0}, "world": "sample"})
+    assert not any(f["rule"] == "runtime_max" for f in none.json()["findings"])  # runs to it
     r = post(client, "simulate", {"project": proj, "world": "sample",
                                   "scenario": {"horizon_s": 300, "timeline": [
                                       {"t": 200, "set": {"is_dead": True}}]}})  # fmt: skip

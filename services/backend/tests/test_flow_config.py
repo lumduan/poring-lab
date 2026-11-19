@@ -64,7 +64,7 @@ def test_every_setting_has_a_valid_default_and_the_run_flows_are_todays() -> Non
         "dagger_key": "F5", "knife_max_s": 8.0, "knife_hp_min": 0.50, "potion_below": 0.40,
         "fly_below": 0.20, "fly_rate": 150, "fly_rate_below": 0.50, "weight_home": 0.50,
         "respawn_at": "645,481", "respawn_confirm_at": "714,405", "WALK_AHEAD": 7,
-        "WALK_EVERY_S": 1.2, "BOX_EVERY_S": 1.0, "minutes": 120, "knife_swap": True,
+        "WALK_EVERY_S": 1.2, "BOX_EVERY_S": 1.0, "minutes": 0, "knife_swap": True,
         "bare_ready": True, "steal_cue": "popup", "swap_gap": True, "weight_exit": True,
         "respawn": True, "engage_screen": True, "reach_check": True, "unreach_escape": False,
         "miss_cue": True, "late_confirm": True, "exp_first": True, "kill_gap": True,

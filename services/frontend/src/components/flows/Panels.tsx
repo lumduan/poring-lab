@@ -128,14 +128,14 @@ export function FlowSettings<F extends { name: string; max_runtime_s: number; wh
     setErr("");
     onFlow(r.flow);
   };
-  const hours = (s: number) => `${(s / 3600).toFixed(s % 3600 ? 2 : 0)} h`;
+  const hours = (s: number) => (s ? `${(s / 3600).toFixed(s % 3600 ? 2 : 0)} h` : "no time limit");
   return (
     <div className="box stack">
       <div className="strong">{flow.name}: run settings</div>
       <div className="grid2">
         <label>
           max_runtime_s ({hours(Number(runtime) || 0)})
-          <input className="field" value={runtime} onChange={(e) => setRuntime(e.target.value)} />
+          <input className="field" value={runtime} placeholder="0 = no time limit" onChange={(e) => setRuntime(e.target.value)} />
         </label>
         <label>
           where_budget (/where reads a run)
@@ -144,7 +144,9 @@ export function FlowSettings<F extends { name: string; max_runtime_s: number; wh
       </div>
       <div className="muted">
         {limits
-          ? `Configured on the Settings page: default ${hours(limits.default_s)}, maximum ${hours(limits.max_s)}. A run above the maximum is refused.`
+          ? limits.max_s
+            ? `Configured on the Settings page: default ${hours(limits.default_s)}, maximum ${hours(limits.max_s)}. A run above the maximum is refused.`
+            : "0 or empty = no time limit: the run goes on until Stop, a death, a full bag or the flow's own end. No maximum is configured."
           : "The configured limits are not loaded yet."}
       </div>
       <div className="row">

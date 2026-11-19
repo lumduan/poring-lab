@@ -28,7 +28,9 @@ def test_the_flow_is_the_4dq_base_as_a_player() -> None:
     assert "--clear-map" not in argv  # a GM line: refused under --player-mode
     # dungeon@9.41 (Batt 2026-11-13): the map's two exits -- a bag over 50 %, a death
     assert argv[argv.index("--weight-home") + 1] == "0.50" and "--respawn" in argv
-    assert argv[argv.index("--minutes") + 1] == "120"  # Batt: the 2-h cap
+    # Batt 2026-11-19: no time limit unless a person sets one (was the 2-h cap): the byte-pinned
+    # runner's --minutes has no "none", so it gets 10 years
+    assert argv[argv.index("--minutes") + 1] == str(fc.NO_LIMIT_MINUTES) == "5256000"
     assert argv[argv.index("--label") + 1] == "flowrun-x"
 
 
@@ -51,6 +53,12 @@ def test_a_start_is_a_projects_and_never_carries_arguments() -> None:
     base = {"id": "a1b2c3d4e5", "action": "start", "flow": "project", "node": "xmas_dun02",
             "project_hash": "a" * 64, "max_s": 7200}  # fmt: skip
     assert fr.parse_request(json.dumps(base)) == base
+    # 0 = no maximum run time (Batt 2026-11-19, ADR-0020 Amendment T): the backend's default now;
+    # more than the old 24 h too; below 0 or above the IR's sanity cap is refused
+    for ok in (0, 90_000):
+        assert fr.parse_request(json.dumps({**base, "max_s": ok})) == {**base, "max_s": ok}
+    for bad in (-1, 31_536_001, True, "7200"):
+        assert "maximum run time" in str(fr.parse_request(json.dumps({**base, "max_s": bad})))
     for extra in ({"args": ["--clear-map"]}, {"settings": {"fly_key": "F1"}},
                   {"vals": {"minutes": 5}}):  # fmt: skip
         assert "nothing else" in str(fr.parse_request(json.dumps({**base, **extra}))), extra

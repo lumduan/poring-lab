@@ -377,7 +377,10 @@ Amendment B); a not-adopted model is never offered.
   risks; the blocks of a technique switched off turn grey and begin "off:".
   ➡️ **~15:4x, matpilot's player test (a real 10-min run, Batt's yes):** while she plays, the Run
   panel shows ONE live line (HP, what she does, kills, loot steps, Knife swaps and steals,
-  potions, Fly Wings, the time of the time box; the Run helper reads the run's own session events)
+  potions, Fly Wings, the time of the time box; the Run helper reads the run's own session events;
+  ➡️ 2026-11-19 (Batt, ADR-0020 Amendment T): no time limit unless one is set -- the project's
+  run settings `max_runtime_s` and the hunt block's `minutes` take 0 or empty for "no time limit",
+  the new default, and the line then shows the elapsed time alone)
   and the block she is on is highlighted as Simulate does (a click on a tab or a block stops
   following until "follow the run"). The end is in plain words ("Stopped by you after 10 min. She
   flew home on a Butterfly Wing. 23 kills …") with the end picture (GET /flows/run/end.png, the

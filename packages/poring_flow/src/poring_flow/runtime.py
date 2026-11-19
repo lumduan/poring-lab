@@ -975,7 +975,7 @@ class Sim:
                     raise _Halt("interlock_red")
                 if self.world.get("human"):
                     raise _Halt("human_pause")
-                if self.t >= self.flow.max_runtime_s:
+                if self.flow.max_runtime_s and self.t >= self.flow.max_runtime_s:  # 0: none
                     raise _Halt("max_runtime")
                 if self.flow.stop_when is not None and self._eval(self.flow.stop_when) is True:
                     raise _Halt("stop_when")

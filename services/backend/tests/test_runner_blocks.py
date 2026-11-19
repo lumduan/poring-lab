@@ -26,6 +26,8 @@ import test_hunt_blocks as thb  # noqa: E402
 from poring_flow import tick as tk  # noqa: E402
 
 FIX = ROOT / "services/frontend/src/lib/flow/fixtures"
+# the configured maximum run time: none since 2026-11-19 (Batt: no time limit unless set)
+NO_MAX = 0
 NODE = "xmas_dun02"
 ONE = (FIX / "project_xmas_dun02.json").read_text()
 HUNT = (FIX / "project_xmas_dun02_hunt.json").read_text()
@@ -33,7 +35,7 @@ FUN = (FIX / "project_xmas_dun02_functions.json").read_text()
 
 
 def _plan(text: str) -> fp.RunnerPlan:
-    got = fp.prepare(text, NODE, 7200)
+    got = fp.prepare(text, NODE, NO_MAX)
     assert not isinstance(got, str), got
     return got.runners[NODE]
 

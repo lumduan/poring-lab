@@ -100,13 +100,14 @@ def lint(
     `routes_provider`: the patrol routes (7d); None skips a patrol hunt's file checks."""
     ctx = Ctx(flow, cat or catalogue(), world, resolver, detector or Detector(), zones_provider,
               routes=routes_provider)  # fmt: skip
-    if runtime_max_s is not None and flow.max_runtime_s > runtime_max_s:
+    if ir.runtime_over(flow.max_runtime_s, runtime_max_s):
+        shown = flow.max_runtime_s
         ctx.add(
             "runtime_max",
             "error",
             1,
             "",
-            f"max_runtime_s {flow.max_runtime_s} is above the configured maximum {runtime_max_s} "
+            f"max_runtime_s {shown} is above the configured maximum {runtime_max_s} "
             "(the Settings page)",
         )
     structure.check(ctx)

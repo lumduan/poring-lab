@@ -2003,6 +2003,9 @@ Marked FIRST: needed before F1 or F2.
    store), defaults 4 h and 24 h; each flow may set its own value up to the global maximum; the
    editor shows it; changes are logged; the run-start check refuses a flow above the configured
    maximum."
+   ➡️ **SUPERSEDED IN PART 2026-11-19 (Batt, Amendment T below): no time limit unless a person sets
+   one.** 0 = no time limit (the new default, flow and hunt block alike); no maximum by default;
+   the sanity cap is 365 days. The rest below is the history of the 4 h / 24 h design.
    - **The flow side (built):** the flow's own `max_runtime_s` (the IR field, unchanged in name);
      the IR's bound is only a SANITY cap now, 7 days (`ir.MAX_RUNTIME_S`; it was 24 h); the editor
      shows and edits it with `where_budget` (the Inspect panel's run settings, refusing a value
@@ -3081,3 +3084,36 @@ simple."
     Another map read, or a cell off the map's ground, still refuses; a check with no hunt core
     (no cell read) still refuses an unread map.
   - Next (Batt: "digits first"): the client's own digits, then its minimap.
+
+## Amendment T (2026-11-19, Batt decided ~13:2x ICT): no time limit unless a person sets one
+
+- **What Batt said** (Thai, translated): "do not fix a run at 120 min; let the bot run long, in case
+  I want to test the bot's endurance, running continuously until the bag is full or it dies." And,
+  asked whether to raise the 24 h maximum: "beyond it, a user sets it in the flow; if it is not
+  set, it runs on with no time limit, and stops hunting only when it dies, or at some break-even
+  end."
+- **Decision (supersedes open question 8's 4 h / 24 h in part).**
+  - `max_runtime_s` 0 = NO TIME LIMIT (`ir.NO_TIME_LIMIT`). A new flow and the ready-made boxes
+    hold 0. The editor's run-settings field takes 0 or empty for it ("no time limit").
+  - The hunt block's `minutes` (the hunt core's time box) 0 = no limit, its new default (was 120;
+    at most 7 days). The byte-pinned runner's `--minutes` has no "none", so it gets
+    `NO_LIMIT_MINUTES` (10 years); a set project time box still shortens it (flow_play's argv).
+  - The configured limits (`flows_settings.runtime_limits`) are `(0, 0)`: no default time, no
+    maximum. A maximum, if one is ever configured, still refuses a flow ABOVE it; a flow with no
+    time limit runs TO it (`ir.runtime_box`), no lock. `None` (no configuration at all) still
+    refuses: fail closed against a caller that forgot.
+  - The sanity cap on hostile input is 365 days (`ir.MAX_RUNTIME_S`; was 7 days).
+- **What still ends a run with no time limit:** Stop; a death (HP 0, Amendment S); the box's own
+  ends (a full bag goes home, `bag_full`; an empty stock); the interlock going red; HUMAN mode;
+  the flow's `stop_when`. The simulator keeps its tick bound.
+- **Run plumbing.** The Run helper's watchdog cap is infinite for such a run (`flow_run`), and the
+  detect server's guarded step gets a 10-year time box (`NO_LIMIT_SERVE_S`); the run's end stops
+  the server itself (`end_server`), as before. The run log says "no time limit"; records write
+  `cap_s: null`.
+- **The A/B harness.** stage6_ab sets each run's length itself (`--max-s = minutes * 60`), so its
+  one-change check no longer compares the arms' time fields: the ready-made B now holds 0, the
+  hash-pinned arm C its old 7200 s / 120 min.
+- **Open (not measured):** a run of days writes its hunt records to `/dev/shm/poring-lab-demo`
+  (RAM, rule 7's 4 GB budget). The sessions measured so far were short (0.5-3 MB each); the
+  first endurance run should watch `/dev/shm` and the input log's growth.
+

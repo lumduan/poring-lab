@@ -84,10 +84,33 @@ MAP_ID = r"^[A-Za-z0-9_@.\-]{1,40}$"
 KEY = r"^[A-Za-z0-9_.\-]{1,64}$"  # an L3 / L4 key
 IR_VERSION = 2  # IR 1 converts on load (`upgrade`); see the module docstring
 # A SANITY CAP on hostile input, not the policy (Batt 2026-10-09, contradictions #17: NOT
-# hard-coded). The policy is CONFIGURED: a global default (4 h) and maximum (24 h) on the Settings
-# page, given to the linter and the run-start check as `runtime_max_s`. Was 86_400 (24 h), the
-# provisional bound of open question 8.
-MAX_RUNTIME_S = 604_800  # 7 days
+# hard-coded). The policy is CONFIGURED: a global default and maximum, given to the linter and the
+# run-start check as `runtime_max_s`. Was 86_400 (24 h), the provisional bound of open question 8;
+# then 604_800 (7 days).
+# ➡️ Batt 2026-11-19: "do not limit a run to 120 min; let the bot run long ... a user sets more in
+# the flow; if it is not set, it runs on with no time limit and stops only when it dies, or at
+# some other end" (an endurance test until the bag is full or she dies). So 0 = NO TIME LIMIT
+# (a project's default), and the configured maximum is none (0) unless one is set.
+MAX_RUNTIME_S = 31_536_000  # 365 days: the sanity cap only
+NO_TIME_LIMIT = 0  # a max_runtime_s / runtime_max_s of 0: none
+
+
+def runtime_over(flow_s: int, max_s: int | None) -> bool:
+    """PURE: a flow's max_runtime_s is above the configured maximum (0 / None = no maximum). A
+    flow with no time limit is never "above": it runs to a maximum that is set (runtime_box) --
+    no lock (Batt 2026-11-19), and a harness's --max-s stays the run's length."""
+    if not max_s or flow_s == NO_TIME_LIMIT:
+        return False
+    return flow_s > max_s
+
+
+def runtime_box(flow_s: int, max_s: int | None) -> int:
+    """PURE: the run's time box in seconds (0 = none): the flow's own, within a set maximum."""
+    if not max_s:
+        return flow_s
+    return max_s if flow_s == NO_TIME_LIMIT else min(flow_s, max_s)
+
+
 # The per-run /where budget (Batt 2026-10-09, contradictions #10): how many ACTIVE position reads
 # (position(), current_map(), read_position, a relocation's read) a run may make. They TYPE /where,
 # which players almost never do; passive sources come first. 12 = about three an hour over the
@@ -686,7 +709,7 @@ class Flow(BaseModel):
     description: str = Field(default="", max_length=500)
     target: Target
     assumes: list[Expr] = Field(default=[], max_length=50)  # character facts, sensed before input
-    max_runtime_s: int = Field(ge=1, le=MAX_RUNTIME_S)
+    max_runtime_s: int = Field(ge=0, le=MAX_RUNTIME_S)  # 0 = no time limit (Batt 2026-11-19)
     # #10: the run's /where budget (lint warns above it; the run report counts every read)
     where_budget: int = Field(default=WHERE_BUDGET_DEFAULT, ge=0, le=WHERE_BUDGET_MAX)
     stop_when: Expr | None = None
