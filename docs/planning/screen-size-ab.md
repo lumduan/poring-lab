@@ -264,3 +264,27 @@ Two candidates, NOT adopted (each its own block, after B2):
   - So the client draws the sword in time when she stands. The runs' "unknown" comes from play
     in motion, which the opt-in trace (`PORING_CURSOR_TRACE`, 77626cdf) measures in
     `s11scr-diag` (1 run, reported only).
+
+### s11scr-diag (1 run at 1080, reported only), 2026-11-20 02:56-03:13 ICT
+
+- Main 77626cdf with `PORING_CURSOR_TRACE` on; the Rogue not immune. 15.1 min of hunting, 24 kills
+  = 95.4 kills/h; it ended "stock_keep: 1 Fly Wing(s) left" like every B2 run (9 escapes, 8 of
+  them the goblin alarm: 31.8 an hour).
+- The runner's own counts: the cursor on box targets sword 50 %, unknown 39 %, clear 11 %; on
+  scan hovers clear 65 %, unknown 28 %, sword 5 %.
+- **The trace, 589 checks** (sword 61, clear 280, unknown 248):
+  - the first read comes a median 150 ms after the second motion (p90 157-167), and the reads
+    are 49-50 ms apart, not 30: 3 reads by 250 ms, 5 by the 350 ms end;
+  - sword checks: the sword (>= 0.75) shows first at a median 250 ms (p90 305), 54 % by 250 ms;
+  - unknown checks see NEITHER cursor: the best sword read is a median 0.357 (151 of 248 under
+    0.40, only 11 in 0.60-0.75), the best walk read a median 0.485 (86 in 0.60-0.85, 2 above);
+    the sword rose by more than 0.1 inside the window in only 32 of 248;
+  - unknown targets lie farther from the screen centre: a median 160 px (sword 62, clear 59);
+  - 29 % of the reads 50 ms apart repeat the previous read exactly (the same frame): clear 41 %,
+    unknown 24 %, sword 19 %. The RDP bus gave 14.5 frames/s with the Rogue standing after the
+    run (10.3 on damage + 4.2 keepalives); no 720 figure in motion to compare yet.
+- **What it says:** a longer cursor window would rescue few unknowns (11 near misses, 32
+  rising). The unknown checks are far targets with no clear cursor in the crop at all, and the
+  picture repeats often. Two leads, not yet measured: (a) the frame rate in motion at 1080
+  against 720 (the bus counters during a run, both sizes); (b) when the cursor does show for a
+  far target in motion (a reads-to-1 s probe; the runner's 0.35 s is byte-pinned, so a probe).
