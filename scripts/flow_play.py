@@ -132,8 +132,8 @@ import sys
 import threading
 import time
 import traceback
-from collections.abc import Callable, Generator, Mapping, Sequence
-from dataclasses import dataclass, field
+from collections.abc import Callable, Generator, Iterator, Mapping, Sequence
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Any
 
@@ -591,6 +591,33 @@ class PixelIO(LiveIO):
         self.screen.close()
 
 
+# Batt 2026-11-19: "we have the death and the respawn at Geffen on the maps; but here simply: if
+# she died -- the dialog is up and her HP is 0 -- do not enter the hunting loop again; very simple."
+# The lab client's death dialog is RECOGNISED (gm_vitals.DEAD_STATE): the runner's own death exit
+# presses the respawn, as before. Another client's dialog may not be (its words, its look): there
+# her HP reading 0 % for DEAD_HP0_S, any language, ends the run -- no respawn press (its button may
+# sit elsewhere: the dialog is the person's), no hunting on.
+DEAD_HP0_S = 3.0
+DEAD_HP0_WORDS = (f"she died (her HP read 0 % for {DEAD_HP0_S:.0f} s): the hunt does not go on; "
+                  "the death dialog is the person's")  # fmt: skip
+
+
+@dataclass
+class Hp0Watch:
+    """PURE: dead by her HP -- 0 % read for DEAD_HP0_S with no death dialog recognised (then the
+    runner's own death exit has the dialog). An unread HP keeps the clock; any HP above 0 resets."""
+
+    since: float | None = None
+
+    def feed(self, t: float, hp: int | float | None, dialog: bool) -> bool:
+        if dialog or (hp is not None and hp > 0):
+            self.since = None
+            return False
+        if hp is not None:  # 0 %
+            self.since = t if self.since is None else self.since
+        return self.since is not None and t - self.since >= DEAD_HP0_S
+
+
 # --- the hunt core (dungeon_hunt in-process) ------------------------------------------------------
 @dataclass
 class HuntResult:
@@ -599,6 +626,7 @@ class HuntResult:
     home: bool = False  # its player end pressed the Butterfly Wing
     respawned: bool = False
     dead: bool = False
+    dead_hp0: bool = False  # Batt 2026-11-19: her HP read 0 % (no dialog recognised): it stopped
     rc: int | None = None
     ticks: int = 0
     survive_calls: int = 0  # stage 2: the hook's survive calls (main ticks and quick reads)
@@ -627,10 +655,15 @@ class HuntHook:
         self.player, self.res = player, res
         self.last: Any = None
         self._hp_t = -1e9
+        self._hp0 = Hp0Watch()
 
     def tick(self, view: Any) -> str | None:
         self.res.ticks += 1
         self.last = view
+        if self._hp0.feed(self.player.io.clock(), getattr(view, "hp_pct", None),
+                          bool(getattr(view, "dead", False))):  # fmt: skip
+            self.res.dead = self.res.dead_hp0 = True  # the hunt does not go on (Batt 2026-11-19)
+            return DEAD_HP0_WORDS
         return self.player.hunt_halt_words() or self.player.stop_due()
 
     def survive(self, view: Any, press: Callable[[str, str], str | None]) -> str | None:
@@ -717,9 +750,15 @@ class HuntCore:
                           if "box_recipes" in box else {}),
                        **({"loop": plan.loop} if plan.loop else {})})  # fmt: skip
         hook = DriveHook(player, res) if plan.loop else HuntHook(player, res)  # 5b-2: its loop
+
+        def warn(words: str) -> None:
+            say(words)
+            player.rec.ev({"kind": "hotbar_warning", "words": words[:300]})
+
         try:
             a = args_fn(argv)
-            res.rc = run_fn(a, hook=hook, session=(player.io.agent, player.io.screen), **box)
+            with hotbar_is_the_players(dh, warn):  # the hotbar never refuses (Batt 2026-11-19)
+                res.rc = run_fn(a, hook=hook, session=(player.io.agent, player.io.screen), **box)
         except SystemExit as e:  # its preamble's refusal, or ro_agent.Stop inside its session
             res.error = str(e)[:400] or "the runner stopped"
         player.rec.ev({"kind": "hunt_end", "n": self.n, "reason": res.reason, "error": res.error,
@@ -758,6 +797,7 @@ class LivePlayer(Sim):
         self._map_before: str | None = None
         self._last_block: tuple[str, float] = ("", -1e9)
         self._hp_t = -1e9
+        self._hp0 = Hp0Watch()  # dead by her HP (Batt 2026-11-19)
         # stage 2: the box's events inside a running hunt core (hunt_tick)
         self._port: Callable[[str, str], str | None] | None = None  # the runner's own press
         self._hunt_keys: frozenset[str] = frozenset()  # the events that play in the hunt core
@@ -786,6 +826,9 @@ class LivePlayer(Sim):
         v = self.io.senses()
         changes = {k: v.get(k) for k in ("hp_percent", "sp_percent", "weight_percent")}
         changes["is_dead"] = v.get("is_dead")
+        if self._hp0.feed(self.io.clock(), v.get("hp_percent"), bool(v.get("is_dead"))):
+            self.words = DEAD_HP0_WORDS  # Batt 2026-11-19: dead by her HP -- no hunting on
+            raise _Halt("dead")
         m = v.get("map")
         if m is not None and m != self.world.get("map"):
             changes["map"] = m
@@ -981,7 +1024,8 @@ class LivePlayer(Sim):
         if res.dead or res.reason == "death":
             by = (f"the box's {plan.call_names['respawn']}()" if "respawn" in plan.calls
                   else "the runner")  # fmt: skip
-            self.words = (f"she died in the hunt; {by} pressed her respawn at the save point"
+            self.words = (DEAD_HP0_WORDS if res.dead_hp0 else
+                          f"she died in the hunt; {by} pressed her respawn at the save point"
                           if res.respawned else "she died in the hunt: the death dialog is a "
                           "person's (the respawn did not arrive)")  # fmt: skip
             raise _Halt("dead")
@@ -1461,13 +1505,71 @@ def generic_check(lio: PixelIO, map_: str) -> dict[str, Any]:
     return {"items": items, **dh.check_verdict(items)}
 
 
+KNIFE_LINES = ("knife", "dagger")  # the Knife swap's slots (F4 the Knife, F5 the dagger worn)
+
+
+def knife_swap_off(prep: Prepared, got: Mapping[str, Any]) -> list[str]:
+    """Batt 2026-11-19 ("do not lock this"): when the check's Knife / dagger lines fail, the run
+    plays WITHOUT the Knife swap instead of refusing -- swapping from an unknown weapon state
+    could equip anything. Its hunt cores' plans lose ``knife_swap`` (in place); the words of each
+    change, for the log."""
+    failed = [i for i in got.get("items") or []
+              if i.get("id") in KNIFE_LINES and i.get("ok") is False]  # fmt: skip
+    if not failed:
+        return []
+    out = []
+    for block, plan in list(prep.runners.items()):
+        if plan.vals.get("knife_swap"):
+            prep.runners[block] = replace(plan, vals={**plan.vals, "knife_swap": False})
+            ids = ", ".join(str(i.get("id")) for i in failed)
+            out.append(
+                f"WARNING: {ids} did not read right: {block} plays WITHOUT the Knife swap "
+                "this run (the hotbar is the player's own; set the Knife on its key and "
+                "the dagger worn for it)"
+            )
+    return out
+
+
+@contextlib.contextmanager
+def hotbar_is_the_players(dh: Any, warn: Callable[[str], None]) -> Iterator[None]:
+    """Batt 2026-11-19 ("do not lock the bot over this: it is the user's own business"): inside
+    the live player, the runner's OWN start refusals on the hotbar -- the stock counts
+    (player_stock_refused: unread, or under PLAYER_MIN_WINGS / _HEALS) and what each role's key
+    shows (player_slots_refused) -- become warnings, so a Run plays what the player brought. The
+    runner file is unchanged (byte-pinned; its CLI keeps its rules); its functions are looked up by
+    name when called, so they are swapped here for the run's duration only, then restored."""
+    saved = (dh.player_stock_refused, dh.player_slots_refused)
+
+    def stock(counts: Mapping[int, int | None], heal_items: Sequence[int]) -> str | None:
+        why = saved[0](counts, heal_items)
+        if why is not None:
+            warn(f"WARNING (the hotbar, the player's own; the Run plays on): {why}")
+        return None
+
+    def slots(states: Mapping[str, tuple[str, str]]) -> str | None:
+        why = saved[1](states)
+        if why is not None:
+            warn(f"WARNING (the hotbar, the player's own; the Run plays on): {why}")
+        return None
+
+    dh.player_stock_refused, dh.player_slots_refused = stock, slots
+    try:
+        yield
+    finally:
+        dh.player_stock_refused, dh.player_slots_refused = saved
+
+
 def check_refusal(got: Mapping[str, Any]) -> str | None:
     """PURE: why the start check refuses the run (None: it may start). Any failed line the runner
     refuses on, and the map line not READ as the node's map (a person places her there)."""
     items = list(got.get("items") or [])
     if not items:
         return str(got.get("detail") or "the start check read nothing")
-    bad = [i for i in items if i.get("ok") is False and i.get("refuses", True)]
+    bad = [
+        i
+        for i in items
+        if i.get("ok") is False and i.get("refuses", True) and i.get("id") not in fr.HOTBAR_LINES
+    ]  # the hotbar is the player's own (Batt)
     if bad:
         return "; ".join(f"{i.get('id')}: {i.get('words')}" for i in bad)
     cell = next((i for i in items if i.get("id") == "cell"), None)
@@ -1497,6 +1599,8 @@ def check_lines(got: Mapping[str, Any]) -> list[str]:
     out = []
     for it in got.get("items") or []:
         mark = {True: "OK  ", False: "FAIL"}.get(it.get("ok"), "?   ")
+        if it.get("ok") is False and it.get("refuses") is False:
+            mark = "WARN"  # Batt 2026-11-19: the hotbar is the player's own (it never refuses)
         value = it.get("value")
         out.append(f"check {mark} {it.get('id')}: {it.get('words')}"
                    + ("" if value in (None, "") else f" [read: {value}]"))  # fmt: skip
@@ -1506,12 +1610,16 @@ def check_lines(got: Mapping[str, Any]) -> list[str]:
 def check_summary(got: Mapping[str, Any]) -> str:
     """PURE: the check in one line: how many lines, which fail or did not read."""
     items = list(got.get("items") or [])
-    bad = [str(i.get("id")) for i in items if i.get("ok") is False]
+    failed = [i for i in items if i.get("ok") is False]
+    bad = [str(i.get("id")) for i in failed if i.get("refuses") is not False]
+    warn = [str(i.get("id")) for i in failed if i.get("refuses") is False]
     unread = [str(i.get("id")) for i in items if i.get("ok") is None]
-    head = f"the start check: {len(items) - len(bad) - len(unread)} of {len(items)} lines pass"
+    passing = len(items) - len(failed) - len(unread)
+    head = f"the start check: {passing} of {len(items)} lines pass"
     return (
         head
         + (f"; FAIL: {', '.join(bad)}" if bad else "")
+        + (f"; WARNING (the Run starts anyway): {', '.join(warn)}" if warn else "")
         + (f"; not read: {', '.join(unread)}" if unread else "")
     )
 
@@ -1595,6 +1703,8 @@ def play(prep: Prepared, lio: LiveIO, *, label: str, stop_file: Path | None,
         say("REFUSED before any input: nothing was pressed (the lines marked FAIL say why)")
         print(refuse(f"the start check: {why}"), flush=True)
         return 2
+    for ln in knife_swap_off(prep, got):
+        say(ln)
     if stop_file is not None and stop_file.exists():
         print(refuse("Stop was pressed before the start"), flush=True)
         return 2
