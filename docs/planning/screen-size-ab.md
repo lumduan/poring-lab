@@ -260,6 +260,9 @@ Two candidates, NOT adopted (each its own block, after B2):
   - kills/h +19 % (72.9 -> 86.9); loot steps/h 96 -> 126;
   - the hover check 293-326 ms (B 460, A 254);
   - the cursor's "unknown" on box targets still 37-48 % (B 33-57 %, A 2 %);
+    ➡️ CORRECTED 2026-11-20 06:5x ICT: `screen_ab.py diag` gives B 26-33 % per run (the four
+    runs: 26.2, 29.8, 33.3, 32.6), A 0-2.4 %, B2 36.5-47.5 %. So B2 did NOT lower the unknown
+    share; it rose. The "33-57" was not from the tool and is withdrawn.
   - kills per box engagement 0.35-0.38 (B 0.32, A ~0.7).
 - **Probe (immune, standing, moves only, 40 hovers at 1080):** the sword read on 34 hovers, the
   first at a median of 110 ms (p90 112), all within 350 ms; 6 never in 1.5 s; the best sword
