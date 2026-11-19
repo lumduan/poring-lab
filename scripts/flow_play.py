@@ -757,7 +757,7 @@ class HuntCore:
 
         try:
             a = args_fn(argv)
-            with hotbar_is_the_players(dh, warn):  # the hotbar never refuses (Batt 2026-11-19)
+            with player_owns_the_start(dh, warn):  # never refuses on them (Batt 2026-11-19)
                 res.rc = run_fn(a, hook=hook, session=(player.io.agent, player.io.screen), **box)
         except SystemExit as e:  # its preamble's refusal, or ro_agent.Stop inside its session
             res.error = str(e)[:400] or "the runner stopped"
@@ -1468,7 +1468,7 @@ def runner_check(plan: RunnerPlan, *, run_fn: Callable[..., int] | None = None) 
     try:
         dh.no_input_guard()
         a = dh.args_for(plan.argv(CHECK_LABEL, None, None), cmd="check")
-        with contextlib.redirect_stdout(buf):
+        with contextlib.redirect_stdout(buf), player_owns_the_start(dh, print):
             try:
                 (run_fn or dh.run)(a)
             except SystemExit as e:
@@ -1531,14 +1531,29 @@ def knife_swap_off(prep: Prepared, got: Mapping[str, Any]) -> list[str]:
 
 
 @contextlib.contextmanager
-def hotbar_is_the_players(dh: Any, warn: Callable[[str], None]) -> Iterator[None]:
+def player_owns_the_start(dh: Any, warn: Callable[[str], None]) -> Iterator[None]:
     """Batt 2026-11-19 ("do not lock the bot over this: it is the user's own business"): inside
-    the live player, the runner's OWN start refusals on the hotbar -- the stock counts
-    (player_stock_refused: unread, or under PLAYER_MIN_WINGS / _HEALS) and what each role's key
-    shows (player_slots_refused) -- become warnings, so a Run plays what the player brought. The
-    runner file is unchanged (byte-pinned; its CLI keeps its rules); its functions are looked up by
-    name when called, so they are swapped here for the run's duration only, then restored."""
+    the live player, the runner's OWN start refusals on what the player brought become warnings,
+    so a Run plays what the player brought:
+    - the hotbar: the stock counts (player_stock_refused: unread, or under PLAYER_MIN_WINGS /
+      _HEALS) and what each role's key shows (player_slots_refused);
+    - ~11:5x (asked): an UNREAD weight (player_weight_refused: no share read and the line not red;
+      a weight read over the limit or drawn red still refuses);
+    - ~11:5x (asked): a minimap picture that cannot tell its map (PLAYER_MAP_UNREAD "warn": the
+      runner then checks her cell on the map's open ground; another map read still refuses).
+    The runner file is unchanged (byte-pinned; its CLI keeps its rules); its functions and its
+    constant are looked up by name when used, so they are swapped here for the run's duration
+    only, then restored."""
     saved = (dh.player_stock_refused, dh.player_slots_refused)
+    saved_weight, saved_map = dh.player_weight_refused, dh.PLAYER_MAP_UNREAD
+
+    def weight(share: float | None, red: bool) -> str | None:
+        why = saved_weight(share, red)
+        if why is not None and share is None and not red:
+            warn(f"WARNING (the weight did not read: the Run plays on; its bag-full exit cannot "
+                 f"work until it reads): {why}")  # fmt: skip
+            return None
+        return why
 
     def stock(counts: Mapping[int, int | None], heal_items: Sequence[int]) -> str | None:
         why = saved[0](counts, heal_items)
@@ -1553,10 +1568,23 @@ def hotbar_is_the_players(dh: Any, warn: Callable[[str], None]) -> Iterator[None
         return None
 
     dh.player_stock_refused, dh.player_slots_refused = stock, slots
+    dh.player_weight_refused, dh.PLAYER_MAP_UNREAD = weight, "warn"
     try:
         yield
     finally:
         dh.player_stock_refused, dh.player_slots_refused = saved
+        dh.player_weight_refused, dh.PLAYER_MAP_UNREAD = saved_weight, saved_map
+
+
+def weight_red(lio: LiveIO) -> bool:
+    """The weight line drawn red on a fresh frame (the runner's own cue, dungeon_hunt
+    overweight_red); False when it cannot be read (a fake IO, no frame)."""
+    try:
+        import dungeon_hunt as dh
+
+        return bool(dh.overweight_red(lio.frame()))
+    except Exception:  # noqa: BLE001 -- no frame: nothing red seen
+        return False
 
 
 def check_refusal(got: Mapping[str, Any]) -> str | None:
@@ -1573,9 +1601,43 @@ def check_refusal(got: Mapping[str, Any]) -> str | None:
     if bad:
         return "; ".join(f"{i.get('id')}: {i.get('words')}" for i in bad)
     cell = next((i for i in items if i.get("id") == "cell"), None)
-    if cell is None or cell.get("ok") is not True:
+    # Batt 2026-11-19 ~11:5x (asked): a minimap picture that cannot tell, with her cell read on the
+    # node map's open ground, warns and starts (the runner's own cell line is ok None only then:
+    # another map read, or a cell off the map's ground, is False and refuses)
+    if cell is None or cell.get("ok") is False or (cell.get("ok") is None
+                                                   and not cell_fits(cell)):  # fmt: skip
         return f"her map is not read as the start node's: {cell.get('words') if cell else '-'}"
     return None
+
+
+def cell_fits(cell: Mapping[str, Any]) -> bool:
+    """PURE: the runner's cell line says her cell lies on the node map's open ground (its own
+    words for a cell that passed player_start_refused; dungeon_hunt is byte-pinned, so they hold).
+    A check with no hunt core reads no cell: its unread map still refuses."""
+    return "'s open ground, in reach of its search area" in str(cell.get("words") or "")
+
+
+MAP_WARN = (
+    "WARNING: the minimap's picture did not tell the map; her cell lies on the node map's "
+    "open ground, so the Run starts (Batt 2026-11-19) -- check the game shows that map"
+)
+
+
+def start_warnings(got: Mapping[str, Any]) -> list[str]:
+    """PURE: the start's warning lines that are not a check line's own (the map unread)."""
+    cell = next((i for i in got.get("items") or [] if i.get("id") == "cell"), None)
+    return [MAP_WARN] if cell is not None and cell.get("ok") is None and cell_fits(cell) else []
+
+
+def red_weight(got: Mapping[str, Any], red: bool) -> Mapping[str, Any]:
+    """PURE: an unread weight line (a warning) becomes a refusal again when the line is drawn
+    red (>= 50 %: a heavy bag, read by its colour)."""
+    if not red:
+        return got
+    items = [{**i, "refuses": True, "words": "the weight line is drawn RED (>= 50 %): lighten the "
+              "bag first (a person)"} if fr.weight_unread(i) else i
+             for i in got.get("items") or []]  # fmt: skip
+    return {**got, "items": items}
 
 
 # --- the run's diary (Batt 2026-11-18: "when Run is pressed, log the status, the checklist and
@@ -1698,12 +1760,14 @@ def play(prep: Prepared, lio: LiveIO, *, label: str, stop_file: Path | None,
     for ln in check_lines(got):
         say(ln)
     say(check_summary(got))
+    if any(fr.weight_unread(i) for i in got.get("items") or []):
+        got = red_weight(got, weight_red(lio))
     why = check_refusal(got)
     if why is not None:
         say("REFUSED before any input: nothing was pressed (the lines marked FAIL say why)")
         print(refuse(f"the start check: {why}"), flush=True)
         return 2
-    for ln in knife_swap_off(prep, got):
+    for ln in [*start_warnings(got), *knife_swap_off(prep, got)]:
         say(ln)
     if stop_file is not None and stop_file.exists():
         print(refuse("Stop was pressed before the start"), flush=True)

@@ -65,6 +65,12 @@ line fails plays without the Knife swap (`flow_play.knife_swap_off`: swapping fr
 state could equip anything). In the run nothing new: an unread count never ends it (a teleport-skill
 key has no count), a count read 0 still ends it (the end's own escape).
 
+**The weight and the map on another client (Batt 2026-11-19 ~11:5x, asked after his Run refused on
+both):** an UNREAD weight warns and the Run starts (its bag-full exit cannot work until it reads; a
+weight read over the limit or drawn red still refuses); a minimap picture that cannot tell its map
+warns and starts when her cell lies on the node map's open ground (another map still refuses). The
+proper fix comes next: the client's own digits, then its minimap.
+
 **A death ends the hunt (Batt 2026-11-19 ~11:0x):** "we have the death and the respawn at Geffen on
 the maps; but here simply: if she died -- the dialog is up and her HP is 0 -- do not enter the
 hunting loop again; very simple." The lab client's death dialog is recognised and its respawn plays

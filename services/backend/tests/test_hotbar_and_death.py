@@ -96,17 +96,20 @@ def test_the_runner_s_own_start_lets_the_hotbar_pass_inside_the_player_only() ->
     dh = types.SimpleNamespace(
         player_stock_refused=lambda counts, heals: "no Fly Wing read",
         player_slots_refused=lambda states: "F1 shows another item",
+        player_weight_refused=lambda share, red: None,
+        PLAYER_MAP_UNREAD="refuse",
     )
     before = (dh.player_stock_refused, dh.player_slots_refused)
     said: list[str] = []
-    with fp.hotbar_is_the_players(dh, said.append):
+    with fp.player_owns_the_start(dh, said.append):
         assert dh.player_stock_refused({601: None}, [504]) is None
         assert dh.player_slots_refused({}) is None
     assert said == ["WARNING (the hotbar, the player's own; the Run plays on): no Fly Wing read",
                     "WARNING (the hotbar, the player's own; the Run plays on): F1 shows another "
                     "item"]  # fmt: skip
     assert (dh.player_stock_refused, dh.player_slots_refused) == before  # restored
-    with pytest.raises(RuntimeError), fp.hotbar_is_the_players(dh, said.append):
+    assert dh.PLAYER_MAP_UNREAD == "refuse"
+    with pytest.raises(RuntimeError), fp.player_owns_the_start(dh, said.append):
         raise RuntimeError("the runner failed")
     assert (dh.player_stock_refused, dh.player_slots_refused) == before  # restored on a fault too
 
@@ -115,7 +118,7 @@ def test_the_real_runner_s_refusals_are_the_ones_swapped() -> None:
     import dungeon_hunt as dh
 
     assert dh.player_stock_refused({601: None}, [504]) is not None  # its CLI keeps its rule
-    with fp.hotbar_is_the_players(dh, lambda w: None):
+    with fp.player_owns_the_start(dh, lambda w: None):
         assert dh.player_stock_refused({601: None}, [504]) is None
     assert dh.player_stock_refused({601: None}, [504]) is not None
 
@@ -172,3 +175,51 @@ def test_outside_the_hunt_her_hp_at_0_ends_the_run_as_dead(tmp_path: Path) -> No
     with pytest.raises(_Halt) as e:
         pl.read()
     assert e.value.reason == "dead" and pl.words == fp.DEAD_HP0_WORDS
+
+
+# -- Batt 2026-11-19 ~11:5x (asked): an unread weight warns; an unread map with her cell fitting --
+
+
+WEIGHT_UNREAD = {"id": "weight", "ok": False, "refuses": True, "value": None,
+                 "words": "the weight on Basic Info did not read, or reads red (>= 50 %): a "
+                 "person first"}  # fmt: skip
+CELL_FITS = {"id": "cell", "ok": None, "value": "(234, 144)",
+             "words": "the map is not read from the minimap: look at the game -- is she on "
+             "xmas_dun02? (her cell (234, 144) is on xmas_dun02's open ground, in reach of its "
+             "search area, if she is)"}  # fmt: skip
+
+
+def test_an_unread_weight_warns_and_a_read_or_red_one_still_refuses() -> None:
+    (got,) = fr.hotbar_warnings([WEIGHT_UNREAD])
+    assert got["refuses"] is False and fr.WEIGHT_WARN in got["words"]
+    read = {**WEIGHT_UNREAD, "value": "62 %", "words": "weight 0.62 >= 0.5: lighten the bag"}
+    assert fr.hotbar_warnings([read]) == [read]  # a weight READ over the limit refuses
+    cell = {"id": "cell", "ok": True, "words": "the minimap is xmas_dun02's"}
+    assert fp.check_refusal({"items": [got, cell]}) is None
+    red = fp.red_weight({"items": [got, cell]}, red=True)
+    assert fp.check_refusal(red) is not None and "RED" in str(fp.check_refusal(red))
+    assert fp.red_weight({"items": [got]}, red=False) == {"items": [got]}
+
+
+def test_an_unread_map_starts_only_when_her_cell_fits_the_node_map() -> None:
+    assert fp.check_refusal({"items": [CELL_FITS]}) is None
+    assert fp.start_warnings({"items": [CELL_FITS]}) == [fp.MAP_WARN]
+    no_cell = {"id": "cell", "ok": None, "words": "the map's name did not read"}  # no hunt core
+    assert fp.check_refusal({"items": [no_cell]}) is not None
+    assert fp.start_warnings({"items": [no_cell]}) == []
+    other = {**CELL_FITS, "ok": False, "words": "the minimap reads prontera's"}
+    assert fp.check_refusal({"items": [other]}) is not None  # another map: always refuses
+
+
+def test_the_runner_s_own_start_warns_on_an_unread_weight_and_map_only() -> None:
+    import dungeon_hunt as dh
+
+    said: list[str] = []
+    assert dh.PLAYER_MAP_UNREAD == "refuse"
+    with fp.player_owns_the_start(dh, said.append):
+        assert dh.PLAYER_MAP_UNREAD == "warn"
+        assert dh.player_weight_refused(None, False) is None and "did not read" in said[-1]
+        assert dh.player_weight_refused(None, True) is not None  # drawn red: a heavy bag
+        assert dh.player_weight_refused(0.9, False) is not None  # read over the limit
+    assert dh.PLAYER_MAP_UNREAD == "refuse"
+    assert dh.player_weight_refused(None, False) is not None  # its CLI keeps its rule

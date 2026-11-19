@@ -337,14 +337,32 @@ HOTBAR_WARN = ("a WARNING only: the Run starts anyway (what the hotbar holds is 
                "choice)")  # fmt: skip
 
 
+# Batt 2026-11-19 ~11:5x (asked: another client's weight digits did not read): "an unreadable weight
+# is a warning" -- the Run starts; the bag-full exit cannot work until the weight reads. A weight
+# READ over the limit, or the line drawn red (>= 50 %), still refuses (flow_play checks the red).
+WEIGHT_WARN = ("a WARNING only: the weight did not read (this client's digits), so the Run starts "
+               "and its bag-full exit cannot work until it reads; a weight read over the limit, or "
+               "the line drawn red, still refuses")  # fmt: skip
+
+
+def weight_unread(it: Any) -> bool:
+    """PURE: the check's weight line failed WITHOUT a weight read (unread, or red: the line's
+    words are the same; flow_play tells red apart on a frame of its own)."""
+    return (isinstance(it, dict) and it.get("id") == "weight" and it.get("ok") is False
+            and it.get("value") in (None, ""))  # fmt: skip
+
+
 def hotbar_warnings(items: list[Any]) -> list[Any]:
-    """PURE: the hotbar lines never refuse; a failed one says it is a warning."""
+    """PURE: the hotbar lines never refuse; a failed one says it is a warning. An unread weight
+    is a warning too (Batt 2026-11-19)."""
     out = []
     for it in items:
         if isinstance(it, dict) and it.get("id") in HOTBAR_LINES:
             it = {**it, "refuses": False}
             if it.get("ok") is False and HOTBAR_WARN not in str(it.get("words")):
                 it["words"] = f"{it.get('words')} -- {HOTBAR_WARN}"
+        elif weight_unread(it) and WEIGHT_WARN not in str(it.get("words")):
+            it = {**it, "refuses": False, "words": f"{it.get('words')} -- {WEIGHT_WARN}"}
         out.append(it)
     return out
 
