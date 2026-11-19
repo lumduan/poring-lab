@@ -34,11 +34,19 @@ test("rdp mode is quiet and expects the RDP window", () => {
 });
 
 test("console mode says paste and files are unavailable and expects the stream", () => {
-  const view = describeCapture(status({ backend: "console", seq: 4 }, { stream_window_present: true }));
+  const view = describeCapture(
+    status({ backend: "console", seq: 4 }, { stream_window_present: true, clipboard_enabled: false }),
+  );
   assert.equal(view.label, "console");
   assert.equal(view.expect, "stream");
   assert.equal(view.notices.length, 1);
   assert.match(view.notices[0], /paste and \\\\tsclient files are unavailable/);
+});
+
+test("console mode with the stream's typed paste says a paste is typed (ADR-0004 amendment e)", () => {
+  const view = describeCapture(status({ backend: "console", seq: 4 }, { stream_window_present: true }));
+  assert.equal(view.notices.length, 1);
+  assert.match(view.notices[0], /a paste is typed into Windows by Sunshine; \\\\tsclient files are unavailable/);
 });
 
 test("a missing stream window in steady console mode is a notice; not while switching", () => {
