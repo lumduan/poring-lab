@@ -125,22 +125,47 @@ session is disconnected. Never connect with a second RDP or streaming client whi
 | 22:27 | `recreate:desktop` OK | |
 | 22:28-22:29 | `to-rdp`: exactly one RDP client, lock `rdp/steady` | Sunshine's revert check did not run: it reads Sunshine's log through the lab PC's own shell, which this PC does not have |
 | 22:29-22:31 | sign-in screen: Yes (with a hover), the 30 s wait, the first sign-in | the bot account's desktop is up; Batt takes over from here |
+| 22:42-22:47 | the bot account's Windows checked (below); the client found to demand administrator rights | the agent did not launch the game (Batt: "do not enter the game"; UAC is a person's) |
+
+## The bot account's Windows, checked 2026-11-19 22:42-22:47 ICT
+
+Read from a plain (non-admin) Terminal in the bot account's own session, opened by Win+X ->
+Terminal (never the Run dialog, never "Terminal (Admin)"):
+
+| what | found | done |
+|---|---|---|
+| display scale | `AppliedDPI 96` = 100 % | nothing to do |
+| sleep / hibernate / screen off, on mains power | 0 = never (Balanced plan, machine-wide, the owner had set it) | nothing to do |
+| idle lock policy (`InactivityTimeoutSecs`) | not set | nothing to do |
+| Remote Desktop idle / disconnect limits | not set (machine and user policy) | nothing to do |
+| screensaver | `ScreenSaveActive 1`, no screensaver program set | set to 0 for the bot account, read back |
+| sessions (`query user`) | the owner's session disconnected, `poring-lab` active on `rdp-tcp#0` | |
+
+**The game client demands administrator rights.**
+- The manifests of `Ragnarok.exe`, `Ragexe.exe` and `Setup.exe` say `requireAdministrator`; the
+  client uses GameGuard.
+- Every folder of the client (`savedata`, `GameGuard` and the rest) is `Users: ReadAndExecute`.
+- So a standard account cannot run it alone. Each launch shows Windows' UAC prompt asking for an
+  administrator's password.
+- A PERSON types that password: the PC's owner, through the console with Secret typing on.
+- The game then runs elevated, which can write its own folder, so no folder permission is
+  needed.
+- The agent never answers UAC, so it never launches this client.
+
+Ways around it, NOT taken (each breaks a lab rule; the owner decides):
+- making the bot account an administrator (the account stays standard);
+- starting the client with the `RunAsInvoker` compatibility layer: GameGuard needs the elevation,
+  and the client would no longer run as it was built;
+- a scheduled task that starts it elevated: a poring-lab program on Windows, against ADR-0019.
+
+A client that does not demand administrator rights has none of this. The lab's own rAthena
+client is one: it runs as the standard account.
 
 ## Still open (Batt's, on that PC)
 
-- **The game client lives under `C:\Program Files (x86)`.**
-  - A standard account may only read and run files there (`Users: ReadAndExecute`).
-  - Nothing has been checked yet: whether the client must write into its folder, or asks for
-    administrator rights at launch. Nothing was changed there, at Batt's request ("you just log
-    in; I handle the rest").
-  - If it must write there, the lab's pattern is Modify on that one folder for `poring-lab`
-    (`icacls "<folder>" /grant "poring-lab:(OI)(CI)M"`), never an administrator account.
-- **The bot account's own Windows settings:**
-  - sleep, the screen lock and the screensaver off (a locked session shows the lock screen to the
-    bot);
-  - display scale 100 %;
-  - a desktop shortcut to the game.
-- **The Settings page of the live console:** this PC's environment entry (a person's act).
+- Launching the game in the bot account's session: Batt answers the UAC prompt with his
+  administrator password, then logs in to the game himself.
+- The Settings page of the live console: this PC's environment entry (a person's act).
 
 ## Going back to Sunshine (not tried on this PC)
 
