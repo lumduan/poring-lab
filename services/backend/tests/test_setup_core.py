@@ -1013,3 +1013,11 @@ def test_another_folders_networks_are_never_this_copys(core: ModuleType, tmp_pat
     assert check.status == "warn" and proposal["LAB_NET_PREFIX"] == "10.210.98"
     check, _ = core.check_subnets(fake, {}, "poring-lab", repo=Path("/home/bot/docker/poring-lab"))
     assert check.status == "ok"  # the lab's own folder
+
+
+def test_the_check_asks_this_copy_s_backend_port(core: ModuleType) -> None:
+    """2026-11-19: a second copy on one host (BACKEND_PORT 8100) was checked on the lab's 8000 --
+    the lab's own backend answered, so the check said OK for a backend that did not exist."""
+    assert core.backend_port({}) == core.DEFAULT_BACKEND_PORT == 8000
+    assert core.backend_port({"BACKEND_PORT": "8100"}) == 8100
+    assert core.backend_port({"BACKEND_PORT": " x "}) == 8000
