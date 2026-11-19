@@ -44,6 +44,12 @@ ALLOWED = {SCRIPTS / "lab_env.py"}
 OTHER = "lab2"  # a second copy's project name
 
 
+@pytest.fixture(autouse=True)
+def _scratch(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    """guarded_build makes its LOGDIR at import: a test's own TMPDIR, never /dev/shm/lab2-*."""
+    monkeypatch.setenv("TMPDIR", str(tmp_path))
+
+
 def _tracked(root: Path) -> list[Path]:
     return [p for p in sorted(root.rglob("*")) if p.is_file() and "__pycache__" not in p.parts
             and "_generated" not in p.parts and p.suffix in SUFFIXES]  # fmt: skip
@@ -123,7 +129,14 @@ def _load(monkeypatch: pytest.MonkeyPatch, script: str, project: str = OTHER) ->
 def test_guarded_build_names_everything_after_its_project(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    monkeypatch.delenv("TMPDIR", raising=False)  # its logs then go to THIS copy's scratch
+    made = not Path("/dev/shm/lab2-tmp").exists()
     gb = _load(monkeypatch, "guarded_build.py")
+    if made:  # the import makes its LOGDIR: leave no test folder in /dev/shm
+        shutil.rmtree("/dev/shm/lab2-tmp", ignore_errors=True)
+    # 2026-11-19: the live copy's detect server logged into the lab's scratch, and its Run helper
+    # (flow_run.SERVE_LOG, in its own) waited for a "listening" line that never came there
+    assert str(gb.LOGDIR) == "/dev/shm/lab2-tmp" == str(_load(monkeypatch, "flow_run.py").SCRATCH)
     assert gb.COMPOSE_PROJECT == OTHER
     assert gb.COMPOSE == ["docker", "compose", "-p", OTHER]
     assert (gb.BACKEND, gb.WORKER) == ("lab2-backend-1", "lab2-vision-worker-1")
