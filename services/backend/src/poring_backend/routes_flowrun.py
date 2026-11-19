@@ -53,6 +53,7 @@ is logged (requests.jsonl, who and what). Reads pass the console-browser gate.
 from __future__ import annotations
 
 import json
+import logging
 import os
 import time
 import uuid
@@ -65,9 +66,11 @@ from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 from poring_backend.routes_settings import _who, browser_gate, write_gate
 from poring_backend.state import AppState
+from poring_env import runoptions as ro_opts
 from poring_env.protocol import Mode
 
 router = APIRouter(prefix="/flows")
+log = logging.getLogger(__name__)
 
 HELPER_FRESH_S = 10.0  # the helper rewrites its status every 2 s: older = not running
 ACTIVE = ("starting", "running", "stopping")
@@ -151,6 +154,45 @@ def refusal(body: RunBody, st: dict[str, Any], mode: Mode) -> tuple[int, str] | 
 @router.get("/run")
 def get_run(state: AppState = Depends(browser_gate)) -> dict[str, Any]:
     return {**read_status(run_dir(state)), "mode": state.mux.mode}
+
+
+class OptionsBody(BaseModel):
+    """PUT /flows/run/options: what a Run does after a code error (poring_env.runoptions)."""
+
+    model_config = ConfigDict(extra="forbid")
+    retry_max: int = Field(ge=ro_opts.RETRY_MAX_RANGE[0], le=ro_opts.RETRY_MAX_RANGE[1])
+    retry_wait_s: int = Field(ge=ro_opts.RETRY_WAIT_RANGE[0], le=ro_opts.RETRY_WAIT_RANGE[1])
+
+
+def options_doc(d: Path) -> dict[str, Any]:
+    """The options as the page reads them: the values, their words, the bounds, the defaults."""
+    o = ro_opts.load(d)
+    return {**o.as_json(), "words": ro_opts.words(o), "saved": (d / ro_opts.FILE_NAME).is_file(),
+            "bounds": {"retry_max": list(ro_opts.RETRY_MAX_RANGE),
+                       "retry_wait_s": list(ro_opts.RETRY_WAIT_RANGE)},
+            "defaults": ro_opts.DEFAULTS.as_json()}  # fmt: skip
+
+
+@router.get("/run/options")
+def get_run_options(state: AppState = Depends(browser_gate)) -> dict[str, Any]:
+    return options_doc(run_dir(state))
+
+
+@router.put("/run/options")
+def put_run_options(body: OptionsBody, request: Request,
+                    state: AppState = Depends(write_gate)) -> dict[str, Any]:  # fmt: skip
+    """Batt 2026-11-19: a retry option after a code error. A person's change from the page (the
+    human-only gate, like Run); the live player reads it at its next retry."""
+    d = run_dir(state)
+    got, why = ro_opts.parse(body.model_dump())
+    if got is None:  # the model's bounds already hold; the module is the one rule
+        raise HTTPException(422, {"reason": "options_invalid", "detail": why})
+    d.mkdir(parents=True, exist_ok=True)
+    tmp = d / f".{ro_opts.FILE_NAME}.{os.getpid()}"
+    tmp.write_text(json.dumps(got.as_json()) + "\n")
+    os.replace(tmp, d / ro_opts.FILE_NAME)
+    log.info("run options saved: %s (%s)", got.as_json(), _who(request).model_dump())
+    return options_doc(d)
 
 
 @router.get("/run/end.png")

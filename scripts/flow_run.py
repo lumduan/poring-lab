@@ -97,7 +97,9 @@ SCRATCH = Path("/dev/shm/poring-lab-tmp")
 RUN_MODES_ENV = "PORING_INPUT_MODES"
 RUN_INPUT_MODES = "ASSIST,BOT"
 RUN_PAUSE_ENV = "PORING_PAUSE_AWAY"  # ro_agent.AWAY_ENV: a Run waits while the game is off screen
-LOG_TAIL_N = 40  # the run log's last lines in the status (the page's log; Batt 2026-11-18)
+# the run log's last lines in the status (the page's log; Batt 2026-11-18); 300 since 2026-11-19
+# for the /flows Logs tab (Batt: "the bot stops by itself and I cannot see why")
+LOG_TAIL_N = 300
 LOG_LINE_MAX = 400
 SERVE_LOG = SCRATCH / "poring-guarded-execdev-vision.log"
 WORKER = lab_env.container("vision-worker")
@@ -459,6 +461,86 @@ PLAYER_DOING = {"press_key": "pressing a key", "wait": "waiting", "wait_until": 
                 "stop": "stopping", "assert_save_point": "the save point"}  # fmt: skip
 
 
+# The /flows Logs tab's "what she does" (Batt 2026-11-19: "what it thinks, what it will do, is it
+# attacking a monster"): the last STORY_N session events in a person's words, newest last
+STORY_N = 80
+WALK_WHY = {"search": "searching for monsters", "explore": "exploring", "loot": "to the loot",
+            "approach": "closing in on a monster", "home": "on the way home",
+            "escape": "getting away", "patrol": "on the patrol route"}  # fmt: skip
+STRIKE_END = {"damage": "a hit", "arrow": "she walks to it", "walked": "she walked to it",
+              "escape": "it got away", "bound": "no answer in time"}  # fmt: skip
+HP_STEP = 10  # an HP line when it moves this many points from the last one said
+
+
+def _cell(v: Any) -> str:
+    try:
+        return f"({int(v[0])}, {int(v[1])})"
+    except (TypeError, ValueError, IndexError):
+        return "?"
+
+
+def event_words(e: Mapping[str, Any]) -> str | None:
+    """PURE: one session event in a person's words, or None (not worth a line). Display only."""
+    k = e.get("kind")
+    if k == "walk":
+        why = str(e.get("why") or "")
+        sent = "" if e.get("clicked", True) else " (the click was not sent)"
+        return f"walks to {_cell(e.get('to'))}{', ' + WALK_WHY.get(why, why) if why else ''}{sent}"
+    if k == "goal":
+        return f"heads for {_cell(e.get('to'))}, {e.get('len', '?')} cells of path"
+    if k == "explore":
+        return f"chooses where to explore next (near {_cell(e.get('anchor'))})"
+    if k == "box_target":
+        if e.get("box"):
+            return "aims at a monster on the screen"
+        return "looks for a monster in reach: none chosen"
+    if k == "recipe":
+        how = "the Knife swap first" if e.get("knife") else "plain strikes"
+        return f"a {e.get('species') or 'monster'}: {how}"
+    if k == "engage":
+        return f"a fight starts ({e.get('by') or '?'})"
+    if k == "strike":
+        return f"strikes: {STRIKE_END.get(str(e.get('end')), str(e.get('end') or '?'))}"
+    if k == "kill":
+        return f"a kill ({e.get('by') or '?'})"
+    if k == "unlock":
+        return f"lets go of the target ({e.get('why') or '?'})"
+    if k == "fight_end":
+        return f"the fight is over: {e.get('kills', 0)} kill(s)"
+    if k == "loot_step":
+        return f"loot: {e.get('picks', 0)} picked ({e.get('end') or 'done'})"
+    if k == "loot_click":
+        return "picks up an item"
+    if k == "press":
+        what = str(e.get("what") or "")
+        return f"presses {e.get('key') or '?'}: {PRESS_DOING.get(what, what)}"
+    if k == "scan":
+        return f"looks around her ({e.get('purpose') or 'scan'})"
+    if k == "player_home":
+        if e.get("pressed"):
+            return f"flies home ({e.get('key') or '?'})"
+        return f"cannot fly home: {e.get('why') or '?'}"
+    if k == "hunt_start":
+        return "the hunt core starts"
+    if k == "hunt_end":
+        return f"the hunt core ends: {e.get('error') or e.get('reason') or '?'}"
+    if k == "retry":
+        return f"RETRY {e.get('n')} of {e.get('of')} after a code error: {e.get('error') or '?'}"
+    if k == "retry_go":
+        return "she is ready again: the hunt core starts again"
+    if k == "retry_refused":
+        return f"not ready for a retry: {e.get('why') or '?'}"
+    if k == "pause":
+        return "PAUSED: the game is not on the screen"
+    if k == "resume":
+        return "back on the screen: playing on"
+    if k == "event":
+        return f"the box's function {e.get('event') or '?'} fires"
+    if k == "run_end":
+        return f"the run ends: {e.get('words') or e.get('reason') or '?'}"
+    return None
+
+
 @dataclass
 class Live:
     """PURE: the live summary of one run's session events (fed line by line)."""
@@ -483,11 +565,33 @@ class Live:
     keys: int = 0  # hotbar keys it pressed
     fired: int = 0  # events (functions with a trigger) that fired
     last_event: str | None = None
+    retries: int = 0  # code-error retries (Batt 2026-11-19)
+    story: list[dict[str, Any]] = field(default_factory=list)  # the Logs tab (STORY_N)
+    _hp_said: int | None = None
+
+    def _tell(self, t: Any, words: str) -> None:
+        el = None if self.t0_ns is None or not isinstance(t, int) else round((t - self.t0_ns) / 1e9)
+        self.story.append({"t_s": el, "words": words[:240]})
+        del self.story[:-STORY_N]
 
     def feed(self, e: Mapping[str, Any]) -> None:
         k, t = e.get("kind"), e.get("t_ns")
         if isinstance(t, int):
             self.t_ns = t
+        if k == "run_start" and isinstance(t, int) and self.t0_ns is None:
+            self.t0_ns = t
+        words = event_words(e)
+        if words is not None:
+            self._tell(t, words)
+        if k == "hp_read" and isinstance(e.get("pct"), int):
+            pct = int(e["pct"])
+            if self._hp_said is None or abs(pct - self._hp_said) >= HP_STEP:
+                self._hp_said = pct
+                self._tell(t, f"HP {pct} %")
+        if k == "retry":
+            self.retries += 1
+            self.doing = f"RETRY {e.get('n')} of {e.get('of')}: waiting, then checking her"
+            return
         if k == "block":  # the player: each block entered, with its node path
             self.node = str(e.get("node") or "") or None
             w = str(e.get("what") or "")
@@ -549,7 +653,8 @@ class Live:
                 "loot_steps": self.loot_steps, "pickups": self.pickups, "knife": self.knife,
                 "steals": self.steals, "potions": self.potions, "flies": self.flies,
                 "node": self.node, "keys": self.keys, "fired": self.fired,
-                "last_event": self.last_event, "end": dict(self.end)}  # fmt: skip
+                "last_event": self.last_event, "end": dict(self.end),
+                "retries": self.retries, "story": list(self.story)}  # fmt: skip
 
 
 def session_of(label: str | None, demo: Path) -> Path | None:

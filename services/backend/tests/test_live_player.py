@@ -950,3 +950,91 @@ def test_a_pause_during_the_start_check_shows_in_the_log_at_once(
         notes("pause", {"why": "the Windows taskbar shows"})
     assert "PAUSED: the Windows taskbar shows" in capsys.readouterr().out
     assert buf.getvalue() == ""
+
+
+# --- Batt 2026-11-19: after a CODE error she is checked and the hunt core plays again ------------
+class FailsFirst(FakeRunner):
+    """The runner's first call ends on ``first`` (an exception), the next ones as FakeRunner."""
+
+    def __init__(self, io_: FakeIO, first: BaseException, fails: int = 1) -> None:
+        super().__init__(io_)
+        self.first, self.fails = first, fails
+
+    def __call__(self, a: Any, *, hook: Any = None, session: Any = None, **kw: Any) -> int:
+        if self.fails > 0:
+            self.fails -= 1
+            self.calls.append({"a": a})
+            raise self.first
+        return super().__call__(a, hook=hook, session=session, **kw)
+
+
+def _retry_run(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    runner: FakeRunner,
+    options: dict[str, Any] | None,
+    checker: Any = None,
+) -> list[dict[str, Any]]:
+    opts_dir = tmp_path / "flowrun"
+    opts_dir.mkdir(parents=True, exist_ok=True)
+    if options is not None:
+        (opts_dir / "options.json").write_text(json.dumps(options))
+    monkeypatch.setattr(fr, "DIR", opts_dir)
+    monkeypatch.setattr(fp, "default_checker", checker or ok_check)
+    d = tmp_path / "demo"
+    d.mkdir(parents=True, exist_ok=True)
+    fp.play(hunt_prep(tmp_path), runner.io, label="r1", stop_file=None, demo=d, checker=ok_check,
+            hunt=fp.HuntCore("r1", None, run_fn=runner))  # fmt: skip
+    return events(d)
+
+
+def test_a_code_error_is_retried_after_the_check_and_the_hunt_plays_on(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    io_ = FakeIO()
+    runner = FailsFirst(io_, RuntimeError("chat tab battle not shown"))
+    ev = _retry_run(tmp_path, monkeypatch, runner, {"v": 1, "retry_max": 2, "retry_wait_s": 5})
+    kinds = [e["kind"] for e in ev]
+    assert len(runner.calls) == 2  # it played again
+    (r,) = [e for e in ev if e["kind"] == "retry"]
+    assert (r["n"], r["of"], r["wait_s"]) == (1, 2, 5) and "chat tab battle" in r["error"]
+    assert kinds.index("retry") < kinds.index("retry_go") < kinds.index("hunt_run_start")
+    assert ev[-1]["reason"] == "home"  # the second hunt ended on its own way home
+    assert io_.now >= 5.0  # it waited the option's seconds before the check
+
+
+def test_a_frozen_picture_is_retried_a_refusal_never(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import ro_agent as r
+
+    io_ = FakeIO()
+    runner = FailsFirst(io_, r.FrozenStream("no frame newer than the action within 1.5 s"))
+    ev = _retry_run(tmp_path, monkeypatch, runner, None)  # the default: 3 tries
+    assert len(runner.calls) == 2 and [e["kind"] for e in ev].count("retry") == 1
+    io2 = FakeIO()
+    refused = FailsFirst(io2, SystemExit("dungeon@9.46 refused: she is on geffen"))
+    ev2 = _retry_run(tmp_path / "b", monkeypatch, refused, None)
+    assert len(refused.calls) == 1 and "retry" not in [e["kind"] for e in ev2]
+    assert ev2[-1]["reason"] == "dungeon_hunt_failed"
+
+
+def test_retry_off_or_used_up_ends_the_run_and_a_failed_check_never_plays(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    off = FailsFirst(FakeIO(), RuntimeError("boom"))
+    ev = _retry_run(tmp_path, monkeypatch, off, {"retry_max": 0, "retry_wait_s": 5})
+    assert len(off.calls) == 1 and ev[-1]["reason"] == "dungeon_hunt_failed"
+    twice = FailsFirst(FakeIO(), RuntimeError("boom"), fails=5)
+    ev = _retry_run(tmp_path / "b", monkeypatch, twice, {"retry_max": 2, "retry_wait_s": 5})
+    assert len(twice.calls) == 3 and [e["kind"] for e in ev].count("retry") == 2
+
+    def not_ready(_p: Any, _io: Any) -> dict[str, Any]:
+        return {"ok": False, "items": [{"id": "chat", "ok": False, "words": "the chat input is "
+                                        "open", "refuses": True}]}  # fmt: skip
+
+    fails = FailsFirst(FakeIO(), RuntimeError("boom"))
+    ev = _retry_run(tmp_path / "c", monkeypatch, fails, {"retry_max": 3, "retry_wait_s": 5},
+                    checker=not_ready)  # fmt: skip
+    assert len(fails.calls) == 1 and [e["kind"] for e in ev].count("retry_refused") == 1
+    assert ev[-1]["reason"] == "dungeon_hunt_failed" and "retry" in ev[-1]["words"]

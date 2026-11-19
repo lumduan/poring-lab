@@ -649,6 +649,10 @@ class HuntResult:
     calls: int = 0  # stage 3: the hook's calls of the box's role functions
     recipes: int = 0  # stage 4a: the hook's recipe answers (one per target, at its lock)
     drive: dict[str, Any] | None = None  # 5b-2: the hunt loop drove the steps (the cursor's end)
+    # Batt 2026-11-19 (a retry option): it ended on a CODE error -- a Python error escaped the
+    # runner, or the picture froze (ro_agent.FrozenStream) -- not on a decision (a refusal, Stop,
+    # a death, the time box, the mux or the interlock): the player may check her and hunt again
+    retryable: bool = False
 
     @property
     def left(self) -> bool:
@@ -771,12 +775,20 @@ class HuntCore:
             say(words)
             player.rec.ev({"kind": "hotbar_warning", "words": words[:300]})
 
+        import ro_agent as r
+
         try:
             a = args_fn(argv)
             with player_owns_the_start(dh, warn):  # never refuses on them (Batt 2026-11-19)
                 res.rc = run_fn(a, hook=hook, session=(player.io.agent, player.io.screen), **box)
         except SystemExit as e:  # its preamble's refusal, or ro_agent.Stop inside its session
             res.error = str(e)[:400] or "the runner stopped"
+            res.retryable = isinstance(e, r.FrozenStream)  # the picture froze: not a decision
+        except Exception as e:  # a CODE error (Batt 2026-11-19: retry those, after a check)
+            res.error, res.retryable = f"{type(e).__name__}: {str(e)[:300]}", True
+            say(f"ERROR in the hunt core: {res.error}")
+            for ln in fault_lines(traceback.format_exc()):
+                print(ln, flush=True)
         player.rec.ev({"kind": "hunt_end", "n": self.n, "reason": res.reason, "error": res.error,
                        "home": res.home, "respawned": res.respawned, "dead": res.dead,
                        "ticks": res.ticks, "survive_calls": res.survive_calls,
@@ -807,6 +819,8 @@ class LivePlayer(Sim):
         self.words: str | None = None  # the end in a player's words, when a block gave them
         self.flow_stop: str | None = None  # a stop statement's reason, when one ended the run
         self.keys_sent: list[str] = []
+        self.retries = 0  # code-error retries used (Batt 2026-11-19; poring_env.runoptions)
+        self._retry_note: str | None = None  # why the last code error was not retried
         self._t0 = lio.clock()
         self._next = self._t0
         self._expect_until = -1.0
@@ -1009,17 +1023,20 @@ class LivePlayer(Sim):
         if self.hunt is None or plan is None:
             self.words = f"no runner for {self.block}"
             return "failed"
-        self._hunt_keys = frozenset(plan.events)  # stage 2: they play through its tick hook
-        self._hunt_weight = frozenset(plan.weight_events)  # stage 3: on its weight read only
-        self._hunt_hotbar, self._hotbar_t = plan.hotbar_keys, {}  # 2026-11-14: from its frames
-        try:
-            res = self.hunt.play(self, plan)
-        finally:
-            self._hunt_keys = self._hunt_weight = frozenset()
-            self.world["sees_boss"] = None  # the runner's boss read: unknown outside it
-            for k in self._hunt_hotbar:  # hotbar_count: unknown outside it too
-                self.world[hotbar_world_key(k)] = None
-            self._hunt_hotbar = ()
+        while True:
+            self._hunt_keys = frozenset(plan.events)  # stage 2: they play through its tick hook
+            self._hunt_weight = frozenset(plan.weight_events)  # stage 3: on its weight read only
+            self._hunt_hotbar, self._hotbar_t = plan.hotbar_keys, {}  # 2026-11-14: its frames
+            try:
+                res = self.hunt.play(self, plan)
+            finally:
+                self._hunt_keys = self._hunt_weight = frozenset()
+                self.world["sees_boss"] = None  # the runner's boss read: unknown outside it
+                for k in self._hunt_hotbar:  # hotbar_count: unknown outside it too
+                    self.world[hotbar_world_key(k)] = None
+                self._hunt_hotbar = ()
+            if not self._retry_due(res) or not self._retry(res):
+                break
         self._next = self.io.clock()
         self.t = self.io.clock() - self._t0
         if res.left:  # its own map exit: the map change it made is expected
@@ -1031,7 +1048,8 @@ class LivePlayer(Sim):
                 self.words = f"{self.words}; the hunt core flew her home"
             raise halt
         if res.error is not None:
-            self.words = f"the hunt core ended: {res.error}"
+            note = f"; {self._retry_note}" if self._retry_note else ""
+            self.words = f"the hunt core ended: {res.error}{note}"
             return "failed"
         why = self.stop_due()
         here = self.world.get("map")
@@ -1057,6 +1075,56 @@ class LivePlayer(Sim):
             self.words = f"the hunt core ended: {res.reason}"
         yield _Tick(None, False, "dungeon_hunt check")
         return "ok" if res.ok else "failed"
+
+    # -- the retry after a code error (Batt 2026-11-19) --
+    def _retry_due(self, res: HuntResult) -> bool:
+        """A code error, and nothing else ends the run: no Stop, no time box, no death, no box
+        event's halt."""
+        return (res.retryable and res.error is not None and self._hunt_halt is None
+                and not (res.dead or res.dead_hp0) and self.stop_due() is None)  # fmt: skip
+
+    def _retry(self, res: HuntResult) -> bool:
+        """Wait the option's seconds (Stop still ends it), run the start check again (reads only)
+        and say whether she is ready; True: the hunt core plays again. The options are read now
+        (settings/flowrun/options.json), so a change on the page applies to this run."""
+        from poring_env import runoptions
+
+        opts = runoptions.load(fr.DIR)
+        self._retry_note = None
+        if self.retries >= opts.retry_max:
+            used = f"no retry left ({self.retries} of {opts.retry_max} used)"
+            self._retry_note = "no retry: retry is off" if opts.retry_max == 0 else used
+            say(f"{self._retry_note} after this code error ({res.error})")
+            return False
+        self.retries += 1
+        say(f"RETRY {self.retries} of {opts.retry_max}: the hunt core stopped on a code error "
+            f"({res.error}); she is checked in {opts.retry_wait_s} s, and it hunts on if she is "
+            "ready")  # fmt: skip
+        self.rec.ev({"kind": "retry", "n": self.retries, "of": opts.retry_max,
+                     "error": str(res.error)[:300], "wait_s": opts.retry_wait_s})  # fmt: skip
+        end = self.io.clock() + opts.retry_wait_s
+        while self.io.clock() < end:
+            if self.stop_due() == "Stop pressed":
+                raise _Halt("stopped")
+            self.io.sleep(min(0.5, max(0.0, end - self.io.clock())))
+        try:
+            got = default_checker(self.prep, self.io)
+        except SystemExit as e:
+            got = {"ok": False, "items": [], "refused": str(e)[:300]}
+        for ln in check_lines(got):
+            say(f"retry check: {ln}")
+        why = check_refusal(got) or got.get("refused")
+        self.read()
+        if why is None and self.world.get("hp_percent") == 0:
+            why = "her HP reads 0 %: she is dead"
+        if why is not None:
+            self._retry_note = f"retry {self.retries}: the check before it refused: {why}"
+            self.rec.ev({"kind": "retry_refused", "n": self.retries, "why": str(why)[:300]})
+            say(f"RETRY {self.retries}: not ready ({why}): the run ends")
+            return False
+        self.rec.ev({"kind": "retry_go", "n": self.retries})
+        say(f"RETRY {self.retries}: she is ready: the hunt core starts again")
+        return True
 
     # -- exits and relocation: by the map's NAME (the minimap) --
     def _exit(self, x: ir.Exit, owner: str) -> Generator[_Tick, str | None, None]:
