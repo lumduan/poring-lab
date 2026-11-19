@@ -161,8 +161,55 @@ def select(name: str) -> None:
     os.environ[ENV] = name
 
 
+# 2026-11-19 (Batt's client, 4 lines: "support many lines; do not limit the width"): in a run on
+# another client the chat window is FOUND (ro_agent.find_panels, find_any) and moved, in the
+# virtual client, to the lab's bottom-left with its OWN line count. Every reader of active() -- the
+# selected tab's row, the input bar, the message lines -- follows that count: the 6-line geometry
+# looked for the tabs at row 582, above a 4-line window (its tabs at 610), and the runner's Battle
+# Log selection clicked the world twice and
+# stopped: "chat tab battle not shown" (flowplay-11191448).
+PANELS_FILE = Path("/dev/shm/poring-lab-tmp/panels.json")  # == ro_agent's (parity-tested)
+PANELS_ENV = "PORING_PANELS_FILE"
+PANELS_TTL_S = 120.0
+MAX_FOUND_LINES = 60  # find_any's own bound
+_FOUND: dict[str, Any] = {"key": None, "doc": None}
+
+
+def found_lines() -> int | None:
+    """The chat window's line count as ro_agent found it (the panels file, at most PANELS_TTL_S
+    old), else None (the lab's window: the geometry by name)."""
+    path = Path(os.environ.get(PANELS_ENV) or PANELS_FILE)
+    try:
+        st = path.stat()
+    except OSError:
+        return None
+    key = (str(path), st.st_mtime_ns, st.st_size)
+    if _FOUND["key"] != key:
+        try:
+            doc = json.loads(path.read_text())
+        except (OSError, ValueError):
+            doc = None
+        _FOUND["key"], _FOUND["doc"] = key, doc
+    doc = _FOUND["doc"]
+    if not isinstance(doc, dict) or time.time() - float(doc.get("t_wall") or 0) > PANELS_TTL_S:
+        return None
+    chat = (doc.get("found") or {}).get("chat")
+    n = chat.get("lines") if isinstance(chat, dict) else None
+    if isinstance(n, bool) or not isinstance(n, int) or not 1 <= n <= MAX_FOUND_LINES:
+        return None
+    return n
+
+
 def active() -> Geometry:
-    return GEOMETRIES.get(os.environ.get(ENV, "standard"), STANDARD)
+    """This process's chat window: the named geometry ("standard" unless a replay selected
+    "legacy"); under "standard", with the line count of the window FOUND on the client."""
+    name = os.environ.get(ENV, "standard")
+    base = GEOMETRIES.get(name, STANDARD)
+    if base is STANDARD:
+        n = found_lines()
+        if n is not None and n != base.lines:
+            return Geometry(n, base.bottom, base.left)
+    return base
 
 
 # --- reading (pure) -----------------------------------------------------------------------------

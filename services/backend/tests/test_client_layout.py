@@ -1,8 +1,10 @@
 from __future__ import annotations
 
+import json
 import os
 import subprocess
 import sys
+import time
 from pathlib import Path
 
 import numpy as np
@@ -181,3 +183,73 @@ def test_a_tab_the_chat_window_does_not_have_is_refused_before_any_input(
     with pytest.raises(cl.LayoutError, match="not in the chat window"):
         cl.select_tab(NoInput(), None, "regular")
     assert cl.next_step({"rows": 4, "panel": "expanded", "tab": "battle"}, "standard") == "unknown"
+
+
+# --- 2026-11-19: another client's chat window (Batt's, 4 lines; flowplay-11191448) --------------
+def _found_chat(path: Path, lines: int, age_s: float = 0.0) -> None:
+    path.write_text(json.dumps({"v": 1, "region": [0, 0, 1920, 1080], "t_wall": time.time() - age_s,
+                                "found": {"chat": {"virtual": [0, 606, 600, 114],
+                                                   "lines": lines}}}))  # fmt: skip
+
+
+def test_the_chat_geometry_follows_the_window_found_on_the_client(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    import chat_window as cw
+    import ro_agent as r
+
+    f = tmp_path / "panels.json"
+    monkeypatch.setenv("PORING_PANELS_FILE", str(f))
+    monkeypatch.delenv(cw.ENV, raising=False)
+    assert cw.active() == cw.STANDARD and cw.found_lines() is None  # no find: the lab's window
+    _found_chat(f, 4)
+    g = cw.active()
+    assert (g.lines, g.bottom, g.left) == (4, 719, 0)
+    assert g.tab_row == 610 and cw.STANDARD.tab_row == 582  # the row the runner looked at
+    assert cl.tab_px("battle") == (42, 619)  # a click on ITS tab row, not the world above it
+    _found_chat(f, 4, age_s=r.PANELS_TTL_S + 5)
+    assert cw.active() == cw.STANDARD  # an old find is not this client's
+    for bad in (0, 61, True):
+        f.write_text(json.dumps({"t_wall": time.time(), "found": {"chat": {"lines": bad}}}))
+        assert cw.active() == cw.STANDARD, bad
+    _found_chat(f, 9)
+    monkeypatch.setenv(cw.ENV, "legacy")
+    assert cw.active() == cw.LEGACY  # a replay's named geometry is never replaced
+    # the same file and lifetime as ro_agent's (the writer)
+    assert (cw.PANELS_FILE, cw.PANELS_ENV, cw.PANELS_TTL_S) == (
+        r.PANELS_FILE, r.PANELS_ENV, r.PANELS_TTL_S)  # fmt: skip
+
+
+class Clicks:
+    def __init__(self) -> None:
+        self.at: list[tuple[int, int]] = []
+
+
+def _tabs(monkeypatch: pytest.MonkeyPatch, seen: list[str | None]) -> Clicks:
+    c = Clicks()
+    it = iter(seen)
+    monkeypatch.setattr(cl, "load_templates", lambda *a, **k: {})
+    monkeypatch.setattr(cl, "state_now", lambda *a: {"tab": next(it)})
+    monkeypatch.setattr(cl, "_ui_click", lambda _agent, u, v: c.at.append((u, v)))
+    return c
+
+
+def test_an_unread_tab_strip_is_never_clicked_and_the_run_goes_on(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """Batt 2026-11-19: a warning, never a lock -- and never a blind click (it walks her)."""
+    c = _tabs(monkeypatch, [None])
+    assert cl.select_tab(object(), None, "battle") == "unread" and c.at == []
+    assert "nothing is clicked" in capsys.readouterr().out
+
+
+def test_the_other_tab_is_clicked_twice_then_a_warning(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    c = _tabs(monkeypatch, ["regular", "battle"])
+    assert cl.select_tab(object(), None, "battle") == "shown" and c.at == [cl.tab_px("battle")]
+    c = _tabs(monkeypatch, ["regular", "regular", "regular"])
+    assert cl.select_tab(object(), None, "battle") == "not_shown" and len(c.at) == 2
+    assert "Battle Log tab did not show" in capsys.readouterr().out
+    c = _tabs(monkeypatch, ["battle"])
+    assert cl.select_tab(object(), None, "battle") == "shown" and c.at == []

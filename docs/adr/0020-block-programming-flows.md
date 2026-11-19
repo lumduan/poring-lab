@@ -3084,6 +3084,12 @@ simple."
     Another map read, or a cell off the map's ground, still refuses; a check with no hunt core
     (no cell read) still refuses an unread map.
   - Next (Batt: "digits first"): the client's own digits, then its minimap.
+  - ➡️ 2026-11-19 ~15:0x (Batt's Run flowplay-11191448 ended 43 s in: "LayoutError: chat tab battle
+    not shown"): the runner's Battle Log selection is a WARNING, not a stop, in the same spirit. A
+    tab row on which no selected tab reads is never clicked (`client_layout.select_tab` returns
+    "unread"); the other tab still shown after two clicks returns "not_shown"; both print a
+    WARNING and the run plays on. And every chat reader (`chat_window.active()`) follows the
+    FOUND window's line count, so the tab row is the window's own (a 4-line window: 610).
 
 ## Amendment T (2026-11-19, Batt decided ~13:2x ICT): no time limit unless a person sets one
 
