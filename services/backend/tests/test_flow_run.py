@@ -704,4 +704,6 @@ def test_the_story_says_what_she_does_in_words() -> None:
     assert len(lv.story) == fr.STORY_N  # the last lines only
     assert fr.event_words({"kind": "walk", "to": [1, 2], "clicked": False}) == (
         "walks to (1, 2) (the click was not sent)")  # fmt: skip
+    assert fr.event_words({"kind": "explore"}) == "chooses where to explore next"
+    assert fr.event_words({"kind": "explore", "anchor": [6, 124]}).endswith("(near (6, 124))")
     assert fr.LOG_TAIL_N == 300

@@ -489,7 +489,8 @@ def event_words(e: Mapping[str, Any]) -> str | None:
     if k == "goal":
         return f"heads for {_cell(e.get('to'))}, {e.get('len', '?')} cells of path"
     if k == "explore":
-        return f"chooses where to explore next (near {_cell(e.get('anchor'))})"
+        near = f" (near {_cell(e['anchor'])})" if e.get("anchor") else ""
+        return f"chooses where to explore next{near}"
     if k == "box_target":
         if e.get("box"):
             return "aims at a monster on the screen"
