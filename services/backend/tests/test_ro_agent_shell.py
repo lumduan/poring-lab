@@ -255,6 +255,29 @@ def test_an_actions_effect_is_judged_only_on_a_later_frame(ro: ModuleType) -> No
     assert ro.grab_after_meta(FakeScreen(), (0, 0, 1, 1), after_ns=200) == (250, "new", 1, "bus")
 
 
+def test_one_slow_grab_across_the_deadline_gets_one_more_try(
+    ro: ModuleType, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """2026-11-19 (4 of Batt's Runs): a grab that took longer than the wait returned the frame it
+    took BEFORE the action, and the run ended on a healthy stream. Only a grab begun after the
+    deadline proves a frozen one."""
+    import time as _time
+
+    monkeypatch.setattr(ro, "FRESH_WAIT_S", 0.05)
+    frames = [(100, "old", 0.12), (250, "new", 0.0)]
+
+    class Slow:
+        def grab_meta(self, x: int, y: int, w: int, h: int):  # type: ignore[no-untyped-def]
+            t, tag, sleep = frames.pop(0) if len(frames) > 1 else frames[0]
+            _time.sleep(sleep)
+            return t, tag, 1, "bus"
+
+    assert ro.grab_after_meta(Slow(), (0, 0, 1, 1), after_ns=200)[1] == "new"
+    frames[:] = [(100, "old", 0.0)]
+    with pytest.raises(ro.FrozenStream):  # a stream that stays old still ends it
+        ro.grab_after_meta(Slow(), (0, 0, 1, 1), after_ns=200)
+
+
 def test_ensure_window_opens_one_only_when_needed(
     ro: ModuleType, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
