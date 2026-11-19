@@ -2955,6 +2955,9 @@ once. Think ahead about such things."
   compared the name plate and the job against the lab Rogue's reference pictures (`--char rogue`,
   `data/thief`: Thief8fce, rogue). Any other character was refused; a learner's install has no
   such pictures at all.
+- ➡️ **SUPERSEDED IN PART 2026-11-19 by Amendment R:** the mode is set on the Settings page, not
+  in `.env` (`RUN_IDENTITY` is no longer read), and a `known` character is remembered by the
+  page's Remember button, not `crusader.py init` / `cut-name`. The modes themselves are unchanged.
 - **Now (`RUN_IDENTITY` in `.env`):** `any` (empty = any; every new install's default): a Run
   compares no name and no job; its identity line reads "any character" (only a black game region
   still fails it). `mine`: as before, the install's own character only. An unknown word means
@@ -2973,7 +2976,9 @@ once. Think ahead about such things."
   minimap's picture must be the node's map, xmas_dun02) and the start cell on that map's open
   ground; so a Run pressed while the community client stands on xmas_dun02's open ground would
   now start. `mine` again is one line.
-  ➡️ **SUPERSEDED AGAIN 2026-11-18 ~22:1x (Batt chose it): the lab runs `known`.** The risk
+  ➡️ **SUPERSEDED AGAIN 2026-11-18 ~22:1x (Batt chose it): the lab runs `known`.** (➡️ AND
+  AGAIN 2026-11-19, Amendment R: the lab is back on `any`, the default, set on the Settings page;
+  Batt sets `known` there himself when he wants it.) The risk
   happened: at 21:55 and 21:57 Run was pressed while rog101, a character that is not in the lab's
   DB (another server's), was in front; under `any` the identity line passed it and only its
   different (Thai) interface and minimap refused the start, before any input. `known` = any
@@ -2986,3 +2991,52 @@ once. Think ahead about such things."
 - **The other start rules, one by one:** docs/planning/teaching-prerun.md (what stays a safety
   rule, what is a setting already, what is still locked and what it needs).
 
+## Amendment R (2026-11-19, Batt decided before 08:40 ICT): who may play a Run is a Settings-page choice; `any` everywhere by default
+
+**Batt (translated):** "First, make `any` the default, this machine included, and settable in
+Settings. Second, let the character names be set in Settings: setting it in `.env` is hard for a
+new user, because docker must be restarted too; on Settings, once set and saved it works at once,
+friendlier to the user." On the proposed "Remember this character" button: "Do it, and put it in
+Settings too." On learners staying on `any`: "Yes, this machine too: `any` is the default, and
+settable in Settings."
+
+- **The store:** `settings/run-identity.json` (the human-only settings store; format and checks in
+  `poring_env/runidentity.py`, shared by both sides): `{"v": 1, "revision", "mode": "any" |
+  "known" | "mine", "characters": [{"id", "name", "remembered", "w", "h", "rgb"}]}`. Its ONLY
+  writer is the backend (`routes_identity.py`), behind `routes_settings.write_gate` (a console
+  browser on the LAN, the Origin and the CSRF token, never the lab host -- whose processes include
+  the bot -- nor the Windows host; rate-limited; every refusal and every change in the Settings
+  audit log: `run_identity_mode`, `char_remember`, `char_rename`, `char_forget`).
+- **The readers:** the Run's checks on the host (`crusader.check(db=False)`, the runner's check and
+  start, the live block player, the helper's status), at EVERY check: a Save applies to the next
+  check or Run with no restart. `.env`'s `RUN_IDENTITY` is no longer read (removed from
+  `.env.example` and from the lab's `.env`); a leftover line changes nothing.
+- **Defaults and failure:** no file = `any` with no character remembered (every install, the lab
+  included: the lab's `known` of 2026-11-18 ~22:1x ends here). A file that does not parse is NOT
+  the default: every Run's identity line fails with its problem in words until a person saves
+  (fail closed: a broken file never loosens `known` back to `any`); the page says so and a Save
+  with no character replaces it.
+- **The page (Settings, "who may play a Run"):** the three modes (any first, "the default"; known;
+  mine, "advanced": the lab's reference pictures, a learner's install refuses with words), the
+  characters remembered here (each one's name line drawn from its own pixels, its name editable,
+  Forget), Save / Cancel changes, and **Remember the character on screen**: a name typed for the
+  list (any script: the bot compares the PICTURE, never the letters), then the press.
+- **Remember:** the backend writes the Run helper's request (`settings/flowrun/request.json`,
+  action `plate`, nothing else in it; refused while another request waits) and waits up to 25 s for
+  `settings/flowrun/plate.json` with the same id. The helper runs `crusader.py plate` once (its
+  own time box 15 s; served even while a run plays, since it only looks): the game must be on the
+  screen and not black, the name line (Basic Info's NAME_BOX, 116 x 14) is read twice 0.5 s apart
+  and must hold still and show letters (>= 20 pixels far from its median; the lab's three measured
+  148-186), and a match with a character already remembered is refused ("remembered already, as
+  ..."). The backend deletes the result file whatever it says: the picture is kept only in the
+  store, and only on success. Nothing cuts a name line at any other time (the privacy rule of
+  2026-11-18: no picture unless a person asks).
+- **Not changed:** what each mode checks (Amendment Q); a GM line still proves the lab's own
+  character from `data/<char>/` (db=True), whatever the page says; `crusader.py init` / `cut-name`
+  / `cut-job` stay for the lab's GM characters and `mine`. The three characters cut in
+  `data/crusader`, `data/thief` and `data/rogue2` are NOT imported into the page's list: under
+  `known` a character is remembered by its button.
+- **Gaps closed:** the 3-slot limit of `crusader.CHARS` (a learner had to reuse the lab's slot
+  names) and the terminal steps no longer bound `known`; the page holds up to 50 characters.
+- **Known limit:** a name line is a picture of one screen size; after a change between window and
+  fullscreen (or another skin) the character must be remembered again (the page says so).

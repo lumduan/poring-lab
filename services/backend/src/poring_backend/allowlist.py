@@ -43,6 +43,8 @@ class AuditRecord(BaseModel):
     action: Literal[
         "refused", "seed", "env_create", "env_delete", "env_rename", "env_type", "env_text",
         "env_windows_host", "server_add", "server_remove", "declare", "withdraw",
+        # the Settings page's "Who may play a Run" (routes_identity.py, ADR-0020 Amendment R)
+        "run_identity_mode", "char_remember", "char_rename", "char_forget",
     ]  # fmt: skip
     kind: Literal["easy", "normal", "hard", "declare"] | None = None  # the rule that applied
     env_id: str | None

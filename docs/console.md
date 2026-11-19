@@ -155,9 +155,32 @@ Applying a change reconnects the RDP session once, because desktop and backend a
   has no such messages, and a watchdog clears any foreign X clipboard owner. The remaining gap (vision
   can still reach X directly) is [ADR-0005](adr/0005-vision-x-access.md), which blocks Phase 4.
 
-## Settings: the game servers the bot may use
+## Settings: who may play a Run, and the game servers the bot may use
 
 Open **Settings** in the console's top bar (`http://<host>:<CONSOLE_PORT>/settings`).
+
+**Who may play a Run** (the top of the page; ADR-0020 Amendment R, Batt 2026-11-19): the first
+line of a Run's check asks who is on screen. A Save works at once: the next check or Run uses it,
+with no restart (`.env`'s `RUN_IDENTITY` is no longer read).
+- **Any character (the default)**, every install's and the lab's: any name, any job; a Run does
+  not check who plays.
+- **Only the characters remembered here:** the character's name line must match one in the list;
+  a character of another server is refused at the first line, before any key is pressed.
+- **Only the lab's own character (advanced):** the name and the job against the reference pictures
+  `crusader.py` cut; an install without them refuses every Run, in words.
+- **Remember the character on screen:** put the character in front with Basic Info open at the top
+  left, type a name for the list (any language: the bot compares the PICTURE, never the letters)
+  and press **Remember**. The Run helper reads the name line (116 x 14 pixels) twice, 0.5 s apart,
+  once, now; it must hold still and show letters, and a character already in the list is refused.
+  Nothing cuts a name line at any other time. Each remembered character shows its name line;
+  rename it or **Forget** it, then **Save**. Remember again after changing between window and
+  fullscreen. Up to 50 characters.
+- The same rules as the servers below: only a person in a browser on another computer of your
+  network can change it (never the lab computer or the game PC), with a CSRF token, every change in
+  the change history. The store is `./settings/run-identity.json`; a file that does not parse
+  fails every Run's check, in words, until a Save replaces it (never back to "any" by itself).
+
+**The game servers:**
 - **Environments** are game services you manage yourself: **Allowed** (the bot may act while the
   game is connected to one of its servers), **Forbidden** (never; its servers can never be allowed
   anywhere) or **Pending** (not approved). Create, rename and delete them, and edit their server
@@ -291,6 +314,10 @@ Amendment B); a not-adopted model is never offered.
   start check. The Run panel also shows the Run's OWN start check line by line and the Run's log
   (40 lines: the screen, the input mode, each check line, the pauses, a fault's traceback). A Run
   saves no picture (Batt 2026-11-18 ~22:3x: a frame can show other people's chat).
+  ➡️ **Since 2026-11-19 (Batt, ADR-0020 Amendment R) who may play is chosen on the SETTINGS page**
+  ("who may play a Run", below): any (the default, the lab's too), known (the characters remembered
+  there) or mine; a Save applies to the next check or Run at once. `.env`'s `RUN_IDENTITY` is no
+  longer read; the history:
   ➡️ **Since 2026-11-18 21:19 (Batt, ADR-0020 Amendment Q) a Run plays ANY character** on an install
   whose `.env` leaves `RUN_IDENTITY` empty or `any` (the default): no name or job is compared, and
   the checklist's first line reads "a character in the game (any name, any job)". `mine` keeps the

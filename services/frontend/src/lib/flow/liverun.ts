@@ -43,7 +43,7 @@ export type LiveStatus = {
   // Batt 2026-11-18 ("log the status, the checklist and the errors more"; "Alt+Tab: only pause"):
   // the Run's OWN start check (its log's CHECK line) and its pause (no picture: Batt 2026-11-18)
   run_check?: LiveCheck | null;
-  identity?: "any" | "mine" | string; // this install's RUN_IDENTITY (ADR-0020 Amendment Q)
+  identity?: "any" | "known" | "mine" | "unreadable" | string; // Settings: who may play a Run (ADR-0020 Amendments Q, R)
   pause?: RunPause | null;
 };
 

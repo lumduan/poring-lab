@@ -231,6 +231,11 @@ const ACTION_TEXT: Record<string, string> = {
   server_remove: "Removed",
   declare: "Declared the owner's permission (not verified)",
   withdraw: "Withdrew the declaration",
+  // Who may play a Run (ADR-0020 Amendment R)
+  run_identity_mode: "Who may play a Run",
+  char_remember: "Remembered a character",
+  char_rename: "Renamed a character",
+  char_forget: "Forgot a character",
 };
 
 /** Changes whose note is the person's own words, quoted (ADR-0023). */

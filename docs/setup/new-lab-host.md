@@ -1144,6 +1144,9 @@ nice -n 10 uv run --quiet python scripts/dungeon_hunt.py run --player-mode --cha
 - **The runner types no line at all**, and reads nothing from the lab's database (since
   dungeon@9.35c the start's identity check skips it too: the name plate and the job, from the
   pixels alone).
+- ➡️ **A /flows Run needs none of the steps below** (ADR-0020 Amendments Q and R): it plays any
+  character by default, and the Settings page's "who may play a Run" can limit it to the characters
+  you remember there (a button, no terminal). The steps below are for the runner's command line.
 - **Your own character, once, before the first run.** The runner knows two character slots:
   `crusader` and `rogue` (the Rogue's files live in `data/thief/`, so the tools below take
   `--char thief`). For a Rogue:

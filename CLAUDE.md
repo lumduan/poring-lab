@@ -380,6 +380,12 @@ Official servers and every other public server are forbidden. Start with `README
     Origin AND the CSRF token (`GET /settings/csrf`, header `X-CSRF-Token`), at most 20/min per
     client. Never `:8001`, never the lab host itself (`lab_host_peer`: host processes can forge the
     Origin), never `WIN_HOST` (`windows_host_peer`). Every refusal is audited.
+  - ➡️ Since 2026-11-19 (ADR-0020 Amendment R, Batt) it also holds WHO MAY PLAY A RUN
+    (`run-identity.json`, `poring_env/runidentity.py`; the backend's `routes_identity.py` is its
+    only writer, behind the same write gate): any (the default, no file; the lab too), known (the
+    characters remembered by the page's Remember button: the Run helper reads the name line once)
+    or mine. The Run's checks read it every time (no restart); unparsable = every Run refused.
+    `.env`'s `RUN_IDENTITY` is no longer read. The agent never changes it or presses Remember.
   - **The agent never confirms environment entries, by any route**: the first confirmation is a
     person's act.
   - A new YAML key in `environments.yaml` needs the backend running the new schema FIRST

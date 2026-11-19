@@ -7,7 +7,7 @@ verdict_date: null
 verdict_ticket: null
 supersedes: null
 related: [../adr/0020-block-programming-flows.md, ../adr/0023-learner-mode.md, ../adr/0006-sanctioned-test-environments.md, fullscreen-client.md, player-mode.md]
-next_action: "Step 1 BUILT (any character: RUN_IDENTITY, ADR-0020 Amendment Q; the lab runs any too since 2026-11-18 ~21:2x). Batt tests one step at a time; the next ones in section 4 wait for him."
+next_action: "Step 1 BUILT (any character, ADR-0020 Amendment Q) and moved to the Settings page 2026-11-19 (Amendment R: any the default everywhere, the lab too; known = the characters remembered there by its Remember button). Batt tests one step at a time; the next ones in section 4 wait for him."
 ---
 
 # A Run's start rules, for teaching
@@ -30,7 +30,7 @@ byte-pinned: `start_check`, `run()`), the player (`scripts/flow_play.py`), the h
 
 | # | Rule | Before | Now | Kind |
 |---|---|---|---|---|
-| 1 | Identity: the name plate and the job | the lab Rogue's pictures (Thief8fce, rogue); any other character refused | `RUN_IDENTITY=any` (the default): any character; `mine`: as before | UNLOCKED (step 1) |
+| 1 | Identity: the name plate and the job | the lab Rogue's pictures (Thief8fce, rogue); any other character refused | the Settings page, "who may play a Run" (Amendment R): any (the default), known (the characters remembered there), mine | UNLOCKED (step 1), a Settings choice |
 | 2 | The game on the screen | misread the desktop | the Run waits for it (ADR-0020 Amendment P) | safety |
 | 3 | The console in ASSIST or BOT | | unchanged | safety |
 | 4 | The chat input closed | | unchanged (text left in it would go to public chat) | safety |
@@ -66,11 +66,18 @@ character, refused before any input). Known English-bound pieces and what to ver
 | 19 | The Battle Log reader (`battle_log.py`) | an English line grammar ("inflicts ... damage points") | KNOWN (gef10-eyes-loot.md section 4); bare_steal reads a line's COLOUR instead |
 | 20 | The chat window's tab check | the tab LABELS' pictures ("Battle Log", "Chat") | KNOWN: per language, or by place and order instead of label |
 | 21 | Screen signatures (login, dialogs, death dialog) | pictures cut on the English client | `state@locale` variants exist (`signature_variants`); each language needs its cut |
-| 22 | The job line (cut-job pictures) | the job's NAME in the client's language | not compared under RUN_IDENTITY=any / known |
+| 22 | The job line (cut-job pictures) | the job's NAME in the client's language | not compared under any / known (the Settings page); the name line under known is a PICTURE, any script |
 | 23 | Basic Info's weight, the hotbar counts, the minimap's picture | digits and pictures, maybe anchored on labels or places | TO VERIFY on a Thai client: rog101's start check read none of them (its layout differed too) |
 
 ## 2. Step 1, built 2026-11-18 (ADR-0020 Amendment Q)
 
+- ➡️ **SUPERSEDED IN PART 2026-11-19 (ADR-0020 Amendment R, Batt): the choice is on the SETTINGS
+  PAGE ("who may play a Run"), saved and used at once with no restart; `.env`'s `RUN_IDENTITY` is
+  no longer read.** `any` is the default of every install, the lab's too. `known` plays only the
+  characters remembered on that page: a person types a name for the list and presses Remember
+  with the character in front (Basic Info open at the top left); the Run helper reads the name
+  line once (pixels only). No terminal step, no slot limit (up to 50). The lines below are the
+  history of step 1.
 - `RUN_IDENTITY` in `.env`: `any` (empty = any) for every new install; `mine` for an install that
   wants only its own character. An unknown word = `mine`.
 - `crusader.check(db=False)` (the player path only) compares no name and no job under `any`; a
