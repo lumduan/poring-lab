@@ -205,3 +205,36 @@ Two candidates, NOT adopted (each its own block, after B2):
 4. `recreate:desktop@60` and `recreate:backend@30`: ALL STEPS OK; ASSIST came back by itself.
 5. `recover gm`: Thief8fce in game; the relog cleared the immunity.
 6. s11scr-720 started 00:56:11 with the same box (project hash acc1ebb7...).
+
+### s11scr-720 (A), 2026-11-20 00:56-01:55 ICT: 3 runs, 2 valid by the bar
+
+- **r01A**: 19.8 min, 0 deaths; 40 kills = 121.5 kills/h; 130.6 loot/h. 8 boss Fly Wings, 5 false.
+- **r02A**: 19.7 min, 0 deaths; 45 kills = 136.8 kills/h; 179.4 loot/h. 2 boss Fly Wings, 1 false.
+- **r03A**: 14.4 min, 0 deaths; 32 kills = 133.7 kills/h.
+  - It ended "relocate_no_block: she is on geffen": the runner's way home took her off the map.
+  - That is not one of the bar's valid ends (home / weight_home), so the bar leaves it out.
+  - Reported: counted, A is 130.7 kills/h, and nothing changes.
+- The runner's records (diag), r01A:
+  - the cursor read "sword" on 97.6 % of box targets; 62.5 % of targets struck;
+  - 27 missed targets an hour;
+  - 0.30 items picked per loot step (1080: 0.02), and 0.21 items seen by the item model per step
+    (1080: 0.05-0.11).
+
+### THE VERDICT (scored 2026-11-20 01:55 ICT, `screen_ab.py score --a s11scr-720 --b s11scr-1080`, B with s11scr-1080b's runs): WORSE
+
+    line        A (720)          B (1080)        bar                      result
+    deaths      0                0               B <= A                   PASS
+    kills/h     129.2 +- 7.7     72.9 +- 3.7     diff -56.2 +- 8.5 >= -2 SE   FAIL
+    loot/h      155.0 +- 24.4    96.2 +- 14.3    diff -58.8 +- 28.3 >= -2 SE  FAIL
+    errors      0                0               none new in B            PASS
+    valid runs  2 (of 3)         3 (of 5)
+
+- Reported:
+  - false boss Fly Wings: B 28 of 30 (three runs, about 59 min); A 6 of 11 (two runs, about
+    39 min);
+  - s10ab's B runs (11-17, before): 114.7-145.9 kills/h; Batt's bar: 228.5 kills/h.
+- So at 1080 the bot kills 44 % fewer an hour. The causes, in the order of the time they cost:
+  1. the false alarms (about 28 an hour, each a Fly Wing plus 30 s with no box engagement): both
+     models see the shrunk 1080 world worse;
+  2. the cursor reads (fixed in B2);
+  3. the item model, which sees a third to a half of the items it sees at 720.
