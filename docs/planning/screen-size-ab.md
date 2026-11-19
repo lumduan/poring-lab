@@ -152,4 +152,26 @@ Two candidates, NOT adopted (each its own block, after B2):
 
 ## Runs
 
-(none yet)
+### s11scr-1080 (B), 2026-11-19 23:14 - 2026-11-20 00:00 ICT: 1 valid run of 3; the series STOPPED
+
+- Main 3513eda2 + docs (the play code as pre-registered). The lab client was already at 1920x1080
+  fullscreen (OptionInfo.lua 1920 / 1080 since 11-19 11:41). The Rogue Thief8fce (slot 3) was
+  chosen at character select by judged steps; the relog cleared her immunity.
+- **r01B**: rc 0, 19.9 min, the time box. 22 kills (packets) = 66.4 kills/h, 81.5 loot/h, 0 deaths.
+  17 boss Fly Wings, 16 FALSE by the packet truth (addendum 2). 71,341 z/h net.
+- **r02B**: played 22 min, then ended by the series' own Stop while paused.
+  - The pauses: "the game off the screen", 3 in all, 4 s. The fullscreen taskbar box read 19.52,
+    under the bar of 20, at one dark corner.
+  - The session has no packets.jsonl.gz and no normal end record: not scoreable (found false).
+- **r03B**: the setup's F5 (the dagger on) was refused `client_not_foreground`, for the same
+  reason. The series STOPPED: a person first.
+  - The Rogue stood unattended under a Cruiser (HP 42 %). The agent pressed the Fly Wing in an
+    ASSIST desktop window, typed `@monsterignore` (read back "You are now immune to attacks"),
+    and later typed it again ("Returned to normal state") before the next series.
+- Probe (immune, moves only, 76 hovers): the same real frames with and without the cursor patch
+  gave 0 / 0 alarm-class boxes, and 186 / 195 monster boxes. **C1 is not supported for alarms
+  and is not adopted.**
+- Probe (25 Fly Wing spots): the taskbar box read 33-181 in game at 1080 (median 89.4), and the
+  shown taskbar 0.0-1.3. A fix candidate is on `feat/virtual-box-grab` (f65ff6dd: the bar
+  20 -> 10); it is not in A or B.
+- B is completed by **s11scr-1080b** (2 more runs, the same code), started 00:08:35.
