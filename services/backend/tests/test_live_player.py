@@ -1038,3 +1038,22 @@ def test_retry_off_or_used_up_ends_the_run_and_a_failed_check_never_plays(
                     checker=not_ready)  # fmt: skip
     assert len(fails.calls) == 1 and [e["kind"] for e in ev].count("retry_refused") == 1
     assert ev[-1]["reason"] == "dungeon_hunt_failed" and "retry" in ev[-1]["words"]
+
+
+def test_a_hunt_core_s_pictures_are_removed_and_its_numbers_kept(tmp_path: Path) -> None:
+    """Batt 2026-11-18 ("store no pictures at all"): the byte-pinned runner still saves end.png
+    (the whole screen), strike frames, ring crops and a name tag per strike; a Run removes them
+    from that hunt core's session folder only (2026-11-19)."""
+    sess = tmp_path / "20261119T180953-demo-dungeon-x-flowplay-1-hunt1"
+    other = tmp_path / "20261119T190000-demo-dungeon-x-flowplay-1-hunt11"  # another core
+    for d in (sess / "tags", other):
+        d.mkdir(parents=True)
+    pics = ["end.png", "strike-001.jpg", "ring-001-red58-on0-out0.png", "tags/tag-x-0001.npy"]
+    kept = ["events.jsonl", "battle_log_live.jsonl", "tags/cuts-x.jsonl"]
+    for name in (*pics, *kept):
+        (sess / name).write_text("x")
+    (other / "end.png").write_text("x")
+    assert fp.drop_pictures("flowplay-1-hunt1", tmp_path) == len(pics)
+    assert not [n for n in pics if (sess / n).exists()]
+    assert all((sess / n).exists() for n in kept) and (other / "end.png").exists()
+    assert fp.drop_pictures("flowplay-1-hunt1", tmp_path) == 0

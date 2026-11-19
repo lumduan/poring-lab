@@ -24,6 +24,9 @@ auto picks, on the first frames, the language whose words type the most lines (n
 yet). English is the live, validated path (v43 runs 1-2; its glyph / name files may also sit
 directly in data/ui_anchors/battle_log/, as before languages). Thai: formats.json and a parser
 fixture from Batt's screenshot (text); its glyphs need the screenshot's PIXELS (th/README.txt).
+➡️ 2026-11-19 (Batt's Thai client): without them, a line the host language types "other"
+is tried in the ANCHORS-ONLY formats (with_anyscript: "[name] <unread> 'n'" a hit, "EXP 'n'
+<unread>" / "Job EXP 'n' <unread>" a kill's EXP), read with the same glyphs.
 No client text is committed: `formats-init en` builds the English file from words in code.
 
 THIS MODULE NEVER SENDS INPUT. ``live`` holds no Agent and opens no ro_agent.session: it reads
@@ -643,6 +646,9 @@ def clean(ln: Line, lang: Lang | None = None) -> bool:
 #   {"num": "<field>", "anchor": "paren"}   (N)
 #   {"num": "<field>", "anchor": "bare"}    N
 #   {"item": "item"}                        an item name: any text, never read
+#   {"unread": "<what>"}                    words in a script the glyph templates do not have:
+#                                           a run of UNREAD glyphs ('?', spaces between), at
+#                                           least one; it scores LIKE_MIN (a fuzzy word's bar)
 # The quoted numbers and the bracketed name are the stable ANCHORS across languages; the fixed
 # words are what differs. A line is the event whose pattern fits with the best mean word ratio
 # (one word per "lit" keeps "Base" and "Job" apart). "colour" is checked only with
@@ -655,14 +661,15 @@ ANCHOR_RX = {
     ("num", "bare"): re.compile(r"\s*(?P<v>[0-9?]+)(?![0-9?])"),
 }
 TAIL_RX = re.compile(r"[\s.?]*")  # what may follow the last element
+UNREAD_RX = re.compile(r"[\s?]*")  # an "unread" element: unread glyphs and the spaces between
 WORD_END = " '[(."  # a fixed word may end before one of these, or at the line's end
 WORD_STRETCH = 1.4  # a fixed word's text may read up to 1.4 x + 1.5 its length (split glyphs)
 
 
 @dataclass(frozen=True)
 class Elem:
-    kind: str  # lit / name / num / item
-    text: str = ""  # lit: the word
+    kind: str  # lit / name / num / item / unread
+    text: str = ""  # lit: the word; unread: what the words say (documentation only)
     field: str = ""  # name / num / item: the record field
     anchor: str = ""  # name: bracket; num: quoted / paren / bare
     opt: bool = False
@@ -679,6 +686,8 @@ def parse_pattern(pattern: Sequence[Mapping[str, Any]]) -> tuple[Elem, ...]:
             out.append(Elem("num", field=str(e["num"]), anchor=str(e.get("anchor", "quoted"))))
         elif "item" in e:
             out.append(Elem("item", field=str(e["item"])))
+        elif "unread" in e:
+            out.append(Elem("unread", text=str(e["unread"])))
         else:
             raise ValueError(f"unknown pattern element {e!r}")
         if out[-1].kind in ("name", "num") and (out[-1].kind, out[-1].anchor) not in ANCHOR_RX:
@@ -698,6 +707,9 @@ class Lang:
     glyphs: Glyphs | None = None
     names: dict[str, np.ndarray] | None = None
     _cache: dict[tuple[str, str], dict[str, Any]] = field(default_factory=dict, repr=False)
+    # read with the same glyphs, tried in order when this language types a line "other"
+    # (with_anyscript: the anchors-only formats of a client in another script)
+    alts: tuple[Lang, ...] = ()
 
 
 def lang_from_formats(fm: Mapping[str, Any], glyphs: Glyphs | None = None,
@@ -763,6 +775,12 @@ def match_pattern(text: str, elems: Sequence[Elem]) -> tuple[float, dict[str, st
             for j in range(i, len(text) + 1):
                 rec(k + 1, j, vals, ratios)
             return
+        if e.kind == "unread":  # words the glyphs cannot read: their run of '?', longest first
+            m_u = UNREAD_RX.match(text, i)
+            for j in range(m_u.end() if m_u else i, i, -1):
+                if "?" in text[i:j]:
+                    rec(k + 1, j, vals, [*ratios, LIKE_MIN])
+            return
         want = len(e.text.replace(" ", ""))
         for j in range(i + 1, len(text) + 1):
             if j < len(text) and text[j] not in WORD_END:
@@ -795,12 +813,25 @@ def species_of(name: str, vocab: Sequence[str] = SPECIES) -> str | None:
     return fit[0] if len(fit) == 1 and sum(ch != "?" for ch in name) >= 2 else None
 
 
-def classify(text: str, colour: str = "", lang: Lang | None = None) -> dict[str, Any]:
+def classify(text: str, colour: str = "", lang: Lang | None = None,
+             alts: bool = True) -> dict[str, Any]:  # fmt: skip
     """{"type", fields} of one decoded line in ``lang`` (default: this host's language, see
     default_lang): the event whose pattern fits best (match_pattern), else other. Fields: n /
     count (None when a digit is unread), and for a damage line name_read and name (the
-    species). Cached per language."""
+    species). Cached per language. A line the language types "other" is tried in its ``alts``
+    (``alts`` False: the language alone, as detect_lang scores it)."""
     lang = lang or default_lang()
+    out = _classify_one(text, colour, lang)
+    if alts and out["type"] == "other":
+        for alt in lang.alts:
+            got = _classify_one(text, colour, alt)
+            if got["type"] != "other":
+                return got
+    return out
+
+
+def _classify_one(text: str, colour: str, lang: Lang) -> dict[str, Any]:
+    """classify in ``lang`` alone."""
     key = (text, colour if lang.render.colour_check else "")
     hit = lang._cache.get(key)
     if hit is not None:
@@ -856,10 +887,46 @@ def load_lang(code: str | None = None, glyphs: Glyphs | None = None) -> Lang:
     legacy = code == "en"
     gpath = _first(d / "glyphs.npz", *([GLYPHS] if legacy else []))
     npath = _first(d / "names.npz", *([NAMES] if legacy else []))
-    return lang_from_formats(json.loads(fpath.read_text()),
-                             glyphs if glyphs is not None else
-                             (load_glyphs(gpath) if gpath else None),
-                             load_names(npath) if npath else None)  # fmt: skip
+    return with_anyscript(lang_from_formats(json.loads(fpath.read_text()),
+                                            glyphs if glyphs is not None else
+                                            (load_glyphs(gpath) if gpath else None),
+                                            load_names(npath) if npath else None))  # fmt: skip
+
+
+# ➡️ 2026-11-19 (Batt's Thai client, "it does not pick up, it does not see monsters"): its Battle
+# Log is Thai -- "[Myst Case] <Thai> '232'", "EXP '0' <Thai>", "Job EXP '2838' <Thai>" -- and this
+# host had no Thai glyphs, so all 416 lines of a Run typed "other": no hit, no kill, so no loot
+# (the trim loot plans picks at kills only). The ANCHORS read in any script (the bracketed name,
+# the quoted numbers, "EXP" and "Job"); the words between them are runs of unread glyphs. On that
+# Run's lines: 66 damage, 4 base EXP, 7 job EXP. Its item line is left out (unread words around a
+# bare count: a fully unread line would fit it).
+ANYSCRIPT = "anyscript"
+
+
+def anyscript_formats() -> dict[str, Any]:
+    """The anchors-only formats: a client whose line words are in a script the glyph templates
+    do not have (its words built at run time, never one client string)."""
+    w = {"job": "Job", "exp": "E" + "XP"}
+    num = {"num": "n", "anchor": "quoted"}
+    return {"lang": ANYSCRIPT, "events": {
+        "damage": {"colour": "yellow", "pattern": [
+            {"name": "name", "anchor": "bracket"}, {"unread": "the receives-damage words"}, num]},
+        "base_exp": {"colour": "yellow", "pattern": [
+            {"lit": w["exp"]}, num, {"unread": "the acquired word"}]},
+        "job_exp": {"colour": "yellow", "pattern": [
+            {"lit": w["job"]}, {"lit": w["exp"]}, num,
+            {"unread": "the acquired word"}]}}}  # fmt: skip
+
+
+def with_anyscript(lang: Lang) -> Lang:
+    """``lang`` with the anchors-only formats as its alternative (same glyphs, rendering, names
+    and species): a line it types "other" is tried there (classify)."""
+    if lang.code == ANYSCRIPT:
+        return lang
+    alt = dataclasses.replace(lang_from_formats(anyscript_formats()), render=lang.render,
+                              species=lang.species, glyphs=lang.glyphs, names=lang.names,
+                              _cache={})  # fmt: skip
+    return dataclasses.replace(lang, alts=(alt,))
 
 
 def default_code() -> str:
@@ -943,7 +1010,7 @@ def detect_lang(imgs: Iterable[np.ndarray], langs: Sequence[Lang],
             for ln in read_lines(c, lg.glyphs, None, lg.render):
                 if ln is None:
                     continue
-                k = classify(ln.text, ln.colour, lg)
+                k = classify(ln.text, ln.colour, lg, alts=False)  # the language's own
                 if k["type"] != "other":
                     typed += 1
                     ratio_sum += max((m[0] for e in lg.events.values()

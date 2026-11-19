@@ -279,9 +279,38 @@ def test_the_pointer_s_own_picture_is_pasted_unscaled_over_the_world(
     ro.real_xy(ro.VIRTUAL_X0 + 700, 300)  # the pointer went there
     view = ro.client_view()
     cursor = [p for p in view.panels if p.name == "cursor"]
-    assert cursor and cursor[0].virtual[:2] == (688, 288) and cursor[0].real_xy == (1038, 438)
+    assert cursor and cursor[0].virtual[:2] == (666, 266) and cursor[0].real_xy == (1016, 416)
     ro.real_xy(ro.VIRTUAL_X0 + 10, 10)  # over Basic Info: the panel itself carries it
     assert not [p for p in ro.client_view().panels if p.name == "cursor"]
+
+
+# Every cursor shape's reach from its hotspot (the v3 references' supports, measured 2026-11-19):
+# x from, x to, y from, y to. The WALK arrow's box cut the hand's left and top edge (Batt's clips).
+CURSOR_REACH = {"walk": (-2, 21, -2, 29), "pickup": (-18, 11, -15, 8), "sword": (-20, 28, -21, 31),
+                "talk": (-18, 14, -14, 10), "noentry": (-16, 28, -8, 31),
+                "warp": (-32, 31, -32, 15)}  # fmt: skip
+
+
+def test_every_cursor_shape_is_read_from_the_real_pixels_around_the_pointer(
+    ro: ModuleType, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """2026-11-19, Batt: "the cursor was a hand when it scanned, but it did not click". The
+    cursor readers' 64 x 64 crop (cursor_sword.crop_at) at the pointer, cut from the virtual
+    frame, is the real client's pixels around the real pointer -- every shape whole, at its own
+    size, with the readers' +-2 px shift search."""
+    monkeypatch.setattr(ro, "real_game_region", lambda: (0, 0, 1920, 1080))
+    monkeypatch.setattr(ro, "desktop", lambda: (1920, 1080))
+    monkeypatch.setattr(ro, "_POINTER", None)
+    dx, dy, bw, bh = ro.CURSOR_BOX
+    for x0, x1, y0, y1 in CURSOR_REACH.values():  # each shape, shifted 2 px either way
+        assert dx <= x0 - 2 and x1 + 2 < dx + bw and dy <= y0 - 2 and y1 + 2 < dy + bh
+    rng = np.random.default_rng(7)
+    frame = rng.integers(0, 256, (1080, 1920, 4), dtype=np.uint8)
+    fake = raw_screen(ro, frame)
+    u, v = 700, 300
+    ro.real_xy(ro.VIRTUAL_X0 + u, v)  # the pointer there: (1050, 450) in the real client
+    _, crop, _, _ = fake.grab_meta(ro.VIRTUAL_X0 + u - 32, v - 32, 64, 64)
+    assert (crop == frame[450 - 32 : 450 + 32, 1050 - 32 : 1050 + 32]).all()
 
 
 def test_the_login_dialogs_stay_in_real_pixels_under_the_virtual_client(

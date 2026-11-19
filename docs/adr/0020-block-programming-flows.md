@@ -2945,6 +2945,15 @@ errors more than now, so we know where a problem is."
   route and the page's view are removed (main after 53e6e840). **The exception (Batt, same
   evening):** when Batt asks the agent to test-play itself, or to record his play, pictures and
   video may be taken in full.
+- ➡️ **2026-11-19 ~19:xx: the gap that was left.** The byte-pinned runner still saved its own
+  pictures in each hunt core's session folder: `end.png` (the WHOLE screen, the chat included),
+  up to 40 strike frames, up to 40 ring crops and a name tag per strike (no cap), and the helper
+  still copied `end.png` for the page. A Run now removes them as each hunt core ends
+  (`flow_play.drop_pictures`; the numbers stay: events, the Battle Log lines, the tag cuts' text),
+  the helper copies none, and the route and the page's slot are marked intentionally inert. The
+  agent looked at 12 of the ring crops (80 x 80 around the pointer) to find why the cursor did
+  not read on Batt's client, after Batt sent his clips asking why (section on reads, teaching-
+  prerun.md rows 19 and 24), and they were removed with the rest.
 
 ## Amendment Q (2026-11-18, Batt decided; built and live 21:19, commit 9eed37b1): a Run's start does not lock the character
 
