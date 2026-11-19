@@ -113,10 +113,12 @@ def test_activating_a_fullscreen_client_only_verifies_and_never_clicks(
     seen: dict[str, float] = {"taskbar": 49.9}
     monkeypatch.setattr(ro, "distance", lambda screen, state, after_ns=None: seen[state])
     ro.activate_client(agent, SCREEN)  # the taskbar absent: in front
-    for shown in (0.0, 15.0):  # shown, or too close to call
+    for shown in (0.0, 8.0):  # shown, or too close to call
         seen["taskbar"] = shown
         with pytest.raises(ro.Stop, match="not in front"):
             ro.activate_client(agent, SCREEN)
+    seen["taskbar"] = 19.52  # s11scr 2026-11-20: a dark game corner at 1080 (bar 10): in front
+    ro.activate_client(agent, SCREEN)
     assert agent.clicks == []  # never a click: in fullscreen it would land in the game
 
 

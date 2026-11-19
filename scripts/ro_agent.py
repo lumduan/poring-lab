@@ -1085,7 +1085,11 @@ DIALOG_OF_POINT = {
     "slot1": "char_select", "char_name": "char_make", "char_create": "char_make",
 }  # fmt: skip
 _VECTORS: dict[str, tuple[int, int]] = {}
-TASKBAR_ABSENT_MIN = 20.0
+# ➡️ 20 -> 10 (s11scr 2026-11-20 00:0x, the lab at 1920x1080). The shown taskbar reads 0.0-1.3
+# (every layout seen, 720 and 1080). The game in front read 49.9-111.7 at 720, but 33-181 at 1080
+# over 25 Fly Wing spots and 19.52 at one dark corner: under 20, so the gate refused every key
+# and the Run paused there (s11scr-1080 r02B's end, r03B's setup). 10 keeps 7x above the taskbar.
+TASKBAR_ABSENT_MIN = 10.0  # the backend's (foreground.py), the same bar
 ENG_FRESH_S = 600.0
 _ENG_AT: float | None = None
 

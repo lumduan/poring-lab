@@ -59,7 +59,11 @@ STREAM_SUFFIX = "@stream"
 # grey-thumb distance: a match is <= SIG_MATCH (6); the game under the taskbar's box measured
 # 2026-11-18, see docs/planning/fullscreen-client.md)
 TASKBAR = "taskbar"
-TASKBAR_ABSENT_MIN = 20.0
+# ➡️ 20 -> 10 (s11scr 2026-11-20 00:0x, the lab at 1920x1080). The shown taskbar reads 0.0-1.3
+# (every layout seen, 720 and 1080). The game in front read 49.9-111.7 at 720, but 33-181 at 1080
+# over 25 Fly Wing spots and 19.52 at one dark corner: under 20, so the gate refused every key
+# and the Run paused there (s11scr-1080 r02B's end, r03B's setup). 10 keeps 7x above the taskbar.
+TASKBAR_ABSENT_MIN = 10.0
 GrabRegion = tuple[int, int, int, int]
 Grab = tuple[int, NDArray[np.uint8], str]  # (capture t_mono_ns, BGRA crop, "bus" | "x11")
 GrabFn = Callable[[GrabRegion], Grab]
