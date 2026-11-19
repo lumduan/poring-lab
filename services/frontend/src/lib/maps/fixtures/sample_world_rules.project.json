@@ -9,7 +9,7 @@
     "locale": "en",
     "path": "s2"
   },
-  "max_runtime_s": 14400,
+  "max_runtime_s": 0,
   "where_budget": 12,
   "stop_when": {
     "kind": "lit",

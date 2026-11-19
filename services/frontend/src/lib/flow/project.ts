@@ -685,8 +685,13 @@ export function xmasCookieNoSwapProject(): Project {
   if (!mon) throw new Error("the one box has a monsters tab");
   const plain = new Set<string>(NO_SWAP_MONSTERS.map((sp) => `${RECIPE_PREFIX}${sp}`));
   mon.defs = mon.defs.map((d) => (plain.has(d.name) ? recipeDef(d.name.slice(RECIPE_PREFIX.length), false) : d));
+  // stage6_ab's arm C is hash-pinned: it keeps the one box's time box from before 2026-11-19
+  // (7200 s, minutes 120); the ready-made boxes hold no time limit since (ADR-0020 Amendment T)
+  const start = n.tabs.find((t) => t.name === "start");
+  if (start && "minutes" in start.vars) start.vars = { ...start.vars, minutes: { kind: "lit", value: 120 } };
   return {
     ...p,
+    max_runtime_s: 7200,
     name: "xmas_dun02_cookie_noswap",
     description: "One box with no Knife swap on the Christmas Cookie and the Cookie (live-blocks 16): attack_cookie and attack_cookie_xmas are strike(t); wait_kill(t); loot(t). The other monsters keep the Knife swap; everything else is the one box.",
   };

@@ -680,7 +680,9 @@ def test_a_project_request_names_its_node_and_hash_and_nothing_else() -> None:
     base = {"id": "a1b2c3d4e5", "action": "start", "flow": "project", "node": "xmas_dun02",
             "project_hash": "a" * 64, "max_s": 86400}  # fmt: skip
     assert fr.parse_request(json.dumps(base)) == base
-    for k, v in (("node", "rm -rf"), ("project_hash", "x"), ("max_s", 0), ("max_s", True)):
+    # max_s 0 = no maximum since 2026-11-19 (ADR-0020 Amendment T): accepted; -1 is not
+    assert fr.parse_request(json.dumps({**base, "max_s": 0})) == {**base, "max_s": 0}
+    for k, v in (("node", "rm -rf"), ("project_hash", "x"), ("max_s", -1), ("max_s", True)):
         assert isinstance(fr.parse_request(json.dumps({**base, k: v})), str), k
     assert isinstance(fr.parse_request(json.dumps({**base, "argv": ["--clear-map"]})), str)
     keys = {"heal_key": "F1", "fly_key": "F8", "home_key": "F9", "knife_key": "F4",

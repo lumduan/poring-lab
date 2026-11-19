@@ -309,13 +309,19 @@ test("the no-swap box is the one box but its two cookies' recipes, which swap no
   assert.deepEqual(steps(xmasProject()), { attack_mystcase: knife, attack_cruiser: knife, attack_cookie: knife, attack_cookie_xmas: knife });
   const mon = mapNodes(c)[0].tabs.find((t) => t.name === MONSTERS_TAB)!;
   assert.deepEqual(mon.defs[2], recipeDef("cookie", false)); // its priority=1 kept: today's order
-  // everything else is the one box's, byte for byte (the A/B changes one thing)
+  // everything else is the one box's, byte for byte (the A/B changes one thing) -- but the time
+  // box: the harness sets a run's length (stage6_ab --max-s); the pinned C keeps 7200 s / 120 min,
+  // the ready-made box holds no time limit since 2026-11-19 (ADR-0020 Amendment T)
   const rest = (p: Project) => {
     const q = JSON.parse(canonical(p)) as Project;
-    for (const t of mapNodes(q)[0].tabs) if (t.name === MONSTERS_TAB) t.defs = t.defs.filter((d) => !["attack_cookie", "attack_cookie_xmas"].includes(d.name));
-    return canonical({ ...q, name: "", description: "" });
+    for (const t of mapNodes(q)[0].tabs) {
+      if (t.name === MONSTERS_TAB) t.defs = t.defs.filter((d) => !["attack_cookie", "attack_cookie_xmas"].includes(d.name));
+      delete t.vars.minutes;
+    }
+    return canonical({ ...q, name: "", description: "", max_runtime_s: 0 });
   };
   assert.equal(rest(c), rest(xmasProject()));
+  assert.equal(c.max_runtime_s, 7200);
   assert.equal(c.name, "xmas_dun02_cookie_noswap");
   // ➡️ round 29: its functions-shape twin, the Load lists' example -- the ready-made box (functions)
   // but the same two recipes, everything else byte for byte

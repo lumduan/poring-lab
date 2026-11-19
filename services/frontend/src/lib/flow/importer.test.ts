@@ -46,9 +46,9 @@ test("an IR 1 file converts to IR 2 exactly as MW1's ir.upgrade does (ADR-0020 #
 test("the run settings stay inside the configured maximum (ADR-0020 #17) and the /where budget (#10)", () => {
   const f = fixture("farm_loop");
   const ok = runSettings(f, "7200", "3", 86_400);
-  assert.ok(ok.ok && ok.flow.max_runtime_s === 7200 && ok.flow.where_budget === 3 && f.max_runtime_s === 0);
+  assert.ok(ok.ok && ok.flow.max_runtime_s === 7200 && ok.flow.where_budget === 3 && f.max_runtime_s === 14_400);
   const over = runSettings(f, "90000", "3", 86_400);
-  assert.ok(!over.ok && /1\.\.86400 \(the configured maximum\)/.test(over.error));
+  assert.ok(!over.ok && /0\.\.86400 \(the configured maximum\)/.test(over.error));
   assert.ok(runSettings(f, "0", "3", 86_400).ok); // no time limit: runs to a configured maximum
   // Batt 2026-11-19: 0 or empty = no time limit, when no maximum is configured (0 / null)
   const none = runSettings(f, "", "3", 0);
