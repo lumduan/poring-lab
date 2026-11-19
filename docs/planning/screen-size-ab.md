@@ -89,6 +89,34 @@ The lines follow the bar lessons (ab-bar-design-lessons):
   clock) goes into the difference. The setup's warps alternate within each block as usual.
 - 3 runs a block: see the SE above.
 
+## Addendum 1 (written 2026-11-19 23:3x ICT, during s11scr-1080's run 1, before any B2 data)
+
+What run 1's first 16 minutes showed (screen_ab.py diag):
+- At 1080, 53 box engagements made 17 kills (0.32 per engagement). At 720, s10ab's runs made
+  0.66-0.83 (42-49 kills from 59-71 engagements).
+- The cursor read "unknown" on 36 % of box targets (720: 0-5 %). A hover took 460 ms from the
+  grab to its verdict (720: 254 ms).
+- The cause, measured live and read-only:
+  - a 64 x 64 read of the virtual client cost 69 ms, because the whole real frame came through the
+    grab pipe and the whole virtual picture was built;
+  - the cursor check reads every 30 ms inside the runner's CURSOR_WAIT_S of 0.35 s, so it got
+    about 4 reads instead of about 10.
+- Also seen (reported, not fixed here):
+  - Christmas Goblin boxes 0.011 per frame (720: 0.001-0.002), many on the player or a monster;
+    the player found 0.87 per frame (720: 0.98);
+  - no Miss cue read at 1080: the text is native-size, and shrunk in the virtual picture.
+
+**B2 = the 1080 block again with `feat/virtual-box-grab`.** A virtual box reads only its real
+pixels (64 x 64: 69 -> 3.5 ms), and the world resample is exact by axis takes (the whole picture:
+64 -> 19 ms).
+- At 1280x720 that code is never used (the identity view: no virtual reads), so block A stays the
+  control for B2 too.
+- The same judged lines as B, B2 against A.
+- Reported, B2 against B: the cursor's "unknown" share on box targets, kills per box engagement,
+  the hover time, the tick pace.
+- Label `s11scr-1080f`, 3 runs of 20 min, after the 720 block. The branch is merged only after
+  block A ends.
+
 ## Runs
 
 (none yet)
