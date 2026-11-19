@@ -210,6 +210,19 @@ class InputMux:
             self._last_human_input_ns = now_ns
         return Decision(True, "ok", tuple(inject))
 
+    def human_text(self, now_ns: int) -> Decision:
+        """A person's TYPED PASTE (ADR-0004 amendment e, console mode): no key event, but the
+        human's input all the same. Refused where the human may not act (BOT); in ASSIST it takes
+        the lease as a key would (the bot lets go of everything first)."""
+        if Source.HUMAN not in _ALLOWED[self._mode]:
+            return Decision(False, f"mode={self._mode}")
+        inject: list[Routed] = []
+        if self._mode is Mode.ASSIST:
+            inject += self._release(Source.BOT, now_ns, reason="handoff_release")
+        self._last_human_ns = now_ns
+        self._last_human_input_ns = now_ns
+        return Decision(True, "ok", tuple(inject))
+
     # --- internals --------------------------------------------------------------------------------
 
     def _is_reserved_chord(self, source: Source, event: InputEvent) -> bool:

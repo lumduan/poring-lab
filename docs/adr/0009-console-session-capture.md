@@ -121,6 +121,8 @@ Three facts shape the decision:
    - no clipboard channel exists;
    - ⌘V becomes **typed paste** (`LiSendUtf8TextEvent` in S2), with the same guarantees:
      human-only, never in `AgentToBackend`, digest-only audit, refused for BOT;
+     ➡️ BUILT 2026-11-19 (Batt asked, ADR-0004 amendment e); its audit is the event and its time
+     only (amendment c: no digest);
    - nothing reaches the Windows clipboard, so there is nothing to scrub;
    - file transfer stays an RDP-mode activity (hybrid).
 6. **Amend CLAUDE.md hard rule 2 and ADR-0001 when this is accepted.** Proposed text: *"One Windows

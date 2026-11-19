@@ -1,5 +1,6 @@
 """End-to-end through FastAPI with fake X capture/input: real WebSockets, real mux, real log."""
 
+import collections
 import hashlib
 import json
 import logging
@@ -15,6 +16,7 @@ from starlette.websockets import WebSocketDisconnect
 
 from poring_backend.config import Settings
 from poring_backend.main import create_app
+from poring_backend.state import TYPED_PASTE_MAX_BYTES
 from poring_env.clock import FrameCounter, monotonic_ns
 from poring_env.frame import Frame
 from poring_env.protocol import (
@@ -86,7 +88,7 @@ def make_client(tmp_path: Path, green_interlock: Any) -> Iterator[Factory]:
     clients: list[TestClient] = []
 
     def factory(
-        *, clipboard: Any = None, green: bool = True, **overrides: Any
+        *, clipboard: Any = None, green: bool = True, s2: Any = None, **overrides: Any
     ) -> tuple[TestClient, FakeInput]:
         fake = FakeInput()
         if clipboard is not None:
@@ -106,6 +108,7 @@ def make_client(tmp_path: Path, green_interlock: Any) -> Iterator[Factory]:
             capture_factory=FakeCapture,
             input_factory=lambda: fake,
             clipboard_factory=(lambda: clipboard) if clipboard is not None else None,
+            s2_input_factory=(lambda: s2) if s2 is not None else None,
         )
         client = TestClient(app)
         client.__enter__()
@@ -480,6 +483,70 @@ def test_console_mode_refuses_paste_and_hides_paste_and_files(
     health = client.get("/health").json()
     assert health["clipboard"]["paste_available"] is False
     assert health["input_refused"]["human"]["paste:console_backend"] == 1
+
+
+class FakeS2:
+    """The S2 client's input socket, as the backend's sink sees it (poring_env.s2input)."""
+
+    def __init__(self) -> None:
+        self.texts: list[str] = []
+        self.events: list[Any] = []
+        self.leg_ns: collections.deque[int] = collections.deque(maxlen=8)
+        self.refused = 0
+
+    def send_many(self, events: list[Any]) -> None:
+        self.events.extend(events)
+
+    def send_text(self, text: str) -> None:
+        self.texts.append(text)
+
+    def pointer(self) -> tuple[int, int]:
+        return (0, 0)
+
+    def has_window_class(self, needle: str) -> bool:
+        return False
+
+    def close(self) -> None:
+        pass
+
+
+def test_console_mode_types_a_paste_through_the_stream_and_never_logs_it(
+    make_client: Factory, make_xfreerdp: Any, tmp_path: Path
+) -> None:
+    """2026-11-19 (Batt: the clipboard on the live copy, a Sunshine-only host; ADR-0004 amendment
+    e): with the S2 client's input socket, a console-mode paste is TYPED by Sunshine. The same
+    rules as the RDP paste: human-only, the event and its time only in the logs."""
+    write_lock(tmp_path / "lab-state", "console", seq=12)
+    sock = tmp_path / "input.sock"
+    sock.touch()  # the S2 client's socket is there
+    s2 = FakeS2()
+    client, fake, xfreerdp = clipboard_client(make_client, make_xfreerdp, s2=s2,
+                                              s2_input_socket=sock)  # fmt: skip
+    with client.websocket_connect("/ws/stream", headers={"origin": ORIGIN}) as ws:
+        status = receive_text_until(ws, "status")
+    assert (status["clipboard_enabled"], status["transfer_enabled"]) == (True, False)
+    assert client.get("/health").json()["clipboard"]["paste_available"] is True
+    with client.websocket_connect("/ws/input", headers={"origin": ORIGIN}) as ws:
+        result = paste(ws)
+    assert (result["ok"], result["reason"]) == (True, "ok")
+    assert s2.texts == [SECRET_TEXT] and keys(fake) == [] and xfreerdp.replies == []
+    summary = next(r for r in log_lines(tmp_path) if r["event"]["type"] == "clipboard_paste")
+    assert summary["event"] == {"type": "clipboard_paste"}
+    for path in tmp_path.rglob("*"):
+        if path.is_file():
+            assert "PASTE-SECRET" not in path.read_text(errors="replace"), path
+    with client.websocket_connect("/ws/input", headers={"origin": ORIGIN}) as ws:
+        result = paste(ws, text="y" * (TYPED_PASTE_MAX_BYTES + 1), request_id=8)
+    assert (result["ok"], result["reason"]) == (False, "too_long_to_type") and len(s2.texts) == 1
+    sock.unlink()  # the S2 client went away: the old refusal, nothing typed
+    with client.websocket_connect("/ws/input", headers={"origin": ORIGIN}) as ws:
+        result = paste(ws)
+    assert (result["ok"], result["reason"]) == (False, "console_backend") and len(s2.texts) == 1
+
+
+def test_the_typed_paste_limit_is_the_stream_client_s() -> None:
+    src = (Path(__file__).resolve().parents[2] / "gamestream/s2spike/input_socket.py").read_text()
+    assert f"TEXT_MAX_BYTES = {TYPED_PASTE_MAX_BYTES}  " in src
 
 
 def test_an_unmounted_lock_holds_and_refuses_paste(

@@ -13,6 +13,12 @@ Times are this host's CLOCK_MONOTONIC (the backend shares it). Every field is wh
 anything else is refused per event, never guessed at.
 
 It counts, and never records which keys were pressed (secret typing must stay secret).
+
+➡️ 2026-11-19 (Batt: the clipboard on the live copy, a Sunshine-only host; ADR-0004 amendment e):
+a ``text`` event is a person's TYPED PASTE -- its UTF-8 text goes to Sunshine in one
+``LiSendUtf8TextEvent``, which types it into the focused Windows window (any script, no keyboard
+layout). Only the backend's paste path makes one (the agent's protocol has no such event). It is
+counted, never logged: no text, no length.
 """
 
 from __future__ import annotations
@@ -34,6 +40,7 @@ from .vk import CODE_TO_VK
 SOCKET_PATH = Path("/s2-input/input.sock")
 MAX_LINE = 64 * 1024
 MAX_EVENTS = 512
+TEXT_MAX_BYTES = 4096  # a typed paste at most (UTF-8): a password, a command, a line
 WHEEL_DELTA = 120  # per notch, as Moonlight-qt's high-res scroll (and the V3b X path) sends
 MODIFIER_BITS = {0xA0: 0x01, 0xA1: 0x01, 0xA2: 0x02, 0xA3: 0x02, 0xA4: 0x04, 0xA5: 0x04,
                  0x5B: 0x08, 0x5C: 0x08}  # fmt: skip  # VK -> MODIFIER_* bit
@@ -45,6 +52,7 @@ FIELDS = {
     "wheel": COMMON | {"dy"},
     "key": COMMON | {"code", "action"},
     "release_all": COMMON,
+    "text": COMMON | {"text"},
 }
 
 
@@ -72,7 +80,7 @@ class InputMapper:
         self.keys: set[int] = set()  # VKs held
         self.buttons: set[str] = set()
         self.counts = {"batches": 0, "keys": 0, "buttons": 0, "moves": 0, "wheel": 0,
-                       "release_all": 0, "refused": 0}  # fmt: skip
+                       "release_all": 0, "text": 0, "refused": 0}  # fmt: skip
 
     def mods(self) -> int:
         out = 0
@@ -127,7 +135,24 @@ class InputMapper:
             event.get("code") not in CODE_TO_VK or event.get("action") not in ("down", "up")
         ):
             raise Refused("unknown_key")
+        elif kind == "text":
+            text = event.get("text")
+            if not isinstance(text, str) or not text:
+                raise Refused("bad_text")
+            try:
+                size = len(text.encode("utf-8"))
+            except UnicodeEncodeError:  # a lone surrogate: no UTF-8 to type
+                raise Refused("bad_text") from None
+            if size > TEXT_MAX_BYTES:
+                raise Refused("text_too_long")
         return str(kind)
+
+    def _text(self, text: str) -> None:
+        """A typed paste: Sunshine types the UTF-8 text (counted, never logged)."""
+        data = text.encode("utf-8")
+        if self.lib.LiSendUtf8TextEvent(data, len(data)) != 0:
+            raise Refused("text_not_sent")
+        self.counts["text"] += 1
 
     def apply(self, event: Any) -> None:
         kind = self.check(event)
@@ -145,6 +170,8 @@ class InputMapper:
             self.counts["wheel"] += 1
         elif kind == "key":
             self._key(CODE_TO_VK[event["code"]], event["action"] == "down")
+        elif kind == "text":
+            self._text(event["text"])
         else:
             self.release_all()
 

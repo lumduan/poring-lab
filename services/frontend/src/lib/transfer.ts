@@ -48,6 +48,12 @@ const PASTE_REASONS: Record<string, string> = {
     "Clipboard paste is not enabled on the backend (RDP_CLIPBOARD=text-to-remote in .env).",
   origin_required: "Refused: this connection did not come from the console page.",
   mode_bot: "Refused: the input mux is in BOT mode. Switch to HUMAN or ASSIST to paste.",
+  console_backend:
+    "Console mode without the stream's input path: nothing was pasted (the stream client is (re)connecting).",
+  backend_hold: "The capture-backend lock is HOLD: no session to paste into.",
+  s2_unavailable: "The stream's input path is not connected (the stream client is (re)connecting): nothing was typed.",
+  s2_error: "The stream client did not take the text: nothing was typed. Try again in a moment.",
+  too_long_to_type: "Too long to type: a paste over the stream is at most 4096 bytes.",
   "mode=BOT": "Refused: the input mux is in BOT mode. Switch to HUMAN or ASSIST to paste.",
   rdp_clipboard_not_listening:
     "The RDP session did not pick up the text (clipboard redirection off, or RDP reconnecting).",

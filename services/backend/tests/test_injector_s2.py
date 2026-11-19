@@ -16,6 +16,7 @@ class Sink:
         self.name, self.fail = name, fail
         self.events: list[InputEvent] = []
         self.closed = False
+        self.texts: list[str] = []
         self.leg_ns: collections.deque[int] = collections.deque(maxlen=8)
         self.refused = 0
 
@@ -24,6 +25,11 @@ class Sink:
             raise OSError("no ack")
         self.events.extend(events)
         self.leg_ns.append(2_000_000)
+
+    def send_text(self, text: str) -> None:
+        if self.fail:
+            raise OSError("no ack")
+        self.texts.append(text)
 
     def pointer(self) -> tuple[int, int]:
         return (1, 2)
@@ -116,3 +122,19 @@ async def test_window_polls_and_the_pointer_stay_on_x(rig) -> None:  # type: ign
 def test_without_an_s2_factory_the_injector_is_x_only() -> None:
     inj = Injector(lambda: Sink("x11"), s2_socket=Path("/"), console_mode=lambda: True)
     assert inj._want_s2() is False
+
+
+async def test_a_typed_paste_goes_to_s2_in_order_and_only_there(rig) -> None:  # type: ignore[no-untyped-def]
+    """ADR-0004 amendment e: the text goes to the S2 client on the injector's one thread; without
+    console mode and the S2 socket it is never typed anywhere (never on X)."""
+    inj, x, s2s, sock, state = rig
+    assert await inj.type_text("abc") == "s2_unavailable" and not inj.s2_ready()
+    state["console"] = True
+    sock.touch()
+    assert inj.s2_ready()
+    await inj.apply(down())  # X held a key before: released there on the switch
+    assert await inj.type_text("รหัส") is None
+    assert s2s[-1].texts == ["รหัส"] and x.texts == []
+    s2s[-1].fail = True
+    assert await inj.type_text("x") == "s2_error" and (await inj.snapshot())["s2_errors"] == 1
+    await inj.close()

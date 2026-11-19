@@ -551,7 +551,9 @@ Official servers and every other public server are forbidden. Start with `README
   - rdp-loop.sh connects only while it says `rdp`, and never while a Moonlight window is on the display;
     every wait wakes when the lock changes. Fail closed: no mount / malformed -> `hold`; mounted dir
     without the file -> `rdp`. The bash and Python readers are parity-tested (`test_capture_lock.py`).
-  - In console mode the backend refuses paste (`console_backend`) and reports paste/files unavailable;
+  - In console mode the backend refuses paste (`console_backend`) and reports paste/files unavailable
+    ➡️ unless the S2 client's input socket is there: then a paste is TYPED by Sunshine (ADR-0004
+    amendment e, 2026-11-19; files stay RDP-only);
     `ro_agent` refuses on hold, during a handover, or when host file and `/health` disagree;
     `rdp_reconnect.sh` refuses unless `rdp`.
   - The bot may never hold Ctrl+Alt+Shift (`stream_hotkey_bot`): Moonlight's own hotkeys (+V types the
