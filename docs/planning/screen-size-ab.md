@@ -150,6 +150,16 @@ Two candidates, NOT adopted (each its own block, after B2):
   - The cost: a true low-score alarm flies one detection later (about 0.25 s).
   - Measured only in a labelled lab block; the ready-made box changes only by Batt's word.
 
+## Addendum 3 (written 2026-11-20 00:1x ICT, before any B2 data): what B2 carries
+
+- B2 (`s11scr-1080f`) plays `feat/virtual-box-grab` as it stands, merged after block A ends:
+  - a1ac2dee, the box-only virtual reads (addendum 1);
+  - f65ff6dd, the fullscreen taskbar-absent bar 20 -> 10, in ro_agent's pause gate and the
+    backend's key gate (see s11scr-1080's runs); the backend restarted to load it.
+- Not in B2: C1 (not supported) and C2 (Batt's decision).
+- The same judged lines as B, B2 against A. Reported, B2 against B: the cursor's "unknown" share,
+  kills per box engagement, the hover time, the tick pace, the pauses.
+
 ## Runs
 
 ### s11scr-1080 (B), 2026-11-19 23:14 - 2026-11-20 00:00 ICT: 1 valid run of 3; the series STOPPED
