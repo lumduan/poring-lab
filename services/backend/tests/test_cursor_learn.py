@@ -106,7 +106,8 @@ def test_a_capture_keeps_only_the_cursor_s_own_pixels() -> None:
     sw_only = cr.RobustRefs(np.stack([paint(texture(k), arrow_mask(), LAB) for k in range(4)]),
                             np.stack([arrow_mask()] * 4), ["sword"] * 4)  # fmt: skip
     assert cl.judge(rf, csw.SwordRefs(sw_only), paint(bg, arrow_mask(), LAB), bg, still)[0] == (
-        "sword")
+        "sword"
+    )
 
 
 def test_the_learned_arrow_is_read_as_clear_where_the_lab_s_is_not() -> None:
@@ -114,7 +115,7 @@ def test_the_learned_arrow_is_read_as_clear_where_the_lab_s_is_not() -> None:
     crop = paint(texture(11), arrow_mask(), HIS)
     base = csw.SwordRefs(rf)
     assert csw.verdict(base.recalls(crop)) == "unknown"  # the lab's colours: not this client's
-    for k in range(csw.LEARN_MIN - 1):
+    for _ in range(csw.LEARN_MIN - 1):
         csw.LEARNED.append((paint(np.zeros((64, 64, 3), np.uint8), arrow_mask(), HIS),
                             arrow_mask()))  # fmt: skip
     assert csw.learned_refs() is None  # fewer than LEARN_MIN: not used
@@ -148,7 +149,9 @@ class FakeClient:
         px, py = self.pointer
         m = arrow_mask()
         ys, xs = np.nonzero(m)
-        ok = (py - 32 + ys >= 0) & (py - 32 + ys < 720) & (px - 32 + xs >= 0) & (px - 32 + xs < 1280)
+        ok = (
+            (py - 32 + ys >= 0) & (py - 32 + ys < 720) & (px - 32 + xs >= 0) & (px - 32 + xs < 1280)
+        )
         f[(py - 32 + ys)[ok], (px - 32 + xs)[ok]] = HIS
         crop = f[y : y + h, x : x + w]
         return 0, np.dstack([crop, np.full(crop.shape[:2], 255, np.uint8)])
