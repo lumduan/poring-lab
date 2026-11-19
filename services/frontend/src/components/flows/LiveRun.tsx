@@ -199,7 +199,7 @@ export default function LiveRun({ live, checklist = [], minutes = null, keys = n
   const pause = pauseLine(st?.pause);
   const ownCheck = runCheckLines(st?.run_check);
   const runKeys = keys ?? live.keys;
-  // the keys Run sends, in the text too; the identity line in this install's RUN_IDENTITY
+  // the keys Run sends, in the text too; the identity line in this install's mode (Settings: who may play a Run)
   const items = checklistWithKeys(checklist, runKeys).map((it) => (it.id === "identity" && st?.identity ? { ...it, text: identityText(st.identity) } : it));
   const check = st?.check?.flow === flow ? st.check : null;
   const cc = canCheck(st, flow);

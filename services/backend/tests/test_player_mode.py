@@ -632,20 +632,27 @@ def test_the_home_press_is_on_the_player_path_only_and_types_nothing() -> None:
 # --- dungeon@9.35c: the start check reads no lab DB under --player-mode ------------------------
 
 
-def test_the_check_without_the_db_never_asks_who_is_online(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_the_check_without_the_db_never_asks_who_is_online(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
     import crusader as cr
 
+    from poring_env import runidentity as ri
+
     asked: list[str] = []
-    mode = {"RUN_IDENTITY": "mine"}  # ADR-0020 Amendment Q: the name plate compared (as before)
     fake = types.SimpleNamespace(online_chars=lambda which: asked.append(which) or ["Someone"],
-                                 black=lambda screen: False, env=lambda: mode)  # fmt: skip
+                                 black=lambda screen: False)  # fmt: skip
     monkeypatch.setitem(sys.modules, "ro_agent", fake)
+    # ADR-0020 Amendments Q and R: the Settings page's mode; "mine" compares the name plate
+    store = tmp_path / ri.FILE_NAME
+    store.write_text(ri.dumps(ri.Store(revision=1, mode="mine")))
+    monkeypatch.setattr(cr, "IDENTITY_FILE", store)
     monkeypatch.setattr(cr, "load_refs", lambda char: ("Me", None, {}))
     monkeypatch.setattr(cr, "client_frame", lambda screen: None)
     monkeypatch.setattr(cr, "identity", lambda frame, ref, jobs, job: {"ok": True, "job": job})
     assert cr.check(object(), "rogue", "thief", db=False) == {"ok": True, "job": "rogue"}
     assert asked == []  # a public server has no DB of ours: never asked
-    mode["RUN_IDENTITY"] = "any"  # every install's default: no name plate compared at all
+    store.unlink()  # no file: any, every install's default -- no name plate compared at all
     assert cr.check(object(), "rogue", "thief", db=False)["who"] == "any"
     assert asked == []  # and still never asked
     # the lab's default still asks, and refuses another character online

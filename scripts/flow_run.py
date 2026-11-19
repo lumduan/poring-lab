@@ -111,6 +111,12 @@ VERSION = 1
 CHECK_TIMEOUT_S = 20.0  # dungeon@9.45's check: uv + the runner's preamble + <= PLAYER_POS_S reads
 CHECK_LABEL = "flowcheck"  # its --label (a check makes no session) and its scratch folder
 CHECK_MARK = "CHECK "  # dungeon_hunt.CHECK_MARK: the check's result line (test_flow_run pins it)
+# 2026-11-19 (ADR-0020 Amendment R): the Settings page's Remember -- the name line of the character
+# on screen, read once by `crusader.py plate` (pixels only, no input) into PLATE_FILE, which the
+# backend reads, stores on the person's word and deletes. Served even while a run plays (it only
+# looks); one at a time; time-boxed.
+PLATE_FILE = "plate.json"
+PLATE_TIMEOUT_S = 15.0
 
 # The runner's fixed part, as the night chain ran it (docs/records/pilot-chain/run_pilot_v3.sh +
 # pilot_rec2.sh's BASE) WITHOUT --clear-map (a GM line: --player-mode refuses it), --seed fixed.
@@ -249,8 +255,12 @@ def parse_request(text: str) -> dict[str, Any] | str:
     rid, action, flow = req.get("id"), req.get("action"), req.get("flow")
     if not isinstance(rid, str) or not re.fullmatch(r"[A-Za-z0-9_-]{8,64}", rid):
         return "bad request id"
-    if action not in ("start", "stop", "check"):
+    if action not in ("start", "stop", "check", "plate"):
         return f"unknown action {action!r}"
+    if action == "plate":  # the Settings page's Remember (Amendment R): it names nothing else
+        if set(req) - {"id", "action", "at"}:
+            return "a name-line read carries nothing else"
+        return {"id": rid, "action": action}
     if action == "stop":
         if req.get("keys") is not None:
             return "keys go with start or check, not stop"
@@ -672,7 +682,7 @@ class RunLog:
     OWN start check (its CHECK line) and the pause (its PAUSED / RESUMED lines)."""
 
     check: dict[str, Any] | None = None
-    identity: str | None = None  # RUN_IDENTITY when the Run started (its check's words)
+    identity: str | None = None  # the mode (Settings page) when the Run started (its check's words)
     pauses: int = 0
     paused_s: float = 0.0
     since: str | None = None  # the open pause's start (ICT), None: not paused
@@ -706,13 +716,14 @@ class RunLog:
 
 
 def run_identity() -> str:
-    """This install's RUN_IDENTITY ("any" | "mine"; crusader.run_identity), "mine" if unreadable."""
+    """This install's mode from the Settings page ("any" | "known" | "mine", or "unreadable":
+    crusader.run_identity; ADR-0020 Amendment R), "unreadable" if crusader cannot say."""
     try:
         import crusader as cr
 
         return cr.run_identity()
     except (OSError, ImportError, SystemExit):
-        return "mine"
+        return "unreadable"
 
 
 def feed_log(rl: RunLog, path: Path, offset: int) -> int:
@@ -760,6 +771,9 @@ class Helper:
         self.check: dict[str, Any] | None = None  # dungeon@9.45: the last check (status "check")
         self.check_proc: subprocess.Popen[bytes] | None = None
         self.check_t = 0.0
+        self.plate_proc: subprocess.Popen[bytes] | None = None  # the Settings page's Remember
+        self.plate_rid: str | None = None
+        self.plate_t = 0.0
         self.label: str | None = None
         self.request_id: str | None = None
         self.started: str | None = None
@@ -844,7 +858,9 @@ class Helper:
         return req
 
     def handle(self, req: Mapping[str, Any]) -> None:
-        if req["action"] == "stop":
+        if req["action"] == "plate":  # it only looks: served while a run plays too
+            self.plate_start(req["id"])
+        elif req["action"] == "stop":
             self.stop(req["id"])
         elif self.runner is not None or self.state in ("starting", "running", "stopping"):
             act = req["action"]
@@ -1029,6 +1045,50 @@ class Helper:
         self.check_t = time.monotonic()
         self.write_status()
 
+    def plate_result(self, rid: str, why: str) -> None:
+        """A failed name-line read, in words (the backend waits for its request's id)."""
+        write_json(self.dir / PLATE_FILE, {"id": rid, "ok": False, "why": why})
+
+    def plate_start(self, rid: str) -> None:
+        """The Settings page's Remember: `crusader.py plate` once, its result in PLATE_FILE."""
+        if self.plate_proc is not None:
+            self.plate_result(rid, "a name line is being read already: try again in a moment")
+            return
+        (self.dir / PLATE_FILE).unlink(missing_ok=True)
+        env = {**os.environ, "PYTHONDONTWRITEBYTECODE": "1", "TMPDIR": str(SCRATCH)}
+        argv = [PY, str(ROOT / "scripts" / "crusader.py"), "plate", "--request", rid,
+                "--out", str(self.dir / PLATE_FILE)]  # fmt: skip
+        self.note(event="plate", request=rid)
+        SCRATCH.mkdir(parents=True, exist_ok=True)
+        with open(SCRATCH / "plate.log", "wb") as fh:
+            self.plate_proc = subprocess.Popen(argv, cwd=ROOT, env=env, stdout=fh,
+                                               stderr=subprocess.STDOUT, stdin=subprocess.DEVNULL,
+                                               start_new_session=True)  # fmt: skip
+        self.plate_rid, self.plate_t = rid, time.monotonic()
+
+    def plate_tick(self) -> None:
+        p, rid = self.plate_proc, self.plate_rid
+        if p is None or rid is None:
+            return
+        rc = p.poll()
+        if rc is None and time.monotonic() - self.plate_t <= PLATE_TIMEOUT_S:
+            return
+        if rc is None:
+            with contextlib.suppress(ProcessLookupError):
+                os.killpg(p.pid, signal.SIGKILL)
+            p.wait(timeout=5)
+        self.plate_proc = self.plate_rid = None
+        try:
+            got = json.loads((self.dir / PLATE_FILE).read_text())
+        except (OSError, ValueError):
+            got = None
+        if not isinstance(got, dict) or got.get("id") != rid:
+            why = (f"the name line was not read within {PLATE_TIMEOUT_S:.0f} s" if rc is None
+                   else f"the name-line reader ended without a result (rc {rc})")  # fmt: skip
+            self.plate_result(rid, why)
+        self.note(event="plate_end", request=rid, rc=rc,
+                  ok=bool(isinstance(got, dict) and got.get("ok")))  # fmt: skip
+
     def check_tick(self) -> None:
         p = self.check_proc
         if p is None or self.check is None:
@@ -1099,6 +1159,7 @@ class Helper:
         self.server = None
 
     def tick(self) -> None:
+        self.plate_tick()
         self.check_tick()
         if self.runner is None:
             return

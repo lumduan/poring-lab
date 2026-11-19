@@ -28,6 +28,9 @@ characters' scripts cannot cross.
     crusader.py [--char C] cut-name                 save the current name line as the reference
                                                     (only after a judged frame; the DB must say
                                                     the character is the one online)
+    crusader.py plate --request ID --out FILE       the name line of the character on screen, for
+                                                    the Settings page's Remember (the Run helper
+                                                    runs it; no input, nothing kept here)
 
 Reference crops and the name live in data/<char>/ (gitignored: client pixels).
 """
@@ -35,6 +38,7 @@ Reference crops and the name live in data/<char>/ (gitignored: client pixels).
 from __future__ import annotations
 
 import argparse
+import base64
 import json
 import sys
 import time
@@ -43,6 +47,8 @@ from typing import Any
 
 import numpy as np
 import numpy.typing as npt
+
+from poring_env import runidentity
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
@@ -115,41 +121,58 @@ def client_frame(screen: Any) -> Img:
 # free to create a character; teaching many at once, the same name for all would confuse"). The
 # PLAYER path only (``check(db=False)``: a Run, its start checks); a GM line (db=True) always proves
 # the lab's own character before it types (gm_line). ADR-0020 Amendment Q.
-IDENTITY_ENV = "RUN_IDENTITY"  # .env: "any" (the default of every install) | "known" | "mine"
-IDENTITY_MODES = ("any", "known", "mine")
-IDENTITY_ANY_WORDS = ("any character: a Run does not check the name or the job (RUN_IDENTITY=any: "
-                      "each player makes their own)")  # fmt: skip
+# ➡️ 2026-11-19 (ADR-0020 Amendment R, Batt: "any the default, this machine too, and settable in
+# Settings ... on Settings, Save and it works at once"): the mode and the characters a Run knows
+# live on the SETTINGS PAGE (settings/run-identity.json, poring_env.runidentity), read at every
+# check -- .env's RUN_IDENTITY is no longer read. No file = any (every install, the lab too). A
+# character is remembered by the page's Remember button (the Run helper runs `plate` below once).
+IDENTITY_FILE = ROOT / "settings" / runidentity.FILE_NAME
+UNREADABLE = "unreadable"  # run_identity() when the file does not parse (every Run's check fails)
+IDENTITY_ANY_WORDS = ("any character: a Run does not check the name or the job (Who may play a "
+                      "Run: any, on the Settings page; each player makes their own)")  # fmt: skip
 # "known" (Batt 2026-11-18 ~22:1x, after a Run was pressed twice on another server's character,
-# rog101): any character THIS INSTALL KNOWS -- one whose name plate was cut once (init + cut-name)
-# -- plays; a character of another server has no reference here and is refused at the first line.
+# rog101): only the characters REMEMBERED here (their name line cut once, on the Settings page)
+# play; a character of another server has no picture here and is refused at the first line.
+PLATE_GAP_S = 0.5  # `plate`: the second look, to tell a still name line from a moving scene
+BLANK_MIN_PX = 20  # a name line has 148-186 pixels far from its median (the lab's three, measured)
 
 
-def identity_mode(value: str | None) -> str:
-    """PURE: RUN_IDENTITY -> "any" | "known" | "mine". Unset or empty: "any"; an unknown word:
-    "mine" (the strict one: a typo never loosens the check)."""
-    v = (value or "").strip().lower()
-    if not v:
-        return "any"
-    return v if v in IDENTITY_MODES else "mine"
+def identity_store(path: Path | None = None) -> runidentity.Store | str:
+    """The Settings page's store (read when called): no file = the default (any, no character);
+    a file that does not parse = its problem in words (a Run's check then fails: fail closed)."""
+    f = IDENTITY_FILE if path is None else path
+    try:
+        text = f.read_text(encoding="utf-8")
+    except FileNotFoundError:
+        return runidentity.DEFAULT
+    except (OSError, UnicodeDecodeError) as e:
+        return f"{f.name} cannot be read ({type(e).__name__})"
+    got = runidentity.parse(text)
+    return got if isinstance(got, runidentity.Store) else f"{f.name}: {got}"
 
 
 def run_identity() -> str:
-    """This install's RUN_IDENTITY (its .env; read when called)."""
-    import ro_agent as r
+    """This install's mode: "any" | "known" | "mine", or UNREADABLE (the Settings page's file)."""
+    got = identity_store()
+    return got.mode if isinstance(got, runidentity.Store) else UNREADABLE
 
-    return identity_mode(r.env().get(IDENTITY_ENV))
+
+def unreadable_words(why: str) -> str:
+    return (f"the Run's identity setting cannot be read ({why}): open the Settings page "
+            "(Who may play a Run) and save it again")  # fmt: skip
 
 
-def known_chars() -> list[tuple[str, str, Any]]:
-    """The characters this install knows: (key, name, name plate reference) for every test
-    character with a char.json and a ref_name.npy (crusader.py --char K init / cut-name)."""
-    out = []
-    for key in CHARS:
-        d = data_dir(key)
-        if (d / "char.json").is_file() and (d / "ref_name.npy").is_file():
-            name = json.loads((d / "char.json").read_text())["name"]
-            out.append((key, str(name), np.load(d / "ref_name.npy")))
-    return out
+def plate_array(c: runidentity.Character) -> npt.NDArray[np.int16]:
+    return np.frombuffer(c.rgb, np.uint8).reshape(c.h, c.w, 3).astype(np.int16)
+
+
+def known_chars(store: runidentity.Store | None = None) -> list[tuple[str, str, Any]]:
+    """The characters this install knows: (id, name, name-line picture) of every character
+    remembered on the Settings page."""
+    got = identity_store() if store is None else store
+    if not isinstance(got, runidentity.Store):
+        return []
+    return [(c.id, c.name, plate_array(c)) for c in got.characters]
 
 
 def known_names() -> list[str]:
@@ -159,8 +182,9 @@ def known_names() -> list[str]:
 def known_match(client: Img, chars: list[tuple[str, str, Any]]) -> dict[str, Any]:
     """PURE: the name plate against every known character's: the closest one, ok within MATCH."""
     if not chars:
-        return {"ok": False, "why": "no character is known to this install (crusader.py --char K "
-                "init --name N, then cut-name)", "who": None, "name_diff": None}  # fmt: skip
+        return {"ok": False, "why": "no character is remembered on this install: on the Settings "
+                "page, press Remember with the character in front", "who": None,
+                "name_diff": None, "known": []}  # fmt: skip
     plate = crop(client, NAME_BOX)
     d, name = min((differing(plate, ref), name) for _, name, ref in chars)
     ok = d <= MATCH
@@ -169,33 +193,49 @@ def known_match(client: Img, chars: list[tuple[str, str, Any]]) -> dict[str, Any
 
 
 def known_words(ok: bool, names: list[str]) -> str:
-    """PURE: the identity line under RUN_IDENTITY=known."""
+    """PURE: the identity line under "known"."""
     shown = ", ".join(names) or "none"
     if ok:
-        return f"a character this install knows (its name plate is one of: {shown})"
-    return (f"the name plate is none of this install's characters ({shown}): another server's "
-            "character, or a window over it -- a Run plays only the ones cut here "
-            "(RUN_IDENTITY=known)")  # fmt: skip
+        return f"a character remembered on this install (its name line is one of: {shown})"
+    if not names:
+        return ("no character is remembered on this install: on the Settings page (Who may play a "
+                "Run), press Remember with the character in front, or choose Any")  # fmt: skip
+    return (f"the name line is none of the characters remembered here ({shown}): another "
+            "server's character, or a window over it -- a Run plays only the ones remembered on "
+            "the Settings page (Who may play a Run: known)")  # fmt: skip
 
 
 def check(screen: Any, job: str, char: str = "crusader", *, db: bool = True) -> dict[str, Any]:
     """The three checks on a fresh frame (no input). ``db=False`` (dungeon@9.35c, --player-mode):
     a public server has no DB of ours, so the lab DB's "who is online" check is skipped and the
     identity rests on the pixels alone (the name plate and the job, against this char's refs).
-    ➡️ 2026-11-18 (ADR-0020 Amendment Q): with ``db=False`` and RUN_IDENTITY=any (the default) no
+    ➡️ 2026-11-18 (ADR-0020 Amendment Q): with ``db=False`` and the mode any (the default) no
     name or job is compared -- any character plays; only a black game region still fails. No
-    reference pictures are needed (a learner's install has none)."""
+    reference pictures are needed (a learner's install has none).
+    ➡️ 2026-11-19 (Amendment R): the mode and the known characters come from the Settings page's
+    store (identity_store); an unreadable store fails the check in words."""
     import ro_agent as r
 
-    mode = "mine" if db else run_identity()
+    store = runidentity.DEFAULT if db else identity_store()
+    if isinstance(store, str):
+        return {"ok": False, "why": unreadable_words(store)}
+    mode = "mine" if db else store.mode
     if mode in ("any", "known") and r.black(screen):
         return {"ok": False, "why": "the game region is black"}
     if mode == "any":
         return {"ok": True, "why": None, "who": "any", "job": job, "name_diff": None,
                 "job_diff": None}  # fmt: skip
     if mode == "known":
-        return {**known_match(client_frame(screen), known_chars()), "job": job, "job_diff": None}
-    name, name_ref, jobs = load_refs(char)
+        return {**known_match(client_frame(screen), known_chars(store)), "job": job,
+                "job_diff": None}  # fmt: skip
+    try:
+        name, name_ref, jobs = load_refs(char)
+    except FileNotFoundError:
+        if db:
+            raise  # a GM line: the lab's own character, always (never a word in its place)
+        return {"ok": False, "why": "this install has no reference pictures of its own character "
+                "(mine is the lab's setting): on the Settings page choose Any, or Known and "
+                "Remember"}  # fmt: skip
     if db:
         online = r.online_chars("gm")
         if online != [name]:
@@ -203,6 +243,49 @@ def check(screen: Any, job: str, char: str = "crusader", *, db: bool = True) -> 
     if r.black(screen):
         return {"ok": False, "why": "the game region is black"}
     return identity(client_frame(screen), name_ref, jobs, job)
+
+
+def plate_verdict(a: npt.NDArray[np.int16], b: npt.NDArray[np.int16]) -> str | None:
+    """PURE: why two looks at the name line (PLATE_GAP_S apart) are no usable picture of it."""
+    if differing(a, b) > MATCH:
+        return ("the name line changed between two looks: open Basic Info at the top left of the "
+                "game, with nothing moving over it")  # fmt: skip
+    med = np.median(a.reshape(-1, 3), axis=0)
+    if int((np.abs(a - med).max(axis=2) > DIFF_LEVEL).sum()) < BLANK_MIN_PX:
+        return ("the name line is blank: open Basic Info at the top left of the game (the window "
+                "with the character's name, level and job)")  # fmt: skip
+    return None
+
+
+def read_plate(screen: Any, store: runidentity.Store | str) -> dict[str, Any]:
+    """The Settings page's Remember (Batt 2026-11-19): the name line of the character on screen,
+    two looks apart, with the name of a remembered character it already matches (``same_as``).
+    Reads pixels only; sends no input; keeps nothing (the backend stores what a person saved)."""
+    import ro_agent as r
+
+    away = r.away_now(screen)
+    if away is not None:
+        return {"ok": False, "why": f"the game is not on the screen ({away}): bring it to front"}
+    if r.black(screen):
+        return {"ok": False, "why": "the game region is black"}
+    a = crop(client_frame(screen), NAME_BOX)
+    time.sleep(PLATE_GAP_S)
+    b = crop(client_frame(screen), NAME_BOX)
+    why = plate_verdict(a, b)
+    if why is not None:
+        return {"ok": False, "why": why}
+    chars = known_chars(store) if isinstance(store, runidentity.Store) else []
+    same = [name for _, name, ref in chars if differing(b, ref) <= MATCH]
+    h, w = b.shape[:2]
+    rgb = base64.b64encode(b.astype(np.uint8).tobytes()).decode("ascii")
+    return {"ok": True, "w": int(w), "h": int(h), "rgb": rgb, "same_as": same[0] if same else None}
+
+
+def write_plate(out: Path, rid: str, got: dict[str, Any]) -> None:
+    """The result for the Run helper (atomic: the backend never reads half a file)."""
+    tmp = out.with_name(f".{out.name}.{rid}")
+    tmp.write_text(json.dumps({"id": rid, **got}) + "\n")
+    tmp.replace(out)
 
 
 def gm_line(agent: Any, screen: Any, command: str, job: str,
@@ -285,6 +368,10 @@ def main() -> int:
         "--name", required=True, help="the character's name exactly as the client shows it"
     )
     i.add_argument("--slot", type=int, default=None, help="its slot at character select (optional)")
+    # 2026-11-19 (ADR-0020 Amendment R): the Settings page's Remember, run by the Run helper only
+    pl = sub.add_parser("plate", help="read the name line of the character on screen (no input)")
+    pl.add_argument("--request", required=True, help="the request id the result carries")
+    pl.add_argument("--out", required=True, type=Path, help="the result file (JSON)")
     for sp in (c, k, sub.choices["cut-name"]):
         sp.add_argument("--no-db", action="store_true",
                         help="a server with no DB of ours (ADR-0023's declared mode): skip the lab "
@@ -299,6 +386,17 @@ def main() -> int:
         return 0
     import ro_agent as r
 
+    if a.cmd == "plate":
+        screen = r.Screen()
+        try:
+            got = read_plate(screen, identity_store())
+        except Exception as e:  # noqa: BLE001 -- the page shows the words, never a traceback
+            got = {"ok": False, "why": f"the name line could not be read ({type(e).__name__}: {e})"}
+        finally:
+            screen.close()
+        write_plate(a.out, a.request, got)
+        print(json.dumps({k: v for k, v in got.items() if k != "rgb"}))
+        return 0 if got.get("ok") else 1
     no_db = bool(getattr(a, "no_db", False))
     if no_db:
         print(NO_DB_WARNING, flush=True)

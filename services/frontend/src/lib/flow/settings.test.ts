@@ -381,11 +381,13 @@ test("round 21 (the re-measure of round 20): Global is named only where the proj
   assert.equal(f("fly_rate_below").words, "the Fly Wing's fall rule: only while HP is under");
 });
 
-test("the identity line follows RUN_IDENTITY: any character by default (Batt 2026-11-18)", () => {
+test("the identity line follows the Settings page's mode: any character by default (Batt 2026-11-18/19)", () => {
   assert.match(identityText(null), /^a character in the game \(any name, any job/);
   assert.equal(identityText("any"), identityText(undefined));
-  assert.match(identityText("mine"), /RUN_IDENTITY=mine/);
-  assert.match(identityText("known"), /RUN_IDENTITY=known: its name plate was cut here once/);
+  assert.match(identityText("mine"), /the lab's own character/);
+  assert.match(identityText("known"), /remembered on the Settings page/);
+  assert.match(identityText("unreadable"), /cannot be read: open the Settings page/);
+  assert.ok(!/RUN_IDENTITY/.test(identityText("known") + identityText("mine")), "no .env word: it is a Settings choice");
   const items = startChecklist({}, "xmas_dun02");
   const ident = items.find((it) => it.id === "identity");
   assert.ok(ident && !/her |Thief8fce/.test(ident.text));

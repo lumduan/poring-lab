@@ -415,9 +415,12 @@ export function withRunKeys(values: Record<string, SettingValue>, keys: RunKeys 
 
 /** PURE: the identity line in this install's RUN_IDENTITY (Batt 2026-11-18, ADR-0020 Amendment Q:
  * "no need to lock the character's name: a user should be free to create a character"). */
+/** The identity line in this install's mode (Settings, "Who may play a Run": ADR-0020 Amendments
+ * Q and R; the helper's status says which). */
 export function identityText(mode: string | null | undefined): string {
-  if (mode === "mine") return "this install's own character on screen (RUN_IDENTITY=mine: the runner compares its name plate and job)";
-  if (mode === "known") return "a character this install knows on screen (RUN_IDENTITY=known: its name plate was cut here once; another server's character is refused)";
+  if (mode === "mine") return "the lab's own character on screen (Settings: only the lab's own character; its name line and job are compared)";
+  if (mode === "known") return "a character remembered on the Settings page on screen (its name line is compared; another server's character is refused)";
+  if (mode === "unreadable") return "who may play cannot be read: open the Settings page (Who may play a Run) and save it again";
   return "a character in the game (any name, any job: a Run does not check who plays)";
 }
 
