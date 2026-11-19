@@ -132,6 +132,11 @@ class SetupError(Exception):
 # --- the command runner ---------------------------------------------------------------------------
 
 
+# The backend's default VIEWER_NETWORKS (poring_backend.config.PRIVATE_NETWORKS; parity-tested):
+# every private range, so a LAN of any numbering and a VPN can use the console (Batt 2026-11-19)
+PRIVATE_NETWORKS = "10.0.0.0/8,172.16.0.0/12,192.168.0.0/16,100.64.0.0/10,fc00::/7"
+
+
 @dataclass(frozen=True)
 class Result:
     rc: int
@@ -882,7 +887,7 @@ class Answers:
     store_dir: str = ""  # LAB_STORE_DIR
     ports: dict[str, int] = field(default_factory=dict)  # RATHENA_*_PORT / NOVNC / BACKEND moves
     nets: dict[str, str] = field(default_factory=dict)  # LAB_NET_PREFIX / LAB_AGENT_NET_PREFIX
-    viewer_net: str = ""  # VIEWER_NETWORKS, the server address's own LAN
+    viewer_net: str = ""  # VIEWER_NETWORKS + the server's own network, when no private range has it
     worker_mem: str = ""  # VISION_WORKER_MEM, the GPU recommendation's (a new .env only)
     render_node: str = ""  # GPU_RENDER_NODE, the GPU recommendation's (the AMD card's own node)
 

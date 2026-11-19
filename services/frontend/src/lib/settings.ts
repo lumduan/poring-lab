@@ -113,7 +113,7 @@ export const REASON_TEXT: Record<string, string> = {
   origin_not_allowed: "This page must be opened from the lab console.",
   not_public_listener: "Settings can only be changed from the lab console.",
   compose_peer: "Settings can only be changed from a browser on your network.",
-  not_a_lan_viewer: "Settings can only be changed from a browser on your network.",
+  not_a_lan_viewer: "This browser's address is outside VIEWER_NETWORKS (the server's .env; empty = every private network, any = every address).",
   agent_network: "The bot can never change settings.",
   lab_host_peer: "Settings cannot be changed from the lab computer itself: use your own computer's browser.",
   windows_host_peer: "Settings cannot be changed from the game PC (the bot controls it): use your own computer's browser.",

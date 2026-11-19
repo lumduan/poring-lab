@@ -7,7 +7,7 @@ verdict_date: 2026-10-01
 verdict_ticket: null
 supersedes: null
 related: []
-next_action: "➡️ 2026-10-10 02:50: the image carrying LoginScrub (f36276e, login ports from the environment + every login-shaped connection) is LIVE, verified by scripts/scrub_check.py and the §2a positive cases (demonstrations.md §2a). Amendment C (code from a source mount) ACCEPTED 2026-10-13 (Batt), BUILT the same day; live at the next guarded recreate:sniffer. History: Implemented and validated (docs/phase1-validation.md). The slim sniffer image is LIVE since 2026-10-03 (71 MB, guarded build; live re-verified: ingest, validation tagging, password zeroing). GAT in Phase 2."
+next_action: "➡️ 2026-11-19 Amendment E (Batt): VIEWER_NETWORKS empty = every private range (a VPN too), `any` = every address, the lab Docker subnets always excluded. ➡️ 2026-10-10 02:50: the image carrying LoginScrub (f36276e, login ports from the environment + every login-shaped connection) is LIVE, verified by scripts/scrub_check.py and the §2a positive cases (demonstrations.md §2a). Amendment C (code from a source mount) ACCEPTED 2026-10-13 (Batt), BUILT the same day; live at the next guarded recreate:sniffer. History: Implemented and validated (docs/phase1-validation.md). The slim sniffer image is LIVE since 2026-10-03 (71 MB, guarded build; live re-verified: ingest, validation tagging, password zeroing). GAT in Phase 2."
 ---
 
 # ADR-0007: Packet ground truth — a viewer-only channel and a separate captures volume
@@ -64,6 +64,8 @@ time):
    - connections without a browser Origin in the allowlist.
    - ➡️ TIGHTENED at implementation (2026-10-01): it **accepts only `VIEWER_NETWORKS`** (default
      `192.168.0.0/16`), so the gateway is refused too. See "Implementation notes".
+     ➡️ WIDENED 2026-11-19 (Batt, "do not lock it to the local network"): the default is every
+     private range, the lab's own Docker subnets always excluded. See "Amendment E" below.
 4. **Nothing in the agent path can carry packet data.**
    - No `Packet*` model is reachable from the agent-side schemas (`agent_to_backend`, `input_event`,
      `backend_to_agent`); `test_protocol` reachability tests enforce this.
@@ -280,3 +282,31 @@ path and tonight's option D build is the way the scrub goes live.
   PASS, `capture filter: host 192.168.1.169 and tcp and (port 6900 or port 6121 or port 5121)` built
   from WIN_HOST; the scrub, monster-click, pickup and npc-click positive cases all PASS
   (demonstrations.md section 2a).
+
+## Amendment E (Batt, 2026-11-19): the viewers are not locked to the local network
+
+- **What happened.** Batt opened the console from outside, over his VPN (address `10.0.1.2`).
+  Every console read behind the browser gate (the flows lint, the Settings page) was refused
+  `not_a_lan_viewer`: `VIEWER_NETWORKS` defaulted to `192.168.0.0/16`. His words: "do not lock it
+  to the local network".
+- **Decision.** An empty `VIEWER_NETWORKS` (the default; compose passes `${VIEWER_NETWORKS:-}`)
+  means EVERY PRIVATE RANGE: `10.0.0.0/8`, `172.16.0.0/12`, `192.168.0.0/16`, the CGNAT block
+  `100.64.0.0/10` (Tailscale-style overlays) and IPv6 unique-local `fc00::/7`
+  (`config.PRIVATE_NETWORKS`). `VIEWER_NETWORKS=any` admits every address. A user may still
+  narrow it to their own networks.
+- **What still holds (unchanged).** The lab's own Docker subnets (the compose subnet, gateway
+  included, and the agent network) are EXCLUDED from every entry, `any` included: an entry that
+  covers them keeps the rest (`address_exclude`), one inside them is dropped. So vision, the
+  sniffer and every lab container stay refused (`compose_peer` or outside the list). The Origin
+  allowlist, the CSRF token, the internal-listener and lab-host / Windows-host refusals of the
+  Settings writes are untouched.
+- **What it widens, said plainly.** A browser on any private network that can route to the bot
+  server is now a viewer, as a LAN machine always was. So is a container on ANOTHER Docker network
+  of the same host (a stock Docker bridge is `172.17-31.x`). None of them is the agent: the agent
+  lives only on the lab's own networks (ADR-0005), which stay excluded.
+- **Setup.** The wizard no longer writes the server's own LAN into `VIEWER_NETWORKS` (that would
+  have narrowed a new install to its LAN). It adds the server's network to the list only when no
+  private range covers it, and keeps the rest.
+- **Tests.** `test_viewer_networks.py` (the VPN, Tailscale, IPv6 ULA and v4-mapped peers admitted;
+  our subnets and public addresses refused by default; `any`), `test_setup_core.py` (the wizard
+  never narrows), `test_packets.py` (the rule itself, unchanged).

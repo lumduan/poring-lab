@@ -480,6 +480,8 @@ environments themselves, and list each one's servers, from the page.
 - `PUT /settings/environments` is served only on the public listener; `:8001` gets 404
   `not_public_listener`.
 - It must come from a LAN viewer (compose peers and the gateway are refused), with the console's
+  ➡️ Since 2026-11-19 a "LAN viewer" is any address in `VIEWER_NETWORKS`, by default every
+  private range (a VPN too), the lab's Docker subnets excluded (ADR-0007 Amendment E, Batt).
   allowlisted Origin.
 - **Never from the lab host itself** (`lab_host_peer`). Found live on 2026-10-06: the host reaches
   its own published port as 192.168.1.13, a LAN viewer, so any host process could forge the Origin.

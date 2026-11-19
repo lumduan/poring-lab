@@ -221,7 +221,7 @@ services:
       # Batt 2026-11-12 ("a pull never breaks a user's config"): the LAN(s) people's browsers are on,
       # comma-separated CIDRs, from .env. Entries overlapping the lab's own Docker subnets are
       # dropped by the backend (config.viewer_nets). Default: as before.
-      VIEWER_NETWORKS: ${VIEWER_NETWORKS:-192.168.0.0/16}
+      VIEWER_NETWORKS: ${VIEWER_NETWORKS:-}  # empty = every private range (config.PRIVATE_NETWORKS)
     volumes:
       - x11-unix:/tmp/.X11-unix:ro
       - ./data:/data

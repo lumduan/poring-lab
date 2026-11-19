@@ -44,7 +44,7 @@ Sunshine ──H.264/UDP──▶ s2spike (decode once → bus, unchanged; the b
 - **Input is unchanged:** it stays on `/ws/input` and the mux. WebRTC carries video only; a data
   channel is NOT a new input path (ADR-0002: new input paths go through the mux, never around it).
 - **Security posture (unchanged rules):**
-  - LAN viewers only (VIEWER_NETWORKS);
+  - viewers in VIEWER_NETWORKS only (➡️ since 2026-11-19 every private range by default, a VPN too: ADR-0007 Amendment E);
   - signaling through the backend with the allowlisted Origin;
   - no TURN or STUN to the internet (host candidates only);
   - the agent network refused (c2);

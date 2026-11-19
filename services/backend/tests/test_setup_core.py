@@ -880,6 +880,25 @@ def test_the_wizard_imports_and_dry_runs_without_rich(
     ]
 
 
+def test_the_wizard_never_narrows_the_viewers_to_the_lan(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Batt 2026-11-19 (outside on the VPN): "do not lock it to the local network". A private
+    server address is in the default already: nothing is written. Otherwise the server's network
+    is ADDED to the list, never put in its place."""
+    monkeypatch.setitem(sys.modules, "rich", None)
+    wiz = load("setup_wizard")
+
+    def viewer_net(ip: str, prefix: int, listed: str = "") -> str:
+        env = {"VIEWER_NETWORKS": listed} if listed else {}
+        fake = SimpleNamespace(addrs=[wiz.core.Addr("eth0", ip, prefix)], env=lambda: env)
+        return str(wiz.Wizard.viewer_net(fake, ip))
+
+    assert viewer_net("192.168.1.228", 24) == ""
+    assert viewer_net("10.0.5.7", 24) == ""  # was "10.0.5.0/24" (outside 192.168/16)
+    assert viewer_net("203.0.113.7", 24) == wiz.core.PRIVATE_NETWORKS + ",203.0.113.0/24"
+    assert viewer_net("203.0.113.7", 24, "any") == ""
+    assert viewer_net("10.0.5.7", 24, "192.168.1.0/24") == "192.168.1.0/24,10.0.5.0/24"
+
+
 def test_setup_sh_asks_before_installing_uv_and_is_read_only_for_check() -> None:
     text = (ROOT / "setup.sh").read_text()
     assert os.access(ROOT / "setup.sh", os.X_OK)
