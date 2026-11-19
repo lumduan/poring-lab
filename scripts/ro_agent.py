@@ -220,6 +220,209 @@ LAB_PANELS: tuple[tuple[str, tuple[int, int, int, int], str], ...] = (
 CURSOR_BOX = (-12, -12, 48, 56)
 _POINTER: tuple[float, float] | None = None  # the last virtual pointer position sent
 
+# The interface windows, FOUND by their shape (teaching-prerun.md 4f, fullscreen-client.md
+# milestone 3; Batt 2026-11-19: "make it work with every client ... we know what RO's main UI looks
+# like: start from that"). Basic Info and the hotbar by poring_env.panelfind's rules, the chat
+# window by chat_window.find_floating; each one found is moved, in the virtual client, to its
+# LAB_PANELS place, so the readers built at the lab's places read any layout. A window not found
+# keeps the lab's place (its reads then fail, in words); the minimap keeps the top-right corner
+# (RO never moves it); hotbar2 keeps its saved place.
+PANELS_FILE = Path("/dev/shm/poring-lab-tmp/panels.json")  # the last find, for other processes
+PANELS_ENV = "PORING_PANELS_FILE"  # another file (the tests: each its own)
+PANELS_TTL_S = 120.0  # another process's find is used this long, for the same client region
+PANEL_CHECK_S = 2.0  # a run re-checks each found window at its place this often (< 1 ms)
+PANEL_SEARCH_S = 15.0  # and searches again at most this often when one moved or is missing
+# where each finder's origin sits in the lab's virtual client (measured 2026-11-19 on the lab's
+# 1280x720 and 1920x1080 frames: the finders return exactly these there)
+LAB_WINDOW_ORIGINS = {"basic_info": (0, 0), "hotbar": (230, 0)}
+CHAT_LAB_BOTTOM = 719  # LAB_PANELS' chat box: six lines, its bottom row at 719
+_PANELS: dict[str, Any] = {}  # this process's last find (find_panels), its checks' clocks
+_PANELS_FILE_CACHE: list[Any] = [0.0, None]  # (when read, the file's state)
+_PANELS_LOCK = threading.Lock()
+
+
+def _lab_box(name: str) -> tuple[int, int, int, int]:
+    return next(box for n, box, _ in LAB_PANELS if n == name)
+
+
+def panel_places(basic: Any, hotbar: Any, chat: Mapping[str, Any] | None) -> dict[str, Any]:
+    """PURE: each window found -> its panel {"virtual": box, "real_xy", "origin", ...} -- the lab
+    box moved by the found window's vector from its lab place (a chat window of another size gets
+    the lab box's width and its own height, its bottom on the lab's)."""
+    out: dict[str, Any] = {}
+    for name, f in (("basic_info", basic), ("hotbar", hotbar)):
+        if f is None:
+            continue
+        box = _lab_box(name)
+        lx, ly = LAB_WINDOW_ORIGINS[name]
+        ox, oy = f.origin
+        out[name] = {"virtual": list(box), "real_xy": [box[0] + ox - lx, box[1] + oy - ly],
+                     "origin": [ox, oy], "score": [f.score, f.of]}  # fmt: skip
+    if chat and chat.get("lines") and chat.get("bottom") is not None:
+        import chat_window as cw
+
+        bx, by, bw, bh = _lab_box("chat")
+        hh = bh + cw.LINE_PITCH * (int(chat["lines"]) - 6)
+        top_v = CHAT_LAB_BOTTOM + 1 - hh
+        out["chat"] = {"virtual": [bx, top_v, bw, hh],
+                       "real_xy": [bx + int(chat["left"]), int(chat["bottom"]) + 1 - hh],
+                       "origin": [int(chat["left"]), int(chat["text_top"])],
+                       "bottom": int(chat["bottom"]), "lines": int(chat["lines"])}  # fmt: skip
+    return out
+
+
+def _default_xy(name: str, box: tuple[int, int, int, int], how: str,
+                size: tuple[int, int]) -> tuple[int, int]:  # fmt: skip
+    from poring_env.clientview import Panel
+
+    return Panel.anchored(name, box, "tr", size).real_xy if how == "tr" else (box[0], box[1])
+
+
+def panels_moved(found: Mapping[str, Any], size: tuple[int, int]) -> bool:
+    """PURE: a found window sits off its lab place (then even a 1280x720 client is virtual)."""
+    for name, box, how in LAB_PANELS:
+        f = found.get(name)
+        if f is not None and (tuple(f["real_xy"]) != _default_xy(name, box, how, size)
+                              or tuple(f["virtual"]) != box):  # fmt: skip
+            return True
+    return False
+
+
+def panels_file() -> Path:
+    return Path(os.environ.get(PANELS_ENV) or PANELS_FILE)
+
+
+def _panel_state() -> dict[str, Any]:
+    """The windows found for THIS client region: this process's find, else another process's
+    (PANELS_FILE, at most PANELS_TTL_S old), else {} (the lab's places)."""
+    try:
+        region = list(real_game_region())
+    except (Stop, OSError, ValueError):
+        return {}
+    with _PANELS_LOCK:
+        if _PANELS.get("region") == region:
+            return _PANELS
+    now = time.monotonic()
+    if now - float(_PANELS_FILE_CACHE[0]) > 1.0:
+        try:
+            got = json.loads(panels_file().read_text())
+        except (OSError, ValueError):
+            got = None
+        _PANELS_FILE_CACHE[0], _PANELS_FILE_CACHE[1] = now, got
+    got = _PANELS_FILE_CACHE[1]
+    if (isinstance(got, dict) and got.get("region") == region
+            and time.time() - float(got.get("t_wall") or 0) <= PANELS_TTL_S):  # fmt: skip
+        return got
+    return {}
+
+
+def find_panels(screen: Any = None, real: Any = None) -> dict[str, Any]:
+    """Find the windows on the REAL client (a fresh grab of ``screen``, or the frame ``real``):
+    this process's state, and PANELS_FILE for the others. Pixels only; nothing is kept but the
+    numbers."""
+    import chat_window as cw
+
+    from poring_env import panelfind as pf
+
+    region = real_game_region()
+    if real is None:
+        real = screen.grab_meta(*region)[1]
+    bgr = np.ascontiguousarray(np.asarray(real)[..., :3])
+    lum = pf.luma(bgr)
+    found = panel_places(pf.find_basic_info(lum), pf.find_hotbar(lum),
+                         cw.find_floating(bgr[..., ::-1]))  # fmt: skip
+    size = (region[2], region[3])
+    st = {"v": 1, "region": list(region), "t_wall": time.time(), "found": found,
+          "moved": panels_moved(found, size),
+          "missing": [n for n in ("basic_info", "hotbar", "chat") if n not in found]}  # fmt: skip
+    now = time.monotonic()
+    with _PANELS_LOCK:
+        _PANELS.clear()
+        _PANELS.update(st, checked=now, searched=now)
+    try:
+        f = panels_file()
+        f.parent.mkdir(parents=True, exist_ok=True)
+        tmp = f.with_name(f".{f.name}.{os.getpid()}")
+        tmp.write_text(json.dumps(st) + "\n")
+        os.replace(tmp, f)
+    except OSError:
+        pass  # this process still has its own state
+    return st
+
+
+def _panel_still_there(name: str, f: Mapping[str, Any], lum: Any, rgb: Any) -> bool:
+    """A cheap re-check of one found window at its place (no search)."""
+    from poring_env import panelfind as pf
+
+    ox, oy = f["origin"]
+    if name == "basic_info":
+        return pf.basic_info_at(lum, (ox, oy)) >= pf.BASIC_MIN_ROWS
+    if name == "hotbar":
+        return pf.hotbar_at(lum, (ox, oy)) >= pf.HOTBAR_MIN_AT
+    import chat_window as cw
+
+    y0, y1 = max(0, oy - 2), int(f["bottom"]) + 1
+    got = cw.find_floating(rgb[y0:y1, max(0, ox) : ox + 600])
+    return bool(got and got.get("lines") == f.get("lines") and got.get("bottom") == y1 - 1 - y0)
+
+
+def _panels_tick(real: Any) -> None:
+    """In the virtual grab path: the first frame finds the windows; then each found window is
+    re-checked at its place every PANEL_CHECK_S, and a moved or missing one is searched for again
+    at most every PANEL_SEARCH_S (a player may drag a window mid-run)."""
+    try:
+        region = list(real_game_region())
+    except (Stop, OSError, ValueError):
+        return
+    now = time.monotonic()
+    with _PANELS_LOCK:
+        st = dict(_PANELS) if _PANELS.get("region") == region else None
+    if st is None:
+        find_panels(real=real)
+        return
+    if now - float(st.get("checked") or 0) < PANEL_CHECK_S:
+        return
+    with _PANELS_LOCK:
+        _PANELS["checked"] = now
+    from poring_env import panelfind as pf
+
+    bgr = np.ascontiguousarray(np.asarray(real)[..., :3])
+    lum, rgb = pf.luma(bgr), bgr[..., ::-1]
+    gone = [n for n, f in (st.get("found") or {}).items() if not _panel_still_there(n, f, lum, rgb)]
+    if (gone or st.get("missing")) and now - float(st.get("searched") or 0) >= PANEL_SEARCH_S:
+        find_panels(real=real)
+
+
+def panels_words(st: Mapping[str, Any] | None = None) -> list[str]:
+    """The windows as the Run's log says them (numbers and places only)."""
+    st = _panel_state() if st is None else st
+    if not st:
+        return ["the windows: not looked for yet (the lab's places are assumed)"]
+    found = st.get("found") or {}
+    try:
+        size = tuple(st["region"][2:4])
+    except (KeyError, TypeError):
+        size = (1280, 720)
+    names = {"basic_info": "Basic Info", "hotbar": "the hotbar", "chat": "the chat window"}
+    out = []
+    for name, label in names.items():
+        f = found.get(name)
+        if f is None:
+            out.append(f"{label} NOT found (closed, collapsed or covered): the lab's place is "
+                       "assumed, so what it shows cannot be read")  # fmt: skip
+            continue
+        box, how = _lab_box(name), next(h for n, _, h in LAB_PANELS if n == name)
+        at_lab = (tuple(f["real_xy"]) == _default_xy(name, box, how, size)  # type: ignore[arg-type]
+                  and tuple(f["virtual"]) == box)  # fmt: skip
+        ox, oy = f["origin"]
+        where = (f"left {ox}, bottom {f['bottom']}, {f['lines']} lines" if name == "chat"
+                 else f"({ox}, {oy})")  # fmt: skip
+        score = f" ({f['score'][0]} of {f['score'][1]} of its shape's cues)" if "score" in f else ""
+        placed = "the lab's place" if at_lab else "moved to the lab's place in the bot's view"
+        out.append(f"{label} found at {where}{score}: {placed}")
+    out.append("the minimap: the top-right corner (RO keeps it there)")
+    return out
+
 
 def client_view() -> Any:
     """The view of the real client: the identity at 1280x720; otherwise the world scaled by the
@@ -227,10 +430,14 @@ def client_view() -> Any:
     from poring_env.clientview import VIRTUAL_H, VIRTUAL_W, ClientView, Panel
 
     x, y, w, h = real_game_region()
-    if (w, h) == (VIRTUAL_W, VIRTUAL_H):
+    st = _panel_state()
+    found = st.get("found") or {}
+    if (w, h) == (VIRTUAL_W, VIRTUAL_H) and not st.get("moved"):
         return ClientView((x, y, w, h))
     mode = "fullscreen" if (x, y) == (0, 0) and (w, h) == desktop() else "window"
-    panels = [Panel.anchored(name, box, "tr", (w, h)) if how == "tr" else
+    panels = [Panel(name, tuple(found[name]["virtual"]), tuple(found[name]["real_xy"]))
+              if name in found else
+              Panel.anchored(name, box, "tr", (w, h)) if how == "tr" else
               Panel(name, box, (box[0], box[1])) for name, box, how in LAB_PANELS]  # fmt: skip
     base = ClientView((x, y, w, h), mode, h / VIRTUAL_H, None, tuple(panels))
     if _POINTER is not None and base.panel_at(*_POINTER) is None:  # over the world
@@ -243,12 +450,13 @@ def client_view() -> Any:
 
 
 def virtual_active() -> bool:
-    """The real client is not 1280x720: the code built on 1280x720 sees the virtual client."""
+    """The real client is not 1280x720, or a window of it was found off its lab place
+    (teaching-prerun.md 4f): the code built on 1280x720 sees the virtual client."""
     try:
         _, _, w, h = real_game_region()
     except (Stop, OSError):
         return False
-    return (w, h) != (1280, 720)
+    return (w, h) != (1280, 720) or bool(_panel_state().get("moved"))
 
 
 def game_region() -> tuple[int, int, int, int]:
@@ -391,6 +599,8 @@ class Screen:
             view = client_view()
             rx, ry, rw, rh = view.rect
             t, real, frame_id, path = self.grab_meta(rx, ry, rw, rh)
+            _panels_tick(real)  # 4f: the windows found, re-checked, searched again if moved
+            view = client_view()
             local = ClientView((0, 0, rw, rh), view.mode, view.world_scale, view.world_centre,
                                view.panels)  # fmt: skip
             vf = local.virtual_frame(real)
@@ -2291,6 +2501,16 @@ def main() -> None:
                     print(f"{st:16} {distance(screen, st):6.1f}")
         finally:
             screen.close()
+        return None
+    if cmd == "find-panels":  # 4f: find the windows now (pixels only; prints numbers)
+        screen = Screen()
+        try:
+            st = find_panels(screen)
+        finally:
+            screen.close()
+        print(json.dumps({"found": st["found"], "moved": st["moved"], "missing": st["missing"]}))
+        for ln in panels_words(st):
+            print(ln)
         return None
     if cmd == "recover":
         if a.retries < 0 or not re.fullmatch(r"[A-Za-z0-9_.-]{1,64}", a.agent_id):

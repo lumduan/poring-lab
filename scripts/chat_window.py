@@ -299,6 +299,32 @@ def find(img_rgb: Any) -> dict[str, Any] | None:
     return None
 
 
+def find_floating(img_rgb: Any) -> dict[str, Any] | None:
+    """``find``, and a window that FLOATS over the world (teaching-prerun.md 4f): fullscreen at
+    1920x1080 RO keeps the chat window at its saved pixels (y 578-719), so the scene continues under
+    it and a closed input's right border runs on into the scene -- ``find`` then says "obscured".
+    With its top border and right border found, each standard size is tried from the top (the
+    bottom = text_top + 37 + 14 x lines, as ``find`` measures) and the first whose separator row
+    holds (uniform, the closed band) is taken: {"floating": True, ...}. Anything else: ``find``'s
+    answer unchanged."""
+    got = find(img_rgb)
+    if got is None or not got.get("obscured") or got.get("text_top") is None:
+        return got
+    lum = luma(img_rgb)
+    left, top = int(got["left"]), int(got["text_top"])
+    run_end = _border_run(lum, top + 2, left)
+    if run_end is None:
+        return got
+    for lines in SIZES:
+        bottom = top + 37 + LINE_PITCH * lines
+        if bottom > run_end:
+            break
+        if _sep(lum, bottom - 23, left, SEP_CLOSED):
+            return {"left": left, "text_top": top, "bottom": bottom, "lines": lines,
+                    "input": "closed", "floating": True}  # fmt: skip
+    return got
+
+
 PADLOCK_BOX = (578, -14, 597, -2)  # x0, dy0, x1, dy1: from (left, text_top)
 PADLOCK_MATCH, PADLOCK_MARGIN = 20.0, 15.0
 PADLOCK_CORE = 170.0  # a template's own icon pixels (the blue fill and the white outline)

@@ -525,3 +525,21 @@ def test_a_window_seen_in_part_where_it_belongs_is_never_answered_by_a_key() -> 
     assert cw.next_step(covered) == "unknown"
     moved = {**covered, "left": 40, "text_top": cw.Geometry(12, 639).text_top}
     assert cw.next_step(moved) == "open_input"
+
+
+@pytest.mark.parametrize("lines", [3, 6, 9])
+def test_a_window_floating_over_the_world_is_found_at_its_size(lines: int) -> None:
+    """Fullscreen at 1920x1080 RO keeps the chat window at its saved pixels: the scene continues
+    under it, and a closed input's right border runs on into it (find: "obscured")."""
+    g = cw.Geometry(lines, 719)
+    small = draw(g, input_open=False, scrollbar=False)
+    tall = np.zeros((1080, 1280, 3), np.uint8)
+    tall[...] = SCENE
+    tall[:720] = small
+    tall[720:900, g.left + cw.BORDER_X] = 140  # the scene under it, as grey as the border
+    assert cw.find(tall)["obscured"] is True  # type: ignore[index]
+    got = cw.find_floating(tall)
+    assert got == {"left": 0, "text_top": g.text_top, "bottom": 719, "lines": lines,
+                   "input": "closed", "floating": True}  # fmt: skip
+    assert cw.find_floating(small) == cw.find(small)  # a window that does not float: find's answer
+    assert cw.find_floating(draw(None)) is None

@@ -129,6 +129,16 @@ the first run at 1080p.
 - 2 the measurements: DONE at 1920x1080 (above); 1440x900 not measured yet.
 - 3 finding panels: the login dialogs are FOUND (signature.find, a hint search for text); the
   in-game panels are the lab's measured layout (LAB_PANELS), not yet found by their picture.
+  ➡️ **BUILT 2026-11-19 (Batt: "make it work with every client ... start from what RO's main UI
+  looks like"; teaching-prerun.md 4f):** Basic Info and the hotbar are found by their SHAPE
+  (`poring_env/panelfind.py`: the hotbar's 9 slot lines on a 29 px pitch under its four top frame
+  rows; Basic Info's uniform frame rows at fixed depths), the chat window by
+  `chat_window.find_floating` (its frame; a window floating over the world at 1080 too); each one
+  found is moved to its LAB_PANELS place in the virtual client (`ro_agent.find_panels`,
+  `client_view`), so even a 1280x720 window with dragged windows is read through the virtual client.
+  No template, no text: any install, any language. The minimap keeps the top-right corner. A Run
+  finds them at its start (its log names each one), re-checks them every 2 s and searches again
+  (at most every 15 s) when one moved; the page's check finds them first too.
 - 4 the wiring: DONE in ro_agent (+ the HUD); the runner untouched.
 - 5 the live proof at 1920x1080 fullscreen: the login (found dialogs), GM lines, the start check
   9 / 9, and a 2-minute run (15:31:38-15:33:40, the Run helper's own command): 30 walk clicks

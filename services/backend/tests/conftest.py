@@ -176,6 +176,15 @@ def pytest_configure(config: pytest.Config) -> None:
 
 
 @pytest.fixture(autouse=True)
+def own_panels_file(
+    tmp_path_factory: pytest.TempPathFactory, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """ro_agent's found windows are shared between processes through a file in /dev/shm
+    (teaching-prerun.md 4f): every test gets its own, so a live Run's find never leaks in."""
+    monkeypatch.setenv("PORING_PANELS_FILE", str(tmp_path_factory.mktemp("panels") / "panels.json"))
+
+
+@pytest.fixture(autouse=True)
 def foreground_in_front(request: pytest.FixtureRequest, monkeypatch: pytest.MonkeyPatch) -> None:
     """The typing-only foreground gate (2026-10-06) looks at the client's title bar; the fakes'
     64x36 frames have none. Tests that are not ABOUT the gate get the client in front;

@@ -312,7 +312,10 @@ Amendment B); a not-adopted model is never offered.
   title bar is not lit): it presses nothing, the page shows "PAUSED since ...", and it plays on by
   itself 1.5 s after the game is back. Pressed while the game is away, Run waits for it before its
   start check. The Run panel also shows the Run's OWN start check line by line and the Run's log
-  (40 lines: the screen, the input mode, each check line, the pauses, a fault's traceback). A Run
+  (40 lines: the screen, the input mode, each check line, the pauses, a fault's traceback).
+  ➡️ Since 2026-11-19 (teaching-prerun.md 4f) the log also names where each game window was found
+  (Basic Info, the hotbar, the chat window; "moved to the lab's place in the bot's view" when a
+  player put it elsewhere, "NOT found" when it is closed or covered): any layout reads. A Run
   saves no picture (Batt 2026-11-18 ~22:3x: a frame can show other people's chat).
   ➡️ **Since 2026-11-19 (Batt, ADR-0020 Amendment R) who may play is chosen on the SETTINGS page**
   ("who may play a Run", below): any (the default, the lab's too), known (the characters remembered

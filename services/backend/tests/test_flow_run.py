@@ -624,3 +624,40 @@ def test_no_start_picture_is_kept_or_offered(tmp_path: Path) -> None:
     h = fr.Helper(tmp_path)
     assert "start_pictures" not in h.status() and not hasattr(h, "copy_start_pictures")
     assert not hasattr(fr, "START_PICTURES")
+
+
+def test_a_check_first_finds_the_game_s_windows_and_a_failure_is_only_a_note(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """4f (teaching-prerun.md): `ro_agent.py find-panels` before the check, so a client whose
+    windows sit elsewhere is read through the virtual client; at most PANELS_TIMEOUT_S."""
+    import subprocess
+    import types
+
+    seen: list[list[str]] = []
+
+    def run(argv: list[str], **kw: Any) -> Any:
+        seen.append(argv)
+        if argv[-1] == "find-panels":
+            assert kw["timeout"] == fr.PANELS_TIMEOUT_S
+            return types.SimpleNamespace(returncode=0, stdout='{"found": {}}\nBasic Info found\n')
+        return types.SimpleNamespace(stdout="", returncode=0)
+
+    h, made = _helper(tmp_path, monkeypatch, 0, "")
+    monkeypatch.setattr(fr.subprocess, "run", run)
+    req = fr.parse_request(json.dumps({**CHECK, "vals": VALS}))
+    assert isinstance(req, dict)
+    h.handle(req)
+    assert [a[-1] for a in seen if a[-1] == "find-panels"] == ["find-panels"]
+    assert made and made[0].argv[8] == "check"  # the check still runs
+    runs = [json.loads(x) for x in (tmp_path / "runs.jsonl").read_text().splitlines()]
+    assert [r["event"] for r in runs][:2] == ["check", "find_panels"]
+    assert runs[1]["lines"] == ["Basic Info found"] and runs[1]["rc"] == 0
+
+    def slow(argv: list[str], **kw: Any) -> Any:
+        raise subprocess.TimeoutExpired(argv, kw.get("timeout", 0))
+
+    monkeypatch.setattr(fr.subprocess, "run", slow)
+    h.find_panels({})
+    last = json.loads((tmp_path / "runs.jsonl").read_text().splitlines()[-1])
+    assert last == {"t": last["t"], "event": "find_panels", "rc": None, "why": "TimeoutExpired"}

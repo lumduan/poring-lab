@@ -7,7 +7,7 @@ verdict_date: null
 verdict_ticket: null
 supersedes: null
 related: [../adr/0020-block-programming-flows.md, ../adr/0023-learner-mode.md, ../adr/0006-sanctioned-test-environments.md, fullscreen-client.md, player-mode.md]
-next_action: "Step 1 BUILT (any character, ADR-0020 Amendment Q) and moved to the Settings page 2026-11-19 (Amendment R: any the default everywhere, the lab too; known = the characters remembered there by its Remember button). Batt tests one step at a time; the next ones in section 4 wait for him."
+next_action: "4f BUILT 2026-11-19 (windows found by their shape; any client, section 4 \"Any client\"); next: the client's own digits, its minimap, 4a. Step 1 BUILT (any character, ADR-0020 Amendment Q) and moved to the Settings page 2026-11-19 (Amendment R: any the default everywhere, the lab too; known = the characters remembered there by its Remember button). Batt tests one step at a time; the next ones in section 4 wait for him."
 ---
 
 # A Run's start rules, for teaching
@@ -122,3 +122,25 @@ character, refused before any input). Known English-bound pieces and what to ver
   titles (the runner's own lines stay until its next step).
 - **4f. Any interface layout (rule 13):** the panels found by their picture, as the login
   dialogs already are (fullscreen plan, milestone 3).
+  ➡️ **BUILT 2026-11-19** (see "Any client" below): Basic Info, the hotbar and the chat window
+  found by their shape anywhere, moved to the lab's places in the bot's view.
+
+### Any client (Batt 2026-11-19)
+
+Batt, after four Runs were refused on another client (09:28-09:31: the weight, the hotbar counts and
+the minimap did not read): **"Agree, do all of them"** -- 4f, the digits of the client itself, the
+minimap of the client itself, 4a -- and **"no need to look [at my client]: just make the system
+work with every client. When teaching we cannot ask to see every user's client, but we know what
+RO's main UI looks like: start from that."** Never by the sniffer or the client's background
+(memory: screen only).
+
+| Step | What it gives | Status |
+|---|---|---|
+| 4f windows found by their shape | Basic Info, the hotbar, the chat window anywhere | BUILT 2026-11-19: offline proof on the lab's frames, 80 of 80 random layouts (1280x720 and 1920x1080) found and read exactly as the original (weight 876 / 2430, the 9 counts, the cell); 0 false windows on 3 login/desktop frames |
+| the client's own digits | the hotbar counts and the weight read in another font or skin | next |
+| the client's own minimap | which map she is on, on another client | after it |
+| 4a any heal item | a beginner's Red Potions start a Run | after it |
+
+The Run log now names each window and where it was found ("the hotbar found at (700, 600) (13 of 13
+of its shape's cues): moved to the lab's place in the bot's view"; "Basic Info NOT found ...: the
+lab's place is assumed"), numbers only: a learner's refused Run says which window was missing.
