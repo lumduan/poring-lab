@@ -185,3 +185,23 @@ Two candidates, NOT adopted (each its own block, after B2):
   shown taskbar 0.0-1.3. A fix candidate is on `feat/virtual-box-grab` (f65ff6dd: the bar
   20 -> 10); it is not in A or B.
 - B is completed by **s11scr-1080b** (2 more runs, the same code), started 00:08:35.
+
+### s11scr-1080b (B, completed), 2026-11-20 00:08-00:51 ICT: 2 valid runs
+
+- The same code as s11scr-1080 (main; the play code unchanged since 3513eda2).
+- **r01B**: 19.7 min, the time box, 0 deaths; 24 kills = 73.1 kills/h; 124.9 loot/h. 8 boss Fly
+  Wings, 7 FALSE.
+- **r02B**: 19.7 min, the time box, 0 deaths; 26 kills = 79.3 kills/h; 82.3 loot/h. 5 boss Fly
+  Wings, 5 FALSE.
+- B's valid runs: 66.4, 73.1 and 79.3 kills/h.
+
+### The switch to A, 00:52-00:56 ICT
+
+1. `ro_agent.py close`.
+2. OptionInfo.lua 1920 / 1080 -> 1280 / 720 (OLD_* too), a byte-exact Latin-1 edit with a backup
+   `OptionInfo.lua.bak-20261119-1080`, read back.
+3. `.env` SESSION_SIZE 1280x720, GAME_REGION 0,0,1280,720, RO_SHORTCUT 37,568, SHELL_SHORTCUT
+   112,568 (the desktop read at 720).
+4. `recreate:desktop@60` and `recreate:backend@30`: ALL STEPS OK; ASSIST came back by itself.
+5. `recover gm`: Thief8fce in game; the relog cleared the immunity.
+6. s11scr-720 started 00:56:11 with the same box (project hash acc1ebb7...).
