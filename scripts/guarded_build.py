@@ -208,7 +208,10 @@ STATE = Path(os.environ.get("LAB_STATE_HOST_DIR", REPO / "state"))
 COMPOSE_PROJECT = lab_env.project()
 COMPOSE = ["docker", "compose", "-p", COMPOSE_PROJECT]
 BACKEND = lab_env.container("backend")
-LOGDIR = Path(os.environ.get("TMPDIR", "/dev/shm/poring-lab-tmp"))  # rule 7: never host /tmp
+# rule 7: never host /tmp. This COPY's scratch (2026-11-19, ADR-0026: the live copy's detect server
+# logged into the lab's /dev/shm/poring-lab-tmp, and its Run helper, reading its own, waited for a
+# "listening" line that never came there); the lab's stays /dev/shm/poring-lab-tmp
+LOGDIR = Path(os.environ.get("TMPDIR") or lab_env.shm("tmp"))
 LOGDIR.mkdir(parents=True, exist_ok=True)
 CONTAINERS = [
     "quant-orderbook-engine",
@@ -1077,7 +1080,7 @@ def tables_cmd(step: Step) -> list[str]:
 def cache_env() -> dict[str, str]:
     """Rule 7: no bytecode, no temp files on the root disk."""
     return {**os.environ, "PYTHONDONTWRITEBYTECODE": "1",
-            "TMPDIR": os.environ.get("TMPDIR", "/dev/shm/poring-lab-tmp")}  # fmt: skip
+            "TMPDIR": os.environ.get("TMPDIR") or str(lab_env.shm("tmp"))}  # fmt: skip
 
 
 def log_path(label: str) -> Path:
