@@ -30,8 +30,11 @@ export function describeCapture(status: Status | null): CaptureView {
     notices.push(`Capture-backend handover to ${lock.backend} in progress (seq ${lock.seq}).`);
   }
   if (lock.backend === "console") {
+    // 2026-11-19 (ADR-0004 amendment e): with the S2 client's input socket a paste is TYPED
     notices.push(
-      "Console mode (Sunshine/Moonlight, ADR-0009): paste and \\\\tsclient files are unavailable.",
+      status.clipboard_enabled
+        ? "Console mode (Sunshine, ADR-0009): a paste is typed into Windows by Sunshine; \\\\tsclient files are unavailable."
+        : "Console mode (Sunshine/Moonlight, ADR-0009): paste and \\\\tsclient files are unavailable.",
     );
     if (!switching && status.stream_window_present === false) {
       notices.push(

@@ -311,3 +311,17 @@ def test_a_held_left_button_is_released_on_every_path(path: str) -> None:
     events = [getattr(r, "event", r) for r in ups]
     assert any(e.button == "left" and e.action == "up" for e in events)
     assert not mux.holds_anything(BOT)
+
+
+def test_a_typed_paste_is_human_input_for_the_mux() -> None:
+    """ADR-0004 amendment e: a person's typed paste (console mode) has no key event, but the mux
+    decides it as human input: refused in BOT, the lease taken in ASSIST (the bot lets go)."""
+    mux = InputMux(lease_ns=LEASE, mode=Mode.BOT)
+    assert mux.human_text(1).reason == "mode=BOT" and not mux.human_text(1).accepted
+    mux = InputMux(lease_ns=LEASE, mode=Mode.ASSIST)
+    assert mux.submit(Source.BOT, key("KeyW", "down"), 1).accepted
+    d = mux.human_text(2)
+    assert d.accepted and mux.lease_active(3) and not mux.holds_anything(Source.BOT)
+    assert [(r.source, r.event.code, r.event.action) for r in d.inject] == [
+        (Source.BOT, "KeyW", "up")]  # fmt: skip
+    assert InputMux(lease_ns=LEASE).human_text(1).accepted  # HUMAN

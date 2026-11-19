@@ -151,7 +151,7 @@ async def health(request: Request) -> dict[str, Any]:
         "clipboard": {
             "enabled": state.clipboard is not None,
             # Paste needs the RDP session's clipboard channel: not in console mode (ADR-0009).
-            "paste_available": state.clipboard is not None and state.rdp_mode,
+            "paste_available": state.paste_ready,
             "x_connected": state.clipboard.connected if state.clipboard else False,
             "foreign_owner_clears": state.clipboard.foreign_owner_clears if state.clipboard else 0,
             "rdp_empty_claims": state.clipboard.rdp_empty_claims if state.clipboard else 0,

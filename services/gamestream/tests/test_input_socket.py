@@ -41,6 +41,10 @@ class FakeLib:
         self.calls.append(("scroll", amount))
         return 0
 
+    def LiSendUtf8TextEvent(self, text: bytes, length: int) -> int:  # noqa: N802
+        self.calls.append(("text", text, length))
+        return 0
+
 
 C = limelight.CONSTANTS
 DOWN, UP = C["KEY_ACTION_DOWN"], C["KEY_ACTION_UP"]
@@ -152,7 +156,7 @@ def test_a_bad_batch_line_is_refused_whole(mapper: isk.InputMapper) -> None:
 def test_the_counts_never_hold_a_key_identity(mapper: isk.InputMapper) -> None:
     mapper.batch([key("KeyP", "down"), key("KeyP", "up")])
     assert set(mapper.counts) == {"batches", "keys", "buttons", "moves", "wheel", "release_all",
-                                  "refused"}  # fmt: skip
+                                  "text", "refused"}  # fmt: skip
     assert "KeyP" not in json.dumps(mapper.counts)
 
 
@@ -185,6 +189,37 @@ def test_round_trip_through_the_backends_sink(server: isk.InputServer) -> None:
     assert sink.pointer() == (360, 450)
     calls = server.mapper.lib.calls
     assert calls[0] == ("move", 360, 450, W, H) and len(calls) == 5
+    sink.close()
+
+
+def test_a_typed_paste_is_one_text_event_counted_and_never_kept(mapper: isk.InputMapper) -> None:
+    """2026-11-19 (ADR-0004 amendment e): a person's paste on the Sunshine path is TYPED by
+    Sunshine (LiSendUtf8TextEvent): any script, no keyboard layout; counted, never kept."""
+    thai = "รหัส ok 42"
+    applied, refused = mapper.batch([{"type": "text", "t_mono_ns": 1, "frame_id": -1,
+                                      "text": thai}])  # fmt: skip
+    data = thai.encode("utf-8")
+    assert (applied, refused) == (1, []) and mapper.lib.calls == [("text", data, len(data))]
+    assert mapper.counts["text"] == 1 and thai not in json.dumps(mapper.counts)
+    bad = [{"type": "text", "t_mono_ns": 1, "text": ""},
+           {"type": "text", "t_mono_ns": 1, "text": "x" * (isk.TEXT_MAX_BYTES + 1)},
+           {"type": "text", "t_mono_ns": 1, "text": 7},
+           {"type": "text", "t_mono_ns": 1, "text": "\ud800"},
+           {"type": "text", "t_mono_ns": 1, "text": "a", "code": "KeyA"}]  # fmt: skip
+    assert mapper.batch(bad)[1] == [[0, "bad_text"], [1, "text_too_long"], [2, "bad_text"],
+                                    [3, "bad_text"], [4, "unknown_field"]]  # fmt: skip
+    assert len(mapper.lib.calls) == 1  # nothing of a refused text was sent
+
+
+def test_a_typed_paste_through_the_backends_sink(server: isk.InputServer) -> None:
+    from poring_env.s2input import GameStreamInput, S2InputError
+
+    sink = GameStreamInput(server.path, size=(W, H))
+    sink.send_text("pass word ไทย")
+    assert server.mapper.lib.calls[-1][0] == "text" and server.mapper.counts["text"] == 1
+    with pytest.raises(S2InputError):
+        sink.send_text("x" * (isk.TEXT_MAX_BYTES + 1))  # refused: raised, counted
+    assert sink.refused == 1 and sink.acks == 2
     sink.close()
 
 

@@ -11,6 +11,9 @@ every LiSend* call has returned. ``send_many`` waits for that ack (``timeout_s``
 "injected" time means what XSync meant for XTest: the input left this host. A missing or mismatched
 ack raises (the Injector then drops this connection and opens a new one): stale input is never
 queued or retried.
+
+➡️ 2026-11-19 (ADR-0004 amendment e): ``send_text`` sends a person's TYPED PASTE as one ``text``
+event (Sunshine types it). Only the backend's paste path calls it; the text is never logged.
 """
 
 import collections
@@ -58,12 +61,10 @@ class GameStreamInput:
         self.refused = 0
         self.leg_ns: collections.deque[int] = collections.deque(maxlen=512)  # done - sent
 
-    def send_many(self, events: list[InputEvent]) -> None:
-        sent = monotonic_ns()
-        line = json.dumps(
-            {"t": sent, "events": [e.model_dump(mode="json") for e in events]},
-            separators=(",", ":"),
-        )
+    def _exchange(self, sent: int, events: list[dict[str, object]]) -> tuple[int, list[str]]:
+        """One batch line out, its ack in: (events refused, their reasons) -- never which key or
+        text."""
+        line = json.dumps({"t": sent, "events": events}, separators=(",", ":"))
         try:
             self._sock.sendall(line.encode() + b"\n")
             ack = self._read_ack()
@@ -77,12 +78,26 @@ class GameStreamInput:
             self.leg_ns.append(done - sent)
         raw = ack.get("refused")
         refused: list[object] = raw if isinstance(raw, list) else []
-        if refused:
+        reasons = sorted({str(r[1]) for r in refused if isinstance(r, list) and len(r) == 2})
+        return len(refused), reasons
+
+    def send_text(self, text: str) -> None:
+        """A person's typed paste: Sunshine types ``text`` into the focused window. Raises
+        S2InputError when the S2 client refused it (its reason only; the text is never logged)."""
+        sent = monotonic_ns()
+        n, reasons = self._exchange(sent, [{"type": "text", "t_mono_ns": sent, "text": text}])
+        if n:
+            self.refused += n
+            raise S2InputError(f"the S2 client refused the typed paste: {reasons}")
+
+    def send_many(self, events: list[InputEvent]) -> None:
+        sent = monotonic_ns()
+        n, reasons = self._exchange(sent, [e.model_dump(mode="json") for e in events])
+        if n:
             # The mux already accepted these: a refusal here is a table drift, never user input.
             # Reasons only, never which key (secret typing).
-            self.refused += len(refused)
-            reasons = sorted({str(r[1]) for r in refused if isinstance(r, list) and len(r) == 2})
-            log.warning("S2 client refused %d event(s): %s", len(refused), reasons)
+            self.refused += n
+            log.warning("S2 client refused %d event(s): %s", n, reasons)
         for e in events:
             if isinstance(e, MouseMove) or (isinstance(e, MouseButton) and e.x is not None):
                 x, y = e.x, e.y

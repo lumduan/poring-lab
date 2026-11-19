@@ -408,6 +408,31 @@ every user remember Secret typing.
 - `scripts/purge_input_log.py` (stdlib-only) keeps its own copy of the same rule, pinned equal by
   `test_purge_input_log.py`; it removes such keys from logs written before this.
 
+## Amendment 2026-11-19 (e): a paste on the Sunshine path is TYPED (Batt asked)
+
+Batt, 2026-11-19, on the live copy (a Sunshine-only host, no RDP): "enable the clipboard on
+poring-lab-live". Console mode had no paste at all: a Ctrl+V reaches Windows through the stream and
+pastes Windows' OWN clipboard, never the person's text (`console_backend`). ADR-0009 section 5 had
+planned the answer (typed paste through `LiSendUtf8TextEvent`), and this builds it.
+
+- **The path:** the console's paste (`ClipboardPaste`, the browser channel only), then
+  `AppState.paste`, then the mux (`InputMux.human_text`), then the Injector's ONE thread
+  (`type_text`), then the S2 input socket (one `text` event), then `LiSendUtf8TextEvent`. Sunshine
+  types the text into the focused Windows window: any script (Thai too), no keyboard layout, nothing
+  on the Windows clipboard (so nothing to scrub).
+- **When:** `RDP_CLIPBOARD=text-to-remote` (the same switch as the RDP paste), the lock console, and
+  the S2 client's input socket present (`AppState.paste_ready`; Status `clipboard_enabled` and
+  `/health` `paste_available` say so). Otherwise the old refusal (`console_backend`).
+- **The same guarantees as the RDP paste:**
+  - human-only (`AgentToBackend` has no such message; the S2 `text` event is made only by this
+    path);
+  - refused in BOT; in ASSIST it takes the human lease, and the bot lets go first;
+  - logged as the event and its time only: no text, no length, no digest (amendment c). The S2
+    client only counts it.
+- **At most 4096 bytes** (UTF-8) a typed paste (`too_long_to_type`), the same limit as the S2
+  client's (`TEXT_MAX_BYTES`, parity-tested).
+- **Files** stay RDP-only.
+
 ## Exceptions log (each one explicit, by Batt, in the conversation)
 
 - **2026-10-03 15:31 ICT, Part C (C4), Batt: "The exe is in \\tsclient\transfer now. Proceed with

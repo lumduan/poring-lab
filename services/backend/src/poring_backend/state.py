@@ -54,6 +54,8 @@ from poring_env.protocol import (
 from poring_env.x11 import parse_session_size
 
 log = logging.getLogger(__name__)
+# a typed paste at most (ADR-0004 amendment e) == s2spike input_socket.TEXT_MAX_BYTES (tested)
+TYPED_PASTE_MAX_BYTES = 4096
 
 T = TypeVar("T")
 
@@ -75,6 +77,8 @@ class S2Sink(XInput, Protocol):
 
     leg_ns: "collections.deque[int]"
     refused: int
+
+    def send_text(self, text: str) -> None: ...
 
 
 class Injector:
@@ -177,6 +181,34 @@ class Injector:
         self.s2_refused += self._s2.refused - before
         if self._s2.leg_ns:
             self._s2_leg_ns.append(self._s2.leg_ns[-1])
+
+    # --- a person's typed paste (ADR-0004 amendment e) -------------------------------------------
+
+    def s2_ready(self) -> bool:
+        """Console mode with a live S2 client socket: a paste can be TYPED by Sunshine."""
+        return self._want_s2()
+
+    def _type_text(self, text: str) -> str | None:
+        """On the injector's thread, in order with every other input: the S2 client types
+        ``text``. None when it did, else why not (the text is never logged)."""
+        if not self._want_s2():
+            return "s2_unavailable"
+        if self.active != "s2":
+            self._switch("s2")
+        assert self._s2_factory is not None
+        try:
+            if self._s2 is None:
+                self._s2 = self._s2_factory()
+            self._s2.send_text(text)
+        except Exception:
+            self.s2_errors += 1
+            self._reset_s2()
+            return "s2_error"
+        self.s2_acks += 1
+        return None
+
+    async def type_text(self, text: str) -> str | None:
+        return await self._job(lambda: self._type_text(text))
 
     # --- the async API ----------------------------------------------------------------------------
 
@@ -643,6 +675,14 @@ class AppState:
     # --- status -----------------------------------------------------------------------------------
 
     @property
+    def paste_ready(self) -> bool:
+        """A paste can reach Windows: RDP's clipboard, or (console mode with the S2 client's input
+        socket) a TYPED paste (ADR-0004 amendment e)."""
+        return self.clipboard is not None and (
+            self.rdp_mode or (self.capture.backend == "console" and self.injector.s2_ready())
+        )
+
+    @property
     def rdp_mode(self) -> bool:
         """The RDP client owns the Windows session (ADR-0009 lock says `rdp`)."""
         return self.capture.backend == "rdp"
@@ -663,7 +703,7 @@ class AppState:
             capture_fps=round(self.hub.capture_fps, 2),
             viewers=self.hub.viewer_count,
             # Paste and \\tsclient ride the RDP session's channels: RDP mode only (ADR-0009).
-            clipboard_enabled=self.clipboard is not None and self.rdp_mode,
+            clipboard_enabled=self.paste_ready,
             transfer_enabled=self.settings.transfer_enabled and self.rdp_mode,
             move_interval_ms=self.tuning.move_interval_ms,
             paint=self.tuning.paint,
@@ -873,16 +913,24 @@ class AppState:
         sha256 prefix confirms a guessed password offline (ADR-0004 amendment c, decided by Batt
         2026-10-02)."""
         refusal: str | None = None
+        typed = False
         if self.clipboard is None:
             refusal = "clipboard_disabled"
         elif not self.rdp_mode:
-            # Console mode (ADR-0009): the Ctrl+V would reach Windows through Moonlight and paste
-            # Windows' OWN clipboard, never this text. Hold: no session at all.
-            refusal = "console_backend" if self.capture.backend == "console" else "backend_hold"
-        elif not browser:
-            refusal = "origin_required"
-        elif self.mux.mode is Mode.BOT:
-            refusal = "mode_bot"
+            # Console mode (ADR-0009): a Ctrl+V would reach Windows through the stream and paste
+            # Windows' OWN clipboard, never this text. With the S2 client's input socket the text is
+            # TYPED instead (ADR-0004 amendment e, 2026-11-19). Hold: no session at all.
+            if self.capture.backend == "console" and self.injector.s2_ready():
+                typed = True
+            else:
+                refusal = "console_backend" if self.capture.backend == "console" else "backend_hold"
+        if refusal is None:
+            if not browser:
+                refusal = "origin_required"
+            elif self.mux.mode is Mode.BOT:
+                refusal = "mode_bot"
+            elif typed and len(msg.text.encode("utf-8")) > TYPED_PASTE_MAX_BYTES:
+                refusal = "too_long_to_type"
         now = monotonic_ns()
         summary: dict[str, Any] = {"type": msg.type}
         if self.human_secret:
@@ -890,6 +938,8 @@ class AppState:
         self._log(Source.HUMAN, summary, msg.frame_id, refusal is None, refusal or "ok", now)
         if refusal is not None or self.clipboard is None:
             outcome = PasteOutcome(False, refusal or "clipboard_disabled")
+        elif typed:
+            outcome = await self._typed_paste(msg.text)
         else:
             outcome = await self.clipboard.paste(msg.text, self._inject_paste_chord)
         if not outcome.ok:
@@ -911,6 +961,18 @@ class AppState:
             reason=outcome.reason,
             chars=len(msg.text) if outcome.ok else 0,
         )
+
+    async def _typed_paste(self, text: str) -> PasteOutcome:
+        """ADR-0004 amendment e: the human's text TYPED by Sunshine (console mode). The mux decides
+        first, as for any human input (BOT refuses; ASSIST takes the lease, the bot lets go)."""
+        now = monotonic_ns()
+        decision = self.mux.human_text(now)
+        if not decision.accepted:
+            return PasteOutcome(False, "mode_bot" if "BOT" in decision.reason else decision.reason)
+        self._log_synthetic(decision.inject, now)
+        await self._inject(decision.inject)
+        why = await self.injector.type_text(text)
+        return PasteOutcome(why is None, why or "ok")
 
     async def _inject_paste_chord(self) -> str | None:
         """Ctrl+V as the human, through the mux; returns the refusal reason, if any."""

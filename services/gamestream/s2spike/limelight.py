@@ -255,6 +255,8 @@ class Lib:
             "LiSendMouseButtonEvent": (c_int, [c_char, c_int]),
             "LiSendKeyboardEvent": (c_int, [c_short, c_char, c_char]),
             "LiSendHighResScrollEvent": (c_int, [c_short]),
+            # a person's typed paste (input_socket "text"; ADR-0004 amendment e)
+            "LiSendUtf8TextEvent": (c_int, [c_char_p, c_uint]),
         }
         for name, (restype, argtypes) in sig.items():
             fn = getattr(m, name)
