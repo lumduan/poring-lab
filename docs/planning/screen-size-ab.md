@@ -238,3 +238,29 @@ Two candidates, NOT adopted (each its own block, after B2):
      models see the shrunk 1080 world worse;
   2. the cursor reads (fixed in B2);
   3. the item model, which sees a third to a half of the items it sees at 720.
+
+### s11scr-1080f (B2 = B + the read speed-up + the taskbar bar 10), 2026-11-20 02:01-02:49 ICT
+
+- Main da68c941 (merged feat/virtual-box-grab); the backend recreated with the bar 10 (/health
+  threshold 10.0); the switch back to 1080 done by the same steps, reversed.
+- Every run ended with "stock_keep: 1 Fly Wing(s) left". The setup tops the Fly Wings up to 10
+  (TOPUP), and the false alarms burned them.
+- **r01B**: 9.2 min; 14 kills = 91.8 kills/h; 8 boss Fly Wings, 7 false. Not valid (under 16 min).
+- **r02B**: 18.1 min; 23 kills = 76.3 kills/h; 9 boss Fly Wings, 7 false.
+- **r03B**: 16.0 min; 26 kills = 97.5 kills/h; 8 boss Fly Wings, 8 false.
+- **B2 against A:**
+  - kills/h 86.9 +- 13.1 against 129.2 +- 7.7 (diff -42.3): FAIL;
+  - loot/h 125.6 against 155.0 (diff -29.5 +- 26.2): PASS;
+  - deaths 0 / 0 and errors 0 / 0: PASS.
+  - Verdict: WORSE.
+- **Reported, B2 against B:**
+  - kills/h +19 % (72.9 -> 86.9); loot steps/h 96 -> 126;
+  - the hover check 293-326 ms (B 460, A 254);
+  - the cursor's "unknown" on box targets still 37-48 % (B 33-57 %, A 2 %);
+  - kills per box engagement 0.35-0.38 (B 0.32, A ~0.7).
+- **Probe (immune, standing, moves only, 40 hovers at 1080):** the sword read on 34 hovers, the
+  first at a median of 110 ms (p90 112), all within 350 ms; 6 never in 1.5 s; the best sword
+  recall median 0.872.
+  - So the client draws the sword in time when she stands. The runs' "unknown" comes from play
+    in motion, which the opt-in trace (`PORING_CURSOR_TRACE`, 77626cdf) measures in
+    `s11scr-diag` (1 run, reported only).
