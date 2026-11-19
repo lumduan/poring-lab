@@ -2074,7 +2074,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     if a.cmd == "plan":
         print(json.dumps(prep.doc(), indent=1))
         return 0
-    os.environ.setdefault("TMPDIR", "/dev/shm/poring-lab-tmp")
+    os.environ.setdefault("TMPDIR", str(fr.SCRATCH))  # this copy's scratch
     pause = enable_pause(a.stop_file)  # before the check: a Run waits for the game, never misreads
     run_dir = a.stop_file.parent if a.stop_file is not None else None
     return play(prep, PixelIO(), label=a.label, stop_file=a.stop_file, pause=pause, run_dir=run_dir)

@@ -89,7 +89,9 @@ from poring_flow import ir  # the time box rule: 0 = no time limit (Batt 2026-11
 
 ROOT = Path(__file__).resolve().parents[1]
 DIR = ROOT / "settings" / "flowrun"
-SCRATCH = Path("/dev/shm/poring-lab-tmp")
+# this copy's scratch (ADR-0026 Implementation 2026-11-19: two copies on one host, Batt): its
+# Stop file, run folders and logs; the lab's /dev/shm/poring-lab-tmp
+SCRATCH = lab_env.shm("tmp")
 # Batt 2026-11-18 ("with BOT it must run too"; ADR-0020 Amendment 2026-11-18): a Run's input path
 # (ro_agent.Agent, ro_agent.MODES_ENV) may send in ASSIST or BOT. In BOT the mux drops the person's
 # input, so watching the Console never pauses the run; Stop, or HUMAN, ends it. Only the processes
@@ -187,7 +189,10 @@ FLOWS: dict[str, Flow] = {
 PROJECT = "project"
 PROJECT_FILE = "project.json"  # settings/flowrun/: the backend's checked project (canonical JSON)
 PROJECT_CHECK_FLOW = "xmas_dun02_rogue"  # a check of "project" is this runner's read-only check
-PROJECT_LABEL = "flowplay"
+# the runner writes every copy's sessions in ONE folder (dungeon_hunt.DEMO, byte-pinned), named for
+# the label: another copy's Runs carry its project name, so no copy reads another's session
+PROJECT_LABEL = ("flowplay" if lab_env.project() == lab_env.PROJECT_DEFAULT
+                 else f"flowplay-{lab_env.project()}")  # fmt: skip
 NODE_ID = re.compile(r"[A-Za-z][A-Za-z0-9_]{0,39}")  # poring_flow.ir.NAME
 HASH = re.compile(r"[0-9a-f]{64}")
 

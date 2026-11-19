@@ -235,7 +235,7 @@ _POINTER: tuple[float, float] | None = None  # the last virtual pointer position
 # LAB_PANELS place, so the readers built at the lab's places read any layout. A window not found
 # keeps the lab's place (its reads then fail, in words); the minimap keeps the top-right corner
 # (RO never moves it); hotbar2 keeps its saved place.
-PANELS_FILE = Path("/dev/shm/poring-lab-tmp/panels.json")  # the last find, for other processes
+PANELS_FILE = lab_env.shm("tmp") / "panels.json"  # the last find, for this copy's processes
 PANELS_ENV = "PORING_PANELS_FILE"  # another file (the tests: each its own)
 PANELS_TTL_S = 120.0  # another process's find is used this long, for the same client region
 PANEL_CHECK_S = 2.0  # a run re-checks each found window at its place this often (< 1 ms)

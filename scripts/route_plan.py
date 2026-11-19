@@ -37,7 +37,10 @@ from collections.abc import Callable, Sequence
 from pathlib import Path
 from typing import Any
 
-PLAN_DIR = Path(os.environ.get("ROUTE_PLAN_DIR", "/dev/shm/poring-lab-route"))
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import lab_env  # noqa: E402  (a sibling, stdlib only: this copy's RAM paths)
+
+PLAN_DIR = Path(os.environ.get("ROUTE_PLAN_DIR") or lab_env.shm("route"))  # this copy's
 PLAN_SOCK = PLAN_DIR / "plan.sock"
 PLAN_LOCK = PLAN_DIR / "previewd.lock"
 PREVIEWD_LOG = PLAN_DIR / "previewd.log"
