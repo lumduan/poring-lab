@@ -712,8 +712,7 @@ class Series:
         self.server = None
 
     def one(self, rr: Mapping[str, Any]) -> dict[str, Any]:
-        ps = subprocess.run(["ps", "-eo", "args"], capture_output=True, text=True).stdout
-        why = fr.busy_reason(ps.splitlines())
+        why = fr.busy_reason(fr.copy_ps_lines())  # this copy's writers (ADR-0026)
         if why is not None:
             raise Stop(f"{rr['label']}: {why}")
         stop = self.dir / f"{rr['label']}.STOP"

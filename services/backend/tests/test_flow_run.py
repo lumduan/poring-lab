@@ -707,3 +707,24 @@ def test_the_story_says_what_she_does_in_words() -> None:
     assert fr.event_words({"kind": "explore"}) == "chooses where to explore next"
     assert fr.event_words({"kind": "explore", "anchor": [6, 124]}).endswith("(near (6, 124))")
     assert fr.LOG_TAIL_N == 300
+
+
+def test_another_copy_s_run_never_makes_this_copy_busy(tmp_path: Path) -> None:
+    """2026-11-19 (ADR-0026: a LIVE copy beside the dev lab): the live helper said "the live block
+    player is playing" for the DEV lab's Run, so neither copy could play while the other did. Only
+    the processes whose working folder is this copy count (another copy plays its own Windows)."""
+    here, other = tmp_path / "poring-lab-live", tmp_path / "poring-lab"
+    ps = ("101 /x/.venv/bin/python scripts/flow_play.py play --project p\n"
+          "102 /y/.venv/bin/python scripts/flow_play.py play --project q\n"
+          "103 /usr/bin/bash\n104 gone\n")  # fmt: skip
+    cwds = {"101": str(other), "102": str(here / "scripts"), "103": str(here)}
+
+    def cwd_of(pid: str) -> str:
+        if pid not in cwds:
+            raise OSError(pid)
+        return cwds[pid]
+
+    lines = fr.copy_ps_lines(here, ps, cwd_of)
+    assert lines == ["/y/.venv/bin/python scripts/flow_play.py play --project q", "/usr/bin/bash"]
+    assert fr.busy_reason(lines) == "the live block player is playing (one input writer at a time)"
+    assert fr.busy_reason(fr.copy_ps_lines(here, ps.replace("102 ", "105 "), cwd_of)) is None
