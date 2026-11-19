@@ -376,7 +376,9 @@ Official servers and every other public server are forbidden. Start with `README
     after that the store wins and the interlock reads ONLY it (fail closed: missing/invalid -> red).
   - Asymmetric rules (`envstore.classify`): tightening easy; loosening Allowed normal; loosening
     Forbidden HARD (typed reason + subject retyped, one per save, audited).
-  - Settings writes (`PUT /settings/environments`) only from a LAN browser with the console's
+  - Settings writes (`PUT /settings/environments`) only from a viewer-network browser (`VIEWER_NETWORKS`;
+    default every private range, a VPN too, our Docker subnets excluded: ADR-0007 Amendment E,
+    Batt 2026-11-19 "do not lock it to the local network") with the console's
     Origin AND the CSRF token (`GET /settings/csrf`, header `X-CSRF-Token`), at most 20/min per
     client. Never `:8001`, never the lab host itself (`lab_host_peer`: host processes can forge the
     Origin), never `WIN_HOST` (`windows_host_peer`). Every refusal is audited.
@@ -438,7 +440,7 @@ Official servers and every other public server are forbidden. Start with `README
   - `/health.framebus.stalls` counts freezes.
 - **Packet ground truth (ADR-0007) never reaches the agent.**
   - `/ingest/packets` takes only the internal port and rathena's pinned `10.210.96.6`.
-  - `/ws/packets` takes only `VIEWER_NETWORKS` (LAN browsers): the compose subnet, *gateway
+  - `/ws/packets` takes only `VIEWER_NETWORKS` (browsers; default every private range): the compose subnet, *gateway
     included*, is refused, because a container dialling the published port arrives from the
     gateway with any Origin it likes.
   - `poring_packets` is never imported by `poring_env`, never installed in vision, and never

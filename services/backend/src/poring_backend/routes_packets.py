@@ -52,6 +52,8 @@ def in_networks(host: str | None, networks: tuple[Any, ...]) -> bool:
         address = ipaddress.ip_address(host)
     except ValueError:
         return False
+    if isinstance(address, ipaddress.IPv6Address) and address.ipv4_mapped is not None:
+        address = address.ipv4_mapped  # a dual-stack listener's "::ffff:10.0.1.2"
     return any(address in net for net in networks)
 
 

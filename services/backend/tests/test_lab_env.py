@@ -123,11 +123,11 @@ def test_compose_names_every_image_of_ours_by_the_project() -> None:
 
 
 def test_compose_fixes_no_lan_address_and_no_subnet() -> None:
-    """The one LAN range left is VIEWER_NETWORKS' DEFAULT (a range for hand installs; ./setup.sh
-    writes the host's own LAN there)."""
+    """No LAN range at all: VIEWER_NETWORKS' default (every private range) lives in the backend's
+    config since 2026-11-19 (Batt: "do not lock it to the local network")."""
     for f in COMPOSE_FILES:
         for n, line in enumerate(f.read_text().splitlines(), 1):
-            code = line.split("#", 1)[0].replace("${VIEWER_NETWORKS:-192.168.0.0/16}", "")
+            code = line.split("#", 1)[0]
             assert not re.search(r"192\.168\.\d+\.\d+", code), (f.name, n, line)
             assert not re.search(r"(?<![-{])10\.210\.\d+\.\d+", code), (f.name, n, line)
 

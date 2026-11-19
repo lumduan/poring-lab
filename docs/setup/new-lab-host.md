@@ -292,7 +292,7 @@ mounts it into the worker as an NFS volume instead (section 4.1, Example 1).
 | `RATHENA_SERVER_USER` / `_PASSWORD` | init_env.sh | at most 23 characters: char and map truncate to 24-byte buffers |
 | `RATHENA_WEB_SERVER` | you (`set`) | `true` for the client's account settings |
 | `S2_REC_DIR` | the wizard, console path only | empty means `~/poring-lab-rec/.s2-h264` (since 2026-11-17; record_session.py's default too). It must exist and be yours (uid 1000): the wizard creates it |
-| `VIEWER_NETWORKS` | the wizard (the server's own LAN), else `192.168.0.0/16` | the browsers' LAN(s): Settings-page writes and the packet viewer accept only these |
+| `VIEWER_NETWORKS` | leave empty (the wizard adds the server's network only when no private range covers it) | where the browsers come from: empty = every private network (any LAN, a VPN), `any` = every address; the console's reads, Settings-page writes and the packet viewer accept only these |
 | `FRONTEND_ORIGINS` | leave empty | empty means `http://<BOT_HOST_IP>:<CONSOLE_PORT>` |
 
 **Rules:**
@@ -369,11 +369,14 @@ services:
 `datasets-nas` is a bind of `${LAB_STORE_DIR:-${HOME}/poring-lab-store}`): set `LAB_STORE_DIR` in
 `.env`, no override needed.
 
-**A LAN outside 192.168.0.0/16:** set `VIEWER_NETWORKS` in your `.env` (since 2026-11-12;
-`.env.example` lists it), e.g. `VIEWER_NETWORKS=10.0.1.0/24`. Settings-page writes and the packet
-viewer accept only browsers on these networks (comma-separated CIDRs; default `192.168.0.0/16`). An
-entry that overlaps the lab's own Docker subnets is dropped with a warning in the backend's log,
-never admitted. Recreate the backend after changing it (a guarded `recreate:backend`).
+**Where the browsers may come from:** `VIEWER_NETWORKS` in your `.env` (since 2026-11-12;
+`.env.example` lists it). Empty (the default since 2026-11-19) means every private network: any
+home LAN numbering, a VPN, a Tailscale-style overlay. `any` admits every address (a reverse proxy,
+a public address). Or narrow it to yours, e.g. `VIEWER_NETWORKS=192.168.1.0/24,10.0.1.0/24`
+(comma-separated CIDRs). The console's reads, Settings-page writes and the packet viewer accept
+only these. The lab's own Docker subnets are always excluded (an entry inside them is dropped with
+a warning in the backend's log). Recreate the backend after changing it (a guarded
+`recreate:backend`).
 
 Notes:
 - Docker fixes a named volume's options when the volume is first created. Write the override
@@ -1246,7 +1249,7 @@ docs/thai-data-experiment.md section 3):
 | the detect server `REFUSED` with `FileNotFoundError ... archive/models/...` | a registered ONNX is missing from the models folder: section 9's rule |
 | `quiet_start.py` waits for ever | it waits 10 quiet minutes and skips SET market windows on every host: on a dedicated host start the worker directly |
 | bot presses refused, `environment_unattested` | read `/health` `environment`: servers not confirmed (`no_servers`); the capture lock not steady (`capture_backend.py status`); the environment's Windows PC is not `WIN_HOST` (section 7, `host_mismatch`: set it on the Settings page). The packets never refuse a press since 2026-11-17 (ADR-0016 amendment 2026-11-17): a sniffer restart or a missing session only shows `unverified:<why>` (green, not verified) |
-| a Settings save refused | from the bot host or the game PC (use a third computer); a LAN outside 192.168.0.0/16 (section 4.1); a stale page (reload: the CSRF token is per backend start) |
+| a Settings save refused | from the bot host or the game PC (use a third computer); `not_a_lan_viewer`: a public address, or a narrowed `VIEWER_NETWORKS` (section 4.1); a stale page (reload: the CSRF token is per backend start) |
 | the wizard: `Docker name: '<name>' belongs to the poring-lab copy in <folder>` | another copy of poring-lab on this host created containers with that name; this copy needs its own: take the offered `<name>-2` or type one (`COMPOSE_PROJECT_NAME`; ADR-0026). The other copy is never touched |
 | the wizard: ports moved (`RATHENA_LOGIN_PORT 6900->7900` ...) | another program (often another copy) holds them; accept, then point your game client's `clientinfo.xml` at the new LOGIN port (section 7.1) |
 | the wizard: `GPU ... NOT ready -> dedicated-cpu` | do the fixes it lists (the NVIDIA driver 580+, the NVIDIA Container Toolkit + `nvidia-ctk runtime configure`, the `amdgpu` driver for an AMD card, or the render group), then re-run `./setup.sh`; meanwhile the CPU detector serves. A card older than compute capability 7.5 (GTX 10 and older) has no fix but a newer card: the CPU detector serves |

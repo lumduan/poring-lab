@@ -754,7 +754,7 @@ Amendment B); a not-adopted model is never offered.
       /economy page itself still reads the JSON exports
       ([econ/economics.md](econ/economics.md) section 10).
 - **No live run (the block editor):** nothing in the block editor reaches the executor, the mux or an input path (➡️ Run, above, is the one live path: the Run helper's player, never the editor). The backend's
-  `/flows/*` routes only compute (public listener, LAN viewer, Origin; POSTs need the CSRF token,
+  `/flows/*` routes only compute (public listener, a viewer network (VIEWER_NETWORKS: every private range by default, a VPN too), Origin; POSTs need the CSRF token,
   20 a minute; the Python view 120 a minute on its own budget since 2026-11-09). See [planning/mw2-block-editor.md](planning/mw2-block-editor.md) and
   [planning/blocks-from-hunt-flow.md](planning/blocks-from-hunt-flow.md) (7b).
 

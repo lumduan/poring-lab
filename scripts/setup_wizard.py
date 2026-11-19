@@ -493,19 +493,23 @@ class Wizard:
             current = ui.ask("The address") if got == "t" else self.addrs[int(got) - 1].ip
 
     def viewer_net(self, ip: str) -> str:
-        """VIEWER_NETWORKS for the browsers on this server's LAN, when the current list (default
-        192.168.0.0/16) does not cover it (Batt 2026-11-17: no LAN assumed; ADR-0026)."""
+        """VIEWER_NETWORKS, only when the current list (default: every private range) does not
+        cover this server's own network -- and then that network is ADDED to the list, never put
+        in its place (Batt 2026-11-19: "do not lock it to the local network"; 2026-11-17: no LAN
+        assumed; ADR-0026)."""
         import ipaddress
 
         where = next((a for a in self.addrs if a.ip == ip), None)
-        listed = self.env().get("VIEWER_NETWORKS", "").strip() or "192.168.0.0/16"
+        listed = self.env().get("VIEWER_NETWORKS", "").strip() or core.PRIVATE_NETWORKS
+        if listed.lower() == "any":
+            return ""
         try:
             nets = [ipaddress.ip_network(n.strip(), strict=False) for n in listed.split(",") if n]
             if any(ipaddress.ip_address(ip) in n for n in nets):
                 return ""
         except ValueError:
             pass
-        return str(where.network) if where else ""
+        return f"{listed},{where.network}" if where else ""
 
     # -- 2 --
 

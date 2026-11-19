@@ -12,6 +12,13 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 _log = logging.getLogger(__name__)
 
 
+# Every private address range (RFC 1918, the CGNAT block VPN overlays use, IPv6 unique-local):
+# the console's default viewers -- a LAN of any numbering and a VPN alike (Batt 2026-11-19).
+PRIVATE_NETWORKS = "10.0.0.0/8,172.16.0.0/12,192.168.0.0/16,100.64.0.0/10,fc00::/7"
+# VIEWER_NETWORKS=any: every address (a reverse proxy or a public address; the user's choice)
+ANY_NETWORKS = "0.0.0.0/0,::/0"
+
+
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(extra="ignore")
 
@@ -88,7 +95,10 @@ class Settings(BaseSettings):
     # refused and counted -- compose peers, and the lab gateway: a container that reaches the
     # PUBLISHED port is proxied in from the gateway, indistinguishable from a host script, and can
     # forge an Origin (live probe, 2026-10-01). Host scripts read /captures instead.
-    viewer_networks: str = "192.168.0.0/16"
+    # Batt 2026-11-19 (outside on the VPN, 10.0.1.2, refused "not_a_lan_viewer"): "do not lock it
+    # to the local network" -- every PRIVATE range by default (a LAN of any numbering, a VPN, a
+    # CGNAT overlay such as Tailscale, IPv6 ULA), the lab's own Docker subnets excluded
+    viewer_networks: str = PRIVATE_NETWORKS
     compose_subnet: str = "10.210.96.0/24"
     # ADR-0005 option c2 (2026-10-04): the internal agent network (vision). Refused on every
     # listener but the internal one (agent_net.AgentNetworkGuard). Pinned like the compose subnet.
@@ -181,20 +191,33 @@ class Settings(BaseSettings):
 
     @property
     def viewer_nets(self) -> tuple[ipaddress.IPv4Network | ipaddress.IPv6Network, ...]:
-        """The LAN viewer networks (VIEWER_NETWORKS, a user's .env since 2026-11-12). An entry
-        that overlaps the lab's own Docker subnets (the compose subnet, the agent network) is
-        DROPPED with a warning: a typo can never admit containers, and it never stops the
-        backend (Batt 2026-11-12: no hard locks)."""
+        """The viewer networks (VIEWER_NETWORKS, a user's .env since 2026-11-12; empty = every
+        private range, PRIVATE_NETWORKS: Batt 2026-11-19, "do not lock it to the local network";
+        ``any`` = every address).
+        The lab's own Docker subnets (the compose subnet, the agent network) are EXCLUDED from
+        every entry -- the rest of an overlapping entry stays -- so no setting can ever admit
+        containers, and none stops the backend (Batt 2026-11-12: no hard locks)."""
         own = [ipaddress.ip_network(self.compose_subnet), *self.agent_nets]
-        out = []
-        for n in self.viewer_networks.split(","):
+        out: list[ipaddress.IPv4Network | ipaddress.IPv6Network] = []
+        listed = self.viewer_networks.strip() or PRIVATE_NETWORKS
+        if listed.lower() == "any":
+            listed = ANY_NETWORKS
+        for n in listed.split(","):
             if not n.strip():
                 continue
-            net = ipaddress.ip_network(n.strip(), strict=False)
-            if any(net.version == o.version and net.overlaps(o) for o in own):
-                _log.warning("VIEWER_NETWORKS: %s overlaps the lab's Docker subnets: dropped", net)
-                continue
-            out.append(net)
+            parts = [ipaddress.ip_network(n.strip(), strict=False)]
+            for o in own:
+                kept: list[ipaddress.IPv4Network | ipaddress.IPv6Network] = []
+                for net in parts:
+                    if net.version != o.version or not net.overlaps(o):
+                        kept.append(net)
+                    elif net.subnet_of(o):  # type: ignore[arg-type]
+                        _log.warning("VIEWER_NETWORKS: %s is inside the lab's Docker subnet %s: "
+                                     "dropped", net, o)  # fmt: skip
+                    else:
+                        kept.extend(net.address_exclude(o))  # type: ignore[arg-type]
+                parts = kept
+            out.extend(sorted(parts))
         return tuple(out)
 
     @property
