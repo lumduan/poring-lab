@@ -420,6 +420,18 @@ def _panels_tick(real: Any) -> None:
         _search_again(real)
 
 
+def _panels_due() -> bool:
+    """_panels_tick would look at the windows now (the first frame, or PANEL_CHECK_S since the
+    last check): that read needs the whole real frame; any other virtual read needs only its box."""
+    try:
+        region = list(real_game_region())
+    except (Stop, OSError, ValueError):
+        return False
+    with _PANELS_LOCK:
+        st = dict(_PANELS) if _PANELS.get("region") == region else None
+    return st is None or time.monotonic() - float(st.get("checked") or 0) >= PANEL_CHECK_S
+
+
 def missing_wait(st: Mapping[str, Any]) -> float:
     """PURE: how long a window still missing waits for its next search (doubling per miss)."""
     return min(PANEL_SEARCH_S * 2.0 ** int(st.get("misses") or 0), PANEL_SEARCH_MAX_S)
@@ -650,17 +662,32 @@ class Screen:
     def _grab_raw(self, x: int, y: int, w: int, h: int) -> tuple[int, np.ndarray, int, str]:
         """grab_meta without the pause gate (the gate's own looks)."""
         if x >= VIRTUAL_X0:
-            from poring_env.clientview import ClientView
+            from poring_env.clientview import VIRTUAL_H, VIRTUAL_W, ClientView
 
             view = client_view()
             rx, ry, rw, rh = view.rect
+            vx = x - VIRTUAL_X0
+            inside = vx >= 0 and y >= 0 and vx + w <= VIRTUAL_W and y + h <= VIRTUAL_H
+            if inside and not _panels_due():
+                # s11scr 2026-11-19: only the real pixels this box reads (a 64 x 64 box at 1080:
+                # ~3 ms, not the 69 ms of the whole frame through the pipe + the whole picture)
+                local = ClientView((0, 0, rw, rh), view.mode, view.world_scale,
+                                   view.world_centre, view.panels)  # fmt: skip
+                src = local.source_rect((vx, y, w, h), (rw, rh))
+                if src is None:
+                    t, _, frame_id, path = self.grab_meta(rx, ry, 1, 1)
+                    return t, local.crop_from(np.zeros((1, 1, 4), np.uint8), None, (vx, y, w, h),
+                                              (rw, rh)), frame_id, path  # fmt: skip
+                sx, sy, sw, sh = src
+                t, sub, frame_id, path = self.grab_meta(rx + sx, ry + sy, sw, sh)
+                if sub.shape[:2] == (sh, sw):
+                    return t, local.crop_from(sub, src, (vx, y, w, h), (rw, rh)), frame_id, path
             t, real, frame_id, path = self.grab_meta(rx, ry, rw, rh)
             _panels_tick(real)  # 4f: the windows found, re-checked, searched again if moved
             view = client_view()
             local = ClientView((0, 0, rw, rh), view.mode, view.world_scale, view.world_centre,
                                view.panels)  # fmt: skip
             vf = local.virtual_frame(real)
-            vx = x - VIRTUAL_X0
             return t, np.ascontiguousarray(vf[y : y + h, vx : vx + w]), frame_id, path
         assert self.proc.stdin is not None and self.proc.stdout is not None
         self.proc.stdin.write(f"{x} {y} {w} {h}\n".encode())

@@ -325,3 +325,42 @@ def test_the_login_dialogs_stay_in_real_pixels_under_the_virtual_client(
         json.dumps({"box": [505, 371, 281, 60]}))  # fmt: skip
     assert ro.layout("service_ok") == (714 + 320, 555 + 225)  # real, never at the far origin
     assert ro.region_for("service_select") == (825, 596, 281, 60)
+
+
+def test_a_virtual_box_reads_only_its_real_pixels_and_equals_the_whole_picture_s_box(
+    ro: ModuleType, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """s11scr 2026-11-19: a 64 x 64 virtual read at 1080 cost 69 ms (the whole real frame through
+    the pipe, the whole virtual picture built); the cursor check got ~4 reads in its 0.35 s. Between
+    the windows' checks a box reads only the real pixels it needs -- the same pixels as the box
+    cut from the whole picture (the pointer's own picture pasted in both)."""
+    monkeypatch.setattr(ro, "real_game_region", lambda: (0, 0, 1920, 1080))
+    monkeypatch.setattr(ro, "desktop", lambda: (1920, 1080))
+    monkeypatch.setattr(ro, "_POINTER", None)
+    rng = np.random.default_rng(7)
+    frame = rng.integers(0, 255, (1080, 1920, 4), dtype=np.uint8)
+    fake = raw_screen(ro, frame)
+    asked: list[tuple[int, int, int, int]] = []
+    plain = fake.grab_meta
+
+    def spy(x: int, y: int, w: int, h: int) -> Any:
+        if x < ro.VIRTUAL_X0:
+            asked.append((x, y, w, h))
+        return plain(x, y, w, h)
+
+    monkeypatch.setattr(fake, "grab_meta", spy)
+    vx0 = ro.VIRTUAL_X0
+    ro.real_xy(vx0 + 640, 330)  # the pointer over the world: its picture is a panel
+    boxes = [(600, 300, 64, 64), (0, 0, 230, 150), (1130, 10, 150, 160), (300, 560, 200, 150),
+             (1240, 680, 40, 40)]  # fmt: skip
+    for x, y, w, h in boxes:
+        monkeypatch.setattr(ro, "_panels_due", lambda: True)
+        asked.clear()
+        _, whole, _, _ = fake.grab_meta(vx0 + x, y, w, h)
+        assert asked == [(0, 0, 1920, 1080)]
+        monkeypatch.setattr(ro, "_panels_due", lambda: False)
+        asked.clear()
+        t, box, fid, path = fake.grab_meta(vx0 + x, y, w, h)
+        assert (t, fid, path) == (7, 42, "bus")
+        assert np.array_equal(box, whole), (x, y, w, h)
+        assert len(asked) == 1 and asked[0][2] * asked[0][3] < 1920 * 1080 // 4, asked

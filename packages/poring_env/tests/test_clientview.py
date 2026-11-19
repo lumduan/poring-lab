@@ -120,3 +120,52 @@ def test_a_panel_leaves_no_shrunk_ghost_in_the_world() -> None:
     assert (out[gy + 5, 10] == 0).all()  # blanked, not 33
     assert (out[600, 10] == 33).all()  # the panel at its virtual place
     assert (out[100, 640] == 90).all()  # the world elsewhere
+
+
+# --- one box from the real pixels it needs (s11scr 2026-11-19: a 64 x 64 read cost 69 ms) ---
+def _views() -> list[ClientView]:
+    lab = (("basic_info", (0, 0, 230, 150), "tl"), ("hotbar", (226, 0, 300, 40), "tl"),
+           ("chat", (0, 578, 600, 142), "bl"), ("minimap", (1130, 10, 150, 160), "tr"))  # fmt: skip
+    full = anchored_view((0, 0, 1920, 1080), "fullscreen", lab, world_scale=1.5)
+    cursor = Panel("cursor", (600, 300, 68, 68), (926, 476))  # unscaled, over the world
+    with_cursor = ClientView(full.rect, full.mode, full.world_scale, None, (*full.panels, cursor))
+    window = anchored_view((80, 77, 1440, 900), "window", lab, world_scale=1.25)
+    edge = ClientView(
+        (0, 0, 1920, 1080),
+        "fullscreen",
+        1.5,
+        None,
+        (Panel("chat", (0, 578, 600, 142), (-40, 990)),),
+    )  # off the left / bottom
+    return [full, with_cursor, window, edge]
+
+
+@pytest.mark.parametrize("k", range(4))
+def test_crop_from_equals_the_virtual_frame_on_random_boxes(k: int) -> None:
+    view = _views()[k]
+    rng = np.random.default_rng(1234 + k)
+    fw, fh = (1920, 1080) if k != 2 else (1600, 1000)
+    frame = rng.integers(0, 255, (fh, fw, 4), dtype=np.uint8)
+    vf = view.virtual_frame(frame)
+    boxes = [(0, 0, 1280, 720), (600, 300, 64, 64), (0, 0, 64, 64), (1216, 656, 64, 64),
+             (1100, 0, 180, 200), (0, 560, 640, 160)]  # fmt: skip
+    for _ in range(150):
+        w, h = int(rng.integers(1, 200)), int(rng.integers(1, 200))
+        boxes.append((int(rng.integers(0, 1280 - w + 1)), int(rng.integers(0, 720 - h + 1)), w, h))
+    for x, y, w, h in boxes:
+        src = view.source_rect((x, y, w, h), (fw, fh))
+        if src is None:
+            got = view.crop_from(frame[:1, :1], None, (x, y, w, h), (fw, fh))
+        else:
+            sx, sy, sw, sh = src
+            assert sx >= 0 and sy >= 0 and sx + sw <= fw and sy + sh <= fh
+            got = view.crop_from(frame[sy : sy + sh, sx : sx + sw], src, (x, y, w, h), (fw, fh))
+        assert np.array_equal(got, vf[y : y + h, x : x + w]), (k, (x, y, w, h))
+
+
+def test_a_small_box_reads_a_small_real_rect() -> None:
+    full = _views()[0]
+    src = full.source_rect((600, 300, 64, 64), (1920, 1080))
+    assert src is not None
+    _, _, sw, sh = src
+    assert sw <= 97 and sh <= 97  # ~1.5 x 64: not the whole 1920 x 1080 frame

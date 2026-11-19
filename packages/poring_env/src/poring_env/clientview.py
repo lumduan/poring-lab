@@ -157,9 +157,7 @@ class ClientView:
         k = self.world_scale
         xs = np.floor(cx + k * (np.arange(VIRTUAL_W) + 0.5 - VIRTUAL_W / 2)).astype(np.int64)
         ys = np.floor(cy + k * (np.arange(VIRTUAL_H) + 0.5 - VIRTUAL_H / 2)).astype(np.int64)
-        okx, oky = (xs >= 0) & (xs < cw), (ys >= 0) & (ys < ch)
-        if okx.any() and oky.any():
-            out[np.ix_(oky, okx)] = client[np.ix_(ys[oky], xs[okx])]
+        _resample_into(out, client, xs, ys, cw, ch, 0, 0)
         # a panel sits ON the world in the real frame: the world layer shows it again, shrunk, as a
         # ghost where the world transform puts its real box. The world behind it is unknown: blank
         for p in self.panels:
@@ -189,6 +187,142 @@ class ClientView:
             sy, sx = sy0 + (ty0 - dy0), sx0 + (tx0 - dx0)
             out[ty0:ty1, tx0:tx1] = client[sy : sy + (ty1 - ty0), sx : sx + (tx1 - tx0)]
         return out
+
+    # --- one box of the virtual picture from the real pixels it needs (s11scr, 2026-11-19) -----
+    # A virtual read of a 64 x 64 box took 69 ms at 1920x1080: the whole real frame came through
+    # the grab pipe and the whole virtual picture was built, to cut 64 x 64 of it (a real 64 x 64
+    # read: 3.4 ms). The cursor check reads every 30 ms inside 0.35 s, so it got ~4 reads instead
+    # of ~10 and its SWORD verdict came late or never ("unknown" 57 % at 1080, 0-5 % at 720).
+    # These two give exactly virtual_frame(frame)[y:y+h, x:x+w] from the frame's sub-rectangle
+    # that holds every real pixel the box reads (test_clientview: equal on random boxes).
+
+    def _world_axes(self, x: int, y: int, w: int, h: int) -> tuple[NDArray[np.int64], ...]:
+        cx, cy = self.centre
+        k = self.world_scale
+        xs = np.floor(cx + k * (np.arange(x, x + w) + 0.5 - VIRTUAL_W / 2)).astype(np.int64)
+        ys = np.floor(cy + k * (np.arange(y, y + h) + 0.5 - VIRTUAL_H / 2)).astype(np.int64)
+        return xs, ys
+
+    def _client_box(self, frame_size: tuple[int, int]) -> tuple[int, int, int, int]:
+        """The client's top-left in the frame and its size there (virtual_frame's ``client``)."""
+        x0, y0, w, h = self.rect
+        fw, fh = frame_size
+        ox, oy = max(0, x0), max(0, y0)
+        return ox, oy, max(0, min(fw, x0 + w) - ox), max(0, min(fh, y0 + h) - oy)
+
+    def _panel_copy(self, p: Panel, cw: int, ch: int) -> tuple[int, int, int, int, int, int] | None:
+        """A panel's copy as virtual_frame makes it: (tx0, ty0, tx1, ty1, sx, sy) -- the virtual
+        target box and its source top-left in client pixels -- or None (off the client)."""
+        vx, vy, pw, ph = p.virtual
+        rx, ry = p.real_xy
+        sx0, sy0 = max(0, rx), max(0, ry)
+        sx1, sy1 = min(cw, rx + pw), min(ch, ry + ph)
+        if sx1 <= sx0 or sy1 <= sy0:
+            return None
+        dx0, dy0 = vx + (sx0 - rx), vy + (sy0 - ry)
+        tx0, ty0 = max(0, dx0), max(0, dy0)
+        tx1, ty1 = min(VIRTUAL_W, dx0 + (sx1 - sx0)), min(VIRTUAL_H, dy0 + (sy1 - sy0))
+        if tx1 <= tx0 or ty1 <= ty0:
+            return None
+        return tx0, ty0, tx1, ty1, sx0 + (tx0 - dx0), sy0 + (ty0 - dy0)
+
+    def _ghost(self, p: Panel) -> tuple[int, int, int, int] | None:
+        """The panel's ghost in the world layer (virtual x0, y0, x1, y1), blanked; or None."""
+        if self.identity:
+            return None
+        cx, cy = self.centre
+        k = self.world_scale
+        rx, ry = p.real_xy
+        _, _, pw, ph = p.virtual
+        x0_ = max(0, int(np.floor(VIRTUAL_W / 2 + (rx - cx) / k)))
+        x1_ = min(VIRTUAL_W, int(np.ceil(VIRTUAL_W / 2 + (rx + pw - cx) / k)))
+        y0_ = max(0, int(np.floor(VIRTUAL_H / 2 + (ry - cy) / k)))
+        y1_ = min(VIRTUAL_H, int(np.ceil(VIRTUAL_H / 2 + (ry + ph - cy) / k)))
+        return (x0_, y0_, x1_, y1_) if x1_ > x0_ and y1_ > y0_ else None
+
+    def source_rect(self, box: Box, frame_size: tuple[int, int]) -> Box | None:
+        """PURE: the frame rectangle (x, y, w, h) holding every real pixel that the virtual box
+        (x, y, w, h) reads in virtual_frame, for a frame of ``frame_size``; None: none."""
+        x, y, w, h = box
+        ox, oy, cw, ch = self._client_box(frame_size)
+        xs, ys = self._world_axes(x, y, w, h)
+        xs, ys = xs[(xs >= 0) & (xs < cw)], ys[(ys >= 0) & (ys < ch)]
+        rects: list[tuple[int, int, int, int]] = []
+        if xs.size and ys.size:
+            rects.append((int(xs.min()), int(ys.min()), int(xs.max()) + 1, int(ys.max()) + 1))
+        for p in self.panels:
+            c = self._panel_copy(p, cw, ch)
+            if c is None:
+                continue
+            tx0, ty0, tx1, ty1, sx, sy = c
+            ix0, iy0 = max(tx0, x), max(ty0, y)
+            ix1, iy1 = min(tx1, x + w), min(ty1, y + h)
+            if ix1 > ix0 and iy1 > iy0:
+                rects.append((sx + ix0 - tx0, sy + iy0 - ty0, sx + ix1 - tx0, sy + iy1 - ty0))
+        if not rects:
+            return None
+        ux0, uy0 = min(r[0] for r in rects), min(r[1] for r in rects)
+        ux1, uy1 = max(r[2] for r in rects), max(r[3] for r in rects)
+        return ox + ux0, oy + uy0, ux1 - ux0, uy1 - uy0
+
+    def crop_from(self, region: NDArray[np.uint8], region_rect: Box | None, box: Box,
+                  frame_size: tuple[int, int]) -> NDArray[np.uint8]:  # fmt: skip
+        """PURE: virtual_frame(frame)[y:y+h, x:x+w] built from ``region``, the frame's pixels
+        at ``region_rect`` (source_rect's; None: nothing is read, the box is all 0)."""
+        x, y, w, h = box
+        out = np.zeros((h, w, *region.shape[2:]), dtype=region.dtype)
+        if region_rect is None:
+            return out
+        ox, oy, cw, ch = self._client_box(frame_size)
+        bx, by = region_rect[0] - ox, region_rect[1] - oy  # the region's origin, client pixels
+        xs, ys = self._world_axes(x, y, w, h)
+        _resample_into(out, region, xs, ys, cw, ch, bx, by)
+        for p in self.panels:
+            g = self._ghost(p)
+            if g is None:
+                continue
+            gx0, gy0, gx1, gy1 = g
+            ix0, iy0 = max(gx0, x), max(gy0, y)
+            ix1, iy1 = min(gx1, x + w), min(gy1, y + h)
+            if ix1 > ix0 and iy1 > iy0:
+                out[iy0 - y : iy1 - y, ix0 - x : ix1 - x] = 0
+        for p in self.panels:
+            c = self._panel_copy(p, cw, ch)
+            if c is None:
+                continue
+            tx0, ty0, tx1, ty1, sx, sy = c
+            ix0, iy0 = max(tx0, x), max(ty0, y)
+            ix1, iy1 = min(tx1, x + w), min(ty1, y + h)
+            if ix1 <= ix0 or iy1 <= iy0:
+                continue
+            ssx, ssy = sx + (ix0 - tx0) - bx, sy + (iy0 - ty0) - by
+            out[iy0 - y : iy1 - y, ix0 - x : ix1 - x] = region[
+                ssy : ssy + (iy1 - iy0), ssx : ssx + (ix1 - ix0)
+            ]
+        return out
+
+
+def _resample_into(
+    out: NDArray[np.uint8],
+    src: NDArray[np.uint8],
+    xs: NDArray[np.int64],
+    ys: NDArray[np.int64],
+    cw: int,
+    ch: int,
+    bx: int,
+    by: int,
+) -> None:
+    """The world's nearest-pixel resample: ``out[i, j] = src[ys[i] - by, xs[j] - bx]`` wherever
+    the client pixel (xs[j], ys[i]) lies inside the cw x ch client, else ``out`` stays. ``xs`` and
+    ``ys`` only grow, so the inside ones are one run each: a slice and two axis takes (~1 ms for
+    the 1280x720 picture at 1080p; the 2-D fancy index took ~20-45 ms)."""
+    okx = np.flatnonzero((xs >= 0) & (xs < cw))
+    oky = np.flatnonzero((ys >= 0) & (ys < ch))
+    if okx.size == 0 or oky.size == 0:
+        return
+    c0, c1, r0, r1 = int(okx[0]), int(okx[-1]) + 1, int(oky[0]), int(oky[-1]) + 1
+    rows = np.take(src, ys[r0:r1] - by, axis=0)
+    out[r0:r1, c0:c1] = np.take(rows, xs[c0:c1] - bx, axis=1)
 
 
 def anchored_view(rect: Box, mode: Mode, layout: Sequence[tuple[str, Box, Anchor]], *,
