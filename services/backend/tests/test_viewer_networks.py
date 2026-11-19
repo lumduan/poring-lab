@@ -6,14 +6,16 @@ and nothing here stops the backend."""
 
 import ipaddress
 import re
+import sys
 from pathlib import Path
-
-import setup_core
 
 from poring_backend.config import PRIVATE_NETWORKS, Settings
 from poring_backend.routes_packets import in_networks
 
 ROOT = Path(__file__).resolve().parents[3]
+sys.path.insert(0, str(ROOT / "scripts"))
+
+import setup_core  # noqa: E402
 
 
 def nets(s: Settings) -> list[str]:
