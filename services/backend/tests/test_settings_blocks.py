@@ -21,6 +21,8 @@ import flow_config as fc  # noqa: E402
 import flow_play as fp  # noqa: E402
 
 FIX = ROOT / "services/frontend/src/lib/flow/fixtures"
+# the configured maximum run time: none since 2026-11-19 (Batt: no time limit unless set)
+NO_MAX = 0
 NODE = "xmas_dun02"
 # The runner argv every box gave on main 2d19014d (2026-11-14, before the settings were blocks),
 # computed with THAT commit's flow_config / flow_run / flow_play and an empty settings file: the
@@ -33,7 +35,7 @@ TODAY = [
     "--fly-rate-below", "0.50", "--weight-home", "0.50", "--respawn-at", "645,481",
     "--respawn-confirm-at", "714,405", "--walk-ahead", "7", "--walk-every", "1.2", "--box-every",
     "1", "--bare-steal", "--bare-ready", "--steal-cue", "popup", "--swap-gap", "--respawn",
-    "--minutes", "120", "--engage-screen", "--reach-check", "--miss-cue", "--late-confirm",
+    "--minutes", "5256000", "--engage-screen", "--reach-check", "--miss-cue", "--late-confirm",
     "--exp-first", "--kill-gap", "--quiet-scan", "--value-target", "--box-strike", "--box-now",
     "--self-recheck", "--still-strike", "--still-target", "--lead-press", "--far-single",
     "--far-approach", "--box-ignore", "2", "--loot", "trim", "--loot-items", "xmas02fi5",
@@ -53,7 +55,7 @@ FROZEN = {
 
 
 def hunt_argv(text: str) -> list[str] | str:
-    prep = fp.prepare(text, NODE, 7200)
+    prep = fp.prepare(text, NODE, NO_MAX)
     if isinstance(prep, str):
         return prep
     return prep.runners[NODE].argv("L", Path("/S"), None)
@@ -102,7 +104,7 @@ def test_a_setting_the_box_plays_itself_is_unused_by_the_runner_with_or_without_
     for it is off (its plays, which the live player hands to run()). A block a person adds with
     another value changes only that flag's value, never what plays (the lint marks the block "not
     used here")."""
-    prep = fp.prepare(json.dumps(one_box()), NODE, 7200)
+    prep = fp.prepare(json.dumps(one_box()), NODE, NO_MAX)
     assert not isinstance(prep, str), prep
     r = prep.runners[NODE]
     assert {"potion", "fly_hp", "weight_home", "respawn"} <= set(r.plays)
@@ -119,7 +121,7 @@ def test_a_setting_the_box_plays_itself_is_unused_by_the_runner_with_or_without_
     assert isinstance(a, list)
     changed = [(x, y) for x, y in zip(a, TODAY, strict=True) if x != y]
     assert changed == [("0.30", "0.40"), ("600,400", "645,481")]  # the two values, nothing else
-    p2 = fp.prepare(json.dumps(d), NODE, 7200)
+    p2 = fp.prepare(json.dumps(d), NODE, NO_MAX)
     assert not isinstance(p2, str) and set(p2.runners[NODE].plays) == set(r.plays)
 
 
@@ -222,5 +224,5 @@ def test_a_layout_changes_neither_the_argv_nor_the_hash(name: str) -> None:
     assert hunt_argv(placed) == TODAY == hunt_argv(raw)
     assert len(TODAY) == 97
     assert pj.project_hash(pj.from_json(placed)) == pj.project_hash(pj.from_json(raw))
-    prep = fp.prepare(placed, NODE, 7200)
+    prep = fp.prepare(placed, NODE, NO_MAX)
     assert not isinstance(prep, str) and prep.project_hash == pj.project_hash(pj.from_json(raw))

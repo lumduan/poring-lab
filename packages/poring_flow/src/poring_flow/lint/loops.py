@@ -2,7 +2,8 @@
 
 Every `while` has a bound, a sensor or variable its body can change, a break, an exit or a stop; a
 body with no action and no wait is a busy loop; every cycle of the workflow graph has a stop
-condition or the explicit `run_until_stopped`. `max_runtime_s` still bounds every run.
+condition or the explicit `run_until_stopped`. `max_runtime_s` bounds a run when it is set (0 =
+no time limit, Batt 2026-11-19: Stop, a death or the flow's own ends stop it).
 """
 
 from __future__ import annotations

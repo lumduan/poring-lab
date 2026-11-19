@@ -73,9 +73,9 @@ INVALID = [
         plain(SIT) | {"workflow": {"start_block": "a", "start_entry": "b", "blocks": []}},
         ["flow: workflow.blocks: List should have at least 1 item after validation, not 0"],
     ),
-    (
-        plain(SIT, max_runtime_s=0),
-        ["flow: max_runtime_s: Input should be greater than or equal to 1"],
+    (  # 0 = no time limit since 2026-11-19 (Batt); below it is invalid
+        plain(SIT, max_runtime_s=-1),
+        ["flow: max_runtime_s: Input should be greater than or equal to 0"],
     ),
     (
         plain(
@@ -247,3 +247,13 @@ def test_messages_print_one_path_grammar() -> None:
     assert ir.PathNames(bare)("hp_critical.0") == "handlers.hp_critical.0"
     # the node ids themselves are unchanged
     assert "town.3" in [s.path for s in ir.sites(farm_flow())]
+
+
+def test_no_time_limit_is_zero_and_a_set_maximum_refuses_it() -> None:
+    """Batt 2026-11-19: "if it is not set, it runs on with no time limit"."""
+    assert ir.validate(plain(SIT, max_runtime_s=0)).max_runtime_s == ir.NO_TIME_LIMIT == 0
+    assert not ir.runtime_over(0, 0) and not ir.runtime_over(0, None)  # no maximum
+    assert not ir.runtime_over(0, 86_400)  # no limit runs to a set maximum (runtime_box)
+    assert ir.runtime_over(90_000, 86_400) and not ir.runtime_over(7_200, 86_400)
+    assert ir.runtime_box(0, 0) == 0 and ir.runtime_box(7_200, 0) == 7_200
+    assert ir.runtime_box(0, 86_400) == 86_400 and ir.runtime_box(90_000, 86_400) == 86_400

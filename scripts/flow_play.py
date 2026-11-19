@@ -127,6 +127,7 @@ import argparse
 import contextlib
 import io
 import json
+import math
 import os
 import sys
 import threading
@@ -263,8 +264,22 @@ class RunnerPlan:
         return out
 
 
+def cap_json(cap_s: float) -> float | None:
+    """A time box as the records write it: None = no time limit (JSON has no infinity)."""
+    return cap_s if math.isfinite(cap_s) else None
+
+
+def box_words(cap_s: float) -> str:
+    """The run log's words for a time box (Batt 2026-11-19: none unless the flow sets one)."""
+    if not math.isfinite(cap_s):
+        return "no time limit (Stop, a death or the flow's own ends stop it)"
+    return f"the time box {int(cap_s // 60)} min"
+
+
 @dataclass(frozen=True)
 class Prepared:
+    """A checked project run; ``cap_s`` its time box (math.inf: none, Batt 2026-11-19)."""
+
     project: pj.Project
     compiled: pj.Compiled
     node: str
@@ -286,7 +301,7 @@ class Prepared:
 
     def doc(self) -> dict[str, Any]:
         return {"version": VERSION, "project": self.project.name, "node": self.node,
-                "map": self.map, "project_hash": self.project_hash, "cap_s": self.cap_s,
+                "map": self.map, "project_hash": self.project_hash, "cap_s": cap_json(self.cap_s),
                 "runners": {b: {"flow": p.flow_id, "keys": p.keys, "events": list(p.events),
                                 "box_plays": sorted(p.plays),
                                 **({"box_roles": p.box_roles(),
@@ -346,7 +361,7 @@ def prepare(text: str, node: str, max_s: int | None, *,
         return refuse(f"{len(bad)} cannot play live: " + "; ".join(shown) + more)
     if max_s is None:
         return refuse("no configured maximum run time (--max-s)")
-    if p.max_runtime_s > max_s:
+    if ir.runtime_over(p.max_runtime_s, max_s):
         return refuse(f"max_runtime_s {p.max_runtime_s} is above the configured maximum {max_s}")
     runners: dict[str, RunnerPlan] = {}
     roles: dict[str, str] = {}
@@ -377,7 +392,8 @@ def prepare(text: str, node: str, max_s: int | None, *,
                                     hp.tick_left_out)  # fmt: skip
         roles.update({k: ROLE_PRESS[f] for f, k in rk.keys.items() if f in ROLE_PRESS})
         roles.update({k: "eat" for k in hp.eat_keys})  # 2026-11-14: the live line's words
-    return Prepared(p, c, node, h, float(min(p.max_runtime_s, max_s)), runners, roles)
+    box = ir.runtime_box(p.max_runtime_s, max_s)  # 0: no time limit (Batt 2026-11-19)
+    return Prepared(p, c, node, h, float(box) if box else math.inf, runners, roles)
 
 
 # --- the session record (the runner's shape: the helper's Live tracker reads it) ------------------
@@ -1809,8 +1825,8 @@ def play(prep: Prepared, lio: LiveIO, *, label: str, stop_file: Path | None,
     0: it played and ended; 2: refused before any input. Its diary (say): the environment, each
     check line, the pauses, a fault's traceback (no picture is saved: Batt 2026-11-18)."""
     checker = checker or default_checker
-    say(f"RUN {label}: the project {prep.project.name} from {prep.node} (map {prep.map}), the "
-        f"time box {prep.cap_s // 60} min")  # fmt: skip
+    say(f"RUN {label}: the project {prep.project.name} from {prep.node} (map {prep.map}), "
+        f"{box_words(prep.cap_s)}")  # fmt: skip
     for ln in lio.describe():
         say(ln)
     say("the start check reads the screen (it presses nothing)")
@@ -1849,7 +1865,7 @@ def play(prep: Prepared, lio: LiveIO, *, label: str, stop_file: Path | None,
                             hunt=hunt or HuntCore(label, stop_file))  # fmt: skip
         log.ev({"kind": "run_start", "player": "flow_play", "version": VERSION,
                 "project": prep.project.name, "project_hash": prep.project_hash,
-                "node": prep.node, "map": prep.map, "cap_s": prep.cap_s,
+                "node": prep.node, "map": prep.map, "cap_s": cap_json(prep.cap_s),
                 "check": {"ok": got.get("ok"), "items": got.get("items")},
                 "runners": {b: p.flow_id for b, p in prep.runners.items()}})  # fmt: skip
         player.start_world(prep.map)

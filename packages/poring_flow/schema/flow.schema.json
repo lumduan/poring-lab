@@ -3451,7 +3451,7 @@
           "anyOf": [
             {
               "exclusiveMinimum": 0,
-              "maximum": 604800,
+              "maximum": 31536000,
               "type": "number"
             },
             {
@@ -3704,8 +3704,8 @@
       "title": "Main"
     },
     "max_runtime_s": {
-      "maximum": 604800,
-      "minimum": 1,
+      "maximum": 31536000,
+      "minimum": 0,
       "title": "Max Runtime S",
       "type": "integer"
     },

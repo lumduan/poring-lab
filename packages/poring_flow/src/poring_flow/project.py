@@ -297,7 +297,7 @@ class Project(BaseModel):
     name: str = Field(pattern=ir.FLOW_NAME)
     description: str = Field(default="", max_length=500)
     target: ir.Target
-    max_runtime_s: int = Field(ge=1, le=ir.MAX_RUNTIME_S)
+    max_runtime_s: int = Field(ge=0, le=ir.MAX_RUNTIME_S)  # 0 = no time limit (Batt 2026-11-19)
     where_budget: int = Field(default=ir.WHERE_BUDGET_DEFAULT, ge=0, le=ir.WHERE_BUDGET_MAX)
     # `false` (a literal) = run until stopped: IR 2's explicit choice for an unbounded workflow
     # (13.5's `run_until_stopped`); `compile_project` says so

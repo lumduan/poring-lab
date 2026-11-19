@@ -68,6 +68,7 @@ from __future__ import annotations
 import argparse
 import contextlib
 import json
+import math
 import os
 import re
 import shutil
@@ -83,6 +84,8 @@ from typing import Any
 import flow_config as fc  # the settings' registry (same directory: scripts/)
 import host_profile  # this host's detect backend (ADR-0022; same directory, stdlib only)
 import lab_env  # this copy's compose project names (same directory, stdlib only)
+
+from poring_flow import ir  # the time box rule: 0 = no time limit (Batt 2026-11-19)
 
 ROOT = Path(__file__).resolve().parents[1]
 DIR = ROOT / "settings" / "flowrun"
@@ -129,6 +132,16 @@ FIXED = [
 # keeps only what flow_config.NOT_SETTINGS names: the character, the map, the strategy, the seed.
 
 
+# A run with no time limit (Batt 2026-11-19) still gives the detect server's guarded step a time
+# box (its command needs one): 10 years. The run's end stops the server itself (end_server).
+NO_LIMIT_SERVE_S = 315_360_000
+
+
+def serve_seconds(cap_s: float) -> str:
+    """PURE: the detect server's time box: the run's cap + 150 s, or NO_LIMIT_SERVE_S."""
+    return str(int(cap_s + 150) if math.isfinite(cap_s) else NO_LIMIT_SERVE_S)
+
+
 @dataclass(frozen=True)
 class Flow:
     id: str
@@ -152,7 +165,7 @@ FLOWS: dict[str, Flow] = {
     "xmas_dun02_rogue": Flow(
         "xmas_dun02_rogue",
         "xmas_dun02: the Rogue with Batt's Knife swap (the base of 4DQ), as a player",
-        120,
+        0,  # no time limit (Batt 2026-11-19, ADR-0020 Amendment T; was 120 min)
         ("--player-mode",),  # Batt: the Run button plays as a player (flow_config.NOT_SETTINGS)
         "rogue-xmas02.md 4DQ (the base) + --player-mode (Batt 2026-11-13: no GM lines) + the "
         "map's two exits (dungeon@9.41, Batt 2026-11-13): weight over 50 % -> the Butterfly Wing "
@@ -275,7 +288,9 @@ def parse_request(text: str) -> dict[str, Any] | str:
             return "a project run names its map node"
         if not isinstance(h, str) or not HASH.fullmatch(h):
             return "a project run carries the checked project's hash"
-        if isinstance(max_s, bool) or not isinstance(max_s, int) or not 1 <= max_s <= 86_400:
+        # 0 = no maximum (Batt 2026-11-19, ADR-0020 Amendment T); the IR's sanity cap above
+        bad = isinstance(max_s, bool) or not isinstance(max_s, int)
+        if bad or not 0 <= max_s <= ir.MAX_RUNTIME_S:
             return "a project run carries the configured maximum run time"
         if set(req) - {"id", "action", "flow", "node", "project_hash", "max_s", "keys", "at"}:
             return "a project run carries nothing else"
@@ -938,7 +953,7 @@ class Helper:
         self.write_status()
         device = ["--device", prof.detect_device] if prof.detect_device else []
         cmd = subprocess.run([PY, "scripts/unit_detector.py", "serve-cmd", "--backend", backend,
-                              *device, "--seconds", str(int(self.cap_s + 150))], cwd=ROOT,
+                              *device, "--seconds", serve_seconds(self.cap_s)], cwd=ROOT,
                              capture_output=True, text=True)  # fmt: skip
         if cmd.returncode == 3:  # no model for this backend in the storage folder
             self.note(event="detect_cpu_only", why="no_model")
@@ -1008,7 +1023,7 @@ class Helper:
             self.note(event="start_refused", why=why, request=rid, flow=PROJECT)
             return
         max_s = int(req["max_s"])
-        runtime_s = min(int(doc.get("max_runtime_s") or 0), max_s)
+        runtime_s = ir.runtime_box(int(doc.get("max_runtime_s") or 0), max_s)  # 0: no time limit
         self.project = {"name": doc.get("name"), "node": node, "map": node_map(doc, node),
                         "hash": req["project_hash"], "max_runtime_s": runtime_s}  # fmt: skip
         self.keys_src = KEYS_SRC_PROJECT
@@ -1017,7 +1032,7 @@ class Helper:
         self.label = PROJECT_LABEL + "-" + time.strftime("%m%d%H%M")
         self.run_dir = SCRATCH / self.label
         self.run_dir.mkdir(parents=True, exist_ok=True)
-        self.cap_s = float(runtime_s) + CAP_GRACE_S
+        self.cap_s = float(runtime_s) + CAP_GRACE_S if runtime_s else math.inf
         keys = req.get("keys")
         if keys and has_hunt_core(doc):  # shown in the status: the hunt core's settings (blocks)
             vals, src, _ks, _why = project_values(doc, node, keys)

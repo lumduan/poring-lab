@@ -331,7 +331,7 @@ def player_for(text: str, node: str = NODE) -> Any:
     no screen and no input path (nothing here may press: the drive's blocks call only the steps)."""
     import flow_play as fp
 
-    prep = fp.prepare(text, node, 7200)
+    prep = fp.prepare(text, node, 0)  # no configured maximum (Batt 2026-11-19)
     if isinstance(prep, str):
         raise SystemExit(prep)
 

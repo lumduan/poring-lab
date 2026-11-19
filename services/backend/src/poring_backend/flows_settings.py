@@ -5,7 +5,8 @@ contradictions #17: max_runtime_s is NOT hard-coded).
 
 - `default_s`: what a NEW flow starts with (the editor's "New"), in seconds.
 - `max_s`: the most a flow may set; the linter reports a flow above it (an ERROR) and the run-start
-  check (`poring_flow.runstart`, `runtime_max_s=`) refuses it. No configured maximum = refuse.
+  check (`poring_flow.runstart`, `runtime_max_s=`) refuses it. 0 = no maximum (since 2026-11-19;
+  `ir.runtime_over`); None (nothing configured at all) still refuses.
 
 Both are human settings: a global default and maximum on the Settings page, human-only writes like
 the environments store (`settings/`, the backend only; the console's Origin and CSRF token; an
@@ -20,8 +21,11 @@ from __future__ import annotations
 
 from typing import Any
 
-DEFAULT_S = 14_400  # 4 h (Batt 2026-10-09)
-MAX_S = 86_400  # 24 h (Batt 2026-10-09)
+# ➡️ Batt 2026-11-19: "do not limit a run to 120 min ... if it is not set, it runs on with no time
+# limit": a new flow has none (0) and there is no maximum (0); a person sets a time in the flow.
+# (Were 14_400 = 4 h and 86_400 = 24 h, Batt 2026-10-09.)
+DEFAULT_S = 0  # no time limit
+MAX_S = 0  # no maximum
 
 
 def runtime_limits(state: Any) -> tuple[int, int]:

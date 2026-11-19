@@ -513,7 +513,7 @@ export function xmasProject(): Project {
     name: "xmas_dun02",
     description: "One box: a person puts the Rogue on xmas_dun02; the runner hunts. Tabs: keys; survival (drink under 50 %, candies); knife; exits; monsters; a block for each setting the box uses, in its tab.",
     target: { ...TARGET },
-    max_runtime_s: 7200,
+    max_runtime_s: 0, // no time limit (Batt 2026-11-19); was 7200
     where_budget: WHERE_BUDGET_DEFAULT,
     stop_when: null,
     assumes: [],
