@@ -182,6 +182,8 @@ def own_panels_file(
     """ro_agent's found windows are shared between processes through a file in /dev/shm
     (teaching-prerun.md 4f): every test gets its own, so a live Run's find never leaks in."""
     monkeypatch.setenv("PORING_PANELS_FILE", str(tmp_path_factory.mktemp("panels") / "panels.json"))
+    # a run searches again in a background thread; a test searches inside the tick (deterministic)
+    monkeypatch.setenv("PORING_PANEL_SEARCH_SYNC", "1")
 
 
 @pytest.fixture(autouse=True)

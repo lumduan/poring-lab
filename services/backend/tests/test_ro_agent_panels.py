@@ -182,3 +182,44 @@ def test_the_finders_and_the_lab_origins_agree(ro: ModuleType) -> None:
     assert pf.find_hotbar(lum).origin == ro.LAB_WINDOW_ORIGINS["hotbar"]  # type: ignore[union-attr]
     assert pf.find_basic_info(lum).origin == (0, 0)  # type: ignore[union-attr]
     assert ro.CHAT_LAB_BOTTOM == 578 + 142 - 1
+
+
+def test_a_window_still_missing_is_searched_for_less_often(ro: ModuleType) -> None:
+    """2026-11-19: Batt's hotbar was never found -- a 1.7 s search every 15 s on this host."""
+    frame = frame_with(basic=(0, 0), hotbar=None)  # no hotbar, no chat
+    ro._panels_tick(frame)
+    assert ro._PANELS["misses"] == 0 and ro.missing_wait(ro._PANELS) == ro.PANEL_SEARCH_S
+    for n in (1, 2, 3, 4):
+        ro._PANELS["checked"], ro._PANELS["searched"] = 0.0, 0.0
+        ro._panels_tick(frame)
+        assert ro._PANELS["misses"] == n
+    waits = [ro.missing_wait({"misses": m}) for m in range(6)]
+    assert waits == [15.0, 30.0, 60.0, 120.0, 120.0, 120.0]
+    ro._PANELS["checked"], ro._PANELS["searched"] = 0.0, 0.0
+    ro._panels_tick(frame_with(basic=(0, 0), hotbar=(230, 0)))  # a new window: the clock resets
+    assert ro._PANELS["misses"] == 0 and "hotbar" in ro._PANELS["found"]
+
+
+def test_a_search_after_the_first_never_runs_inside_the_grab(
+    ro: ModuleType, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import threading
+
+    monkeypatch.delenv(ro.PANEL_SEARCH_SYNC_ENV)
+    release, started = threading.Event(), threading.Event()
+
+    def slow_find(screen: Any = None, real: Any = None) -> Any:
+        started.set()
+        release.wait(5)
+        return {}
+
+    monkeypatch.setattr(ro, "find_panels", slow_find)
+    t0 = time.monotonic()
+    ro._search_again(np.zeros((4, 4, 3), np.uint8))
+    ro._search_again(np.zeros((4, 4, 3), np.uint8))  # one at a time: no second thread
+    assert time.monotonic() - t0 < 0.5 and started.wait(2)
+    th = ro._SEARCH[0]
+    assert th is not None and th.is_alive() and th.daemon
+    release.set()
+    th.join(5)
+    assert not th.is_alive()

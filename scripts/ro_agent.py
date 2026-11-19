@@ -233,6 +233,12 @@ PANELS_ENV = "PORING_PANELS_FILE"  # another file (the tests: each its own)
 PANELS_TTL_S = 120.0  # another process's find is used this long, for the same client region
 PANEL_CHECK_S = 2.0  # a run re-checks each found window at its place this often (< 1 ms)
 PANEL_SEARCH_S = 15.0  # and searches again at most this often when one moved or is missing
+# 2026-11-19: a window still missing after a search is searched for half as often each time, up to
+# this (Batt's hotbar was never found: a 1.7 s search every 15 s on this host's CPU); a found
+# window that moved is still searched for at PANEL_SEARCH_S. Every search after the first runs
+# in a BACKGROUND thread, never inside a grab (a grab waits for a fresh frame within 1.5 s).
+PANEL_SEARCH_MAX_S = 120.0
+PANEL_SEARCH_SYNC_ENV = "PORING_PANEL_SEARCH_SYNC"  # "1": search inside the tick (the tests)
 # where each finder's origin sits in the lab's virtual client (measured 2026-11-19 on the lab's
 # 1280x720 and 1920x1080 frames: the finders return exactly these there)
 LAB_WINDOW_ORIGINS = {"basic_info": (0, 0), "hotbar": (230, 0)}
@@ -344,8 +350,12 @@ def find_panels(screen: Any = None, real: Any = None) -> dict[str, Any]:
           "missing": [n for n in ("basic_info", "hotbar", "chat") if n not in found]}  # fmt: skip
     now = time.monotonic()
     with _PANELS_LOCK:
+        before = dict(_PANELS) if _PANELS.get("region") == list(region) else {}
+        # a search that finds no window the last one missed is one more miss (the backoff)
+        new = set(found) - set(before.get("found") or {})
+        misses = int(before.get("misses") or 0) + 1 if before and st["missing"] and not new else 0
         _PANELS.clear()
-        _PANELS.update(st, checked=now, searched=now)
+        _PANELS.update(st, checked=now, searched=now, misses=misses)
     try:
         f = panels_file()
         f.parent.mkdir(parents=True, exist_ok=True)
@@ -398,8 +408,37 @@ def _panels_tick(real: Any) -> None:
     bgr = np.ascontiguousarray(np.asarray(real)[..., :3])
     lum, rgb = pf.luma(bgr), bgr[..., ::-1]
     gone = [n for n, f in (st.get("found") or {}).items() if not _panel_still_there(n, f, lum, rgb)]
-    if (gone or st.get("missing")) and now - float(st.get("searched") or 0) >= PANEL_SEARCH_S:
+    since = now - float(st.get("searched") or 0)
+    if (gone and since >= PANEL_SEARCH_S) or (st.get("missing") and since >= missing_wait(st)):
+        _search_again(real)
+
+
+def missing_wait(st: Mapping[str, Any]) -> float:
+    """PURE: how long a window still missing waits for its next search (doubling per miss)."""
+    return min(PANEL_SEARCH_S * 2.0 ** int(st.get("misses") or 0), PANEL_SEARCH_MAX_S)
+
+
+_SEARCH: list[threading.Thread | None] = [None]
+
+
+def _search_again(real: Any) -> None:
+    """A search after the first: in a background thread (one at a time), so the grab that
+    noticed it returns at once; PORING_PANEL_SEARCH_SYNC=1 searches here (the tests)."""
+    if os.environ.get(PANEL_SEARCH_SYNC_ENV) == "1":
         find_panels(real=real)
+        return
+    th = _SEARCH[0]
+    if th is not None and th.is_alive():
+        return
+    frame = np.array(real, copy=True)
+
+    def work() -> None:
+        with contextlib.suppress(Exception):  # a failed search keeps the last state
+            find_panels(real=frame)
+
+    th = threading.Thread(target=work, name="panel-search", daemon=True)
+    _SEARCH[0] = th
+    th.start()
 
 
 def panels_words(st: Mapping[str, Any] | None = None) -> list[str]:
@@ -796,10 +835,15 @@ def grab_after_meta(
     "x11"). dungeon@9.21 (LF-2) keeps the frame id of the frame it read."""
     end = time.monotonic() + FRESH_WAIT_S
     while True:
+        started = time.monotonic()
         t, img, frame_id, source = screen.grab_meta(*region)
         if source != "bus" or t > after_ns:
             return t, img, frame_id, source
-        if time.monotonic() > end:
+        # 2026-11-19 (Batt's Runs flowplay-11191458..1510, 4 of 4 ended here): only a grab that
+        # BEGAN after the deadline proves the stream frozen. One slow grab (a 1.7 s window search
+        # on a 1920x1080 frame, now in the background) used to cross the deadline with the frame
+        # it took before the action, and the run ended on a healthy stream (p95 73 ms).
+        if started > end:
             raise FrozenStream(f"no frame newer than the action within {FRESH_WAIT_S} s")
         time.sleep(0.02)
 
