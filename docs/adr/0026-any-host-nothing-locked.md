@@ -165,4 +165,9 @@ at once; I will use it with another Windows host". This machine then runs TWO la
   - the client-derived run-time inputs in `/dev/shm/poring-lab-tmp` (GAT, sprites, calibrations);
   - the CPU detector folder (`/dev/shm/poring-lab-detector`: the models and the venv);
   - the guarded-build guard's own files (one heavy step at a time on the host is the point).
-- **Tested** by `test_lab_names.py::test_a_copy_s_run_helper_and_readers_keep_their_own_ram`.
+- **"One input writer at a time" is per copy** (`flow_run.copy_ps_lines`: only processes whose
+  working folder is this copy). Before this, the live helper read the dev lab's Run as its own
+  busy writer, and neither copy could play while the other did. Each copy writes to its own
+  Windows through its own mux, so two Runs at once are two separate input paths.
+- **Tested** by `test_lab_names.py::test_a_copy_s_run_helper_and_readers_keep_their_own_ram` and
+  `test_flow_run.py::test_another_copy_s_run_never_makes_this_copy_busy`.
