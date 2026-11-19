@@ -205,16 +205,19 @@ class Settings(BaseSettings):
         for n in listed.split(","):
             if not n.strip():
                 continue
-            parts = [ipaddress.ip_network(n.strip(), strict=False)]
+            entry = ipaddress.ip_network(n.strip(), strict=False)
+            inside = [o for o in own if o.version == entry.version and entry.subnet_of(o)]  # type: ignore[arg-type]
+            if inside:  # the user's own entry, not a piece left by an exclusion below
+                _log.warning("VIEWER_NETWORKS: %s is inside the lab's Docker subnet %s: dropped",
+                             entry, inside[0])  # fmt: skip
+                continue
+            parts = [entry]
             for o in own:
                 kept: list[ipaddress.IPv4Network | ipaddress.IPv6Network] = []
                 for net in parts:
                     if net.version != o.version or not net.overlaps(o):
                         kept.append(net)
-                    elif net.subnet_of(o):  # type: ignore[arg-type]
-                        _log.warning("VIEWER_NETWORKS: %s is inside the lab's Docker subnet %s: "
-                                     "dropped", net, o)  # fmt: skip
-                    else:
+                    elif not net.subnet_of(o):  # type: ignore[arg-type]
                         kept.extend(net.address_exclude(o))  # type: ignore[arg-type]
                 parts = kept
             out.extend(sorted(parts))

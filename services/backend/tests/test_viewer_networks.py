@@ -5,9 +5,12 @@ the Settings page; no hard locks). Batt 2026-11-19, outside on the VPN (10.0.1.2
 and nothing here stops the backend."""
 
 import ipaddress
+import logging
 import re
 import sys
 from pathlib import Path
+
+import pytest
 
 from poring_backend.config import PRIVATE_NETWORKS, Settings
 from poring_backend.routes_packets import in_networks
@@ -61,3 +64,15 @@ def test_compose_passes_it_from_env_and_the_code_holds_the_default() -> None:
     assert re.search(r"VIEWER_NETWORKS: \$\{VIEWER_NETWORKS:-\}", text)
     assert re.search(r"(?m)^VIEWER_NETWORKS=$", (ROOT / ".env.example").read_text())
     assert setup_core.PRIVATE_NETWORKS == PRIVATE_NETWORKS  # the wizard's copy
+
+
+def test_only_a_users_own_entry_inside_our_subnets_is_warned(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """The default's pieces (10/8 minus the compose subnet leaves 10.210.97.0/24, then the agent
+    network removes it) are dropped silently: the property is read on every request."""
+    with caplog.at_level(logging.WARNING, logger="poring_backend.config"):
+        assert Settings().viewer_nets
+        assert not caplog.records
+        assert nets(Settings(viewer_networks="10.210.97.5/32,192.168.1.0/24")) == ["192.168.1.0/24"]
+    assert len(caplog.records) == 1 and "10.210.97.5/32" in caplog.records[0].getMessage()
