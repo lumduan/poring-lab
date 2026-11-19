@@ -169,7 +169,7 @@ def test_the_run_log_says_where_each_window_was_found(ro: ModuleType) -> None:
     st = ro.find_panels(real=frame_with(basic=(0, 0), hotbar=(700, 600)))
     words = ro.panels_words(st)
     assert words[0] == "Basic Info found at (0, 0) (11 of 11 of its shape's cues): the lab's place"
-    assert words[1].startswith("the hotbar found at (700, 600) (13 of 13") and "moved" in words[1]
+    assert words[1].startswith("the hotbar found at (700, 600) (9 of 9") and "moved" in words[1]
     assert words[2].startswith("the chat window NOT found") and "cannot be read" in words[2]
     assert words[3] == "the minimap: the top-right corner (RO keeps it there)"
     assert ro.panels_words({}) == ["the windows: not looked for yet (the lab's places are assumed)"]

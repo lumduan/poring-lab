@@ -261,6 +261,8 @@ def panel_places(basic: Any, hotbar: Any, chat: Mapping[str, Any] | None) -> dic
         ox, oy = f.origin
         out[name] = {"virtual": list(box), "real_xy": [box[0] + ox - lx, box[1] + oy - ly],
                      "origin": [ox, oy], "score": [f.score, f.of]}  # fmt: skip
+        if getattr(f, "pitch", None) is not None:  # the hotbar's slot pitch (the lab's: 29)
+            out[name]["pitch"] = int(f.pitch)
     if chat and chat.get("lines") and chat.get("bottom") is not None:
         import chat_window as cw
 
@@ -363,7 +365,7 @@ def _panel_still_there(name: str, f: Mapping[str, Any], lum: Any, rgb: Any) -> b
     if name == "basic_info":
         return pf.basic_info_at(lum, (ox, oy)) >= pf.BASIC_MIN_ROWS
     if name == "hotbar":
-        return pf.hotbar_at(lum, (ox, oy)) >= pf.HOTBAR_MIN_AT
+        return pf.hotbar_at(lum, (ox, oy), int(f.get("pitch") or 29)) >= pf.HOTBAR_MIN_AT
     import chat_window as cw
 
     y0, y1 = max(0, oy - 2), int(f["bottom"]) + 1

@@ -12,9 +12,9 @@ unchanged.
 The finders use the standard RO windows' STRUCTURE, written here as rules -- no template cut from
 a client, no text (any language), so every install can use them without a calibration step:
 
-- the HOTBAR (the shortcut bar): 9 slots on a 29 px pitch; each slot's left frame line is a
-  vertical line, uniform over the slot's 25 rows, of a mid grey, whatever icon the slot holds
-  (measured on the lab's client: x = 245 + 29 i, rows 4-28 of the window, luma 180-210);
+- the HOTBAR (the shortcut bar; Batt 2026-11-19: "9 slots in a row = the hotbar"): 9 square slot
+  boxes on one row at one pitch (26-36 px; the lab's 29), each by its left line and its top edge,
+  uniform and standing out from a neighbour, whatever their colour or the icon inside;
 - BASIC INFO: a 220 px wide window whose frame draws uniform rows at fixed depths and a right
   border line, measured only where no text, EXP bar or badge can reach (the title rows right of
   x 130, the gaps between the bars, the level panel's edges, the line over the weight), whatever
@@ -26,6 +26,7 @@ Pure: numpy only, no X, no I/O. Inputs are LUMA frames of the real client (clien
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from dataclasses import dataclass
 
 import numpy as np
@@ -34,28 +35,25 @@ from numpy.typing import NDArray
 Luma = NDArray[np.float32]
 
 # --- the hotbar --------------------------------------------------------------------------------
+# Batt 2026-11-19 ~12:3x: "really not hard: just look for the UI with 9 slots in a row ... RO's
+# hotbar is fixed like that: 9 horizontal slots = the hotbar." Each slot is a square BOX with a
+# thin frame (the lab's: 26 x 26 on a 29 px pitch, grey 195 on white); another client's frame may
+# be another colour (Batt's: dark) and its counts sit elsewhere, so a slot is its LEFT line and its
+# TOP edge -- each uniform and standing out from a neighbour, whatever their colour -- and the bar
+# is 9 such boxes on one row at one pitch. The right line and the bottom edge are not used: the
+# counts are drawn over them.
 HOTBAR_SLOTS = 9
-HOTBAR_PITCH = 29
-HOTBAR_BAND = 25  # rows of a slot's left line (window rows 4-28)
-HOTBAR_LINE_DX = 15  # the first slot's left line, from the window's origin
-HOTBAR_LINE_DY = 4
-HOTBAR_LINE_STD = 12.0  # a line: its column varies at most this much over the band
-HOTBAR_LINE_LUMA = (165.0, 225.0)  # and its mean is a mid grey (the lab: 180-210)
-HOTBAR_MIN_LINES = 8  # of 9: one slot may be covered (the pointer, a tooltip)
-# its top frame rows, over the slots' span: uniform, at these lumas (the lab's client: 204, 245,
-# 254, 254 on four frames of 1280x720 and 1920x1080, whatever the slots held). They pin the row
-# exactly and refuse other combs of lines (the login screen's list drew 8 of 9).
-HOTBAR_ROWS: tuple[tuple[int, tuple[float, float]], ...] = (
-    (0, (180.0, 228.0)),
-    (1, (230.0, 256.0)),
-    (2, (240.0, 256.0)),
-    (3, (240.0, 256.0)),
-)
-HOTBAR_ROW_STD = 8.0
-HOTBAR_SPAN = HOTBAR_PITCH * (HOTBAR_SLOTS - 1) + 26  # the slots' width, from the first line
-HOTBAR_CANDIDATES = 400  # the best comb positions checked for the rows
+# RO's shortcut bar is fixed (Batt): the lab's 29, Batt's other client's 29 too (his screenshot);
+# a little either side for another skin
+HOTBAR_PITCHES = (28, 29, 30)
+HOTBAR_GAP = 3  # a slot box is its pitch minus this (the lab: 26 of 29)
+HOTBAR_LINE_STD = 12.0  # a frame line varies at most this much along itself
+HOTBAR_EDGE = 20.0  # and stands out from a neighbour (outside or inside) by at least this
+HOTBAR_MIN_LINES = 9  # a search wants all 9 boxes (Batt: "9 slots complete = the hotbar")
+HOTBAR_LINE_DX = 15  # the first slot's left line, from the window's origin (the lab's registry)
+HOTBAR_LINE_DY = 4  # its top edge, from the window's origin
+HOTBAR_MIN_AT = 8  # a re-check at its place: one slot may be covered (the pointer, a tooltip)
 
-HOTBAR_MIN_AT = HOTBAR_MIN_LINES + 4  # hotbar_at: 8 of 9 lines and all four top rows
 
 # --- Basic Info ------------------------------------------------------------------------------
 BASIC_W = 220
@@ -88,12 +86,14 @@ BASIC_H = max(max(r for r, _, _ in BASIC_ROWS) + 1, BASIC_COL[2][1])
 
 @dataclass(frozen=True)
 class Found:
-    """A window found at ``origin`` (client px, its top-left) with ``score`` of ``of`` cues."""
+    """A window found at ``origin`` (client px, its top-left) with ``score`` of ``of`` cues
+    (the hotbar: its slots' ``pitch``)."""
 
     name: str
     origin: tuple[int, int]
     score: int
     of: int
+    pitch: int | None = None
 
 
 def luma(frame_bgr: NDArray[np.uint8]) -> Luma:
@@ -118,72 +118,84 @@ def _running(a: Luma, n: int, axis: int) -> tuple[NDArray[np.float64], NDArray[n
     return mean, np.sqrt(var)
 
 
-def hotbar_lines(lum: Luma) -> NDArray[np.bool_]:
-    """PURE: line[y, x] -- column x is a slot frame line over rows y .. y + HOTBAR_BAND - 1."""
-    if lum.shape[0] < HOTBAR_BAND:
-        return np.zeros((0, lum.shape[1]), bool)
-    mean, std = _running(lum, HOTBAR_BAND, axis=0)
-    lo, hi = HOTBAR_LINE_LUMA
-    return (std <= HOTBAR_LINE_STD) & (mean >= lo) & (mean <= hi)
+def _frame_line(m: NDArray[np.float64], sd: NDArray[np.float64], axis: int) -> NDArray[np.bool_]:
+    """A box's frame line, from each line's run mean ``m`` and std ``sd`` along ``axis`` (the
+    line before = outside the box, the line after = inside): uniform; standing out from the
+    OUTSIDE; and from the inside too -- or the inside is no flat colour (an icon)."""
+    out = np.zeros(m.shape, bool)
+    sl = [slice(None)] * m.ndim
+    cur, prev, nxt = list(sl), list(sl), list(sl)
+    cur[axis], prev[axis], nxt[axis] = slice(1, -1), slice(None, -2), slice(2, None)
+    c, p, n = tuple(cur), tuple(prev), tuple(nxt)
+    outside = np.abs(m[c] - m[p]) >= HOTBAR_EDGE
+    inside = (np.abs(m[c] - m[n]) >= HOTBAR_EDGE) | (sd[n] > HOTBAR_LINE_STD)
+    out[c] = (sd[c] <= HOTBAR_LINE_STD) & outside & inside
+    return out
 
 
-def _hotbar_comb(line: NDArray[np.bool_]) -> NDArray[np.int64]:
-    span = HOTBAR_PITCH * (HOTBAR_SLOTS - 1)
-    h, w = line.shape
+def _slots(lum: Luma, pitch: int) -> NDArray[np.bool_]:
+    """ok[y, x]: a slot box of this pitch has its top-left corner at (x, y) -- its left line
+    (rows y + 1 .. y + size - 2) and its top edge (columns x + 1 .. x + size - 2) uniform and
+    each standing out from a neighbour."""
+    size = pitch - HOTBAR_GAP
+    n = size - 2
+    h, w = lum.shape
+    if h < size or w < size:
+        return np.zeros((0, 0), bool)
+    cm, cs = _running(lum, n, axis=0)  # column runs: (h - n + 1, w), row r = from row r
+    left = _frame_line(cm, cs, axis=1)
+    rm, rs = _running(lum, n, axis=1)  # row runs: (h, w - n + 1), column c = from column c
+    top = _frame_line(rm, rs, axis=0)
+    ny, nx = h - size + 1, w - size + 1
+    return np.asarray(left[1 : 1 + ny, :nx] & top[:ny, 1 : 1 + nx])
+
+
+def _comb(ok: NDArray[np.bool_], pitch: int) -> NDArray[np.int64]:
+    span = pitch * (HOTBAR_SLOTS - 1)
+    h, w = ok.shape
     if w <= span:
         return np.zeros((h, 0), np.int64)
     comb = np.zeros((h, w - span), np.int64)
     for i in range(HOTBAR_SLOTS):
-        comb += line[:, HOTBAR_PITCH * i : HOTBAR_PITCH * i + w - span]
+        comb += ok[:, pitch * i : pitch * i + w - span]
     return comb
 
 
-def hotbar_rows_at(lum: Luma, origin: tuple[int, int]) -> int:
-    """PURE: how many of the hotbar's top frame rows hold at ``origin``."""
-    ox, oy = origin
-    x0 = ox + HOTBAR_LINE_DX
-    if oy < 0 or x0 < 0 or oy + len(HOTBAR_ROWS) > lum.shape[0] or x0 + HOTBAR_SPAN > lum.shape[1]:
-        return 0
-    n = 0
-    for depth, (lo, hi) in HOTBAR_ROWS:
-        row = lum[oy + depth, x0 : x0 + HOTBAR_SPAN].astype(np.float64)
-        n += int(float(row.std()) <= HOTBAR_ROW_STD and lo <= float(row.mean()) <= hi)
-    return n
-
-
-def find_hotbar(lum: Luma) -> Found | None:
-    """PURE: the hotbar's row 1 -- a comb of at least HOTBAR_MIN_LINES slot lines on the pitch
-    under all of its top frame rows; the most lines, then the topmost, then the leftmost -- or
-    None. Its origin is where the lab's registry puts the window's (the first line at origin +
-    (15, 4), the top frame row at origin)."""
-    comb = _hotbar_comb(hotbar_lines(lum))
-    if comb.size == 0 or int(comb.max()) < HOTBAR_MIN_LINES:
+def find_hotbar(lum: Luma, pitches: Sequence[int] = HOTBAR_PITCHES) -> Found | None:
+    """PURE: the hotbar's row 1 -- the most slots (at least HOTBAR_MIN_LINES of 9) on one row at
+    one pitch, then the topmost, then the leftmost -- or None. Its origin is where the lab's
+    registry puts the window's (slot 1's box at origin + (15, 4)); ``pitch`` says its pitch."""
+    best: tuple[int, int, int, int] | None = None  # (-score, y, x, pitch)
+    for pitch in pitches:
+        comb = _comb(_slots(lum, pitch), pitch)
+        if comb.size == 0:
+            continue
+        top = int(comb.max())
+        if top < HOTBAR_MIN_LINES:
+            continue
+        ys, xs = np.nonzero(comb == top)
+        k = int(np.lexsort((xs, ys))[0])
+        cand = (-top, int(ys[k]), int(xs[k]), pitch)
+        if best is None or cand < best:
+            best = cand
+    if best is None:
         return None
-    ys, xs = np.nonzero(comb >= HOTBAR_MIN_LINES)
-    order = np.lexsort((xs, ys, -comb[ys, xs]))[:HOTBAR_CANDIDATES]
-    for k in order.tolist():
-        y, x = int(ys[k]), int(xs[k])
-        origin = (x - HOTBAR_LINE_DX, y - HOTBAR_LINE_DY)
-        if hotbar_rows_at(lum, origin) == len(HOTBAR_ROWS):
-            return Found("hotbar", origin, int(comb[y, x]) + len(HOTBAR_ROWS),
-                         HOTBAR_SLOTS + len(HOTBAR_ROWS))  # fmt: skip
-    return None
+    score, y, x, pitch = -best[0], best[1], best[2], best[3]
+    return Found("hotbar", (x - HOTBAR_LINE_DX, y - HOTBAR_LINE_DY), score, HOTBAR_SLOTS, pitch)
 
 
-def hotbar_at(lum: Luma, origin: tuple[int, int]) -> int:
-    """PURE: how many of the hotbar's cues (9 slot lines + its top frame rows) hold at
-    ``origin`` (a cheap re-check: HOTBAR_MIN_AT or more = still there)."""
+def hotbar_at(lum: Luma, origin: tuple[int, int], pitch: int = 29) -> int:
+    """PURE: how many of the 9 slot boxes the hotbar shows at ``origin`` (a cheap re-check:
+    HOTBAR_MIN_AT or more = still there)."""
     ox, oy = origin
-    y0, x0 = oy + HOTBAR_LINE_DY, ox + HOTBAR_LINE_DX
-    x1 = x0 + HOTBAR_PITCH * (HOTBAR_SLOTS - 1) + 1
-    if y0 < 0 or x0 < 0 or y0 + HOTBAR_BAND > lum.shape[0] or x1 > lum.shape[1]:
+    x0, y0 = ox + HOTBAR_LINE_DX, oy + HOTBAR_LINE_DY
+    size = pitch - HOTBAR_GAP
+    x1, y1 = x0 + pitch * (HOTBAR_SLOTS - 1) + size + 1, y0 + size + 1
+    if x0 < 1 or y0 < 1 or x1 > lum.shape[1] or y1 > lum.shape[0]:
         return 0
-    band = lum[y0 : y0 + HOTBAR_BAND, x0:x1].astype(np.float64)
-    cols = band[:, ::HOTBAR_PITCH]
-    lo, hi = HOTBAR_LINE_LUMA
-    mean, std = cols.mean(axis=0), cols.std(axis=0)
-    lines = int(((std <= HOTBAR_LINE_STD) & (mean >= lo) & (mean <= hi)).sum())
-    return lines + hotbar_rows_at(lum, origin)
+    sub = lum[y0 - 1 : y1, x0 - 1 : x1]
+    ok = _slots(sub, pitch)
+    return int(sum(bool(ok[1, 1 + pitch * i]) for i in range(HOTBAR_SLOTS)))
 
 
 def _basic_rows(lum: Luma) -> NDArray[np.int64]:

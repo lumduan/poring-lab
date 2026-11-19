@@ -16,20 +16,24 @@ def world(h: int = 720, w: int = 1280, seed: int = 0) -> np.ndarray:
 
 
 def draw_hotbar(lum: np.ndarray, at: tuple[int, int], lines: int = 9, rows: bool = True,
-                seed: int = 1) -> np.ndarray:  # fmt: skip
-    """The shortcut bar as the module describes it: the top frame rows, 9 slot lines on the
-    pitch, an icon (noise) in every slot."""
+                seed: int = 1, pitch: int = 29, frame: float = 195.0) -> np.ndarray:  # fmt: skip
+    """The shortcut bar as the module describes it: 9 square boxes on one row (each a left line
+    and a top edge of ``frame`` on the bar's white), an icon (noise) in every box. ``lines``: how
+    many boxes keep their left line; ``rows`` False: no top edges (a comb of lines only)."""
     rng = np.random.default_rng(seed)
     ox, oy = at
     x0, y0 = ox + pf.HOTBAR_LINE_DX, oy + pf.HOTBAR_LINE_DY
-    if rows:
-        for depth, (lo, hi) in pf.HOTBAR_ROWS:
-            lum[oy + depth, x0 : x0 + pf.HOTBAR_SPAN] = (lo + hi) / 2
+    size = pitch - pf.HOTBAR_GAP
+    lum[y0 - 2 : y0 + size + 2, x0 - 3 : x0 + pitch * 8 + size + 3] = 250.0  # the bar's white
     for i in range(pf.HOTBAR_SLOTS):
-        x = x0 + pf.HOTBAR_PITCH * i
-        lum[y0 : y0 + pf.HOTBAR_BAND, x + 1 : x + 26] = rng.uniform(0, 255, (pf.HOTBAR_BAND, 25))
+        x = x0 + pitch * i
+        lum[y0 + 2 : y0 + size - 2, x + 2 : x + size - 2] = rng.uniform(
+            0, 255, (size - 4, size - 4)
+        )
         if i < lines:
-            lum[y0 : y0 + pf.HOTBAR_BAND, x] = 195.0
+            lum[y0 : y0 + size, x] = frame  # its left line
+        if rows:
+            lum[y0, x : x + size] = frame  # its top edge
     return lum
 
 
@@ -52,24 +56,36 @@ def draw_basic(lum: np.ndarray, at: tuple[int, int], crossed: int = 0, seed: int
 @pytest.mark.parametrize("at", [(230, 0), (0, 0), (517, 333), (1280 - 300, 720 - 40)])
 def test_the_hotbar_is_found_wherever_it_was_dragged(at: tuple[int, int]) -> None:
     got = pf.find_hotbar(draw_hotbar(world(), at))
-    assert got is not None and got.origin == at and (got.score, got.of) == (13, 13)
+    assert got is not None and got.origin == at and (got.score, got.of, got.pitch) == (9, 9, 29)
 
 
-def test_one_covered_slot_is_still_a_hotbar_two_are_not() -> None:
-    assert pf.find_hotbar(draw_hotbar(world(), (400, 200), lines=8)) is not None
-    assert pf.find_hotbar(draw_hotbar(world(), (400, 200), lines=7)) is None
+@pytest.mark.parametrize("pitch", [28, 30])
+@pytest.mark.parametrize("frame", [195.0, 40.0])
+def test_nine_boxes_in_a_row_whatever_their_colour_and_pitch(pitch: int, frame: float) -> None:
+    """Batt 2026-11-19: "9 slots in a row = the hotbar" -- his client draws a dark frame."""
+    got = pf.find_hotbar(draw_hotbar(world(), (300, 200), pitch=pitch, frame=frame))
+    assert got is not None and got.origin == (300, 200) and got.pitch == pitch
 
 
-def test_a_comb_of_lines_without_the_frame_rows_is_no_hotbar() -> None:
-    """The login screen's list drew 8 lines on the pitch (2026-11-19, the lab's frames)."""
+def test_a_search_wants_all_nine_a_recheck_lets_one_be_covered() -> None:
+    eight = draw_hotbar(world(), (400, 200), lines=8)
+    assert pf.find_hotbar(eight) is None
+    assert pf.hotbar_at(eight, (400, 200)) == 8 >= pf.HOTBAR_MIN_AT
+
+
+def test_a_comb_of_lines_without_the_boxes_tops_is_no_hotbar() -> None:
+    """The login screen's list drew lines on the pitch (2026-11-19, the lab's frames)."""
     assert pf.find_hotbar(draw_hotbar(world(), (143, 523), rows=False)) is None
     assert pf.find_hotbar(world()) is None
+    flat = np.full((720, 1280), 250.0, np.float32)  # a white window: no line stands out
+    assert pf.find_hotbar(flat) is None
 
 
 def test_the_recheck_pins_the_hotbar_to_its_row() -> None:
     lum = draw_hotbar(world(), (300, 120))
-    assert pf.hotbar_at(lum, (300, 120)) == 13 >= pf.HOTBAR_MIN_AT
-    assert pf.hotbar_at(lum, (300, 121)) < pf.HOTBAR_MIN_AT  # one row off: its top rows fail
+    assert pf.hotbar_at(lum, (300, 120)) == 9
+    assert pf.hotbar_at(lum, (300, 126)) < pf.HOTBAR_MIN_AT  # off its row
+    assert pf.hotbar_at(lum, (305, 120)) < pf.HOTBAR_MIN_AT  # off its columns
     assert pf.hotbar_at(lum, (5000, 0)) == 0  # off the frame
 
 

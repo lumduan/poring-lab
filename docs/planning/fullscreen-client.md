@@ -131,8 +131,9 @@ the first run at 1080p.
   in-game panels are the lab's measured layout (LAB_PANELS), not yet found by their picture.
   ➡️ **BUILT 2026-11-19 (Batt: "make it work with every client ... start from what RO's main UI
   looks like"; teaching-prerun.md 4f):** Basic Info and the hotbar are found by their SHAPE
-  (`poring_env/panelfind.py`: the hotbar's 9 slot lines on a 29 px pitch under its four top frame
-  rows; Basic Info's uniform frame rows at fixed depths), the chat window by
+  (`poring_env/panelfind.py`: the hotbar as 9 square slot boxes on one row at one pitch, any frame
+  colour (Batt 2026-11-19: "9 slots in a row = the hotbar"); Basic Info's uniform frame rows at
+  fixed depths, clear of its text, EXP bars and badge), the chat window by
   `chat_window.find_any` (its frame: any size, any width, floating over the world at 1080 too); each one
   found is moved to its LAB_PANELS place in the virtual client (`ro_agent.find_panels`,
   `client_view`), so even a 1280x720 window with dragged windows is read through the virtual client.
