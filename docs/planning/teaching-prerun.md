@@ -141,6 +141,20 @@ RO's main UI looks like: start from that."** Never by the sniffer or the client'
 | the client's own minimap | which map she is on, on another client | after it |
 | 4a any heal item | a beginner's Red Potions start a Run | after it |
 
+**The first test on another client (Batt, 2026-11-19 10:33, a Thai-UI client on another server,
+fullscreen 1920x1080; his screenshot, scaled 0.92):** all three windows NOT found. Compared with
+the lab's own frames (the causes, to be proven on OUR Thai client before the fix ships):
+
+| Window | His client vs the lab's | Why the 4f rule missed it |
+|---|---|---|
+| Basic Info | the same skin; a Thai title (ข้อมูลพื้นฐาน, tails below the line), a Job EXP bar (Job 48), the red "N" notice badge | rows 16 / 20 sit against the TITLE TEXT (a language's glyphs reach them); every lab character measured was max level (no EXP bars): content, not frame |
+| the hotbar | no 1/2 row selector on the left, a dark top border, the counts under the icons, a "1" and a grip on the right | its four top-row lumas are the lab skin's |
+| the chat window | 4 lines, wider default tabs (Battle Message, General Message) | `chat_window.find` knows sizes 3/6/9/12/15 and the lab's tab widths (TOP_START) |
+
+The lab's Thai client (`C:\RO-rAthena-th`, the same 2021 exe with the Thai data) still points at
+192.168.1.13 (the cutover changed only `C:\RO-rAthena`): a test there needs its clientinfo moved to
+the lab host first.
+
 The Run log now names each window and where it was found ("the hotbar found at (700, 600) (13 of 13
 of its shape's cues): moved to the lab's place in the bot's view"; "Basic Info NOT found ...: the
 lab's place is assumed"), numbers only: a learner's refused Run says which window was missing.
