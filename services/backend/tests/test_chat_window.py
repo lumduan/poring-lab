@@ -527,19 +527,62 @@ def test_a_window_seen_in_part_where_it_belongs_is_never_answered_by_a_key() -> 
     assert cw.next_step(moved) == "open_input"
 
 
-@pytest.mark.parametrize("lines", [3, 6, 9])
-def test_a_window_floating_over_the_world_is_found_at_its_size(lines: int) -> None:
-    """Fullscreen at 1920x1080 RO keeps the chat window at its saved pixels: the scene continues
-    under it, and a closed input's right border runs on into it (find: "obscured")."""
-    g = cw.Geometry(lines, 719)
-    small = draw(g, input_open=False, scrollbar=False)
-    tall = np.zeros((1080, 1280, 3), np.uint8)
-    tall[...] = SCENE
-    tall[:720] = small
-    tall[720:900, g.left + cw.BORDER_X] = 140  # the scene under it, as grey as the border
-    assert cw.find(tall)["obscured"] is True  # type: ignore[index]
-    got = cw.find_floating(tall)
-    assert got == {"left": 0, "text_top": g.text_top, "bottom": 719, "lines": lines,
-                   "input": "closed", "floating": True}  # fmt: skip
-    assert cw.find_floating(small) == cw.find(small)  # a window that does not float: find's answer
-    assert cw.find_floating(draw(None)) is None
+def draw_any(left: int, bottom: int, lines: int, width: int = 597, tab_end: int = 80, *,
+             input_open: bool = False, h: int = 720, w: int = 1280,
+             scene_under: bool = False) -> np.ndarray:  # fmt: skip
+    """A chat window of ANY size and width, as another client draws it (teaching-prerun.md 4f):
+    the white left border at left + 3, the top border from the end of the tabs to 4 px short of
+    the right border, the grey right border, the separator 23 rows above the bottom, the white
+    input bar while the input is open; ``scene_under``: a floating window, a scene under it as
+    grey as the border."""
+    img = np.zeros((h, w, 3), np.uint8)
+    img[...] = SCENE
+    top = bottom - 37 - cw.LINE_PITCH * lines
+    right = left + width - 1
+    img[top + 1 : bottom + 1, left:right] = 55  # the darkened message area
+    img[top + 1 : bottom + 1, left + 3] = 250  # its white left border
+    img[top, left + tab_end : right - 3] = 255  # the top border, after the selected tab
+    img[top + 1 : bottom + 1, right] = 140  # the right border (input closed: to the bottom)
+    img[bottom - 23, left : right + 1] = 139  # the separator
+    if input_open:
+        img[bottom - 23, left : right + 2] = 196
+        img[bottom - 22 : bottom - 20, left : right + 2] = 255
+        img[bottom - 19 : bottom - 2, left : right + 2] = 247
+        img[bottom - 2 : bottom, left : right + 2] = 255
+        img[bottom, left : right + 2] = 196
+    if scene_under:
+        img[bottom + 1 : bottom + 200, right] = 140
+    return img
+
+
+@pytest.mark.parametrize("lines", [1, 4, 6, 9, 20])
+@pytest.mark.parametrize("width", [450, 597, 760])
+@pytest.mark.parametrize("input_open", [False, True])
+def test_find_any_reads_any_size_and_any_width(lines: int, width: int, input_open: bool) -> None:
+    """Batt 2026-11-19: "support many lines; do not limit the width" (his client: 4 lines)."""
+    left, bottom = 30, 700
+    got = cw.find_any(draw_any(left, bottom, lines, width, input_open=input_open))
+    top = bottom - 37 - cw.LINE_PITCH * lines
+    assert got == {"left": left, "right": left + width - 1, "text_top": top, "bottom": bottom,
+                   "lines": lines, "input": "open" if input_open else "closed"}  # fmt: skip
+
+
+def test_find_any_takes_wide_tabs_a_floating_window_and_a_bright_scene_beside_it() -> None:
+    wide = cw.find_any(draw_any(0, 719, 4, tab_end=210))  # Battle Message | General Message
+    assert wide is not None and (wide["left"], wide["lines"]) == (0, 4)
+    floating = draw_any(0, 719, 6, h=1080, w=1920, scene_under=True)  # fullscreen at 1080
+    got = cw.find_any(floating)
+    assert got is not None and (got["bottom"], got["lines"], got["input"]) == (719, 6, "closed")
+    bright = draw_any(100, 600, 6)
+    top = 600 - 37 - cw.LINE_PITCH * 6
+    bright[top, 100 + 596 - 3 : 1200] = 255  # a bright scene continues the top border's run
+    got = cw.find_any(bright)
+    assert got is not None and (got["left"], got["right"]) == (100, 696)
+    assert cw.find_any(draw(None)) is None
+
+
+def test_find_any_agrees_with_find_on_the_lab_standard() -> None:
+    for input_open in (False, True):
+        img = draw_any(0, 719, 6, input_open=input_open)
+        got, std = cw.find_any(img), cw.find(img)
+        assert std is not None and got == {**std, "right": 596}

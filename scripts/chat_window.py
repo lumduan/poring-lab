@@ -299,30 +299,117 @@ def find(img_rgb: Any) -> dict[str, Any] | None:
     return None
 
 
-def find_floating(img_rgb: Any) -> dict[str, Any] | None:
-    """``find``, and a window that FLOATS over the world (teaching-prerun.md 4f): fullscreen at
-    1920x1080 RO keeps the chat window at its saved pixels (y 578-719), so the scene continues under
-    it and a closed input's right border runs on into the scene -- ``find`` then says "obscured".
-    With its top border and right border found, each standard size is tried from the top (the
-    bottom = text_top + 37 + 14 x lines, as ``find`` measures) and the first whose separator row
-    holds (uniform, the closed band) is taken: {"floating": True, ...}. Anything else: ``find``'s
-    answer unchanged."""
-    got = find(img_rgb)
-    if got is None or not got.get("obscured") or got.get("text_top") is None:
-        return got
-    lum = luma(img_rgb)
-    left, top = int(got["left"]), int(got["text_top"])
-    run_end = _border_run(lum, top + 2, left)
-    if run_end is None:
-        return got
-    for lines in SIZES:
-        bottom = top + 37 + LINE_PITCH * lines
+# find_any (teaching-prerun.md 4f; Batt 2026-11-19: "support many lines; do not limit the width"):
+# another client's chat window has its own size (Batt's: 4 lines), its own width and wider tabs
+# (Battle Message | General Message), so its white top border is shorter and starts elsewhere.
+TOP_MIN_RUN = 150  # the top border's white run, at least (the lab's: ~512 after an 80 px tab)
+MAX_LINES = 60
+BORDER_DX = BORDER_X - TOP_END  # the right border sits this far right of the top border's end
+
+
+def _col_run(lum: np.ndarray, y0: int, x: int) -> int | None:
+    """The last row of the right border's continuous run in column ``x`` from ``y0`` (None: it
+    is not there): ``_border_run`` for a border at any x."""
+    if not 0 <= x < lum.shape[1]:
+        return None
+    col = lum[:, x]
+    ok = (col >= BORDER_LO) & (col <= BORDER_HI)
+    if y0 + 6 > len(col) or not ok[y0 : y0 + 6].all():
+        return None
+    off = np.flatnonzero(~ok[y0:])
+    return y0 + int(off[0]) - 1 if off.size else lum.shape[0] - 1
+
+
+def _uniform(lum: np.ndarray, y: int, s: int, e: int, band: tuple[float, float]) -> bool:
+    if not 0 <= y < lum.shape[0]:
+        return False
+    row = lum[y, s:e]
+    return (
+        bool(row.size) and float(row.std()) <= SEP_STD and band[0] <= float(row.mean()) <= band[1]
+    )
+
+
+LEFT_BORDER_DX = 3  # the window's white left border line: column left + 3 (the lab's frames)
+
+
+def _left_border(lum: np.ndarray, top: int, s: int, sep_y: int) -> int | None:
+    """The window's left border: the nearest column left of the top border's start that is white
+    over the whole message area (rows top + 2 .. the separator); None if there is none."""
+    rows = lum[top + 2 : sep_y]
+    if rows.shape[0] < 4:
+        return None
+    white = (rows >= WHITE).all(axis=0)
+    cols = np.flatnonzero(white[: max(0, s)])
+    return int(cols[-1]) if cols.size else None
+
+
+def _bottom(lum: np.ndarray, y: int, s: int, e: int,
+            run_end: int) -> tuple[int, str, int] | None:  # fmt: skip
+    """(bottom, input, separator row) of a window whose top border is row ``y`` over [s, e) and
+    whose right border runs to ``run_end``, or None."""
+    h = lum.shape[0]
+    sep = run_end + 1  # input OPEN: the border stops at the separator, the bar follows
+    if (sep + 3 < h and _uniform(lum, sep, s, e, SEP_OPEN)
+            and float(lum[sep + 1 : sep + 3, s:e].mean()) >= 235):  # fmt: skip
+        bottom = sep + 23
+        span = bottom - 37 - y
+        if span > 0 and span % LINE_PITCH == 0 and span // LINE_PITCH <= MAX_LINES:
+            return bottom, "open", sep
+    for lines in range(1, MAX_LINES + 1):  # input CLOSED: the first separator on a whole line
+        bottom = y + 37 + LINE_PITCH * lines
         if bottom > run_end:
             break
-        if _sep(lum, bottom - 23, left, SEP_CLOSED):
-            return {"left": left, "text_top": top, "bottom": bottom, "lines": lines,
-                    "input": "closed", "floating": True}  # fmt: skip
-    return got
+        if _uniform(lum, bottom - 23, s, e, SEP_CLOSED):
+            return bottom, "closed", bottom - 23
+    return None
+
+
+def find_any(img_rgb: Any) -> dict[str, Any] | None:
+    """A chat window of ANY size and width, anywhere: {"left", "right", "text_top", "bottom",
+    "lines", "input"} (find's keys plus "right", its right border's column), or None.
+
+    Its white top border (a run of at least TOP_MIN_RUN px, wherever the tabs end); its grey
+    right border BORDER_DX px right of the border's last pixel, running down from it (tried from
+    the run's right end inwards: a bright scene or another window may continue the run); its
+    bottom where the separator holds at a whole number of LINE_PITCH lines under the top (input
+    closed: the border runs to the bottom, or on into a scene under a floating window, and the
+    separator is 23 rows above the bottom; input open: the border stops at the separator and the
+    white bar follows); its left from its white left border (left + LEFT_BORDER_DX). The same
+    frame cues as ``find``, without its fixed width, its tab widths or its F10 sizes -- ``find``
+    (the lab's chat standard) is unchanged."""
+    lum = luma(img_rgb)
+    h, w = lum.shape
+    white = lum >= WHITE
+    band = (lum >= BORDER_LO) & (lum <= BORDER_HI)  # the right border's colour, everywhere
+    for y in np.nonzero(white.sum(axis=1) >= TOP_MIN_RUN)[0]:
+        y = int(y)
+        if y + 8 > h:
+            break
+        for s, e in _white_runs(white[y]):
+            if e - s < TOP_MIN_RUN:
+                continue
+            # the border's candidates at once: 6 rows of the border colour under the run's end
+            lo, hi = s + TOP_MIN_RUN - 1 + BORDER_DX, min(e - 1 + BORDER_DX, w - 1)
+            if hi < lo:
+                continue
+            ok = band[y + 2 : y + 8, lo : hi + 1].all(axis=0)
+            for i in np.flatnonzero(ok)[::-1]:  # from the right end inwards
+                right = lo + int(i)
+                last = right - BORDER_DX
+                run_end = _col_run(lum, y + 2, right)
+                if run_end is None:
+                    continue
+                got = _bottom(lum, y, s, last + 1, run_end)
+                if got is None:
+                    continue
+                bottom, state, sep_y = got
+                col = _left_border(lum, y, s, sep_y)
+                if col is None:
+                    continue
+                return {"left": col - LEFT_BORDER_DX, "right": right, "text_top": y,
+                        "bottom": bottom, "lines": (bottom - 37 - y) // LINE_PITCH,
+                        "input": state}  # fmt: skip
+    return None
 
 
 PADLOCK_BOX = (578, -14, 597, -2)  # x0, dy0, x1, dy1: from (left, text_top)

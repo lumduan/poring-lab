@@ -133,7 +133,7 @@ the first run at 1080p.
   looks like"; teaching-prerun.md 4f):** Basic Info and the hotbar are found by their SHAPE
   (`poring_env/panelfind.py`: the hotbar's 9 slot lines on a 29 px pitch under its four top frame
   rows; Basic Info's uniform frame rows at fixed depths), the chat window by
-  `chat_window.find_floating` (its frame; a window floating over the world at 1080 too); each one
+  `chat_window.find_any` (its frame: any size, any width, floating over the world at 1080 too); each one
   found is moved to its LAB_PANELS place in the virtual client (`ro_agent.find_panels`,
   `client_view`), so even a 1280x720 window with dragged windows is read through the virtual client.
   No template, no text: any install, any language. The minimap keeps the top-right corner. A Run

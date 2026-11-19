@@ -223,7 +223,8 @@ _POINTER: tuple[float, float] | None = None  # the last virtual pointer position
 # The interface windows, FOUND by their shape (teaching-prerun.md 4f, fullscreen-client.md
 # milestone 3; Batt 2026-11-19: "make it work with every client ... we know what RO's main UI looks
 # like: start from that"). Basic Info and the hotbar by poring_env.panelfind's rules, the chat
-# window by chat_window.find_floating; each one found is moved, in the virtual client, to its
+# window by chat_window.find_any (any size, any width); each one found is moved, in the virtual
+# client, to its
 # LAB_PANELS place, so the readers built at the lab's places read any layout. A window not found
 # keeps the lab's place (its reads then fail, in words); the minimap keeps the top-right corner
 # (RO never moves it); hotbar2 keeps its saved place.
@@ -236,6 +237,7 @@ PANEL_SEARCH_S = 15.0  # and searches again at most this often when one moved or
 # 1280x720 and 1920x1080 frames: the finders return exactly these there)
 LAB_WINDOW_ORIGINS = {"basic_info": (0, 0), "hotbar": (230, 0)}
 CHAT_LAB_BOTTOM = 719  # LAB_PANELS' chat box: six lines, its bottom row at 719
+CHAT_LAB_TEXT_TOP = 598  # and its top border's row (its tabs above it: the box starts at 578)
 _PANELS: dict[str, Any] = {}  # this process's last find (find_panels), its checks' clocks
 _PANELS_FILE_CACHE: list[Any] = [0.0, None]  # (when read, the file's state)
 _PANELS_LOCK = threading.Lock()
@@ -247,8 +249,9 @@ def _lab_box(name: str) -> tuple[int, int, int, int]:
 
 def panel_places(basic: Any, hotbar: Any, chat: Mapping[str, Any] | None) -> dict[str, Any]:
     """PURE: each window found -> its panel {"virtual": box, "real_xy", "origin", ...} -- the lab
-    box moved by the found window's vector from its lab place (a chat window of another size gets
-    the lab box's width and its own height, its bottom on the lab's)."""
+    box moved by the found window's vector from its lab place. A chat window of another size or
+    width (Batt 2026-11-19: "support many lines; do not limit the width") gets its OWN box, its
+    bottom-left on the lab's (the readers count its lines up from the bottom)."""
     out: dict[str, Any] = {}
     for name, f in (("basic_info", basic), ("hotbar", hotbar)):
         if f is None:
@@ -262,12 +265,14 @@ def panel_places(basic: Any, hotbar: Any, chat: Mapping[str, Any] | None) -> dic
         import chat_window as cw
 
         bx, by, bw, bh = _lab_box("chat")
-        hh = bh + cw.LINE_PITCH * (int(chat["lines"]) - 6)
-        top_v = CHAT_LAB_BOTTOM + 1 - hh
-        out["chat"] = {"virtual": [bx, top_v, bw, hh],
-                       "real_xy": [bx + int(chat["left"]), int(chat["bottom"]) + 1 - hh],
-                       "origin": [int(chat["left"]), int(chat["text_top"])],
-                       "bottom": int(chat["bottom"]), "lines": int(chat["lines"])}  # fmt: skip
+        left, top, bottom = int(chat["left"]), int(chat["text_top"]), int(chat["bottom"])
+        right = int(chat.get("right", left + cw.BORDER_X))
+        ww = right - left + (bw - cw.BORDER_X)  # the lab: 596 + 4 = 600
+        hh = bottom - top + (bh - (CHAT_LAB_BOTTOM - CHAT_LAB_TEXT_TOP))  # the lab: 121 + 21
+        out["chat"] = {"virtual": [bx, CHAT_LAB_BOTTOM + 1 - hh, ww, hh],
+                       "real_xy": [bx + left, bottom + 1 - hh], "origin": [left, top],
+                       "right": right, "bottom": bottom,
+                       "lines": int(chat["lines"])}  # fmt: skip
     return out
 
 
@@ -330,7 +335,7 @@ def find_panels(screen: Any = None, real: Any = None) -> dict[str, Any]:
     bgr = np.ascontiguousarray(np.asarray(real)[..., :3])
     lum = pf.luma(bgr)
     found = panel_places(pf.find_basic_info(lum), pf.find_hotbar(lum),
-                         cw.find_floating(bgr[..., ::-1]))  # fmt: skip
+                         cw.find_any(bgr[..., ::-1]))  # fmt: skip
     size = (region[2], region[3])
     st = {"v": 1, "region": list(region), "t_wall": time.time(), "found": found,
           "moved": panels_moved(found, size),
@@ -362,8 +367,10 @@ def _panel_still_there(name: str, f: Mapping[str, Any], lum: Any, rgb: Any) -> b
     import chat_window as cw
 
     y0, y1 = max(0, oy - 2), int(f["bottom"]) + 1
-    got = cw.find_floating(rgb[y0:y1, max(0, ox) : ox + 600])
-    return bool(got and got.get("lines") == f.get("lines") and got.get("bottom") == y1 - 1 - y0)
+    x0, x1 = max(0, ox), int(f.get("right", ox + cw.BORDER_X)) + 5
+    got = cw.find_any(rgb[y0:y1, x0:x1])
+    return bool(got and got.get("lines") == f.get("lines") and got.get("bottom") == y1 - 1 - y0
+                and got.get("left") == ox - x0)  # fmt: skip
 
 
 def _panels_tick(real: Any) -> None:
@@ -415,7 +422,8 @@ def panels_words(st: Mapping[str, Any] | None = None) -> list[str]:
         at_lab = (tuple(f["real_xy"]) == _default_xy(name, box, how, size)  # type: ignore[arg-type]
                   and tuple(f["virtual"]) == box)  # fmt: skip
         ox, oy = f["origin"]
-        where = (f"left {ox}, bottom {f['bottom']}, {f['lines']} lines" if name == "chat"
+        where = (f"left {ox}, bottom {f['bottom']}, {f['lines']} lines, "
+                 f"{int(f.get('right', ox + 596)) - ox + 1} px wide" if name == "chat"
                  else f"({ox}, {oy})")  # fmt: skip
         score = f" ({f['score'][0]} of {f['score'][1]} of its shape's cues)" if "score" in f else ""
         placed = "the lab's place" if at_lab else "moved to the lab's place in the bot's view"
