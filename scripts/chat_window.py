@@ -55,6 +55,9 @@ from typing import Any
 
 import numpy as np
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import lab_env  # noqa: E402  (a sibling, stdlib only: this copy's RAM paths)
+
 ROOT = Path(__file__).resolve().parents[1]
 TEMPLATES = ROOT / "data/ui_anchors/chat_window/padlock.npz"
 SHOTS = Path("/dev/shm/poring-lab-tmp/chat-window")
@@ -168,7 +171,7 @@ def select(name: str) -> None:
 # looked for the tabs at row 582, above a 4-line window (its tabs at 610), and the runner's Battle
 # Log selection clicked the world twice and
 # stopped: "chat tab battle not shown" (flowplay-11191448).
-PANELS_FILE = Path("/dev/shm/poring-lab-tmp/panels.json")  # == ro_agent's (parity-tested)
+PANELS_FILE = lab_env.shm("tmp") / "panels.json"  # == ro_agent's (parity-tested)
 PANELS_ENV = "PORING_PANELS_FILE"
 PANELS_TTL_S = 120.0
 MAX_FOUND_LINES = 60  # find_any's own bound

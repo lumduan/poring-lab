@@ -139,3 +139,30 @@ ADR-0022 Amendment 2026-11-18), row V (the Settings page needs a third browser, 
 `--loot-items` path (`/dev/shm/poring-lab-detector/model`, kept: the runner is pinned by its
 proofs), the Thai-client and locale NAS shares of the Thai experiment, and the client-derived run
 data (section 8 of the manual).
+
+## Implementation 2026-11-19: two copies on one host (Batt: a LIVE copy beside the dev lab)
+
+Batt, 2026-11-19: "clone the project to `~/bot/`, separate from poring-lab, so both open in Docker
+at once; I will use it with another Windows host". This machine then runs TWO labs: the dev lab
+(`~/docker/poring-lab`, project `poring-lab`) the agent develops, and the live copy
+(`~/bot/poring-lab-live`, project `poring-lab-live`) Batt tests before teaching.
+
+- **Already per copy** (2026-11-17): every Docker name, the ports, the two subnets, the storage
+  folder, the compose-mounted RAM folders (`/dev/shm/<project>-detect`, `-hwshm`, `-mediarec`)
+  and the capture-backend flock.
+- **Made per copy now** (`lab_env.shm`; the lab's names stay as they were):
+  - the Run helper's scratch, i.e. its Stop file, its run folders and its logs (`flow_run.SCRATCH`;
+    before this, one copy's Stop file stopped the other's Run);
+  - the Run's TMPDIR;
+  - the window-find file (`ro_agent` / `chat_window` `PANELS_FILE`; before this, the other copy's
+    windows would have been read);
+  - the route plans (`route_plan.PLAN_DIR`).
+- **The Run labels name the copy** (`flowplay-<project>-MMDDHHMM`; the lab keeps `flowplay-`).
+  The byte-pinned runner writes every copy's sessions into ONE folder (`dungeon_hunt.DEMO`,
+  `/dev/shm/poring-lab-demo`), named for the label, so no copy reads, scores or cleans another
+  copy's session.
+- **Shared on purpose, read-only:**
+  - the client-derived run-time inputs in `/dev/shm/poring-lab-tmp` (GAT, sprites, calibrations);
+  - the CPU detector folder (`/dev/shm/poring-lab-detector`: the models and the venv);
+  - the guarded-build guard's own files (one heavy step at a time on the host is the point).
+- **Tested** by `test_lab_names.py::test_a_copy_s_run_helper_and_readers_keep_their_own_ram`.

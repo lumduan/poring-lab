@@ -298,3 +298,23 @@ def test_the_bash_snippet_refuses_a_bad_name(tmp_path: Path) -> None:
 def test_the_bash_tools_take_their_container_from_the_snippet(script: str, line: str) -> None:
     text = (SCRIPTS / script).read_text()
     assert "lab_project.sh" in text and line in text
+
+
+def test_a_copy_s_run_helper_and_readers_keep_their_own_ram(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """2026-11-19 (Batt: a LIVE copy beside the dev lab on this host): the Run helper's scratch
+    (its Stop file, run folders, logs), its Run labels (the byte-pinned runner writes every copy's
+    sessions in one folder, named for the label), the window-find file and the route plans are the
+    copy's own. The lab keeps its names."""
+    monkeypatch.delenv("ROUTE_PLAN_DIR", raising=False)
+    monkeypatch.delenv("PORING_PANELS_FILE", raising=False)
+    fr = _load(monkeypatch, "flow_run.py")
+    assert (str(fr.SCRATCH), fr.PROJECT_LABEL) == ("/dev/shm/lab2-tmp", "flowplay-lab2")
+    for script in ("ro_agent.py", "chat_window.py"):
+        assert str(_load(monkeypatch, script).PANELS_FILE) == "/dev/shm/lab2-tmp/panels.json"
+    assert str(_load(monkeypatch, "route_plan.py").PLAN_DIR) == "/dev/shm/lab2-route"
+    lab = _load(monkeypatch, "flow_run.py", project=le.PROJECT_DEFAULT)
+    assert (str(lab.SCRATCH), lab.PROJECT_LABEL) == ("/dev/shm/poring-lab-tmp", "flowplay")
+    rp = _load(monkeypatch, "route_plan.py", project=le.PROJECT_DEFAULT)
+    assert str(rp.PLAN_DIR) == "/dev/shm/poring-lab-route"
