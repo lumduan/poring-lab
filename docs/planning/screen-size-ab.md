@@ -105,6 +105,9 @@ What run 1's first 16 minutes showed (screen_ab.py diag):
   - Christmas Goblin boxes 0.011 per frame (720: 0.001-0.002), many on the player or a monster;
     the player found 0.87 per frame (720: 0.98);
   - no Miss cue read at 1080: the text is native-size, and shrunk in the virtual picture.
+    ➡️ WRONG, corrected 2026-11-20 06:4x ICT from the runs' events: the runner's `miss_cue`
+    fired at 1080 too (16-110 an hour per run, scores 0.61-0.78; 720: 39-62 an hour). The
+    Miss cue is not a cause.
 
 **B2 = the 1080 block again with `feat/virtual-box-grab`.** A virtual box reads only its real
 pixels (64 x 64: 69 -> 3.5 ms), and the world resample is exact by axis takes (the whole picture:
