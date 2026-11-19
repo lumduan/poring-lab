@@ -223,3 +223,27 @@ def test_the_runner_s_own_start_warns_on_an_unread_weight_and_map_only() -> None
         assert dh.player_weight_refused(0.9, False) is not None  # read over the limit
     assert dh.PLAYER_MAP_UNREAD == "refuse"
     assert dh.player_weight_refused(None, False) is not None  # its CLI keeps its rule
+
+
+def test_the_log_says_why_the_weight_did_not_read(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Batt 2026-11-19 ("digits first"): the weight reader's own reason, in words with the
+    symbols it read -- numbers only, no picture -- so another client's line says where it
+    differs."""
+    import gm_state
+
+    from poring_env import weight as wt
+
+    monkeypatch.setattr(gm_state, "_path", lambda: "rdp")
+    monkeypatch.setattr(wt, "load_weight_glyphs", lambda path: "GLYPHS")
+    g = [wt.Glyph(0, "1", 1.0, 0.4), wt.Glyph(7, "5", 1.0, 0.05)]
+    monkeypatch.setattr(wt, "read_weight",
+                        lambda frame, glyphs: wt.WeightReading(None, "ambiguous", 0.0, tuple(g),
+                                                               (50, 3)))  # fmt: skip
+    io_ = types.SimpleNamespace(frame=lambda: "FRAME")
+    (line,) = fp.weight_diagnosis(io_)  # type: ignore[arg-type]
+    assert line == (
+        "the weight reader says ambiguous (a digit looks like two (another font)): "
+        "the symbols read '15', the label at (50, 3), the closest call 0.05"
+    )
+    assert fp.weight_diagnosis(types.SimpleNamespace()) == [  # type: ignore[arg-type]
+        "the weight reader did not run (AttributeError)"]  # fmt: skip
