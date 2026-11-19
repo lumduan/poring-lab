@@ -117,6 +117,39 @@ pixels (64 x 64: 69 -> 3.5 ms), and the world resample is exact by axis takes (t
 - Label `s11scr-1080f`, 3 runs of 20 min, after the 720 block. The branch is merged only after
   block A ends.
 
+## Addendum 2 (written 2026-11-19 23:4x ICT, before any B2 or B3 data): the false alarms
+
+Run 1, scored by stage9's packet truth (an alarm-species unit on screen, outside the post-vanish
+windows):
+- 17 boss Fly Wings, 16 FALSE:
+  - 15 were Christmas Goblin boxes: 9 at 0.27-0.65 with a 2-frame streak, 2 at 0.27 / 0.42 with a
+    3-frame streak, and 4 alone at 0.73-0.85;
+  - 1 was a Stormy Knight box alone at 0.73.
+- The one true alarm was the Stormy Knight (0.998, streak 4).
+- That is about 48 false an hour. s10ab at 720 made 15 false in 8 runs (about 5.6 an hour), and
+  9 true ones.
+- Each false Fly Wing costs the teleport and BOSS_AVOID_S (30 s with no box engagement).
+
+The true alarms of s10ab (720), sighting score and streak:
+- knight 0.64 (streak 6);
+- goblin 0.712 (1), 0.835 (1), 0.903 (3), 0.951 (1);
+- knight 0.836 (1), 0.997 (4);
+- garm 0.971 (4), 0.978 (1).
+
+Two candidates, NOT adopted (each its own block, after B2):
+- **C1, a code candidate: no cursor patch in the detection threads' frames.** The virtual
+  client's cursor patch is the real pixels around the pointer, unscaled, so the world inside its
+  68 x 68 square is magnified 1.5x over the hovered monster.
+  - `ro_agent.NO_CURSOR_THREADS` = the runner's box-watch and hud-watch threads.
+  - First a probe (the Rogue immune, moves only): the same real frames detected with and
+    without the patch. Adopted into a block only if the probe shows fewer alarm-class boxes
+    without it.
+- **C2, a setting candidate (Batt decides; safety): garm_confirm 2 -> 3.**
+  - On the data above it removes the 9 false sightings with a 2-frame streak (7 of 16 remain).
+  - It keeps every s10ab true alarm: each scored >= alarm_solo 0.7 or had a streak >= 3.
+  - The cost: a true low-score alarm flies one detection later (about 0.25 s).
+  - Measured only in a labelled lab block; the ready-made box changes only by Batt's word.
+
 ## Runs
 
 (none yet)
