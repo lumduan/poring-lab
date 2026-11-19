@@ -250,20 +250,42 @@ def ensure(agent: Any, screen: Any, name: str, max_steps: int = 10) -> dict[str,
     raise LayoutError(f"layout {name} not reached in {max_steps} steps: {steps}")
 
 
-def select_tab(agent: Any, screen: Any, which: str) -> None:
-    """Show chat tab ``which`` ("battle" / "regular") and verify it; LayoutError if not. A tab the
-    chat window's standard does not have (chat_window.TABS; Regular Chat is gone since
-    2026-11-05) is refused BEFORE any input: the empty tab strip passes a click to the world."""
+TAB_UNREAD_WORDS = (
+    "WARNING (the chat window's tabs, the player's own; the run plays on): no "
+    "selected tab reads on the chat window's tab row, so nothing is clicked there "
+    "(a click into an unknown strip walks her); the Battle Log reader reads what "
+    "the window shows (kills it cannot see are inferred when kill_gap is on)"
+)
+TAB_NOT_SHOWN_WORDS = (
+    "WARNING (the chat window's tabs; the run plays on): the {tab} tab did "
+    "not show after two clicks on it"
+)
+
+
+def select_tab(agent: Any, screen: Any, which: str) -> str:
+    """Show chat tab ``which`` ("battle" / "regular") and verify it: "shown". A tab the chat
+    window's standard does not have (chat_window.TABS; Regular Chat is gone since 2026-11-05) is
+    refused BEFORE any input: the empty tab strip passes a click to the world.
+    ➡️ 2026-11-19 (Batt: the bot never locks on the player's client; a warning instead): when NO
+    tab reads selected on the tab row (another client's chat window, its tabs not the lab's), it
+    clicks NOTHING and returns "unread"; when the other tab stays shown after two clicks,
+    "not_shown". Both print a WARNING and the run goes on (they raised LayoutError before)."""
     if which not in _chat().TABS:
         raise LayoutError(f"chat tab {which!r} is not in the chat window's standard "
                           f"{_chat().TABS}: nothing clicked")  # fmt: skip
     tm = load_templates()
     for _ in range(2):
-        if state_now(agent, screen, tm).get("tab") == which:
-            return
+        tab = state_now(agent, screen, tm).get("tab")
+        if tab == which:
+            return "shown"
+        if tab is None:  # never act blind: the strip is not where (or not what) the lab's is
+            print(TAB_UNREAD_WORDS, flush=True)
+            return "unread"
         _ui_click(agent, *tab_px(which))
     if state_now(agent, screen, tm).get("tab") != which:
-        raise LayoutError(f"chat tab {which} not shown")
+        print(TAB_NOT_SHOWN_WORDS.format(tab=_chat().TAB_NAMES.get(which, which)), flush=True)
+        return "not_shown"
+    return "shown"
 
 
 def main() -> int:
