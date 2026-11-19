@@ -9,6 +9,7 @@ The root [README](../README.md) is the quick start. Everything else lives here.
 | [setup/new-lab-host.md](setup/new-lab-host.md) | **The full manual:** Ubuntu and Docker from scratch, `.env`, your own configuration and `git pull`, the host profile, starting the services (by hand, or `./setup.sh`: section 6.1), the Windows game PC, client-derived data, choosing the detector, a new game server, player mode |
 | [setup/sunshine-windows.md](setup/sunshine-windows.md) | **Before `./setup.sh`:** Sunshine on the Windows game PC, step by step (the install, the firewall, a display, the PIN during the wizard), and what works on the Sunshine path today |
 | [windows-setup.md](windows-setup.md) | The Windows game PC for a learner: the game client and Sunshine |
+| [setup/sunshine-to-rdp.md](setup/sunshine-to-rdp.md) | Moving a Sunshine-only Windows PC to RDP (why: the UI gate's Sunshine pictures are not cut yet), in plain words and step by step: the bot account, Remote Desktop, the one credential check, the handover, the sign-in screen |
 | [setup/windows-lab-host.md](setup/windows-lab-host.md) | The lab's own Windows checklist (RDP as the human's admin path) |
 | [client/rathena-client.md](client/rathena-client.md) | The rAthena client copy: the exe, data, patches, settings, the RDP wrapper, Thai locale |
 | [setup/game-accounts.md](setup/game-accounts.md) | The game accounts the lab creates, and the RDP credentials |

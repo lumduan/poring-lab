@@ -218,10 +218,12 @@ primary path ([ADR-0014](../adr/0014-s2-primary-bot-path.md)), and it is not fin
 |---|---|
 | **Seeing the PC** in the console | **works** (the S2 client's frames, through the frame bus) |
 | **Playing as a person** through the console | **works** (your mouse and keyboard go through the input mux to the S2 client, then to Sunshine) |
-| Paste and file transfer | **not available** (they need the RDP session; the backend refuses paste in console mode) |
+| Paste and file transfer | ➡️ **paste works since 2026-11-19**: the console types it into Windows through Sunshine, in HUMAN or ASSIST, up to 4096 bytes (ADR-0004 amendment e). File transfer is still **not available** (it needs the RDP session) |
 | **The bot's typed lines** (chat, GM commands) | **refused, every one.** The UI gate types only after reading the client from pixels with templates PROVEN on the same display path. The S2 set (`data/ui_anchors/s2`) is not cut or proven anywhere yet ([s2-gate-templates.md](../operations/s2-gate-templates.md)), so it fails closed: nothing is typed. The typing-only foreground gate also refuses every bot key until its stream template is cut on this path |
 | **The bot's programs** (the dungeon runner, hunt, farm, agent_play) | **do not run.** They refuse a console lock (their cursor references exist for RDP only) or stop at the UI gate at their start |
-| A single bot click (e.g. `ro_agent.py click`) | passes the mux only in ASSIST or BOT (a person switches the mode) AND while the safety interlock is green (your servers confirmed on the Settings page, and today a game PC at 192.168.1.169), or in ASSIST during a short operator window. Everything else is refused |
+| A single bot click (e.g. `ro_agent.py click`) | passes the mux only in ASSIST or BOT (a person switches the mode) AND while the safety interlock is green (your servers confirmed on the Settings page, and the environment's Windows host matching this install's `WIN_HOST`, ADR-0023 decision 4), or in ASSIST during a short operator window. Everything else is refused |
+
+**The workaround today: add RDP to the same PC** (Windows Pro or better): a standard bot account, Remote Desktop open to the bot server only, then the handover to RDP. The bot then uses the lab's proven RDP templates. Step by step, in plain words: [sunshine-to-rdp.md](sunshine-to-rdp.md) (done for the live copy 2026-11-19).
 
 On a new host, every UI template (on either path) is cut from YOUR client: [new-lab-host.md](new-lab-host.md)
 section 8.
