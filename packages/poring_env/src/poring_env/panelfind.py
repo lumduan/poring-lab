@@ -62,10 +62,10 @@ BASIC_W = 220
 BASIC_ROW_STD = 8.0  # a frame row: uniform across its span
 # (depth from the window's top, luma band, (x0, x1) of the span). Only rows no TEXT, EXP BAR or
 # BADGE can reach (2026-11-19 ~11:0x, after the first test on a Thai-UI client: a Thai title's
-# tails reach the line under it, a Job EXP bar fills the level panel, the "N" notice badge sits
-# at the bottom; every lab character measured was max level). The title rows are read only right
-# of x 130 (a title is left-aligned, ~105 px in English and in Thai); the level panel only by its
-# top and bottom edges. Measured on the lab's 1280x720 and 1920x1080 frames (4 frames).
+# tails reach the line under it, the "N" notice badge sits at the bottom). The title rows are read
+# only right of x 130 (a title is left-aligned, ~105 px in English and in Thai); the level panel
+# only by its top and bottom edges (its EXP bars live inside; live 11:40, Valcd8bd6 Base 70 / Job 1:
+# they missed the first rules' rows too). Measured on the lab's 1280x720 and 1920x1080 frames.
 BASIC_ROWS: tuple[tuple[int, tuple[float, float], tuple[int, int]], ...] = (
     (2, (150.0, 225.0), (130, 200)),  # the title bar (lab 187)
     (16, (0.0, 60.0), (130, 200)),  # the line under it (lab 0)

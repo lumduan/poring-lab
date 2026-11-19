@@ -112,6 +112,11 @@ Run on 2026-10-05 from 14:19 ICT (Batt moved it ahead of 17:00 while he was avai
 
 ### 3b. The client copy and its defences
 
+➡️ **REMOVED 2026-10-06 (ADR-0019 Part 1, Batt: "the Thai-data decision is final"):** `C:\RO-rAthena-th`
+and the "Ragnarok Offline TH" shortcut are gone from the Windows PC (read back: "left: 0"); ro_agent's
+`th` profile refuses; rathena-th stays a stopped server-side option. The lines below describe the copy
+as it was. (2026-11-19: read as present by the agent, which nearly planned a test on it.)
+
 - **The copy:** `C:\RO-rAthena-th` holds 936 files (3,808,348,146 B, verified) from `C:\RO-rAthena`;
   the original is untouched.
   - `client\thdata.grf` came through the temporary NAS drop (sha256 `a3718c74…f537`).

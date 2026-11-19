@@ -166,13 +166,15 @@ the lab's own frames (the causes, to be proven on OUR Thai client before the fix
 
 | Window | His client vs the lab's | Why the 4f rule missed it |
 |---|---|---|
-| Basic Info | the same skin; a Thai title (ข้อมูลพื้นฐาน, tails below the line), a Job EXP bar (Job 48), the red "N" notice badge | rows 16 / 20 sit against the TITLE TEXT (a language's glyphs reach them); every lab character measured was max level (no EXP bars): content, not frame |
+| Basic Info | the same skin; a Thai title (ข้อมูลพื้นฐาน, tails below the line), a Job EXP bar (Job 48), the red "N" notice badge | rows 16 / 20 sit against the TITLE TEXT (a language's glyphs reach them); row 131 under the "N" badge. ➡️ The EXP bar is NOT a cause: the live test 11:39-11:41 (the lab client, Valcd8bd6, Base 70 / Job 1, both EXP bars drawn) found Basic Info with the FIRST rules too, 11 of 11 (the bars sit between the rows). The title and the badge cannot be shown on our client (an English title; the badge needs a notice): the new cues keep clear of both by design |
 | the hotbar | no 1/2 row selector on the left, a dark top border, the counts under the icons, a "1" and a grip on the right | its four top-row lumas are the lab skin's |
-| the chat window | 4 lines, wider default tabs (Battle Message, General Message) | `chat_window.find` knows sizes 3/6/9/12/15 and the lab's tab widths (TOP_START) |
+| the chat window | 4 lines, wider default tabs (Battle Message, General Message) | `chat_window.find` knows sizes 3/6/9/12/15 and the lab's tab widths (TOP_START). ➡️ Built `find_any` (any lines, any width, any tabs); live 11:40 on the lab client: F10 through every size, 9 / 12 / 15 / hidden / bar / 3 / 6, each read right, the standard back (`chat_window.py read`: standard true). A 4-line window or wider tabs cannot be made on our 2021 client (F10 sizes only): synthetic tests cover them |
 
-The lab's Thai client (`C:\RO-rAthena-th`, the same 2021 exe with the Thai data) still points at
-192.168.1.13 (the cutover changed only `C:\RO-rAthena`): a test there needs its clientinfo moved to
-the lab host first.
+~~The lab's Thai client (`C:\RO-rAthena-th`) still points at 192.168.1.13: a test there needs its
+clientinfo moved to the lab host first.~~ ➡️ WRONG (corrected 2026-11-19 ~11:4x): that copy and its
+shortcut were REMOVED from the Windows PC on 2026-10-06 (ADR-0019, "the Thai-data decision is
+final"); the lab has no Thai client. Batt's approval to move its address was not used; nothing on
+Windows changed. Our tests use the main client only.
 
 The Run log now names each window and where it was found ("the hotbar found at (700, 600) (13 of 13
 of its shape's cues): moved to the lab's place in the bot's view"; "Basic Info NOT found ...: the
