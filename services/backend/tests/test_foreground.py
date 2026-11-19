@@ -144,6 +144,11 @@ def test_in_fullscreen_the_taskbar_must_be_absent(tmp_path: Path) -> None:
     half = (TASKBAR_SHOWN.astype(np.int16) + 6).clip(0, 255).astype(np.uint8)  # close to it
     screen.crop = half
     assert not g.check().ok  # unsure is never a pass
+    # s11scr 2026-11-20: a dark game corner at 1080 read 19.52 and refused every key; ~15 passes now
+    dark = (TASKBAR_SHOWN.astype(np.int16) + 15).clip(0, 255).astype(np.uint8)
+    screen.crop = dark
+    far = g.check()
+    assert far.ok and far.distance is not None and 10.0 <= far.distance < 20.0, far
     snap = g.snapshot()
     assert snap["mode"] == "fullscreen" and snap["threshold"] == TASKBAR_ABSENT_MIN
     assert snap["calibrated"] == {"rdp": True, "stream": False, "box": True}
