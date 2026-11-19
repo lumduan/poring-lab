@@ -3068,3 +3068,16 @@ simple."
   as "dead" -- no respawn press (another client's button may sit elsewhere: the dialog is the
   person's), no hunting on (`flow_play.Hp0Watch`: the hunt core's tick hook stops the runner; the
   player's own reads halt). Language-neutral: a number, not a word.
+- **Added ~11:5x (Batt answered two questions, after his client's Run refused on the weight and
+  the map):**
+  - "An unreadable weight is a warning": the weight line failed WITHOUT a weight read warns
+    (`flow_run.weight_unread`, `WEIGHT_WARN`) and the Run starts; its bag-full exit cannot work
+    until the weight reads. The line drawn RED (>= 50 %, the runner's `overweight_red` on a fresh
+    frame) or a weight READ over the limit still refuses. The runner's own start: the unread case
+    of `player_weight_refused` warns inside the live player.
+  - "Warn if the cell fits": a minimap picture that cannot tell its map, with her cell read on the
+    node map's open ground (the runner's cell line is `ok: None` only then), warns and starts
+    (`flow_play.cell_fits`, `MAP_WARN`); `PLAYER_MAP_UNREAD` is "warn" inside the live player.
+    Another map read, or a cell off the map's ground, still refuses; a check with no hunt core
+    (no cell read) still refuses an unread map.
+  - Next (Batt: "digits first"): the client's own digits, then its minimap.

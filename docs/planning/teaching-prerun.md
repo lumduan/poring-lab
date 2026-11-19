@@ -34,9 +34,9 @@ byte-pinned: `start_check`, `run()`), the player (`scripts/flow_play.py`), the h
 | 2 | The game on the screen | misread the desktop | the Run waits for it (ADR-0020 Amendment P) | safety |
 | 3 | The console in ASSIST or BOT | | unchanged | safety |
 | 4 | The chat input closed | | unchanged (text left in it would go to public chat) | safety |
-| 5 | The map: the minimap's picture is the node's map | | unchanged: the project's map node, the user's choice | the project |
+| 5 | The map: the minimap's picture is the node's map | | ➡️ 2026-11-19: a picture that cannot tell WARNS when her cell lies on the node map's open ground; another map still refuses | the project |
 | 6 | The start cell: on the map's open ground, reaching its search area | | unchanged: the walk plans from it | needed (see 4c) |
-| 7 | The bag under WEIGHT_MAX (48 %) | | a setting (block), 10-90 % | setting |
+| 7 | The bag under WEIGHT_MAX (48 %) | | a setting (block), 10-90 %; ➡️ 2026-11-19: an UNREAD weight warns (a read or red heavy bag still refuses) | setting |
 | 8 | Fly Wings on fly_key, at least PLAYER_MIN_WINGS (5) | | ➡️ 2026-11-19: a WARNING only, the Run starts (below) | the player's own |
 | 9 | Heal items on heal_key, at least PLAYER_MIN_HEALS (5) | | ➡️ 2026-11-19: a WARNING only, the Run starts (below); which item counts is still 4a | the player's own |
 | 10 | Butterfly Wings on home_key | | never refuses | the player's own |
@@ -64,6 +64,12 @@ for the run only: the runner file is unchanged, its CLI keeps its rules); a run 
 line fails plays without the Knife swap (`flow_play.knife_swap_off`: swapping from an unknown weapon
 state could equip anything). In the run nothing new: an unread count never ends it (a teleport-skill
 key has no count), a count read 0 still ends it (the end's own escape).
+
+**The weight and the map on another client (Batt 2026-11-19 ~11:5x, asked after his Run refused on
+both):** an UNREAD weight warns and the Run starts (its bag-full exit cannot work until it reads; a
+weight read over the limit or drawn red still refuses); a minimap picture that cannot tell its map
+warns and starts when her cell lies on the node map's open ground (another map still refuses). The
+proper fix comes next: the client's own digits, then its minimap.
 
 **A death ends the hunt (Batt 2026-11-19 ~11:0x):** "we have the death and the respawn at Geffen on
 the maps; but here simply: if she died -- the dialog is up and her HP is 0 -- do not enter the

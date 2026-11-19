@@ -316,7 +316,8 @@ Amendment B); a not-adopted model is never offered.
   ➡️ Since 2026-11-19 (ADR-0020 Amendment S, Batt: "the hotbar is the user's own business; do not
   lock this") the hotbar lines (wings, heals, home, knife, dagger) are WARNINGS: the Run starts (a
   run whose Knife / dagger slots fail plays without the Knife swap); and her HP reading 0 % for 3 s
-  ends the run as "dead" on any client (no hunting on).
+  ends the run as "dead" on any client (no hunting on). ~11:5x (Batt): an UNREAD weight and a
+  minimap picture that cannot tell its map (her cell on the node map's open ground) warn too.
   ➡️ Since 2026-11-19 (teaching-prerun.md 4f) the log also names where each game window was found
   (Basic Info, the hotbar, the chat window; "moved to the lab's place in the bot's view" when a
   player put it elsewhere, "NOT found" when it is closed or covered): any layout reads. A Run
