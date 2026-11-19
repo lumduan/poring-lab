@@ -53,6 +53,7 @@ PY = sys.executable
 PROGRESS_VERSION = 1
 
 DEFAULT_CONSOLE_PORT = 3000
+DEFAULT_BACKEND_PORT = 8000  # lab_env.PORTS' (the backend's host port)
 PORT_MIN, PORT_MAX = 1024, 65535
 # The lab's own ports on this host (docs/services-and-ports.md): published on HOST_LAN_IP, or used
 # inside the compose network. The console may take none of them.
@@ -911,6 +912,13 @@ def read_env(path: Path) -> dict[str, str]:
     return parse_env_text(read_text(path)) if path.exists() else {}
 
 
+def backend_port(env: Mapping[str, str]) -> int:
+    """PURE: the backend's host port from .env (BACKEND_PORT), else DEFAULT_BACKEND_PORT
+    (2026-11-19: a second copy on one host answers on its own port, not the lab's 8000)."""
+    text = str(env.get("BACKEND_PORT", "")).strip()
+    return int(text) if text.isdigit() else DEFAULT_BACKEND_PORT
+
+
 def env_baseline(repo: Path) -> dict[str, str]:
     """What .env holds now, or, before it exists, what init_env.sh will start from
     (.env.example: its non-secret defaults; the secrets it generates are not known yet)."""
@@ -1619,8 +1627,9 @@ def run_check(
         rep.status.append(Check(f"svc-{svc}", f"service {svc}", "ok" if up else "warn",
                                 status or "not created"))  # fmt: skip
     if ip:
-        rep.status.append(Check("health", "backend /health", "ok" if fetch(
-            f"http://{ip}:8000/health") else "warn", f"http://{ip}:8000/health"))  # fmt: skip
+        health = f"http://{ip}:{backend_port(env)}/health"
+        rep.status.append(Check("health", "backend /health", "ok" if fetch(health) else "warn",
+                                health))  # fmt: skip
         url = console_url(ip, port)
         rep.status.append(Check("console", "the console", "ok" if fetch(f"{url}/api/health")
                                 else "warn", url))  # fmt: skip

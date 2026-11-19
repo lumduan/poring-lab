@@ -820,12 +820,13 @@ class Wizard:
                     self.save()
                     break
         ip, port = self.a.server_ip, self.a.console_port
+        health = f"http://{ip}:{core.backend_port(core.read_env(core.REPO / '.env'))}/health"
         while True:
             with ui.c.status("Waiting for the backend and the console (up to 3 minutes)..."):
-                backend = core.wait_http(f"http://{ip}:8000/health", 180)
+                backend = core.wait_http(health, 180)
                 console = core.wait_http(f"{core.console_url(ip, port)}/api/health", 180)
             for ok, what in (
-                (backend, f"the backend: http://{ip}:8000/health"),
+                (backend, f"the backend: {health}"),
                 (console, f"the console: {core.console_url(ip, port)}"),
             ):
                 (ui.ok if ok else ui.warn)(what + ("" if ok else " does not answer yet"))
