@@ -1508,24 +1508,46 @@ def generic_check(lio: PixelIO, map_: str) -> dict[str, Any]:
 KNIFE_LINES = ("knife", "dagger")  # the Knife swap's slots (F4 the Knife, F5 the dagger worn)
 
 
+KNIFE_ROLES = ("knife_on", "knife_back")  # the box's Knife swap functions (BOX_CALL_ROLES["knife"])
+
+
+def without_knife(plan: RunnerPlan) -> RunnerPlan:
+    """PURE: the hunt core's plan WITHOUT the Knife swap, whole: the switch off (no --bare-steal),
+    the box's own Knife swap (its knife_on / knife_back functions: the "knife" play) and its
+    monsters' recipes (the "recipes" play) left out -- the runner refuses each without the swap
+    (dungeon@9.50 / 9.51: box_plays_refused) -- so the runner strikes with its own plain recipe."""
+    return replace(
+        plan,
+        vals={**plan.vals, "knife_swap": False},
+        plays=frozenset(plan.plays - {"knife", "recipes"}),
+        calls={r: v for r, v in plan.calls.items() if r not in KNIFE_ROLES},
+        call_names={r: v for r, v in plan.call_names.items() if r not in KNIFE_ROLES},
+        recipes={},
+    )
+
+
 def knife_swap_off(prep: Prepared, got: Mapping[str, Any]) -> list[str]:
     """Batt 2026-11-19 ("do not lock this"): when the check's Knife / dagger lines fail, the run
     plays WITHOUT the Knife swap instead of refusing -- swapping from an unknown weapon state
-    could equip anything. Its hunt cores' plans lose ``knife_swap`` (in place); the words of each
-    change, for the log."""
+    could equip anything. Its hunt cores' plans lose the swap whole (``without_knife``, in place);
+    the words of each change, for the log."""
     failed = [i for i in got.get("items") or []
               if i.get("id") in KNIFE_LINES and i.get("ok") is False]  # fmt: skip
     if not failed:
         return []
     out = []
     for block, plan in list(prep.runners.items()):
-        if plan.vals.get("knife_swap"):
-            prep.runners[block] = replace(plan, vals={**plan.vals, "knife_swap": False})
+        if plan.vals.get("knife_swap") or "knife" in plan.plays or plan.recipes:
+            prep.runners[block] = without_knife(plan)
             ids = ", ".join(str(i.get("id")) for i in failed)
+            dropped = [x for x in ("its Knife functions" if "knife" in plan.plays else "",
+                                   f"its {len(plan.recipes)} monster recipe(s)" if plan.recipes
+                                   else "") if x]  # fmt: skip
+            more = f" (and {' and '.join(dropped)}: the runner strikes plainly)" if dropped else ""
             out.append(
                 f"WARNING: {ids} did not read right: {block} plays WITHOUT the Knife swap "
-                "this run (the hotbar is the player's own; set the Knife on its key and "
-                "the dagger worn for it)"
+                f"this run{more} -- the hotbar is the player's own; set the Knife on its key "
+                "and the dagger worn for it"
             )
     return out
 

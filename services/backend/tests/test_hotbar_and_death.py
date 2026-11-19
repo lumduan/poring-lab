@@ -78,6 +78,22 @@ def plan(knife_swap: bool) -> fp.RunnerPlan:
                          vals={"knife_swap": knife_swap, "heal_key": "F1"})  # fmt: skip
 
 
+def boxed_plan() -> fp.RunnerPlan:
+    """A hunt core whose box plays the Knife swap itself (its knife_on / knife_back functions)
+    and strikes its monsters by recipes -- Batt's xmas_dun02 project's shape (12:13: the switch
+    alone turned off, the runner refused: "the box's recipes swap the Knife")."""
+    from poring_flow import recipes as rc
+
+    steps = ("knife_on", "strike", "wait_steal", "knife_back", "wait_kill", "loot")
+    return fp.RunnerPlan(
+        block="field", flow_id="xmas_dun02_rogue", keys={}, vals={"knife_swap": True},
+        plays=frozenset({"knife", "recipes", "model", "potion"}),
+        calls={"knife_on": (), "knife_back": (), "home": ()},
+        call_names={"knife_on": "knife_on", "knife_back": "knife_back", "home": "home"},
+        recipes={"mystcase": rc.Recipe("mystcase", "attack_mystcase", steps)},
+    )  # fmt: skip
+
+
 def test_a_knife_slot_that_does_not_read_right_plays_without_the_knife_swap() -> None:
     prep = types.SimpleNamespace(runners={"field": plan(True)})
     knife = {"id": "knife", "ok": False, "words": "the F4 slot draws a count None"}
@@ -90,6 +106,20 @@ def test_a_knife_slot_that_does_not_read_right_plays_without_the_knife_swap() ->
     assert ok.runners["field"].vals["knife_swap"] is True
     off = types.SimpleNamespace(runners={"field": plan(False)})
     assert fp.knife_swap_off(off, {"items": [knife]}) == []  # type: ignore[arg-type]
+
+
+def test_the_knife_swap_goes_whole_its_functions_and_recipes_with_it() -> None:
+    """The runner refuses the box's Knife functions and its recipes without the swap
+    (box_plays_refused; checked 2026-11-19 on Batt's real project through the runner's own run():
+    the switch alone -> refused, the whole swap off -> accepted)."""
+    prep = types.SimpleNamespace(runners={"field": boxed_plan()})
+    (words,) = fp.knife_swap_off(prep, {"items": [{"id": "dagger", "ok": False}]})  # type: ignore[arg-type]
+    got = prep.runners["field"]
+    assert got.vals["knife_swap"] is False and got.recipes == {}
+    assert got.plays == frozenset({"model", "potion"})
+    assert set(got.calls) == set(got.call_names) == {"home"}
+    assert "box_recipes" not in got.box_kwargs() and got.box_roles() == {"home": "home"}
+    assert "its Knife functions and its 1 monster recipe(s)" in words
 
 
 def test_the_runner_s_own_start_lets_the_hotbar_pass_inside_the_player_only() -> None:
