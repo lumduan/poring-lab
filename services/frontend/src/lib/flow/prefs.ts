@@ -13,7 +13,8 @@ export const KEYS = {
   simulate: "poring-lab.flows.simulate-pane.v1",
   paths: "poring-lab.flows.path-pane.v1",
   hunt: "poring-lab.flows.hunt-pane.v1",
-  run: "poring-lab.flows.run-pane.v1", // the Run pane (a flow whose map holds the runner's block)
+  run: "poring-lab.flows.run-pane.v1", // the Run / Log pane (Batt 2026-11-20: Before Run + Logs in one)
+  runOptions: "poring-lab.flows.run-options.v1", // the Run options section open or folded (Batt 2026-11-20)
   logs: "poring-lab.flows.logs-pane.v1", // the Logs pane (Batt 2026-11-19)
   flow: "poring-lab.flows.flow.v1",
   world: "poring-lab.flows.world.v1", // the static data the last flow is linted and simulated on

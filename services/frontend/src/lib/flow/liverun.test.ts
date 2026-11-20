@@ -64,8 +64,9 @@ test("the labels and every refusal the backend gives have words", () => {
 test("the live line says what she does, the counts and the time of the time box", async () => {
   const { liveLine } = await import("./liverun.ts");
   const l = { hp: 95, hp_low: 94, pos: [8, 22], doing: "looting", block: "loot", elapsed_s: 581, kills: 23, loot_steps: 27, pickups: 5, knife: 26, steals: 14, potions: 0, flies: 0, end: {} };
-  assert.equal(liveLine(l, 120), "HP 95 % · looting · 23 kills · 27 loot steps · 26 Knife swaps (14 steals) · 9:41 of 120 min");
-  assert.equal(liveLine({ ...l, kills: 1, knife: 0, hp: null, elapsed_s: 5 }, null), "looting · 1 kill · 27 loot steps · 0:05");
+  // Batt 2026-11-20: no Knife words (a Rogue's technique); a steal is an item gained, beside the loot
+  assert.equal(liveLine(l, 120), "HP 95 % · looting · 23 kills · 27 loot steps · 14 stolen · 9:41 of 120 min");
+  assert.equal(liveLine({ ...l, kills: 1, steals: 0, hp: null, elapsed_s: 5 }, null), "looting · 1 kill · 27 loot steps · 0:05");
   assert.equal(liveLine(null, 120), null);
 });
 
@@ -225,4 +226,27 @@ test("the Run's own start check: one line per item, the failing ones first", () 
     { id: "weight", ok: false, words: "the weight did not read", value: null },
   ] } as never);
   assert.deepEqual(lines.map((l) => `${l.sign} ${l.id}`), ["✗ weight", "? cell", "✓ chat"]);
+});
+
+
+// Batt 2026-11-20: "a small dashboard of the bot, with small emoji so a look tells"
+test("the monitor bar: a tile per fact with its emoji; no Knife tile; steals beside the pickups", async () => {
+  const { doingIcon, monitorTiles } = await import("./liverun.ts");
+  for (const [d, icon] of [["walking", "🚶"], ["scanning around her", "👀"], ["striking", "⚔️"], ["picking up", "💰"], ["a Fly Wing", "🪽"], ["the Butterfly Wing home", "🪽"], ["a potion", "🧪"], ["the idle weapon on", "🔁"], ["waiting", "⏳"], ["RETRY 1 of 3: waiting, then checking her", "🛠️"], ["something new", "•"]] as const) {
+    assert.equal(doingIcon(d), icon, d);
+  }
+  assert.deepEqual(monitorTiles(null).map((t) => t.key), ["state"]);
+  const st = { ...ok, state: "running", live: { hp: 42, hp_low: 30, pos: [128, 89], doing: "walking", block: null, elapsed_s: 2790, kills: 89, loot_steps: 123, pickups: 14, knife: 0, steals: 3, potions: 0, flies: 15, end: {}, retries: 0 } };
+  const tiles = monitorTiles(st);
+  assert.deepEqual(tiles.map((t) => t.key), ["state", "doing", "hp", "cell", "kills", "items", "potions", "wings", "time"]);
+  const by = Object.fromEntries(tiles.map((t) => [t.key, t]));
+  assert.equal(by.state.icon, "▶️");
+  assert.equal(by.doing.icon, "🚶");
+  assert.equal(by.hp.text, "42 % (low 30)");
+  assert.equal(by.hp.bar, 42);
+  assert.equal(by.cell.text, "128, 89");
+  assert.equal(by.items.text, "14 + 3 stolen");
+  assert.equal(by.time.text, "46:30");
+  assert.ok(!tiles.some((t) => /knife/i.test(`${t.text} ${t.title}`)));
+  assert.equal(monitorTiles({ ...st, live: { ...st.live, retries: 2 } }).at(-1)?.key, "retries");
 });

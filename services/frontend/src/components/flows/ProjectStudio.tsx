@@ -32,7 +32,7 @@ import FlowFileDialogs, { type FileDialog, type Opened, useFileShortcuts } from 
 import CodeView from "@/components/flows/CodeView";
 import NodeInspector from "@/components/maps/NodeInspector";
 import LiveRun, { LiveRunButtons, RunNotReady, useLiveRun } from "@/components/flows/LiveRun";
-import { LogsPanel, RunOptionsBox } from "@/components/flows/RunPanels";
+import { LogsPanel, RunMonitor, RunOptionsBox } from "@/components/flows/RunPanels";
 import { effectiveLimitS } from "@/lib/flow/runoptions";
 import { DEFAULT_SIM, FlowSettings, HuntRulesPanel, LintPanel, PathPanel, scenarioOf, type SimForm, SimulatePanel } from "@/components/flows/Panels";
 import { ApiError, type CatalogueDoc, type Finding, FlowsApi, type LintDoc, type PythonFiles, type SimDoc, sitePath, type WorldSource } from "@/lib/flow/api";
@@ -93,15 +93,17 @@ const NOTICE_MS = 12_000;
 const VIEWS = ["blocks", "python"] as const;
 const OPEN_CLOSED = ["open", "closed"] as const;
 const WORLDS = ["local", "sample"] as const;
-type Pane = "inspect" | "lint" | "simulate" | "paths" | "hunt" | "run" | "logs";
+type Pane = "inspect" | "lint" | "simulate" | "paths" | "hunt" | "run";
 const PANES: [Pane, string][] = [
-  ["run", "Before Run"], // matpilot 2026-11-13 #4: one button is "Run" (the game); this is its checklist
+  // matpilot 2026-11-13 #4: one button is "Run" (the game); this pane is its checklist. Batt
+  // 2026-11-20: "Before Run cannot be closed and repeats Logs: make them ONE, Run / Log" -- the
+  // checklist, the state at a glance, what she does and the log, closable like every pane
+  ["run", "Run / Log"],
   ["inspect", "Inspect"],
   ["lint", "Lint"],
   ["simulate", "Results"],
   ["paths", "Path map"],
   ["hunt", "Hunt rules"],
-  ["logs", "Logs"], // Batt 2026-11-19: the Run's state, what she does, its whole log
 ];
 type Notice = { text: string; tone: "ok" | "warn" | "error"; undo: { project: Project; world: WorldSource; file: FileMeta } | null };
 const NO_EDITOR: EditorState = { ready: false, failed: false, issues: [], loose: [], canUndo: false, canRedo: false };
@@ -193,7 +195,13 @@ export default function ProjectStudio({ backendUrl, initialNode = null }: { back
     return readChoice(store, KEYS.python, OPEN_CLOSED, pythonDefault(wide));
   });
   const [panes, setPanes] = useState<Record<Pane, boolean>>(() =>
-    Object.fromEntries(PANES.map(([p]) => [p, readChoice(store, KEYS[p], OPEN_CLOSED, "closed") === "open"])) as Record<Pane, boolean>,
+    Object.fromEntries(
+      PANES.map(([p]) => [
+        p,
+        // a browser that had the old Logs pane open opens Run / Log (2026-11-20: one pane)
+        readChoice(store, KEYS[p], OPEN_CLOSED, "closed") === "open" || (p === "run" && readChoice(store, KEYS.logs, OPEN_CLOSED, "closed") === "open"),
+      ]),
+    ) as Record<Pane, boolean>,
   );
   const menuRef = useRef<HTMLDivElement | null>(null);
   const codeRef = useRef<HTMLPreElement | null>(null);
@@ -243,7 +251,9 @@ export default function ProjectStudio({ backendUrl, initialNode = null }: { back
           : ready && !ready.ready
             ? ready.why
             : "Run is not available on this node";
-  const shown: Record<Pane, boolean> = { ...panes, run: panes.run || runActive };
+  // a Run that starts OPENS Run / Log once; the person may close it at any time (Batt 2026-11-20:
+  // "every tab can be closed except Before Run")
+  const shown: Record<Pane, boolean> = panes;
 
   const setView = (v: (typeof VIEWS)[number]) => {
     setViewState(v);
@@ -261,6 +271,12 @@ export default function ProjectStudio({ backendUrl, initialNode = null }: { back
     },
     [store],
   );
+  // a Run that starts opens Run / Log ONCE (it stays closable; 2026-11-20)
+  const wasActive = useRef(runActive);
+  useEffect(() => {
+    if (runActive && !wasActive.current) setPane("run", true);
+    wasActive.current = runActive;
+  }, [runActive, setPane]);
 
   // --- the project: from the blocks (no reload), or replaced from outside (the blocks reload) -------
   const fromBlocks = useCallback((p: Project) => {
@@ -580,7 +596,7 @@ export default function ProjectStudio({ backendUrl, initialNode = null }: { back
   const total = lintDoc ? lintLine(lintDoc.counts) : null;
   const pythonOpen = view === "blocks" && pythonPanel === "open";
   const huntRules = catalogue?.hunt_rules ?? null;
-  const visiblePanes = PANES.filter(([p]) => (p !== "hunt" || huntRules) && (p !== "run" || node.kind === "map"));
+  const visiblePanes = PANES.filter(([p]) => p !== "hunt" || huntRules);
   const openPanes = visiblePanes.filter(([p]) => shown[p]);
   const notReady = (lintStale ? [] : (lintDoc?.findings ?? [])).filter((f) => f.severity === "readiness" && (f.node ?? "") === node.id);
   const tabErrors = (t: string) => errors.some((f) => (f.node || node.id) === node.id && (f.tab || MAIN_TAB) === t);
@@ -999,13 +1015,14 @@ export default function ProjectStudio({ backendUrl, initialNode = null }: { back
                 )}
                 {p === "paths" && <PathPanel server={project.target.server} sim={simDoc} stale={simStale} world={world} api={api} />}
                 {p === "hunt" && huntRules && <HuntRulesPanel rules={huntRules} l1={catalogue?.blocks.hunt?.badge ?? "unknown"} />}
-                {p === "logs" && (
+                {p === "run" && <RunMonitor live={live} />}
+                {p === "run" && node.kind !== "map" && (
                   <div className="run-pane" data-testid="run-pane-logs">
+                    <p className="muted">A Run starts from a map node (open one to see its checklist); its state, what she does and its log show here on every node.</p>
                     <RunOptionsBox project={project} onProject={(f) => replace(f, { keepView: true })} live={live} />
-                    <LogsPanel live={live} />
                   </div>
                 )}
-                {p === "run" && !runnable && (
+                {p === "run" && node.kind === "map" && !runnable && (
                   <div className="run-pane" data-testid="run-pane-not-ready">
                     <p>
                       <strong>Run in the game · not ready here.</strong> {notRunWhy}
@@ -1050,6 +1067,7 @@ export default function ProjectStudio({ backendUrl, initialNode = null }: { back
                     </p>
                   </div>
                 )}
+                {p === "run" && <LogsPanel live={live} />}
               </div>
             </section>
           ))}

@@ -125,7 +125,7 @@ export function liveLine(l: LiveSummary | null | undefined, minutes: number | nu
     l.doing,
     `${l.kills} kill${l.kills === 1 ? "" : "s"}`,
     `${l.loot_steps} loot step${l.loot_steps === 1 ? "" : "s"}`,
-    l.knife ? `${l.knife} Knife swaps (${l.steals} steals)` : null,
+    l.steals ? `${l.steals} stolen` : null, // Batt 2026-11-20: a steal is an item gained, as loot
     l.potions ? `${l.potions} potions` : null,
     l.flies ? `${l.flies} Fly Wings` : null,
     minutes ? `${mm} of ${minutes} min` : mm,
@@ -134,6 +134,58 @@ export function liveLine(l: LiveSummary | null | undefined, minutes: number | nu
 }
 
 export const ACTIVE: readonly string[] = ["starting", "running", "stopping"];
+
+// --- the Run's monitor bar (Batt 2026-11-20: "a small dashboard of the bot, with small emoji, so a
+// look tells"): one tile per fact, any class -- no Knife row (a Rogue's technique); a steal is an
+// item gained, beside the pickups (0 for a class that has none)
+/** PURE: a small picture for what she does (flow_run's DOING / PRESS_DOING / PLAYER_DOING words). */
+export function doingIcon(doing: string): string {
+  const d = doing.toLowerCase();
+  const rules: [RegExp, string][] = [
+    [/^retry|checking her/, "🛠️"],
+    [/paused|off the screen/, "⏸️"],
+    [/back on the screen/, "▶️"],
+    [/fly wing|butterfly wing|flying home/, "🪽"],
+    [/potion|drink|eat/, "🧪"],
+    [/weapon|knife|dagger|swap/, "🔁"],
+    [/a kill/, "💀"],
+    [/strik|fight starts|aiming/, "⚔️"],
+    [/loot|picking up/, "💰"],
+    [/scanning|looking/, "👀"],
+    [/walk|explor|exit/, "🚶"],
+    [/fight is over|letting go/, "✅"],
+    [/wait/, "⏳"],
+    [/stopp/, "⏹️"],
+    [/hunting|deciding|loop|function|pressing|save point/, "⚙️"],
+  ];
+  return rules.find(([re]) => re.test(d))?.[1] ?? "•";
+}
+
+export type MonitorTile = { key: string; icon: string; text: string; title: string; bar?: number };
+
+/** PURE: the monitor bar's tiles: the state, what she does, HP (with a bar), kills, the items
+ * gained (picked up + stolen), potions, Fly Wings, the time, the retries. */
+export function monitorTiles(st: LiveStatus | null | undefined): MonitorTile[] {
+  const active = ACTIVE.includes(st?.state ?? "");
+  const state = st?.pause?.paused ? "⏸️" : active ? "▶️" : st?.state === "failed" ? "⚠️" : st?.state === "ended" ? "⏹️" : "·";
+  const out: MonitorTile[] = [{ key: "state", icon: state, text: st ? (st.pause?.paused ? "paused" : active ? "playing" : (st.state ?? "idle")) : "no answer yet", title: "the Run" }];
+  const l = st?.live;
+  if (!l) return out;
+  const t = l.elapsed_s ?? 0;
+  const time = `${Math.floor(t / 60)}:${String(Math.floor(t % 60)).padStart(2, "0")}`;
+  out.push(
+    { key: "doing", icon: doingIcon(l.doing), text: l.doing, title: "what she does" },
+    { key: "hp", icon: "❤️", text: l.hp === null ? "HP not read" : `${l.hp} %${l.hp_low !== null ? ` (low ${l.hp_low})` : ""}`, title: "HP (the lowest this Run)", ...(l.hp === null ? {} : { bar: Math.max(0, Math.min(100, l.hp)) }) },
+    { key: "cell", icon: "📍", text: l.pos ? `${l.pos[0]}, ${l.pos[1]}` : "not read", title: "her cell (the minimap)" },
+    { key: "kills", icon: "⚔️", text: String(l.kills), title: "kills" },
+    { key: "items", icon: "💰", text: `${l.pickups}${l.steals ? ` + ${l.steals} stolen` : ""}`, title: `items gained: picked up${l.steals ? " + stolen" : ""} (${l.loot_steps} loot steps)` },
+    { key: "potions", icon: "🧪", text: String(l.potions), title: "potions drunk" },
+    { key: "wings", icon: "🪽", text: String(l.flies), title: "Fly Wings flown" },
+    { key: "time", icon: "⏱️", text: time, title: "time played" },
+  );
+  if (l.retries) out.push({ key: "retries", icon: "🛠️", text: String(l.retries), title: "retries after a code error" });
+  return out;
+}
 
 /** The body of POST /flows/run: Stop names nothing else (a start and a check are a project's:
  * projectRunBody, checkBody). */

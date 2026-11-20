@@ -1734,3 +1734,51 @@
   white-space: pre-wrap;
   overflow-wrap: anywhere;
 }
+
+/* the Run's monitor bar (Batt 2026-11-20: "a small dashboard of the bot, emoji so a look tells") */
+.run-monitor {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  margin: 0 0 0.5rem;
+}
+.run-tile {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  padding: 0.15rem 0.5rem;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--surface);
+  color: var(--text);
+  font-size: 0.85rem;
+  white-space: nowrap;
+}
+.run-tile-icon {
+  font-size: 1rem;
+  line-height: 1;
+}
+.run-tile-doing {
+  white-space: normal;
+}
+.run-tile-bar {
+  display: inline-block;
+  width: 3rem;
+  height: 0.4rem;
+  border-radius: 999px;
+  background: var(--border);
+  overflow: hidden;
+}
+.run-tile-bar > span {
+  display: block;
+  height: 100%;
+  background: var(--run-bg);
+}
+.run-tile-bar > span[data-low="true"] {
+  background: var(--error-border);
+}
+/* Run options folded by default: its one-line summary in the header */
+.run-options > summary {
+  cursor: pointer;
+  list-style: revert;
+}

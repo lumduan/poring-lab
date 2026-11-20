@@ -12,10 +12,11 @@
  * - LogsPanel: the Run's state, what she does (the Run helper's story of the session events, in
  *   words) and the Run's whole log tail. Display only: it never decides or sends input.
  */
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import type { Live } from "@/components/flows/LiveRun";
-import { ACTIVE, liveLabel, REFUSALS } from "@/lib/flow/liverun";
+import { ACTIVE, liveLabel, monitorTiles, REFUSALS } from "@/lib/flow/liverun";
+import { browserStorage, KEYS, readChoice, writeChoice } from "@/lib/flow/prefs";
 import type { Project } from "@/lib/flow/project";
 import {
   effectiveLimitS,
@@ -115,9 +116,25 @@ export function RunOptionsBox({ project, onProject, live }: { project: Project; 
     onProject(withTimeLimit(project, secs));
   };
   const { opts, err, save, busy } = useRetryOptions(live.base);
+  // Batt 2026-11-20: "make Run options hideable: we do not look at it all the time" -- folded by
+  // default, its one-line summary in the header; this browser remembers it open or folded
+  const store = useMemo(() => browserStorage(), []);
+  const [open, setOpen] = useState(() => readChoice(store, KEYS.runOptions, ["open", "closed"] as const, "closed") === "open");
+  const summary = `${effective ? `at most ${timeWords(effective)}` : "no time limit"} · ${opts ? (opts.retry_max ? `a code error: check and hunt on (${opts.retry_max}×)` : "a code error ends it") : "…"}`;
   return (
-    <div className="box stack" data-testid="run-options">
-      <div className="strong">Run options</div>
+    <details
+      className="box stack run-options"
+      data-testid="run-options"
+      open={open}
+      onToggle={(e) => {
+        const now = (e.currentTarget as HTMLDetailsElement).open;
+        setOpen(now);
+        writeChoice(store, KEYS.runOptions, now ? "open" : "closed");
+      }}
+    >
+      <summary className="strong" data-testid="run-options-summary">
+        Run options <span className="muted">· {summary}</span>
+      </summary>
       <label>
         Time limit for the Run{" "}
         <select
@@ -180,11 +197,35 @@ export function RunOptionsBox({ project, onProject, live }: { project: Project; 
         {opts ? `${opts.words[0].toUpperCase()}${opts.words.slice(1)}. A code error is a program fault or a frozen picture; a death, Stop, the time limit, a full bag, the game leaving the screen or a refusal never retries. This bot server's setting: the Run that is playing reads it at its next retry.` : "The retry option is loading…"}
       </p>
       {err && <p className="err-text">{err}</p>}
+    </details>
+  );
+}
+
+/** The Run's monitor bar (Batt 2026-11-20: "a small dashboard of the bot, emoji so a look tells"):
+ * the state, what she does, HP as a bar, her cell, kills, items gained, potions, Fly Wings, time. */
+export function RunMonitor({ live }: { live: Live }) {
+  const tiles = monitorTiles(live.st);
+  return (
+    <div className="run-monitor" role="status" aria-label="the Run at a glance" data-testid="run-monitor">
+      {tiles.map((t) => (
+        <span key={t.key} className={`run-tile run-tile-${t.key}`} title={t.title} data-testid={`run-tile-${t.key}`}>
+          <span className="run-tile-icon" aria-hidden="true">
+            {t.icon}
+          </span>
+          <span className="run-tile-text">{t.text}</span>
+          {t.bar !== undefined && (
+            <span className="run-tile-bar" aria-hidden="true">
+              <span style={{ width: `${t.bar}%` }} data-low={t.bar < 50 ? "true" : "false"} />
+            </span>
+          )}
+        </span>
+      ))}
     </div>
   );
 }
 
-/** The Logs tab: the Run's state, what she does (newest first), and the Run's log. */
+/** The Logs part of the Run / Log pane: the Run's state line, what she does (newest first), and the
+ * Run's log. Its facts are the monitor bar's tiles (RunMonitor). */
 export function LogsPanel({ live }: { live: Live }) {
   const st = live.st;
   const l = st?.live ?? null;
@@ -196,19 +237,6 @@ export function LogsPanel({ live }: { live: Live }) {
     if (follow && pre.current) pre.current.scrollTop = pre.current.scrollHeight;
   }, [lines.length, follow]);
   const active = ACTIVE.includes(st?.state ?? "");
-  const facts: [string, string][] = l
-    ? [
-        ["doing", l.doing],
-        ["HP", l.hp === null ? "not read" : `${l.hp} %${l.hp_low !== null ? ` (lowest ${l.hp_low} %)` : ""}`],
-        ["cell", l.pos ? `(${l.pos[0]}, ${l.pos[1]})` : "not read"],
-        ["time", storyTime(l.elapsed_s) || "0:00"],
-        ["kills", String(l.kills)],
-        ["loot", `${l.loot_steps} steps, ${l.pickups} picked up`],
-        ["Knife", `${l.knife} swaps, ${l.steals} steals`],
-        ["potions / Fly Wings", `${l.potions} / ${l.flies}`],
-        ["retries", String(l.retries ?? 0)],
-      ]
-    : [];
   return (
     <div className="stack" data-testid="logs-pane">
       <div className="box stack">
@@ -220,16 +248,6 @@ export function LogsPanel({ live }: { live: Live }) {
         </div>
         {st?.detail && <div className={st.state === "ended" || st.state === "failed" ? "notice-sub" : "muted"}>{st.detail}</div>}
         {l?.end?.words && <div className="notice-sub">The end: {l.end.words}</div>}
-        {facts.length > 0 && (
-          <div className="grid2" data-testid="logs-facts">
-            {facts.map(([k, v]) => (
-              <div key={k}>
-                <span className="muted">{k}: </span>
-                {v}
-              </div>
-            ))}
-          </div>
-        )}
       </div>
       <div className="box stack">
         <div className="strong">What she does (newest first)</div>

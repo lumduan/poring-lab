@@ -460,7 +460,9 @@ DOING = {"walk": "walking", "strike": "striking", "kill": "a kill", "loot_step":
          "box_target": "aiming", "explore": "exploring", "goal": "exploring",
          "unlock": "letting go",
          "scan": "scanning around her", "player_home": "flying home"}  # fmt: skip
-PRESS_DOING = {"opener": "the Knife on", "equip": "the dagger back on", "potion": "a potion",
+# 2026-11-20 (roles-not-names.md: "make it WEAPON, so other classes can use it"): the swap's roles
+PRESS_DOING = {"opener": "the idle weapon on", "equip": "the fighting weapon back on",
+               "potion": "a potion",
                "fly": "a Fly Wing", "home": "the Butterfly Wing home"}  # fmt: skip
 # the live block player's blocks (its "block" events' "what") in a player's words
 PLAYER_DOING = {"press_key": "pressing a key", "wait": "waiting", "wait_until": "waiting",

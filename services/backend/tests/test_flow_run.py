@@ -84,7 +84,8 @@ def test_the_defaults_are_valid_settings_and_the_strategys_own() -> None:
     for k, v in f.defaults.items():
         assert k in fc.BY_NAME and not fc.BY_NAME[k].tune, k  # a flag or a switch of its own
         assert fc.problem_of(fc.BY_NAME[k], v) is None, (k, v)
-    own = {x.name for x in fc.FIELDS if x.flag or x.kind in ("switch", "choice")}
+    # an item setting (roles-not-names.md step 2) has the flow's default too: the player applies it
+    own = {x.name for x in fc.FIELDS if x.flag or x.kind in ("switch", "choice", "item")}
     assert own == set(f.defaults)  # every flag and switch has the flow's default
     assert fc.clash(f.defaults) is None
     p2 = dh.STRATEGIES[fr.FIXED[fr.FIXED.index("--strategy") + 1]]
@@ -289,7 +290,8 @@ def test_the_live_line_follows_the_runs_own_events(tmp_path: Path) -> None:
     f.write_text("".join(json.dumps(e) + "\n" for e in ev[:5]) + '{"t_ns": 5')  # a half line
     lv = fr.Live()
     off = fr.feed_new(lv, f, 0)
-    assert lv.knife == 1 and lv.steals == 1 and lv.kills == 0 and lv.doing == "the dagger back on"
+    assert lv.knife == 1 and lv.steals == 1 and lv.kills == 0
+    assert lv.doing == "the fighting weapon back on"
     with open(f, "a") as fh:
         fh.write('500000000, "kind": "hp_read"}\n' + "".join(json.dumps(e) + "\n" for e in ev[5:]))
     fr.feed_new(lv, f, off)
