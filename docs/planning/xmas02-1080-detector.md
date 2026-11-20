@@ -443,3 +443,15 @@ FIT ran 09:04-09:08 (`run-fit.sh`, CPU, nice 10, a 4 GB scope) on `20261120T0837
   - Agreement: q1 210, q2 206, q3 210 of 210.
 - **So no species is masked beyond the pre-registered knight-session masks.** The cache and the
   training run as Amendment 7.
+
+### Amendment 10 (2026-11-20 12:07 ICT from `date`, BEFORE the GPU step): the cache as built; E = 6
+
+- **The cache** `xmas02-v1080-mix-20261120` (guarded `cache:` 11:48:34-12:06:41, ALL STEPS OK,
+  1,083 s): 4,401 frames written, equal to the dry run (1080 TRAIN 3,509 + v1f VAL 892).
+  - With the linked 720 cache: **TRAIN 7,122 frames** (10 sessions) and VAL 1,998 (3 sessions);
+    20 shards.
+  - manifest.json sha256 3331793f....
+- **E = min(10, floor(28,800 / (0.64 x 7,122 + 100))) = floor(6.18) = 6 epochs** (~8 h).
+- **The launch** (Amendment 7's command, E = 6), detached as `poring-train-xmas02v1080`:
+
+      python3 scripts/guarded_build.py --threshold 30 --sustain 30 "execdev:vision@43200=python -m poring_vision.train --cache /datasets/.framecache/xmas02-v1080-mix-20261120 --epochs 6 --batch 2 --workers 2 --name xmas02-v1080-20261120 --mid-ckpt --weights /datasets/archive/train/xmas02-sk-20261114/weights/last.pt --hsv-s 0.2 --close-mosaic 3 --scale 0.1"
