@@ -223,3 +223,57 @@ def test_a_search_after_the_first_never_runs_inside_the_grab(
     release.set()
     th.join(5)
     assert not th.is_alive()
+
+
+# --- xmas02-items-1080.md T-I5 (2026-11-20): the open inventory is a panel at 1080 ---------------
+def _bag_frame(open_: bool) -> np.ndarray:
+    """A 1920x1080 BGRA real frame; with ``open_`` an EMPTY bag at the inventory's home (its 42
+    ovals, bag_count's rule)."""
+    import bag_count as bc
+
+    f = np.full((1080, 1920, 4), 90, np.uint8)
+    if open_:
+        ox, oy = (0, 120)
+        f[oy : oy + 255, ox : ox + 280, :3] = 255
+        w, h = bc.OVAL_BOX[2], bc.OVAL_BOX[3]
+        yy, xx = np.mgrid[0:h, 0:w]
+        oval = ((xx + 0.5 - w / 2) / (w / 2)) ** 2 + ((yy + 0.5 - h / 2) / (h / 2)) ** 2 <= 1.0
+        for s in range(bc.SLOTS):
+            x, y = bc.icon_xy((ox, oy), s)
+            dx, dy = bc.OVAL_BOX[0], bc.OVAL_BOX[1]
+            f[y + dy : y + dy + h, x + dx : x + dx + w, :3][oval] = bc.OVAL[::-1]
+    return f
+
+
+class BagScreen:
+    def __init__(self, frame: np.ndarray) -> None:
+        self.frame, self.grabs = frame, []
+
+    def grab_meta(self, x: int, y: int, w: int, h: int) -> tuple[int, np.ndarray, int, str]:
+        self.grabs.append((x, y, w, h))
+        return 0, self.frame[y : y + h, x : x + w], -1, "x11"
+
+
+def test_the_open_inventory_is_a_one_to_one_panel_at_1080(
+    ro: ModuleType, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(ro, "desktop", lambda: (1920, 1080))
+    monkeypatch.setattr(ro, "real_game_region", lambda: (0, 0, 1920, 1080))
+    monkeypatch.setattr(ro, "_INV", {"origin": None, "t": -1e9})
+    import gm_state as gs
+
+    scr = BagScreen(_bag_frame(True))
+    assert ro.inventory_tick(scr, now=10.0) is True
+    assert scr.grabs and scr.grabs[0][2] * scr.grabs[0][3] < 200_000  # a small box, not the frame
+    view = ro.client_view()
+    assert view.panel_at(*gs.slot_centre(0, 0)).name == "inventory"
+    sx, sy = gs.slot_centre(3, 2)
+    assert view.to_real(sx, sy) == (sx, sy)  # a slot: 1:1, where RO draws it
+    wx, wy = view.to_real(*gs.DROP_AT)  # the ground: the world's scale about the centre
+    assert (round(wx), round(wy)) == (round(960 + 1.5 * (gs.DROP_AT[0] - 640)),
+                                      round(540 + 1.5 * (gs.DROP_AT[1] - 360)))  # fmt: skip
+    # checked again only after INV_CHECK_S; then closed: the place is the world again
+    scr.frame = _bag_frame(False)
+    assert ro.inventory_tick(scr, now=10.1) is True  # within INV_CHECK_S: the last answer
+    assert ro.inventory_tick(scr, now=10.0 + ro.INV_CHECK_S) is False
+    assert ro.client_view().panel_at(*gs.slot_centre(0, 0)) is None

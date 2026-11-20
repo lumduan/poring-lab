@@ -237,6 +237,16 @@ _POINTER: tuple[float, float] | None = None  # the last virtual pointer position
 # (RO never moves it); hotbar2 keeps its saved place.
 PANELS_FILE = lab_env.shm("tmp") / "panels.json"  # the last find, for this copy's processes
 PANELS_ENV = "PORING_PANELS_FILE"  # another file (the tests: each its own)
+# xmas02-items-1080.md T-I5 (2026-11-20; the 1080 clear-bag "slot 0 did not drop twice"): the
+# INVENTORY is a panel while it is open. RO draws it 1:1 at the same client pixels at any screen
+# size (the lab's home (0, 120), gm_state.INV_SLOT1's window); in the virtual picture it was part of
+# the scaled world, so its slots read the wrong pixels and a drag from one started elsewhere. It is
+# found by bag_count's oval lattice at its home in the REAL frame, at most every INV_CHECK_S, and
+# is a panel only while found (a closed bag's place stays the world).
+INV_HOME = (0, 120)
+INV_SIZE = (280, 255)  # the window from its origin (bag_count's grid + its frame)
+INV_CHECK_S = 0.5  # the drop opens the bag, waits 1.0 s, then reads it
+_INV: dict[str, Any] = {"origin": None, "t": -1e9}
 PANELS_TTL_S = 120.0  # another process's find is used this long, for the same client region
 PANEL_CHECK_S = 2.0  # a run re-checks each found window at its place this often (< 1 ms)
 PANEL_SEARCH_S = 15.0  # and searches again at most this often when one moved or is missing
@@ -424,6 +434,32 @@ def _panels_tick(real: Any) -> None:
         _search_again(real)
 
 
+def inventory_tick(screen: Any, now: float | None = None) -> bool:
+    """T-I5: is the bag open at its home (bag_count.window_at on the REAL pixels around it)? At most
+    every INV_CHECK_S; the answer is kept for client_view (the inventory panel). A small real grab
+    (the window and a margin), so the virtual grab path stays cheap."""
+    import bag_count as bc
+
+    t = time.monotonic() if now is None else now
+    with _PANELS_LOCK:
+        if t - float(_INV["t"]) < INV_CHECK_S:
+            return _INV["origin"] is not None
+        _INV["t"] = t
+    try:
+        rx, ry, rw, rh = real_game_region()
+        bx, by, bw, bh = bc.bag_box(INV_HOME)
+        x0, y0 = max(0, bx), max(0, by)
+        w, h = min(bw - (x0 - bx), rw - x0), min(bh - (y0 - by), rh - y0)
+        _, sub, _, _ = screen.grab_meta(rx + x0, ry + y0, w, h)
+        bgr = np.ascontiguousarray(np.asarray(sub)[..., :3])
+        open_ = bool(bc.window_at(bgr, (INV_HOME[0] - x0, INV_HOME[1] - y0)))
+    except (Stop, OSError, ValueError):
+        open_ = False
+    with _PANELS_LOCK:
+        _INV["origin"] = INV_HOME if open_ else None
+    return open_
+
+
 def _panels_due() -> bool:
     """_panels_tick would look at the windows now (the first frame, or PANEL_CHECK_S since the
     last check): that read needs the whole real frame; any other virtual read needs only its box."""
@@ -511,6 +547,11 @@ def client_view() -> Any:
               if name in found else
               Panel.anchored(name, box, "tr", (w, h)) if how == "tr" else
               Panel(name, box, (box[0], box[1])) for name, box, how in LAB_PANELS]  # fmt: skip
+    with _PANELS_LOCK:
+        inv = _INV["origin"]
+    if inv is not None:  # T-I5: the open inventory, 1:1 at its home in the bot's picture
+        panels.append(Panel("inventory", (INV_HOME[0], INV_HOME[1], *INV_SIZE),
+                            (int(inv[0]), int(inv[1]))))  # fmt: skip
     base = ClientView((x, y, w, h), mode, h / VIRTUAL_H, None, tuple(panels))
     if _POINTER is not None and base.panel_at(*_POINTER) is None:  # over the world
         vx, vy = _POINTER
@@ -668,6 +709,8 @@ class Screen:
         if x >= VIRTUAL_X0:
             from poring_env.clientview import VIRTUAL_H, VIRTUAL_W, ClientView
 
+            if virtual_active():
+                inventory_tick(self)  # T-I5: the open bag is a panel (its slots 1:1)
             view = client_view()
             rx, ry, rw, rh = view.rect
             vx = x - VIRTUAL_X0
