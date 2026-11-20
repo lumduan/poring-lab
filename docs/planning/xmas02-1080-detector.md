@@ -405,3 +405,16 @@ FIT ran 09:04-09:08 (`run-fit.sh`, CPU, nice 10, a 4 GB scope) on `20261120T0837
     computed from the cache manifest and written here before the launch.
   - While it trains, the dev lab's detect server is refused (one job per worker). The live copy's
     worker is separate and not touched.
+
+### Amendment 8 (2026-11-20 11:31 ICT from `date`, BEFORE the T2 pack): v1g2 fails too; TRAIN is final
+
+- **v1g2 (11:14-11:30): own C1 32 / 468 = 0.0684.** Fails, so it does not join.
+  - Garm Baby is 26 of the 32 bad (26 / 249 = 10.4 %, v1g1: 20 / 200 = 10.0 %).
+  - The other species: Christmas Cookie 3 / 51, Cookie 3 / 34, Cruiser 0 / 60, Myst Case 0 / 74.
+- **Two Garm watches failing at the same rate look systematic at 1080** (720: gw1 6.21 % out,
+  gw2 4.26 % in). So no third Garm watch now; its cause is a question for after the launch.
+- **The 1080 TRAIN is final: v1t2, v1t3, v1k1, v1k2** (3,509 frames in the trial dry run).
+  - The model still meets Garm Babies: 720 TRAIN 649 boxes, plus 1080's own in the knight sessions
+    (the party) 114 + 172, and v1t3's.
+  - T2 checks those labels (the pack draws Garm Baby crops from these sessions). Bar A3 on v1Tg
+    decides whether that is enough.
