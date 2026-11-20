@@ -419,7 +419,7 @@ FIT ran 09:04-09:08 (`run-fit.sh`, CPU, nice 10, a 4 GB scope) on `20261120T0837
   - T2 checks those labels (the pack draws Garm Baby crops from these sessions). Bar A3 on v1Tg
     decides whether that is enough.
 
-### Amendment 9 (2026-11-20 11:55 ICT from `date`, BEFORE the cache): T2 PASSES on every species
+### Amendment 9 (2026-11-20 11:48 ICT from `date`, BEFORE the cache): T2 PASSES on every species
 
 - **The pack:** v1t2 + v1t3 + v1k1 + v1k2, seed 51, min-fit 0.504. 210 crops, 30 per species of
   the tier [1249, 1248, 1265, 1246, 1515, 1607, 1251].
