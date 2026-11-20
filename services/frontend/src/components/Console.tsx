@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import Banner from "@/components/Banner";
 import FilesPanel from "@/components/FilesPanel";
@@ -16,6 +16,8 @@ import StatsPanel, { EMPTY_STATS, type Links, type Stats } from "@/components/St
 import StreamCanvas from "@/components/StreamCanvas";
 import Toolbar from "@/components/Toolbar";
 import { statusWatch } from "@/lib/banner";
+import { loadConsolePrefs, saveToggle, saveView } from "@/lib/consoleprefs";
+import { browserStorage } from "@/lib/flow/prefs";
 import { connectingViews, type FeedState, NOTHING_SEEN, type Seen, stepFeeds } from "@/lib/feeds";
 import type { HudFrame } from "@/lib/hud";
 import { HeldKeys, type KeyStep } from "@/lib/keys";
@@ -86,12 +88,18 @@ export default function Console({ backendUrl }: Props) {
   const [frameSize, setFrameSize] = useState<Size>({ width: 1280, height: 800 });
   const [viewMode, setViewMode] = useState<ViewMode>("fit");
   const [focused, setFocused] = useState(false);
-  // Watch only (Batt, 2026-10-07): this tab forwards no input; per tab, off on every load, so a
-  // reload always brings instant takeover back.
+  // Watch only (Batt, 2026-10-07): this tab forwards no input. ➡️ Since 2026-11-20 (Batt: "the
+  // buttons I pressed are forgotten when I go to /flows and come back") it is REMEMBERED in this
+  // browser with the HUD, Secret typing and the view (lib/consoleprefs.ts), restored after the
+  // first render; remembered ON is the cautious side (no input leaves the tab).
+  const prefsStore = useMemo(() => browserStorage(), []);
   const [watchOnly, setWatchOnlyState] = useState(false);
   const watchOnlyRef = useRef(false);
-  // The operator HUD (Batt, 2026-10-08): display only, per tab, off on every load. While off,
-  // its messages are dropped on arrival.
+  // Secret typing that THIS browser turned on: sent again each time the input socket opens (the
+  // backend keeps it per connection, so leaving the page ended it).
+  const secretWantedRef = useRef(false);
+  // The operator HUD (Batt, 2026-10-08): display only, per tab; remembered since 2026-11-20 (above).
+  // While off, its messages are dropped on arrival.
   const [hudOn, setHudOnState] = useState(false);
   const hudOnRef = useRef(false);
   const [hud, setHud] = useState<HudFrame | null>(null);
@@ -270,7 +278,13 @@ export default function Console({ backendUrl }: Props) {
     });
 
     const input = new ReconnectingSocket(`${base}/ws/input`, {
-      onOpen: () => setLinks((l) => ({ ...l, input: true })),
+      onOpen: () => {
+        setLinks((l) => ({ ...l, input: true }));
+        // Secret typing is a control message (lib/watch.ts): it passes in Watch only too.
+        if (secretWantedRef.current) {
+          input.send({ type: "secret_input", t_mono_ns: browserNowNs(), frame_id: frameIdRef.current, on: true });
+        }
+      },
       onClose: () => {
         setLinks((l) => ({ ...l, input: false }));
         setPastePending(false); // its answer died with the socket
@@ -373,20 +387,45 @@ export default function Console({ backendUrl }: Props) {
   const setWatchOnly = (on: boolean) => {
     watchOnlyRef.current = on; // StreamCanvas lets go of what it holds first (release_all passes)
     setWatchOnlyState(on);
+    saveToggle(prefsStore, "watchOnly", on);
   };
 
   const setHudOn = (on: boolean) => {
     hudOnRef.current = on;
     setHudOnState(on);
     if (!on) setHud(null); // turned off: nothing kept, nothing drawn
+    saveToggle(prefsStore, "hud", on);
   };
+
+  const changeView = (mode: ViewMode) => {
+    setViewMode(mode);
+    saveView(prefsStore, mode);
+  };
+
+  // The remembered toggles, applied once after the first render: the server renders the defaults,
+  // so reading the storage during render would not match it (hydration).
+  useEffect(() => {
+    const prefs = loadConsolePrefs(prefsStore);
+    watchOnlyRef.current = prefs.watchOnly;
+    hudOnRef.current = prefs.hud;
+    secretWantedRef.current = prefs.secret;
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- browser-only state, read once
+    setWatchOnlyState(prefs.watchOnly);
+    setHudOnState(prefs.hud);
+    setViewMode(prefs.view);
+    // Secret typing goes out when the input socket opens (onOpen above; it is not open yet here).
+  }, [prefsStore]);
 
   const stamp = () => ({ t_mono_ns: browserNowNs(), frame_id: frameIdRef.current });
 
   const setMode = (mode: Mode) => send({ type: "set_mode", ...stamp(), mode });
 
   // Secret typing (passwords): the backend keeps no human key identities in its logs while on.
-  const setSecret = (on: boolean) => send({ type: "secret_input", ...stamp(), on });
+  const setSecret = (on: boolean) => {
+    secretWantedRef.current = on;
+    saveToggle(prefsStore, "secret", on);
+    send({ type: "secret_input", ...stamp(), on });
+  };
 
   const sendKeys = (steps: KeyStep[]) => {
     if (watchOnlyRef.current) return;
@@ -481,7 +520,7 @@ export default function Console({ backendUrl }: Props) {
         onHudChange={setHudOn}
         onKeys={sendKeys}
         onReleaseAll={releaseAll}
-        onModeChange={setViewMode}
+        onModeChange={changeView}
         onSecretChange={setSecret}
       />
       <StreamCanvas

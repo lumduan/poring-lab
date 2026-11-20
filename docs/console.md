@@ -34,8 +34,13 @@ Open **http://HOST_LAN_IP:CONSOLE_PORT** (`CONSOLE_PORT` in `.env`, 3000 unless 
   - Watch only forwards no input at all from this tab: no mouse, keys, wheel or paste.
   - So the bot keeps control in ASSIST while you watch; the mux mode is unchanged and switching to
     HUMAN still works.
-  - Turning it on first releases what the tab holds. Off restores instant takeover, and every
-    page load starts with it off.
+  - Turning it on first releases what the tab holds. Off restores instant takeover.
+  - ➡️ Since 2026-11-20 (Batt: "the HUD and the buttons I pressed are forgotten when I go to
+    /flows and come back") **Watch only, the HUD, Secret typing and Fit / Native are remembered in
+    this browser** (localStorage, `lib/consoleprefs.ts`) across pages and reloads. Before, every
+    page load started with them off. Secret typing is sent again each time the input socket opens,
+    because the backend keeps it per connection. Blocked site data only means the defaults: all
+    off, Fit.
   - An amber WATCH ONLY chip shows on the screen and in the header.
 - **Top bar (every page):** Console / Maps / Flows / Economy / Hardware / Settings (Batt's order,
   2026-11-13; Label QA left the bar 2026-11-10, `/qa` remains), and the **mode badge**, always
@@ -74,7 +79,8 @@ Open **http://HOST_LAN_IP:CONSOLE_PORT** (`CONSOLE_PORT` in `.env`, 3000 unless 
     as the camera scrolled (Batt, 2026-10-08). The protocol refuses a `RoutePreview` without
     `live: true`.
   - Display only (a `RoutePreview` the backend relays like detections, never to the mux).
-- **Operator HUD** (2026-10-08; the **HUD** toolbar toggle, per tab, off on every load): the rule's
+- **Operator HUD** (2026-10-08; the **HUD** toolbar toggle, per tab; remembered in this browser
+  since 2026-11-20, see Watch only above): the rule's
   detector boxes (class, confidence, distance in cells), its locked target and countdown, the work
   zone, the walk vector, counters, and a short plain-words log in a panel under the stream. Display
   only (an `OperatorHud` the backend relays to viewers, never to the mux); see docs/phase4-ui.md.

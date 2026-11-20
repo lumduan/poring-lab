@@ -163,7 +163,7 @@ test("the toggle says which state it is in and that it sends nothing", () => {
   assert.match(hudToggle(true).label, /ON/);
   assert.doesNotMatch(hudToggle(false).label, /ON/);
   assert.match(hudToggle(true).title, /sends nothing/);
-  assert.match(hudToggle(false).title, /off on every load/);
+  assert.match(hudToggle(false).title, /remembers it/);
 });
 
 // The empty-overlay feed lines are tested in feeds.test.ts (2026-10-09).

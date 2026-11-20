@@ -57,6 +57,7 @@ export function watchToggle(on: boolean): { label: string; title: string } {
         label: "Watch only",
         title:
           "Watch without taking over: no input from this tab reaches Windows, so the bot keeps " +
-          "control in ASSIST. Turn it off to get instant takeover back.",
+          "control in ASSIST. Turn it off to get instant takeover back. This browser remembers it " +
+          "across pages and reloads.",
       };
 }

@@ -167,7 +167,8 @@ reply to the agent. Pinned by tests:
 
 **The console** (`components/HudCanvas.tsx`, `HudPanel.tsx`; pure math in `lib/hud.ts`, unit tested
 by `lib/hud.test.ts`):
-- **The toggle:** "HUD" in the toolbar, per tab, **off on every load**, like "Watch only". While off,
+- **The toggle:** "HUD" in the toolbar, per tab, like "Watch only". ~~Off on every load~~ ➡️ since
+  2026-11-20 remembered in this browser (Batt; docs/console.md, `lib/consoleprefs.ts`). While off,
   the tab drops the messages on arrival. It sends nothing in either state.
 - **The canvas**, its own, over the stream like the route preview:
   - boxes coloured by class, labelled `monster 81% 4 cells`;

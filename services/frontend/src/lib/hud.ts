@@ -1,6 +1,7 @@
 // The operator HUD (Batt 2026-10-08, docs/phase4-ui.md): what the rule saw and decided, over the
 // stream. Display only: an agent -> backend -> viewer message (OperatorHud) that carries no input
-// and never reaches the mux. A per-tab toggle, off on every load, like "Watch only". Pure, unit
+// and never reaches the mux. A per-tab toggle like "Watch only", remembered in this browser since
+// 2026-11-20 (lib/consoleprefs.ts; it was off on every load). Pure, unit
 // tested with `node --test` (src/lib/hud.test.ts). Every string it returns is drawn as TEXT
 // (canvas fillText or a React text node), never as markup.
 
@@ -182,7 +183,7 @@ export function hudToggle(on: boolean): { label: string; title: string } {
         label: "HUD",
         title:
           "Show the operator HUD in this tab: what the rule sees and decides, over the stream. " +
-          "Display only, off on every load.",
+          "Display only; this browser remembers it (on or off) across pages and reloads.",
       };
 }
 

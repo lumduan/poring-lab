@@ -10,10 +10,11 @@ type Props = {
   mode: ViewMode;
   /** Secret typing, as the backend reports it (Status.human_secret): true while ANY console has it on. */
   secret: boolean;
-  /** Watch only: this tab forwards no input (Batt, 2026-10-07). */
+  /** Watch only: this tab forwards no input (Batt, 2026-10-07); remembered in this browser since
+   * 2026-11-20 (lib/consoleprefs.ts), like the HUD, Secret typing and the view. */
   watchOnly: boolean;
   onWatchOnlyChange: (on: boolean) => void;
-  /** The operator HUD: shown in this tab only, off on every load (Batt, 2026-10-08). */
+  /** The operator HUD: shown in this tab only (Batt, 2026-10-08); remembered since 2026-11-20. */
   hud: boolean;
   onHudChange: (on: boolean) => void;
   onKeys: (steps: KeyStep[]) => void;
