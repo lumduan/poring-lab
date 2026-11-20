@@ -220,7 +220,7 @@ xmas02sk's and xmas02gb's results are in xmas02-detector.md M11 and S7.6.
   - The runner sees the same ghosts at 1080: in play the bot is blind there, as a person at 1080
     would be behind the real chat window. Reported; this round does not change it.
 
-### Amendment 2 (2026-11-20 08:48 ICT from `date`, before the next recording): the camera ZOOM; v1f invalid; the chat finder
+### Amendment 2 (2026-11-20 08:36 ICT from `date`, before the next recording): the camera ZOOM; v1f invalid; the chat finder
 
 - **v1f (07:57-08:20) stopped after 34 stands.** The watch's chat-window check failed at
   xmas_dun02 236,248. Its F10 step then cycled the window to 9 lines, and it stopped without
