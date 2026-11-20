@@ -799,3 +799,31 @@ AG / AH (v1Tg: `990790e4...` / `05501847...`), each 100 % of its pack, none saw 
   setup), started 20:36.
   - Scored with `screen_ab.py score --a s11scr-720 --b s12scr-1080+s12scr-1080b` (b17d4db7:
     X+Y joins a block's series, as s11scr-1080 + 1080b was joined by hand).
+
+### Amendment 22 (2026-11-20 20:46 ICT from `date`): Batt's first live test of the 1080 model -- kept as information (his words: "keep these as information for now")
+
+- **What he saw** (his 1080 PC, Run `flowplay-poring-lab-live-11202031`, use_model xmas02v1080;
+  three screen recordings 20:36 / 20:42 / 20:43 in the session's uploads):
+  - (a) the bot does not pick up all the loot;
+  - (b) the bot strikes too late: the monster has often walked away before the click.
+- **(b), tonight's own cause, FOUND AND FIXED (a slip of mine):**
+  - every detection of that Run went to the CPU: 73 / 73 box_target `path` cpu, `gpu_reason`
+    disabled, det_ms p50 152 / p90 187 ms;
+  - the GPU server answers in ~20-25 ms (the lab's 8c runs: 92 / 92, 85 / 85, 28 / 28 on the
+    GPU, det_ms p50 22-24 ms).
+  - Why: the live copy keeps its models in its OWN storage folder
+    (`/home/bot/poring-lab-live-store/archive/models`, its LAB_STORE_DIR), not on the NAS where
+    the ONNX had been copied. Its serve step (`present_models`) left xmas02v1080 out; the
+    server answered the Run's requests as "bad" (2), and the GpuDetector disabled itself.
+  - Fixed 20:5x: the ONNX and names copied there (read back `04b19898...`);
+    `present_models('openvino')` now lists xmas02v1080. A NEW Run starts a server with it.
+- **(b), the other causes, known:**
+  - the cursor's read at 1080 (section 10's cause 2): that Run's strikes ended 15 damage,
+    13 bound (no answer in time), 5 arrow; verdict_from_grab p50 576 ms;
+  - the frames lag the server ~0.5 s.
+- **(a) is section 10's cause 3, the item model at 1080:**
+  - xmas02fi5 PASSED its bars at 720 (natural drops 95.6 %, precision 99.0 %, O26);
+  - at 1080 it sees only ~1/3-1/2 of the items (screen-size-ab.md);
+  - that Run: 20 kills, 34 loot steps, 9 picks in 12.8 min.
+  - Its own round at 1080 (the monster model's route: 1080 recordings, labels, training) is
+    the next step, pre-registered first. Batt decides when.
