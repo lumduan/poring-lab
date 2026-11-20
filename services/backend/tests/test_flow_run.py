@@ -733,3 +733,21 @@ def test_another_copy_s_run_never_makes_this_copy_busy(tmp_path: Path) -> None:
     assert lines == ["/y/.venv/bin/python scripts/flow_play.py play --project q", "/usr/bin/bash"]
     assert fr.busy_reason(lines) == "the live block player is playing (one input writer at a time)"
     assert fr.busy_reason(fr.copy_ps_lines(here, ps.replace("102 ", "105 "), cwd_of)) is None
+
+
+def test_a_second_stop_ends_the_run_at_once_skipping_the_bag_count(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Batt 2026-11-20: Stop = "count, then stop"; a SECOND Stop skips the count (SIGINT now)."""
+    import types
+
+    h = fr.Helper(tmp_path)
+    sent: list[tuple[int, int]] = []
+    monkeypatch.setattr(fr.os, "killpg", lambda pid, sig: sent.append((pid, sig)))
+    h.runner = types.SimpleNamespace(pid=4242, poll=lambda: None)  # type: ignore[assignment]
+    h.stop_file = tmp_path / "STOP"
+    h.label = "flowplay-x"
+    h.stop("r1")
+    assert h.state == "stopping" and h.stop_file.exists() and sent == []
+    h.stop("r2")
+    assert sent == [(4242, fr.signal.SIGINT)] and "no bag count" in h.detail

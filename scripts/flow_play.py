@@ -2067,7 +2067,7 @@ def enable_pause(stop_file: Path | None) -> PauseNotes:
 def play(prep: Prepared, lio: LiveIO, *, label: str, stop_file: Path | None,
          demo: Path = DEMO, checker: Callable[[Prepared, LiveIO], dict[str, Any]] | None = None,
          hunt: HuntCore | None = None, pause: PauseNotes | None = None,
-         run_dir: Path | None = None) -> int:  # fmt: skip
+         run_dir: Path | None = None, census: BagCensus | None = None) -> int:  # fmt: skip
     """The run: the start check (reads), the input path, the UI gate, the runtime, the end.
     0: it played and ended; 2: refused before any input. Its diary (say): the environment, each
     check line, the pauses, a fault's traceback (no picture is saved: Batt 2026-11-18)."""
@@ -2103,6 +2103,14 @@ def play(prep: Prepared, lio: LiveIO, *, label: str, stop_file: Path | None,
     log = SessionLog(demo, label, lio.ns)
     player: LivePlayer | None = None
     end, words = "failed", None
+    from poring_env import runoptions
+
+    if census is None and isinstance(lio, PixelIO) and runoptions.load(fr.DIR).bag_count:
+        import bag_count
+
+        census = bag_count.census
+    bag0: dict[str, Any] | None = None
+    bag1: dict[str, Any] | None = None
     try:
         lio.open()  # the ONE input path (refuses unless ASSIST and the lock is steady)
         lio.ui_clear()
@@ -2116,6 +2124,8 @@ def play(prep: Prepared, lio: LiveIO, *, label: str, stop_file: Path | None,
                 "check": {"ok": got.get("ok"), "items": got.get("items")},
                 "runners": {b: p.flow_id for b, p in prep.runners.items()}})  # fmt: skip
         player.start_world(prep.map)
+        if census is not None:  # the Economy: the bag at the start (after run_start)
+            bag0 = take_bag(census, lio, "start")
         end = player.run()
         words = player.words
     except SystemExit as e:  # ro_agent.Stop outside a block (the Agent, the UI gate, a grab)
@@ -2143,6 +2153,8 @@ def play(prep: Prepared, lio: LiveIO, *, label: str, stop_file: Path | None,
             lio.release()
         raise
     finally:
+        if census is not None and bag0 is not None and end not in NO_END_COUNT:
+            bag1 = take_bag(census, lio, "end")  # after a Stop too ("count, then stop")
         elapsed = 0.0 if player is None else player.t
         text = end_words(end, words, elapsed, None if player is None else player.flow_stop)
         log.ev({"kind": "run_end", "reason": end, "words": text,
@@ -2152,9 +2164,52 @@ def play(prep: Prepared, lio: LiveIO, *, label: str, stop_file: Path | None,
             say(f"paused {pause.count} time(s), {pause.total_s:.0f} s in all (the game off the "
                 "screen)")  # fmt: skip
         log.close()
+        if bag0 is not None and bag1 is not None:
+            try:
+                path = bag_economy(bag0, bag1, log.dir / "events.jsonl", label)
+                say(f"the Run's economy: {path.name} (the Economy page)")
+            except Exception as e:  # noqa: BLE001 -- the economy never fails a Run
+                say(f"WARNING: the Run's economy was not written: {type(e).__name__}: {e}")
         print(f"flow_play: {text}", flush=True)
         lio.close()
     return 0
+
+
+# econ-bag-count.md Amendment 3 (Batt 2026-11-20: the economy from the bag, "the way people do it";
+# a Stop: "count, then stop"): the Run counts the bag (scripts/bag_count.py: Alt+E, the four tabs,
+# closed again) after its start and at its end -- after a Stop too; a second Stop ends the Run at
+# once (the helper's SIGINT), so that count is skipped -- and writes the Run's economy
+# (scripts/econ_bag.py) for the /economy page. A count that fails warns: the Run plays on.
+BagCensus = Callable[[Any, Any], dict[str, Any]]
+NO_END_COUNT = ("input_refused", "error", "stopped_by_parent", "dead")  # no keys at those ends
+
+
+def take_bag(census: BagCensus, lio: Any, when: str) -> dict[str, Any] | None:
+    """One count of the bag in the Run's input path, or None with a WARNING (never a refusal)."""
+    say(f"the bag: counting it at the {when} (keys only: Alt+E and its four tabs; ~17 s)")
+    try:
+        got = census(lio.agent, lio.screen)
+    except (SystemExit, Exception) as e:  # ro_agent.Stop, a grab, the reader: the Run plays on
+        say(f"WARNING (the Run plays on): the bag did not count at the {when}: "
+            f"{type(e).__name__}: {str(e)[:200]}")  # fmt: skip
+        return None
+    say(f"the bag at the {when}: {len(got.get('totals') or {})} kinds read, "
+        f"{got.get('unread', 0)} slot(s) unread, {got.get('seconds')} s")  # fmt: skip
+    return got
+
+
+def bag_economy(start: Mapping[str, Any], end: Mapping[str, Any], events: Path,
+                label: str, data: Path = ROOT / "data") -> Path:  # fmt: skip
+    """The Run's economy from its two counts and its own events: one export for /economy."""
+    import econ_bag
+    import econ_dash
+
+    evs = [json.loads(x) for x in events.read_text().splitlines() if x.strip()]
+    tpath, tdoc, names, mobs = econ_dash.sources(data)
+    run = econ_bag.run_from_bags(start, end, evs, tdoc["items"], names, session=label)
+    doc = econ_dash.document([run], label, tpath, tdoc, names, mobs)
+    doc["sources"]["judges"] = "bag_count censuses (the Run's start, its end) + its own events"
+    return econ_dash.write(doc, data / "econ" / "dashboard")
 
 
 def default_checker(prep: Prepared, lio: LiveIO) -> dict[str, Any]:

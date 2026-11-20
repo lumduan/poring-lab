@@ -73,6 +73,8 @@ export function parseHoursMinutes(hours: string, minutes: string): number | null
 export type RetryOptions = {
   retry_max: number;
   retry_wait_s: number;
+  // econ-bag-count.md (Batt 2026-11-20): count the bag at the Run's start and end (the Economy)
+  bag_count?: boolean;
   words: string;
   saved: boolean;
   bounds: { retry_max: [number, number]; retry_wait_s: [number, number] };

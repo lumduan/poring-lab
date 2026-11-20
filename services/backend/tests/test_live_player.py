@@ -1178,3 +1178,77 @@ def test_item_settings_never_reach_the_runners_argv() -> None:
     base = st.argv(st.DEFAULTS)
     picked = st.argv({**st.DEFAULTS, "swap_item": 1301, "heal_item": 505})
     assert base == picked and not any("item" in a and a != "--loot-items" for a in base)
+
+
+# --- econ-bag-count.md Amendment 3 (Batt 2026-11-20): the bag counted at the start and the end ----
+def _bag(totals: dict[str, int]) -> dict[str, Any]:
+    return {"totals": totals, "unread": 0, "full_tabs": [], "seconds": 1.0, "as_found": True}
+
+
+def test_a_run_counts_the_bag_at_its_start_and_end_and_writes_its_economy(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    calls: list[str] = []
+    bags = iter([_bag({"601": 20, "911": 1}), _bag({"601": 18, "911": 6})])
+
+    def census(agent: Any, screen: Any) -> dict[str, Any]:
+        calls.append("count")
+        return next(bags)
+
+    written: dict[str, Any] = {}
+
+    def economy(start: Any, end: Any, events: Path, label: str) -> Path:
+        written.update(start=start["totals"], end=end["totals"], label=label,
+                       events=events.exists())  # fmt: skip
+        return tmp_path / f"{label}.json"
+
+    monkeypatch.setattr(fp, "bag_economy", economy)
+    io_ = FakeIO()
+    runner = FakeRunner(io_)
+    opts = tmp_path / "flowrun"
+    opts.mkdir()
+    monkeypatch.setattr(fr, "DIR", opts)
+    d = tmp_path / "demo"
+    d.mkdir()
+    fp.play(hunt_prep(tmp_path), io_, label="r1", stop_file=None, demo=d, checker=ok_check,
+            hunt=fp.HuntCore("r1", None, run_fn=runner), census=census)  # fmt: skip
+    assert calls == ["count", "count"]
+    assert written == {"start": {"601": 20, "911": 1}, "end": {"601": 18, "911": 6},
+                       "label": "r1", "events": True}  # fmt: skip
+
+
+def test_no_end_count_after_a_death_and_a_failed_count_only_warns(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    monkeypatch.setattr(fp, "bag_economy", lambda *a, **k: (_ for _ in ()).throw(AssertionError))
+    calls: list[str] = []
+
+    def broken(agent: Any, screen: Any) -> dict[str, Any]:
+        calls.append("count")
+        raise SystemExit("bag_count: Alt+E showed no bag")
+
+    io_ = FakeIO()
+    opts = tmp_path / "flowrun"
+    opts.mkdir()
+    monkeypatch.setattr(fr, "DIR", opts)
+    d = tmp_path / "demo"
+    d.mkdir()
+    fp.play(hunt_prep(tmp_path), io_, label="r1", stop_file=None, demo=d, checker=ok_check,
+            hunt=fp.HuntCore("r1", None, run_fn=FakeRunner(io_)), census=broken)  # fmt: skip
+    assert calls == ["count"]  # the start's failed: no end count, no economy, the Run played
+    out = capsys.readouterr().out
+    assert "WARNING (the Run plays on): the bag did not count at the start" in out
+    assert fp.NO_END_COUNT == ("input_refused", "error", "stopped_by_parent", "dead")
+
+
+def test_the_bag_count_is_a_run_option_on_by_default() -> None:
+    from poring_env import runoptions as ro
+
+    assert ro.DEFAULTS.bag_count is True and ro.DEFAULTS.as_json()["bag_count"] is True
+    got, why = ro.parse({"v": 1, "retry_max": 3, "retry_wait_s": 20, "bag_count": False})
+    assert why is None and got is not None and got.bag_count is False
+    assert (
+        ro.parse({"retry_max": 3, "retry_wait_s": 20, "bag_count": "yes"})[1]
+        == "bag_count: true or false"
+    )
+    assert ro.parse({"retry_max": 3, "retry_wait_s": 20})[0] == ro.DEFAULTS  # an older file

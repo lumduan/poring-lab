@@ -162,6 +162,9 @@ class OptionsBody(BaseModel):
     model_config = ConfigDict(extra="forbid")
     retry_max: int = Field(ge=ro_opts.RETRY_MAX_RANGE[0], le=ro_opts.RETRY_MAX_RANGE[1])
     retry_wait_s: int = Field(ge=ro_opts.RETRY_WAIT_RANGE[0], le=ro_opts.RETRY_WAIT_RANGE[1])
+    # econ-bag-count.md (Batt 2026-11-20): count the bag at the start and the end (the Economy);
+    # absent = the file's own value (an older page sends only the retry)
+    bag_count: bool | None = None
 
 
 def options_doc(d: Path) -> dict[str, Any]:
@@ -184,7 +187,10 @@ def put_run_options(body: OptionsBody, request: Request,
     """Batt 2026-11-19: a retry option after a code error. A person's change from the page (the
     human-only gate, like Run); the live player reads it at its next retry."""
     d = run_dir(state)
-    got, why = ro_opts.parse(body.model_dump())
+    sent = body.model_dump()
+    if sent.get("bag_count") is None:
+        sent["bag_count"] = ro_opts.load(d).bag_count
+    got, why = ro_opts.parse(sent)
     if got is None:  # the model's bounds already hold; the module is the one rule
         raise HTTPException(422, {"reason": "options_invalid", "detail": why})
     d.mkdir(parents=True, exist_ok=True)

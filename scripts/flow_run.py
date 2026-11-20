@@ -1342,6 +1342,12 @@ class Helper:
         if self.runner is None or self.runner.poll() is not None:
             self.detail = "nothing is running"
             return
+        if self.state == "stopping":  # Batt 2026-11-20: a SECOND Stop skips the end's bag count
+            self.detail, self.request_id = "Stop pressed again: ending now (no bag count)", rid
+            self.note(event="stop_again", label=self.label, request=rid)
+            os.killpg(self.runner.pid, signal.SIGINT)
+            self.stop_t = None
+            return
         self.state, self.detail, self.request_id = "stopping", "Stop pressed: ending cleanly", rid
         self.note(event="stop", label=self.label, request=rid)
         # the runner's --stop-file: it ends at its next tick through its NORMAL end (the safe-end

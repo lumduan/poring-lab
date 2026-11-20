@@ -598,7 +598,9 @@ def test_the_retry_option_is_read_by_the_page_and_changed_behind_the_write_gate(
     ok = client.put("/flows/run/options", headers=hx, json=body)
     assert ok.status_code == 200 and ok.json()["retry_max"] == 5 and ok.json()["saved"]
     f = tmp_path / "settings" / "flowrun" / "options.json"
-    assert json.loads(f.read_text()) == {"v": 1, "retry_max": 5, "retry_wait_s": 60}
+    # bag_count (econ-bag-count.md, 2026-11-20): a page that sends only the retry keeps its value
+    assert json.loads(f.read_text()) == {"v": 1, "retry_max": 5, "retry_wait_s": 60,
+                                         "bag_count": True}  # fmt: skip
     for bad in ({"retry_max": 21, "retry_wait_s": 20}, {"retry_max": 1, "retry_wait_s": 1},
                 {"retry_max": 1, "retry_wait_s": 20, "more": 1}):  # fmt: skip
         assert client.put("/flows/run/options", headers=hx, json=bad).status_code == 422, bad

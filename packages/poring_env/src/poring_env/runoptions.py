@@ -4,7 +4,11 @@ Batt: "every time it stops by an error of the code -- not a logic error, a death
 dropping out -- the bot should check the character and run on by itself if she is ready to hunt;
 make it a retry option." The file is ``settings/flowrun/options.json`` (the Run helper's folder):
 
-    {"v": 1, "retry_max": 3, "retry_wait_s": 20}
+    {"v": 1, "retry_max": 3, "retry_wait_s": 20, "bag_count": true}
+
+``bag_count`` (Batt 2026-11-20, Economy option b-i; docs/planning/econ-bag-count.md): the Run
+counts the bag at its start and its end (after a Stop too: "count, then stop"; a second Stop
+skips it) and writes the Run's economy for the /economy page. On by default; off = no count.
 
 - WRITER: the backend only (routes_flowrun PUT /flows/run/options), from the /flows page behind
   the same human-only gate as Run (routes_settings.write_gate).
@@ -29,15 +33,18 @@ RETRY_MAX_RANGE = (0, 20)  # 0 = off
 RETRY_WAIT_RANGE = (5, 600)  # seconds before the check, so a passing hiccup can clear
 DEFAULT_RETRY_MAX = 3
 DEFAULT_RETRY_WAIT_S = 20
+DEFAULT_BAG_COUNT = True
 
 
 @dataclass(frozen=True)
 class RunOptions:
     retry_max: int = DEFAULT_RETRY_MAX
     retry_wait_s: int = DEFAULT_RETRY_WAIT_S
+    bag_count: bool = DEFAULT_BAG_COUNT
 
     def as_json(self) -> dict[str, Any]:
-        return {"v": VERSION, "retry_max": self.retry_max, "retry_wait_s": self.retry_wait_s}
+        return {"v": VERSION, "retry_max": self.retry_max, "retry_wait_s": self.retry_wait_s,
+                "bag_count": self.bag_count}  # fmt: skip
 
 
 DEFAULTS = RunOptions()
@@ -53,7 +60,7 @@ def parse(doc: Any) -> tuple[RunOptions | None, str | None]:
     """PURE: the options of a document, or (None, why)."""
     if not isinstance(doc, dict):
         return None, "not an object"
-    extra = set(doc) - {"v", "retry_max", "retry_wait_s"}
+    extra = set(doc) - {"v", "retry_max", "retry_wait_s", "bag_count"}
     if extra:
         return None, f"unknown keys: {', '.join(sorted(extra))}"
     rm = _int_in(doc.get("retry_max", DEFAULT_RETRY_MAX), RETRY_MAX_RANGE)
@@ -62,7 +69,10 @@ def parse(doc: Any) -> tuple[RunOptions | None, str | None]:
     rw = _int_in(doc.get("retry_wait_s", DEFAULT_RETRY_WAIT_S), RETRY_WAIT_RANGE)
     if rw is None:
         return None, f"retry_wait_s: whole seconds {RETRY_WAIT_RANGE[0]}..{RETRY_WAIT_RANGE[1]}"
-    return RunOptions(rm, rw), None
+    bag = doc.get("bag_count", DEFAULT_BAG_COUNT)
+    if not isinstance(bag, bool):
+        return None, "bag_count: true or false"
+    return RunOptions(rm, rw, bag), None
 
 
 def load(folder: Path) -> RunOptions:

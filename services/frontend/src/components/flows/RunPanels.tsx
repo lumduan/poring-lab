@@ -34,7 +34,7 @@ import {
 const btn = "button button-small";
 const OPTIONS_POLL_MS = 15_000;
 
-function useRetryOptions(base: string): { opts: RetryOptions | null; err: string | null; save: (retryMax: number, waitS: number) => Promise<void>; busy: boolean } {
+function useRetryOptions(base: string): { opts: RetryOptions | null; err: string | null; save: (retryMax: number, waitS: number, bagCount?: boolean) => Promise<void>; busy: boolean } {
   const [opts, setOpts] = useState<RetryOptions | null>(null);
   const [err, setErr] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -59,7 +59,7 @@ function useRetryOptions(base: string): { opts: RetryOptions | null; err: string
     };
   }, [base]);
   const save = useCallback(
-    async (retryMax: number, waitS: number) => {
+    async (retryMax: number, waitS: number, bagCount?: boolean) => {
       setBusy(true);
       setErr(null);
       try {
@@ -73,7 +73,7 @@ function useRetryOptions(base: string): { opts: RetryOptions | null; err: string
             method: "PUT",
             cache: "no-store",
             headers: { "content-type": "application/json", "x-csrf-token": csrf.current },
-            body: JSON.stringify({ retry_max: retryMax, retry_wait_s: waitS }),
+            body: JSON.stringify({ retry_max: retryMax, retry_wait_s: waitS, ...(bagCount === undefined ? {} : { bag_count: bagCount }) }),
           });
           if (r.ok) {
             setOpts((await r.json()) as RetryOptions);
@@ -120,7 +120,7 @@ export function RunOptionsBox({ project, onProject, live }: { project: Project; 
   // default, its one-line summary in the header; this browser remembers it open or folded
   const store = useMemo(() => browserStorage(), []);
   const [open, setOpen] = useState(() => readChoice(store, KEYS.runOptions, ["open", "closed"] as const, "closed") === "open");
-  const summary = `${effective ? `at most ${timeWords(effective)}` : "no time limit"} · ${opts ? (opts.retry_max ? `a code error: check and hunt on (${opts.retry_max}×)` : "a code error ends it") : "…"}`;
+  const summary = `${effective ? `at most ${timeWords(effective)}` : "no time limit"} · ${opts ? (opts.retry_max ? `a code error: check and hunt on (${opts.retry_max}×)` : "a code error ends it") : "…"}${opts ? ` · ${opts.bag_count === false ? "no bag count" : "the bag counted"}` : ""}`;
   return (
     <details
       className="box stack run-options"
@@ -195,6 +195,18 @@ export function RunOptionsBox({ project, onProject, live }: { project: Project; 
       </label>
       <p className="muted" data-testid="run-retry-words">
         {opts ? `${opts.words[0].toUpperCase()}${opts.words.slice(1)}. A code error is a program fault or a frozen picture; a death, Stop, the time limit, a full bag, the game leaving the screen or a refusal never retries. This bot server's setting: the Run that is playing reads it at its next retry.` : "The retry option is loading…"}
+      </p>
+      <label>
+        The Economy{" "}
+        <select className="field" data-testid="run-bag-count" disabled={!opts || busy} value={opts?.bag_count === false ? "off" : "on"} onChange={(e) => opts && void save(opts.retry_max, opts.retry_wait_s, e.target.value === "on")}>
+          <option value="on">count the bag at the start and the end (~17 s each)</option>
+          <option value="off">do not count the bag (no economy)</option>
+        </select>
+      </label>
+      <p className="muted" data-testid="run-bag-words">
+        {opts?.bag_count === false
+          ? "No bag count: a Run writes no economy."
+          : "The bot opens the bag (Alt+E), reads every tab and closes it, at the start and at the end -- after Stop too (a second Stop skips it). The change is the Run's economy on the Economy page. This bot server's setting."}
       </p>
       {err && <p className="err-text">{err}</p>}
     </details>
