@@ -776,3 +776,26 @@ AG / AH (v1Tg: `990790e4...` / `05501847...`), each 100 % of its pack, none saw 
   - any live Run of Batt's shares the Arc GPU with the block's detect server.
   - The block's runs record their own timings (box_target det_ms), so this can be checked per
     run.
+
+### Amendment 21 (2026-11-20 20:36 ICT from `date`, BEFORE 8c is scored): run 3 stopped at its setup; the block completed by s12scr-1080b
+
+- **s12scr-1080:**
+  - r01B ended rc 0 after 20.3 min; r02B ended rc 0 after 20.1 min.
+  - r03B's setup read the bag at 0.458 (>= CLEAR_AT 0.40) and ran the lab's
+    `dungeon_hunt.py clear-bag --tabs etc,use` on prt_fild08. It ended rc 1: "clear_tab
+    (clear-bag:etc): slot 0 did not drop twice". The bag still read 0.458, so the series
+    STOPPED ("a person first"), before any input of r03B.
+  - The cause is NOT found. Etc slot 0 held a Pearl x4, and the "before" picture shows nothing
+    unusual. It is left for its own look.
+- **The same end state, by the lab GM** (20:3x; the lab's own character):
+  - the bag counter (`bag_count.py census`, 0 unread) read the Etc and Use tabs; it matched
+    the database;
+  - every one of those stacks was removed with `@delitem`;
+  - then `@item 504 10` and `@item 601 10`, clear-bag's own restock (potions_to /
+    wings_to 10);
+  - a second census read Use = White Potion x10 + Fly Wing x10, Etc empty, the equipment
+    untouched.
+- **The block's third run is `s12scr-1080b`** (`--runs 1`, the same code and model, its own
+  setup), started 20:36.
+  - Scored with `screen_ab.py score --a s11scr-720 --b s12scr-1080+s12scr-1080b` (b17d4db7:
+    X+Y joins a block's series, as s11scr-1080 + 1080b was joined by hand).
