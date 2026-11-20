@@ -196,3 +196,20 @@ A count under its minimum is NO VERDICT, never a pass.
 - The loot step's timing (the 4CZ settle lesson: items asked about 1.96-3.10 s after the fall).
 
 ## 11. RESULTS and AMENDMENTS (clock-labelled; nothing above is edited after this commit except by a labelled amendment)
+
+### Amendment 1 (2026-11-20 21:38 ICT from `date`, before any 1080 item recording): recordings are banked BEFORE the tools merge
+
+- **Section 3 said** "merged before the FIT session is recorded". A recording is raw (frames and
+  packets); the labels and the fit are made from it later by the tools. Capture-first: the FIT
+  session and the TRAIN / held-out pilots are recorded while the tools are built.
+  - No label, fit or freeze is made before the tools merge.
+- **The pilot protocol** (`/dev/shm/poring-lab-tmp/i1080/pilot_rec.sh LABEL MINUTES`, archived
+  with the round):
+  1. the zoom check (1.000 +- 0.01, the 1080 monster round's `zoom_check.py` and its reference
+     frame);
+  2. the chat-window standard;
+  3. the recorder (`record_session.py --backend rdp --fps 1 --format png`, MINUTES + 4 min);
+  4. ONE play run beside it: `screen_ab.py run --label <L>-play --screen 1080 --runs 1 --minutes
+     MINUTES --model xmas02v1080` (stage2_ab's setup, not immune, its own detect server);
+  5. the recorder stopped by its own PID, then `dataset_ship.py ship` (its checksums).
+- **The first:** ifF (FIT / VAL), 25 min, started at about 21:38.
