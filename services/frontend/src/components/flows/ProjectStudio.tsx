@@ -32,7 +32,7 @@ import FlowFileDialogs, { type FileDialog, type Opened, useFileShortcuts } from 
 import CodeView from "@/components/flows/CodeView";
 import NodeInspector from "@/components/maps/NodeInspector";
 import LiveRun, { LiveRunButtons, RunNotReady, useLiveRun } from "@/components/flows/LiveRun";
-import { LogsPanel, RunMonitor, RunOptionsBox } from "@/components/flows/RunPanels";
+import { RunLogBox, RunMonitor, RunOptionsBox, RunStateBox, RunStory } from "@/components/flows/RunPanels";
 import { effectiveLimitS } from "@/lib/flow/runoptions";
 import { DEFAULT_SIM, FlowSettings, HuntRulesPanel, LintPanel, PathPanel, scenarioOf, type SimForm, SimulatePanel } from "@/components/flows/Panels";
 import { ApiError, type CatalogueDoc, type Finding, FlowsApi, type LintDoc, type PythonFiles, type SimDoc, sitePath, type WorldSource } from "@/lib/flow/api";
@@ -1015,59 +1015,71 @@ export default function ProjectStudio({ backendUrl, initialNode = null }: { back
                 )}
                 {p === "paths" && <PathPanel server={project.target.server} sim={simDoc} stale={simStale} world={world} api={api} />}
                 {p === "hunt" && huntRules && <HuntRulesPanel rules={huntRules} l1={catalogue?.blocks.hunt?.badge ?? "unknown"} />}
-                {p === "run" && <RunMonitor live={live} />}
-                {p === "run" && node.kind !== "map" && (
-                  <div className="run-pane" data-testid="run-pane-logs">
-                    <p className="muted">A Run starts from a map node (open one to see its checklist); its state, what she does and its log show here on every node.</p>
-                    <RunOptionsBox project={project} onProject={(f) => replace(f, { keepView: true })} live={live} />
-                  </div>
-                )}
-                {p === "run" && node.kind === "map" && !runnable && (
-                  <div className="run-pane" data-testid="run-pane-not-ready">
-                    <p>
-                      <strong>Run in the game · not ready here.</strong> {notRunWhy}
-                      {ready && !ready.ready && ready.notLive.length > 0 ? " (the live block player plays a block only once it is built and proven; until then Simulate plays it)." : ""}
-                    </p>
-                    {notReady.length > 0 && (
-                      <>
-                        <p className="muted">What the flow engine says is not ready for a live run on this node:</p>
-                        <ul>
-                          {notReady.map((f, i) => (
-                            <li key={`${f.path}-${i}`}>
-                              <button type="button" className="problem-link" onClick={() => showFinding(f)} title="Show the block">
-                                {f.message}
-                              </button>
-                            </li>
-                          ))}
-                        </ul>
-                      </>
+                {/* Batt 2026-11-20: two columns -- the Run on the left, "what she does" (what a player
+                    reads most) on the right; one column under 64rem */}
+                {p === "run" && (
+                  <div className="run-log-cols" data-testid="run-log-cols">
+                    <div className="run-log-left">
+                      <RunMonitor live={live} />
+                    {p === "run" && node.kind !== "map" && (
+                      <div className="run-pane" data-testid="run-pane-logs">
+                        <p className="muted">A Run starts from a map node (open one to see its checklist); its state, what she does and its log show here on every node.</p>
+                        <RunOptionsBox project={project} onProject={(f) => replace(f, { keepView: true })} live={live} />
+                      </div>
                     )}
-                    <p className="muted">Simulate (green) plays this map alone; /maps plays the whole chain.</p>
+                    {p === "run" && node.kind === "map" && !runnable && (
+                      <div className="run-pane" data-testid="run-pane-not-ready">
+                        <p>
+                          <strong>Run in the game · not ready here.</strong> {notRunWhy}
+                          {ready && !ready.ready && ready.notLive.length > 0 ? " (the live block player plays a block only once it is built and proven; until then Simulate plays it)." : ""}
+                        </p>
+                        {notReady.length > 0 && (
+                          <>
+                            <p className="muted">What the flow engine says is not ready for a live run on this node:</p>
+                            <ul>
+                              {notReady.map((f, i) => (
+                                <li key={`${f.path}-${i}`}>
+                                  <button type="button" className="problem-link" onClick={() => showFinding(f)} title="Show the block">
+                                    {f.message}
+                                  </button>
+                                </li>
+                              ))}
+                            </ul>
+                          </>
+                        )}
+                        <p className="muted">Simulate (green) plays this map alone; /maps plays the whole chain.</p>
+                      </div>
+                    )}
+                    {p === "run" && runnable && !runnerLive && (
+                      <div className="run-pane" data-testid="run-pane-blocks">
+                        <p className="muted">Run (the amber button at the top) plays this project in the game from {node.id}, box by box, where she stands (the live block player; player mode, no GM line).</p>
+                        <RunOptionsBox project={project} onProject={(f) => replace(f, { keepView: true })} live={live} />
+                        <LiveRun live={live} check={false} blocked={editorHeld ?? runWhy ?? lintBlock} held={editorHeld} />
+                      </div>
+                    )}
+                    {p === "run" && runnerLive && runnerMap && runValues && (
+                      <div className="run-pane" data-testid="run-pane">
+                        <p className="muted">
+                          Run (the amber button at the top) plays this project in the game from {node.id}, box by box, where she stands (the live block player; player mode, no GM line); its block &ldquo;hunt with the runner&rdquo; is the runner&apos;s hunt on {runnerMap}, in the same process. Its keys are this node&apos;s functions
+                          {/* round 22: Global named only where the project has one */}
+                          {globalOf(project) ? " (its own first, then Global's)" : ""}: {keysLine}.
+                        </p>
+                        <RunOptionsBox project={project} onProject={(f) => replace(f, { keepView: true })} live={live} />
+                        <LiveRun live={live} checklist={startChecklist(runValues, runnerMap, runKeys ?? undefined)} minutes={Math.round(effectiveLimitS(project) / 60) || null} keys={runKeys} blocked={editorHeld ?? runWhy ?? lintBlock ?? (runnable ? null : notRunWhy)} held={editorHeld} global={globalOf(project) !== undefined} />
+                        {/* live-blocks.md 12 (Batt 2026-11-14: "make them ALL blocks"): the settings are blocks */}
+                        <p className="muted" data-testid="run-pane-settings">
+                          Its settings are BLOCKS: one per setting in the tabs {SETTING_TABS.filter((g) => tabs.some((t) => t.name === g)).join(", ") || "of its groups"} ({SETTING_TABS.map((g) => groupOf(g)?.title ?? g).join("; ")}). {globalOf(project) ? "This node's block replaces Global's; a deleted one falls back to Global's, else the default." : "A deleted block falls back to the default."} A Run and the check send the project: the blocks you see are what the runner gets (the Lint pane names any it cannot take, or does not use).
+                        </p>
+                      </div>
+                    )}
+                      <RunStateBox live={live} />
+                      <RunLogBox live={live} />
+                    </div>
+                    <div className="run-log-right">
+                      <RunStory live={live} />
+                    </div>
                   </div>
                 )}
-                {p === "run" && runnable && !runnerLive && (
-                  <div className="run-pane" data-testid="run-pane-blocks">
-                    <p className="muted">Run (the amber button at the top) plays this project in the game from {node.id}, box by box, where she stands (the live block player; player mode, no GM line).</p>
-                    <RunOptionsBox project={project} onProject={(f) => replace(f, { keepView: true })} live={live} />
-                    <LiveRun live={live} check={false} blocked={editorHeld ?? runWhy ?? lintBlock} held={editorHeld} />
-                  </div>
-                )}
-                {p === "run" && runnerLive && runnerMap && runValues && (
-                  <div className="run-pane" data-testid="run-pane">
-                    <p className="muted">
-                      Run (the amber button at the top) plays this project in the game from {node.id}, box by box, where she stands (the live block player; player mode, no GM line); its block &ldquo;hunt with the runner&rdquo; is the runner&apos;s hunt on {runnerMap}, in the same process. Its keys are this node&apos;s functions
-                      {/* round 22: Global named only where the project has one */}
-                      {globalOf(project) ? " (its own first, then Global's)" : ""}: {keysLine}.
-                    </p>
-                    <RunOptionsBox project={project} onProject={(f) => replace(f, { keepView: true })} live={live} />
-                    <LiveRun live={live} checklist={startChecklist(runValues, runnerMap, runKeys ?? undefined)} minutes={Math.round(effectiveLimitS(project) / 60) || null} keys={runKeys} blocked={editorHeld ?? runWhy ?? lintBlock ?? (runnable ? null : notRunWhy)} held={editorHeld} global={globalOf(project) !== undefined} />
-                    {/* live-blocks.md 12 (Batt 2026-11-14: "make them ALL blocks"): the settings are blocks */}
-                    <p className="muted" data-testid="run-pane-settings">
-                      Its settings are BLOCKS: one per setting in the tabs {SETTING_TABS.filter((g) => tabs.some((t) => t.name === g)).join(", ") || "of its groups"} ({SETTING_TABS.map((g) => groupOf(g)?.title ?? g).join("; ")}). {globalOf(project) ? "This node's block replaces Global's; a deleted one falls back to Global's, else the default." : "A deleted block falls back to the default."} A Run and the check send the project: the blocks you see are what the runner gets (the Lint pane names any it cannot take, or does not use).
-                    </p>
-                  </div>
-                )}
-                {p === "run" && <LogsPanel live={live} />}
               </div>
             </section>
           ))}

@@ -226,54 +226,76 @@ export function RunMonitor({ live }: { live: Live }) {
 
 /** The Logs part of the Run / Log pane: the Run's state line, what she does (newest first), and the
  * Run's log. Its facts are the monitor bar's tiles (RunMonitor). */
-export function LogsPanel({ live }: { live: Live }) {
+/** The Run's state line: playing / ended, its label, when it started or ended, its end words. */
+export function RunStateBox({ live }: { live: Live }) {
   const st = live.st;
   const l = st?.live ?? null;
-  const story = [...(l?.story ?? [])].reverse();
-  const lines = st?.log_tail ?? [];
+  const active = ACTIVE.includes(st?.state ?? "");
+  return (
+    <div className="box stack">
+      <div className="strong" data-testid="logs-state">
+        {st ? `${active ? "Playing" : (st.state ?? "idle")} · ${liveLabel(st)}` : "The Run helper has not answered yet"}
+        {st?.label ? ` · ${st.label}` : ""}
+        {st?.started ? ` · started ${st.started}` : ""}
+        {st?.ended ? ` · ended ${st.ended}` : ""}
+      </div>
+      {st?.detail && <div className={st.state === "ended" || st.state === "failed" ? "notice-sub" : "muted"}>{st.detail}</div>}
+      {l?.end?.words && <div className="notice-sub">The end: {l.end.words}</div>}
+    </div>
+  );
+}
+
+/** What she does (newest first): the Run helper's story of the session's events, in words. */
+export function RunStory({ live }: { live: Live }) {
+  const story = [...(live.st?.live?.story ?? [])].reverse();
+  return (
+    <div className="box stack run-story">
+      <div className="strong">What she does (newest first)</div>
+      {story.length === 0 ? (
+        <div className="muted">Nothing yet: the lines come from the Run&apos;s own events while she plays.</div>
+      ) : (
+        <ol className="logs-story" data-testid="logs-story">
+          {story.map((s, i) => (
+            <li key={`${story.length - i}-${s.t_s}`}>
+              <span className="muted">{storyTime(s.t_s)}</span> {s.words}
+            </li>
+          ))}
+        </ol>
+      )}
+    </div>
+  );
+}
+
+/** The Run's log: its last lines, following the end unless the person turns that off. */
+export function RunLogBox({ live }: { live: Live }) {
+  const lines = live.st?.log_tail ?? [];
   const pre = useRef<HTMLPreElement | null>(null);
   const [follow, setFollow] = useState(true);
   useEffect(() => {
     if (follow && pre.current) pre.current.scrollTop = pre.current.scrollHeight;
   }, [lines.length, follow]);
-  const active = ACTIVE.includes(st?.state ?? "");
+  return (
+    <div className="box stack">
+      <div className="row">
+        <span className="strong">The Run&apos;s log ({lines.length} lines)</span>
+        <label className="muted">
+          <input type="checkbox" checked={follow} onChange={(e) => setFollow(e.target.checked)} /> follow the end
+        </label>
+      </div>
+      <pre className="logs-pre" ref={pre} data-testid="logs-pre">
+        {lines.length ? lines.join("\n") : "No Run has written a log yet."}
+      </pre>
+    </div>
+  );
+}
+
+/** The three in one column (the old Logs tab's order): the state, what she does, the log. */
+export function LogsPanel({ live }: { live: Live }) {
   return (
     <div className="stack" data-testid="logs-pane">
-      <div className="box stack">
-        <div className="strong" data-testid="logs-state">
-          {st ? `${active ? "Playing" : (st.state ?? "idle")} · ${liveLabel(st)}` : "The Run helper has not answered yet"}
-          {st?.label ? ` · ${st.label}` : ""}
-          {st?.started ? ` · started ${st.started}` : ""}
-          {st?.ended ? ` · ended ${st.ended}` : ""}
-        </div>
-        {st?.detail && <div className={st.state === "ended" || st.state === "failed" ? "notice-sub" : "muted"}>{st.detail}</div>}
-        {l?.end?.words && <div className="notice-sub">The end: {l.end.words}</div>}
-      </div>
-      <div className="box stack">
-        <div className="strong">What she does (newest first)</div>
-        {story.length === 0 ? (
-          <div className="muted">Nothing yet: the lines come from the Run&apos;s own events while she plays.</div>
-        ) : (
-          <ol className="logs-story" data-testid="logs-story">
-            {story.map((s, i) => (
-              <li key={`${story.length - i}-${s.t_s}`}>
-                <span className="muted">{storyTime(s.t_s)}</span> {s.words}
-              </li>
-            ))}
-          </ol>
-        )}
-      </div>
-      <div className="box stack">
-        <div className="row">
-          <span className="strong">The Run&apos;s log ({lines.length} lines)</span>
-          <label className="muted">
-            <input type="checkbox" checked={follow} onChange={(e) => setFollow(e.target.checked)} /> follow the end
-          </label>
-        </div>
-        <pre className="logs-pre" ref={pre} data-testid="logs-pre">
-          {lines.length ? lines.join("\n") : "No Run has written a log yet."}
-        </pre>
-      </div>
+      <RunStateBox live={live} />
+      <RunStory live={live} />
+      <RunLogBox live={live} />
     </div>
   );
 }

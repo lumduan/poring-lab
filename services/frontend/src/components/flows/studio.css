@@ -1782,3 +1782,30 @@
   cursor: pointer;
   list-style: revert;
 }
+/* the Run / Log pane in two columns (Batt 2026-11-20): the Run on the left, what she does on the
+   right, scrolling on its own; one column on a narrow screen */
+.run-log-cols {
+  display: grid;
+  grid-template-columns: minmax(0, 3fr) minmax(18rem, 2fr);
+  gap: 0.75rem;
+  align-items: start;
+}
+.run-log-left {
+  min-width: 0;
+}
+.run-log-right {
+  position: sticky;
+  top: 0;
+  min-width: 0;
+}
+.run-log-right .logs-story {
+  max-height: 70vh;
+}
+@media (max-width: 64rem) {
+  .run-log-cols {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .run-log-right {
+    position: static;
+  }
+}
