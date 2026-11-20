@@ -113,3 +113,26 @@ true one, and does play at 1080 gain from it?
 4. The play bar, after the cursor round's.
 
 ## 9. RESULTS and AMENDMENTS (clock-labelled)
+
+### Amendment 1 (2026-11-21 00:42 ICT from `date`): the replay tool built; its check on the FIT pilots
+
+- `scripts/alarm_replay.py` (branch goblin-alarm, 9 tests; merged after the item chain with the
+  flow_play patch's branch, no code change on main while the chain runs).
+- **A slip, fixed before any held-out read:** the first FIT run read no start record (the
+  runner's first record is `run_start`, the tool asked for `hunt_run_start`) and fell back to
+  defaults in silence (garm_baby only, no solo): 5 episodes. The tool now refuses a session
+  without its start record (a test).
+- **The FIT pilots** (ifT1, ifT2, ifH1, ifT3; 1.526 h; the parameters were set on them, so this
+  checks the tool, not the rule; `replay-fit.json` sha256 `0e91a003a39a631a...`):
+
+  | rule | episodes | false | false / h | true | true lost |
+  |---|---|---|---|---|---|
+  | today (need 2, solo 0.7, the HUD twin fed) | 28 | 22 (all g_gobline_xmas) | 14.41 | 6 | - |
+  | A, near-her | 8 | 1 | 0.66 | 7 | 0 |
+  | confirm 3 | 13 | 6 | 3.93 | 7 | 0 |
+
+  - today's 22 false episodes: the nearest unit Myst Case (1249) 15, Christmas Cookie (1246) 6,
+    1265 once; the score's own count was 23 false flies (21 goblin), so the replay matches it.
+  - A and confirm 3 show 7 true episodes where today shows 6: a false near sighting just before a
+    true far one joins them into one episode under today's rule.
+- The held-out (section 5) is unchanged: ifT4, ifT5, ifH2, ifT6..ifT10.
