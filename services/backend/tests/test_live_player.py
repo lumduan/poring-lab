@@ -1057,3 +1057,92 @@ def test_a_hunt_core_s_pictures_are_removed_and_its_numbers_kept(tmp_path: Path)
     assert not [n for n in pics if (sess / n).exists()]
     assert all((sess / n).exists() for n in kept) and (other / "end.png").exists()
     assert fp.drop_pictures("flowplay-1-hunt1", tmp_path) == 0
+
+
+# --- Batt 2026-11-20: a hunt core that ended on its POSITION READ hunts on (fp.READ_ENDS) ---------
+class ReadEndsFirst(FakeRunner):
+    """The first ``n`` calls end on ``reason`` (a position-read end, no way home); then as
+    FakeRunner (its weight home)."""
+
+    def __init__(self, io_: FakeIO, reason: str, n: int = 1, map_after: str | None = None) -> None:
+        super().__init__(io_)
+        self.read_reason, self.n, self.map_after = reason, n, map_after
+
+    def __call__(self, a: Any, *, hook: Any = None, session: Any = None, **kw: Any) -> int:
+        if self.n <= 0:
+            return super().__call__(a, hook=hook, session=session, **kw)
+        self.n -= 1
+        self.calls.append({"a": a})
+        hook.event({"kind": "run_start", "map": "xmas_dun02"}, self.io.now)
+        self.io.now += 1.0
+        if self.map_after is not None:
+            self.io.w["map"] = self.map_after
+        hook.event({"kind": "run_end", "reason": self.read_reason, "counts": {}}, self.io.now)
+        hook.event({"kind": "player_end", "reason": self.read_reason, "home": False,
+                    "dead": False, "respawned": False}, self.io.now)  # fmt: skip
+        return 0
+
+
+def test_read_ends_and_their_waits() -> None:
+    assert fp.read_end("position unread for 30 s")
+    assert fp.read_end("hard_bar: position jump (map change?)")
+    assert not fp.read_end("stock_out: item 601 reads 0 on the hotbar")
+    assert not fp.read_end("death") and not fp.read_end(None)
+    lo, hi = fp.REREAD_WAIT_S
+    assert fp.reread_wait(None, 5.0) == lo  # the first
+    assert fp.reread_wait(lo, 5.0) == 2 * lo  # a quick repeat doubles it
+    assert fp.reread_wait(hi, 5.0) == hi  # capped
+    assert fp.reread_wait(hi, fp.REREAD_QUICK_S) == lo  # after a real hunt: back to the first
+
+
+@pytest.mark.parametrize("reason", ["position unread for 30 s",
+                                    "hard_bar: position jump (map change?)"])  # fmt: skip
+def test_a_position_read_end_hunts_on_without_a_limit(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, reason: str
+) -> None:
+    """Batt 2026-11-20: "read again; if it still does not read, keep doing it" -- five read ends
+    in a row (more than any retry budget), and the sixth hunt core ends on its own way home."""
+    io_ = FakeIO()
+    runner = ReadEndsFirst(io_, reason, n=5)
+    ev = _retry_run(tmp_path, monkeypatch, runner, {"v": 1, "retry_max": 1, "retry_wait_s": 5})
+    kinds = [e["kind"] for e in ev]
+    assert len(runner.calls) == 6
+    assert kinds.count("reread") == 5 and kinds.count("reread_go") == 5
+    assert "retry" not in kinds  # the code-error budget is untouched
+    rr = [e for e in ev if e["kind"] == "reread"]
+    assert [e["wait_s"] for e in rr] == [3.0, 6.0, 12.0, 24.0, 30.0]  # quick repeats back off
+    assert ev[-1]["reason"] == "home"
+
+
+def test_a_read_end_on_another_map_or_with_stop_pressed_ends_the_run(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    io_ = FakeIO()
+    moved = ReadEndsFirst(io_, "hard_bar: position jump (map change?)", map_after="prontera")
+    ev = _retry_run(tmp_path, monkeypatch, moved, None)
+    assert len(moved.calls) == 1
+    assert [e["kind"] for e in ev].count("reread_refused") == 1
+    assert ev[-1]["reason"] != "home"
+
+    io2 = FakeIO()
+    stop = tmp_path / "b" / "STOP"
+    stop.parent.mkdir(parents=True)
+    unread = ReadEndsFirst(io2, "position unread for 30 s", n=3)
+    real_sleep = io2.sleep
+
+    def sleep_then_stop(s: float) -> None:
+        if unread.calls:  # the person presses Stop during the re-read's wait
+            stop.write_text("")
+        real_sleep(s)
+
+    monkeypatch.setattr(io2, "sleep", sleep_then_stop)
+    opts_dir = tmp_path / "b" / "flowrun"
+    opts_dir.mkdir(parents=True)
+    monkeypatch.setattr(fr, "DIR", opts_dir)
+    monkeypatch.setattr(fp, "default_checker", ok_check)
+    d = tmp_path / "b" / "demo"
+    d.mkdir()
+    fp.play(hunt_prep(tmp_path / "b"), io2, label="r1", stop_file=stop, demo=d, checker=ok_check,
+            hunt=fp.HuntCore("r1", stop, run_fn=unread))  # fmt: skip
+    ev2 = events(d)
+    assert len(unread.calls) == 1 and ev2[-1]["reason"] == "stopped"

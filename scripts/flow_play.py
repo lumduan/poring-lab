@@ -852,6 +852,34 @@ class HuntCore:
         return res
 
 
+# Batt 2026-11-20 ("walk a little so the number changes and read again; if it still does not read,
+# keep doing it"; "we end only at a death"): a hunt core that ended on its POSITION READ -- 30 s
+# without one, or a jump it took for a map change -- ended on a reading, not on a decision. The
+# Run starts it again after a short wait, with no limit (the code-error retries keep their own),
+# while nothing else ends the run: no Stop, no time box, no death, no box event's halt, no way
+# home, and the minimap still names the node's map. The new hunt core reads her position afresh
+# (its first read is its baseline) and walks on; its own unread rule (a Fly Wing after POS_FLY_S;
+# with the `unread_step` block on, a step first) moves her so the numbers change. The pinned
+# runner is unchanged (its 30 s end stays its own; the 10:47 live Run ended on a jump after 34 min).
+READ_ENDS = ("position unread for 30 s", "hard_bar: position jump")
+REREAD_WAIT_S = (3.0, 30.0)  # the wait before it hunts on: 3 s, doubled after a quick repeat
+REREAD_QUICK_S = 60.0  # a hunt core shorter than this that ended on a read again doubles the wait
+
+
+def read_end(reason: str | None) -> bool:
+    """PURE: the hunt core ended on its position read (READ_ENDS), not on a decision."""
+    return reason is not None and reason.startswith(READ_ENDS)
+
+
+def reread_wait(prev: float | None, core_s: float) -> float:
+    """PURE: the wait before the next re-read: the first, or after a hunt core that lasted
+    REREAD_QUICK_S or more, REREAD_WAIT_S[0]; after a quick one, double the last, capped."""
+    lo, hi = REREAD_WAIT_S
+    if prev is None or core_s >= REREAD_QUICK_S:
+        return lo
+    return min(hi, prev * 2.0)
+
+
 # --- the live runtime -----------------------------------------------------------------------------
 class LivePlayer(Sim):
     """runtime.Sim with the live environment (the module docstring): its seams `_advance` (the
@@ -875,6 +903,8 @@ class LivePlayer(Sim):
         self.flow_stop: str | None = None  # a stop statement's reason, when one ended the run
         self.keys_sent: list[str] = []
         self.retries = 0  # code-error retries used (Batt 2026-11-19; poring_env.runoptions)
+        self.rereads = 0  # hunt cores started again after a position-read end (READ_ENDS)
+        self._reread_wait: float | None = None
         self._retry_note: str | None = None  # why the last code error was not retried
         self._t0 = lio.clock()
         self._next = self._t0
@@ -1079,6 +1109,8 @@ class LivePlayer(Sim):
             self.words = f"no runner for {self.block}"
             return "failed"
         while True:
+            self.t = self.io.clock() - self._t0  # the time box it gets (after a wait, a retry)
+            core_t0 = self.io.clock()
             self._hunt_keys = frozenset(plan.events)  # stage 2: they play through its tick hook
             self._hunt_weight = frozenset(plan.weight_events)  # stage 3: on its weight read only
             self._hunt_hotbar, self._hotbar_t = plan.hotbar_keys, {}  # 2026-11-14: its frames
@@ -1090,6 +1122,10 @@ class LivePlayer(Sim):
                 for k in self._hunt_hotbar:  # hotbar_count: unknown outside it too
                     self.world[hotbar_world_key(k)] = None
                 self._hunt_hotbar = ()
+            if self._reread_due(res):
+                if self._reread(res, self.io.clock() - core_t0):
+                    continue
+                break
             if not self._retry_due(res) or not self._retry(res):
                 break
         self._next = self.io.clock()
@@ -1130,6 +1166,39 @@ class LivePlayer(Sim):
             self.words = f"the hunt core ended: {res.reason}"
         yield _Tick(None, False, "dungeon_hunt check")
         return "ok" if res.ok else "failed"
+
+    # -- the re-read after a position-read end (Batt 2026-11-20; READ_ENDS) --
+    def _reread_due(self, res: HuntResult) -> bool:
+        """It ended on its position read, and nothing else ends the run."""
+        return (res.error is None and read_end(res.reason) and self._hunt_halt is None
+                and not (res.dead or res.dead_hp0 or res.home or res.left)
+                and self.stop_due() is None)  # fmt: skip
+
+    def _reread(self, res: HuntResult, core_s: float) -> bool:
+        """Wait (Stop still ends it), read her again (a death ends the run there), and say
+        whether the hunt core plays again: True unless the minimap now names another map."""
+        self.rereads += 1
+        wait = self._reread_wait = reread_wait(self._reread_wait, core_s)
+        say(f"RE-READ {self.rereads}: the hunt core ended on her position read ({res.reason}): "
+            f"a reading, not a decision; in {wait:.0f} s she hunts on and her position is read "
+            "afresh (only a death ends the run)")  # fmt: skip
+        self.rec.ev({"kind": "reread", "n": self.rereads, "reason": str(res.reason)[:200],
+                     "core_s": round(core_s, 1), "wait_s": wait})  # fmt: skip
+        end = self.io.clock() + wait
+        while self.io.clock() < end:
+            if self.stop_due() == "Stop pressed":
+                raise _Halt("stopped")
+            self.io.sleep(min(0.5, max(0.0, end - self.io.clock())))
+        self.read()  # her HP / the death dialog: a death ends the run here (_Halt "dead")
+        here, want = self.world.get("map"), self.tree.blocks[self.block].map.map
+        if here is not None and here != want:
+            self.rec.ev({"kind": "reread_refused", "n": self.rereads, "map": here})
+            say(f"RE-READ {self.rereads}: the minimap reads {here}, not {want}: no hunt here")
+            return False
+        if self.stop_due() is not None:
+            return False  # the time box ended in the wait: the run ends as at any hunt end
+        self.rec.ev({"kind": "reread_go", "n": self.rereads})
+        return True
 
     # -- the retry after a code error (Batt 2026-11-19) --
     def _retry_due(self, res: HuntResult) -> bool:

@@ -3213,3 +3213,37 @@ no-entry ring only on a "clear" one.
     so a learned arrow adds no strike.
   - The sword and the pickup hand are not learned: the sword reads on his client (0.83 against
     0.75), and the hand is expected to (~0.94 against 0.90) since the cursor box fix.
+
+## Amendment W (2026-11-20, Batt decided in the live-test conversation, before 12:28 ICT; built 12:47): a Run never ends on one reading -- re-read, and only a death ends it
+
+Batt, answering the 11-20 live Runs' ends:
+- on a far position jump read once: "walk a little so the number changes; if it still does not
+  read on a second look, keep doing it";
+- on a stock count read 0 once: "do not end the run: that is the player's own to prepare; if it
+  is 0 they must prepare it; we end only at a death".
+
+The 11-20 live Runs ended on readings 3 times: a jump the runner took for a map change, after
+34 min (10:47); and a hotbar 0 read once, twice (11:26, 11:55). The runner (`dungeon_hunt.py`)
+is byte-pinned, so the readers and the Run player carry the rule. Each part is on only in a
+player's Run (the Run helper sets `PORING_CONFIRM_READS=1`); lab A/Bs read as before.
+
+- **Position jumps** (`poring_env.selfpos.JumpGuard`, 8c3c83a0): a base read that jumps from the
+  last believed one comes back doubtful ("light", `jump_unconfirmed`) until a second read at the
+  new place agrees. A misread drops out at the next read; a real teleport is believed at the
+  second.
+- **Stock** (`hotbar_count`, f143858e): an empty slot reads None (unknown), never 0, so the
+  runner's `stock_out` (which needs a 0) never ends the Run. Its stock-keep end needs a count
+  at or under `PLAYER_WINGS_KEEP` (a /flows setting the player may set to 0). The live client's
+  count layout (a mark, then the count left-aligned) reads since a23b8c4c.
+- **Position-read ends** (`flow_play.READ_ENDS`, this amendment): "position unread for 30 s"
+  or "hard_bar: position jump". The Run starts the hunt core again with no limit (the code-error
+  retries of Amendment U keep their own budget). It waits 3 s; after a hunt core shorter than
+  60 s it waits double the last, at most 30 s.
+  - Before each start it reads her again: a death ends the Run there.
+  - Nothing else that ends a Run is changed: Stop, the time box, a box event's halt, a way home,
+    or a minimap naming another map all still end it.
+  - The new hunt core takes its first read as its baseline and walks on. Its own unread rule
+    moves her so the numbers change: a Fly Wing after `POS_FLY_S`, or a step first with the
+    `unread_step` block on (safety: "no position read: a step first, then a Fly Wing"; off by
+    default).
+  - Events: `reread` (n, reason, core_s, wait_s), `reread_go`, `reread_refused` (map).

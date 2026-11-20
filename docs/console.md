@@ -394,7 +394,10 @@ Amendment B); a not-adopted model is never offered.
   time limit for the whole Run (no limit ... 2 days, or hours and minutes; the hunt block's
   `minutes` follows it at 0) and "after a code error": end the Run, or check her and hunt on up to
   N times after a wait (this bot server's setting; a death, Stop, the time limit, a full bag, the
-  game off the screen or a refusal never retries)
+  game off the screen or a refusal never retries). ➡️ 2026-11-20 (Batt, ADR-0020 Amendment W): a
+  hunt that ended on her POSITION read (30 s unread, or a jump taken for a map change) hunts on
+  with no limit after a short wait (3-30 s), and a stock count never reads 0 in a Run: only a
+  death, Stop, the time limit or a map change ends it
   and the block she is on is highlighted as Simulate does (a click on a tab or a block stops
   following until "follow the run"). The end is in plain words ("Stopped by you after 10 min. She
   flew home on a Butterfly Wing. 23 kills …") with the end picture (GET /flows/run/end.png, the
