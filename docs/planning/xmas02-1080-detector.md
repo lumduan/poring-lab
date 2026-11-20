@@ -197,3 +197,25 @@ xmas02sk's and xmas02gb's results are in xmas02-detector.md M11 and S7.6.
   probe. They run while the GPU trains.
 
 ## 11. RESULTS and AMENDMENTS (clock-labelled; nothing above is edited after this commit except by a labelled amendment)
+
+### Amendment 1 (2026-11-20 08:2x ICT, before any 1080 recording): the tools as built; the ghosts
+
+- **T-V1 to T-V4 merged:** d5ba886a (feat a588a390) and aed717c8.
+  - `scripts/rec_paths.py` holds the two paths; map_labels.check_recording and
+    detector_vs_packets.check_session share it.
+  - record_session v8 writes `client_view` (captured at the recording's start).
+  - The names: v1f is FIT by name; v1T, v1Tg and v1Tk are held out by name.
+  - Tests: test_rec_paths.py; 35 related test files pass on main.
+  - d5ba886a went in with one NAS-reading test red: it was skipped in the tmpfs worktree, which has
+    no `.env` for LAB_STORE_DIR. aed717c8 fixed it. Tests that read the NAS run from the main
+    checkout.
+- **A finding before recording (a picture of the client at 08:00, the virtual picture):**
+  - At 1920x1080 the real client keeps its windows at their SAVED 720 pixels. panels.json found
+    the chat window at real (0, 578).
+  - The world behind a real window is unknown, so every virtual frame shows a black GHOST where the
+    world transform puts the real window: about (0, 385)-(400, 480) for the chat, and
+    (496, 0)-(556, 24) for hotbar2 (half under the hotbar panel).
+  - So T-V3's UI is the panels' virtual boxes PLUS their ghosts (`rec_paths.panel_rects`, a test
+    built through ClientView.virtual_frame). A unit under a ghost is UI to the label rule.
+  - The runner sees the same ghosts at 1080: in play the bot is blind there, as a person at 1080
+    would be behind the real chat window. Reported; this round does not change it.
