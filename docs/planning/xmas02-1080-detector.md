@@ -261,3 +261,26 @@ xmas02sk's and xmas02gb's results are in xmas02-detector.md M11 and S7.6.
   - scale 1.000 +- 0.01 to proceed; otherwise wheel steps back to it, read again.
 - **v1f is marked INVALID** (`dataset_ship.py mark-invalid`: kept, refused by the label tools). It
   is recorded again as v1f at the default zoom. The seed and stands are the same.
+
+### Amendment 3 (2026-11-20 09:08 ICT from `date`): v1f recorded again; the client left the front; FIT from it
+
+- **v1f, the second recording (08:37-08:59, the default zoom):** 1,296 frames, 22 min,
+  `20261120T083735-rdp-xmas02-v1f`, shipped. The watch stopped after 32 stands. Its GM-line
+  identity check failed (name_diff 1411) because the fullscreen client was no longer in front.
+  - The end picture shows the desktop, the poring-lab shell window in front, and the client
+    minimized on the taskbar at 08:59.
+  - The input log has NO human input then: only the watch's own Enter keys and pointer moves
+    (real 1870, 566). The trigger is on the Windows side, not known.
+  - Restored with the client's own taskbar button (an ASSIST desktop window):
+    - the first click (the template found the button at x 1230) left the desktop showing;
+    - after it the button showed highlighted, and the template no longer matched;
+    - one more click at the same place brought the client back in game (09:03), with no relog, so
+      immunity holds.
+  - A few frames at the recording's end show the desktop; the label tools' layout check drops
+    them.
+- **FIT runs on this v1f alone** (22 min instead of 30; the first v1f is invalid, Amendment 2). If
+  its offset or threshold has too few samples (Amendment G's sizes: 200 offset samples, 1,459 kept
+  labels at 720), a second FIT watch is recorded under its own amendment before the freeze.
+- **The TRAIN chain** (`chain.sh`): the zoom check (1.000 +- 0.01 at 93,82, against the 11-06
+  frame), the chat window standard, `@killmonster2`, then the watch; it stops on any failure.
+  v1t1 started at 09:04:31 (zoom 1.000, err 10.53).
