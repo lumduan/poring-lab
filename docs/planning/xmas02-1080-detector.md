@@ -284,3 +284,30 @@ xmas02sk's and xmas02gb's results are in xmas02-detector.md M11 and S7.6.
 - **The TRAIN chain** (`chain.sh`): the zoom check (1.000 +- 0.01 at 93,82, against the 11-06
   frame), the chat window standard, `@killmonster2`, then the watch; it stops on any failure.
   v1t1 started at 09:04:31 (zoom 1.000, err 10.53).
+
+### Amendment 4 (2026-11-20 09:09 ICT from `date`): FIT, THE FREEZE, T1 PASSES -- the 720 camera holds at the default zoom
+
+FIT ran 09:04-09:08 (`run-fit.sh`, CPU, nice 10, a 4 GB scope) on `20261120T083735-rdp-xmas02-v1f`.
+
+| step | 1080 (v1f) | 720 (Amendment G) |
+|---|---|---|
+| 4b offset | **120 ms**; median 3.16 px at 120-160 ms (100: 4.30; 200: 5.39; 0: 11.0); 86 samples, 26 units | 120 ms, 2.24 px; 200 samples, 53 units |
+| 4f terrain | **ADOPTED**: n under 57, drop 0.273, p 3.4e-10 | adopted: 96, 0.257, 1.9e-18 |
+| 4e T_h (o3h-t) | **0.504** (the p5 of 721 clear kept labels; p50 0.753) | 0.536 (1,363; p50 0.788) |
+
+- **The FREEZE** at 09:07:55: labels `xmas02-o3h-t`, FROZEN, offset 120 ms, o3h-t, T_h 0.504, E0,
+  commit 505ba1df.
+  - `/dev/shm/poring-lab-tmp/x1080/fit/params-1080.json`, sha256
+    `9c73278f8c1aca1fb315673e3ee350db904407349b7655b14dee4d47c8de0331`
+    (offset.json f1d97b17..., threshold.json 75ec5a98...).
+- **The sizes are about half of 720's.** The offset curve's minimum is still clear, and T_h is a
+  p5 over 721 labels. So no second FIT watch (Amendment 3's condition is not met).
+- **T1 (`check --c1-rule round2 --allow-fit` on v1f, as section 5 pre-registered): PASS.**
+  - C1 pooled 4 / 280 = **0.0143** (bar <= 0.050 on >= 100). Per species: Christmas Cookie 0 / 49,
+    Cruiser 0 / 69, Myst Case 0 / 98, Cookie 4 / 64.
+  - C2: every species median |dx| 0-1 px, |dy| 1-2 px (bar <= 4). No stop.
+  - t1-v1f.json sha256 42b2be5a....
+  - At 720 T1 was read on TEST. Here it is in-sample, as pre-registered, so each TRAIN session's own
+    C1 (3c) is the out-of-sample check: each must also be <= 0.050, or that session is not TRAIN.
+- **So the 1080 virtual picture at the DEFAULT zoom is the 720 camera's picture** (11-18's 1.50
+  measurement, now on labels). Every number above came from frames whose zoom was checked.
