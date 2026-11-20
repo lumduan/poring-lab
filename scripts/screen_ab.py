@@ -34,6 +34,7 @@ sys.path.insert(0, str(ROOT / "scripts"))
 import flow_run as fr  # noqa: E402
 import stage2_ab as s2  # noqa: E402
 import stage4_ab as s4  # noqa: E402
+import stage5c_ab as s5c  # noqa: E402
 import stage7_ab as s7  # noqa: E402
 import stage10_ab as s10  # noqa: E402
 
@@ -96,21 +97,119 @@ def use_model(model: str) -> None:
     s10.MODEL = model
 
 
+# goblin-alarm-1080.md section 6 (the play bar, 2026-11-21): a block may set PLAYER settings
+# (poring_flow.settings Field.player: the live player applies them, flow_play; never a runner
+# flag nor a --tune constant), e.g. rule A's alarm_near_px. Nothing else may differ between two
+# blocks: the runner's argv, box, keys and loop are checked equal to the box's own.
+def player_sets(items: Sequence[str]) -> dict[str, Any] | str:
+    """PURE: ``--player-set NAME=VALUE`` items as {name: value}, or why not: NAME a player
+    setting, VALUE one it can take (the settings' own check), each name once."""
+    from poring_flow import settings as st
+
+    by = {f.name: f for f in st.FIELDS}
+    out: dict[str, Any] = {}
+    for it in items:
+        name, sep, raw = it.partition("=")
+        f = by.get(name.strip())
+        if not sep or f is None:
+            return f"--player-set {it!r}: NAME=VALUE, NAME a setting's name"
+        if not f.player:
+            return (f"--player-set {f.name}: not a player setting (it would reach the pinned "
+                    "runner; a block changes the box, not the runner)")  # fmt: skip
+        if f.name in out:
+            return f"--player-set {f.name}: given twice"
+        try:
+            v: Any = float(raw) if f.kind in ("number", "share") else raw.strip()
+        except ValueError:
+            return f"--player-set {f.name}: {raw!r} is not a number"
+        why = st.problem_of(f, v)
+        if why:
+            return f"--player-set {f.name}: {why}"
+        out[f.name] = v
+    return out
+
+
+def with_player_sets(text: str, sets: Mapping[str, Any]) -> str:
+    """PURE: the box text with each player setting in its group's tab of the map node (the tab
+    rule of settings.with_setting_tabs: an existing tab of that name, else a new one)."""
+    from poring_flow import project as pj
+    from poring_flow import settings as st
+
+    if not sets:
+        return text
+    d = json.loads(text)
+    node = next(n for n in d["nodes"] if n.get("id") == s10.NODE)
+    by = {f.name: f for f in st.FIELDS}
+    for name, v in sets.items():
+        f = by[name]
+        tab = next((t for t in node["tabs"] if t.get("name") == f.group), None)
+        if tab is None:
+            tab = {"name": f.group, "main": None, "defs": [], "vars": {}}
+            node["tabs"].append(tab)
+        tab["vars"][f.var] = {"kind": "lit", "value": st.lit_value(f, v)}
+    return pj.to_json(pj.validate(d))
+
+
+def player_set_arm(text: str, sets: Mapping[str, Any], secs: int) -> dict[str, Any] | str:
+    """PURE but for flow_play.prepare: the block's box with its player settings -- its text, its
+    settings and its project hash -- or a refusal: the settings must differ from the box's in the
+    named ones alone, and the runner must get the same argv, box, keys and loop."""
+    import flow_play as fp
+
+    from poring_flow import project as pj
+
+    out = with_player_sets(text, sets)
+    base, vals = s5c.vals_of(text), s5c.vals_of(out)
+    if isinstance(base, str) or isinstance(vals, str):
+        return f"refused before any input: {base if isinstance(base, str) else vals}"
+    diff = sorted(k for k in set(base) | set(vals) if base.get(k) != vals.get(k))
+    want = sorted(k for k, v in sets.items() if base.get(k) != v)
+    if diff != want or any(vals.get(k) != v for k, v in sets.items()):
+        return (f"refused before any input: the player settings changed {diff}, not "
+                f"{sorted(sets)}")  # fmt: skip
+    preps = []
+    for t, v in ((text, base), (out, vals)):
+        h = pj.project_hash(pj.from_json(t))
+        prep = fp.prepare(t, s10.NODE, secs, runner_vals={s10.NODE: v}, want_hash=h)
+        if isinstance(prep, str):
+            return f"refused before any input: {prep}"
+        preps.append((h, prep.runners[s10.NODE]))
+    (_, a), (h, b) = preps
+    if a.argv("L", None, None) != b.argv("L", None, None):
+        return "refused before any input: a player setting changed the runner's argv"
+    for k in ("box_kwargs", "keys", "loop", "tick_left_out"):
+        va, vb = getattr(a, k), getattr(b, k)
+        if (va() if callable(va) else va) != (vb() if callable(vb) else vb):
+            return f"refused before any input: a player setting changed the runner's {k}"
+    return {"text": out, "vals": vals, "project_hash": h}
+
+
 def plan_doc(label: str, n: int, minutes: float, screen: str, folder: Path,
-             base: Mapping[str, Any] | None = None) -> dict[str, Any] | str:  # fmt: skip
+             base: Mapping[str, Any] | None = None, sets: Mapping[str, Any] | None = None,
+             base_text: str | None = None) -> dict[str, Any] | str:  # fmt: skip
     """PURE but for stage10's reads: the block's series document, or a refusal. ``base``: a
-    stage10 plan document (tests); else stage10's own plan (its proofs, the box's argv)."""
+    stage10 plan document (tests); else stage10's own plan (its proofs, the box's argv).
+    ``sets``: the block's player settings (player_sets); ``base_text``: the box text they go
+    into (tests), else stage10's B box."""
     got = base if base is not None else s10.plan_doc(label, 1, minutes, "ab", folder)
     if isinstance(got, str):
         return got
     arm = got["arms"][BOX_ARM]
+    vals = got["vals"][BOX_ARM]
     secs = int(round(minutes * 60))
+    if sets:
+        ps = player_set_arm(base_text if base_text is not None
+                            else s10.arm_text(BOX_ARM, minutes), sets, secs)  # fmt: skip
+        if isinstance(ps, str):
+            return ps
+        arm, vals = {**arm, "project_hash": ps["project_hash"]}, ps["vals"]
     runs = runs_of(label, n, screen, s2.dh_cells() if base is None else ((1, 1), (2, 2)))
     return {
         "version": got["version"], "label": label, "screen": screen, "model": s10.MODEL,
         "screen_want": {k: SCREENS[screen][k] for k in ("session", "region")},
         "runs_n": n, "minutes": minutes, "box_arm": BOX_ARM, "arm": arm,
-        "vals": {BOX_ARM: got["vals"][BOX_ARM]}, "bar": {**s10.BAR, "screen": BAR},
+        "player_set": dict(sets or {}),
+        "vals": {BOX_ARM: vals}, "bar": {**s10.BAR, "screen": BAR},
         "runner_sha256": got["runner_sha256"], "drive_base": got["drive_base"],
         "serve_s": int(n * (minutes * 60 + s2.START_GRACE_S + 120) + s2.SERVE_EXTRA_S),
         "runs": [{**{k: getattr(r, k) for k in ("k", "pair", "arm", "label", "warp")},
@@ -122,6 +221,35 @@ def plan_doc(label: str, n: int, minutes: float, screen: str, folder: Path,
 
 
 # --- pure: the comparison -----------------------------------------------------------------------
+def false_boss_line(a_runs: Sequence[Mapping[str, Any]], b_runs: Sequence[Mapping[str, Any]],
+                    minutes: float) -> dict[str, Any]:  # fmt: skip
+    """PURE (goblin-alarm-1080.md 6): the FALSE boss Fly Wings an hour per block over its valid
+    runs (stage9_ab's packet judgement in each run's ``boss``: ``false``), B against A: "lower"
+    when B is under A by more than SE_K Poisson SEs (sqrt(nA / tA^2 + nB / tB^2)), else "not
+    lower"; INCONCLUSIVE under 2 valid runs a block."""
+
+    def rate(runs: Sequence[Mapping[str, Any]]) -> tuple[int, float, int]:
+        ok = [r for r in runs if valid(r, minutes)]
+        n = sum(sum(1 for b in (r.get("boss") or []) if b.get("false")) for r in ok)
+        return n, sum(float(r.get("minutes") or 0.0) for r in ok) / 60.0, len(ok)
+
+    (na, ta, ka), (nb, tb, kb) = rate(a_runs), rate(b_runs)
+    out: dict[str, Any] = {"a": na, "a_h": round(ta, 3), "b": nb, "b_h": round(tb, 3),
+                           "valid": [ka, kb]}  # fmt: skip
+    if ka < 2 or kb < 2 or ta <= 0 or tb <= 0:
+        return {**out, "verdict": "INCONCLUSIVE"}
+    ra, rb = na / ta, nb / tb
+    se = math.sqrt(na / ta**2 + nb / tb**2)
+    return {
+        **out,
+        "a_per_h": round(ra, 2),
+        "b_per_h": round(rb, 2),
+        "diff": round(rb - ra, 2),
+        "se": round(se, 2),
+        "verdict": "lower" if rb - ra < -SE_K * se else "not lower",
+    }
+
+
 def valid(run: Mapping[str, Any], minutes: float) -> bool:
     """PURE: a scored run counts (stage10's rule): found, played >= 80 % of its time box or ended
     by a valid end (home), and not a code error."""
@@ -335,6 +463,14 @@ def main(argv: Sequence[str] | None = None) -> int:
             default=MODELS[0],
             help="the box's use_model (8c: the 1080 model; default s11scr's)",
         )
+        p.add_argument(
+            "--player-set",
+            action="append",
+            default=[],
+            metavar="NAME=VALUE",
+            help="a PLAYER setting for this block (goblin-alarm-1080.md 6: alarm_near_px=60); "
+            "never a runner flag",
+        )
     dg = sub.add_parser("diag", help="the runner's own records, per run (REPORTED only)")
     dg.add_argument("labels", nargs="+", help="run labels (or series labels: every run of it)")
     dg.add_argument("--demo", type=Path, default=s2.DEMO, help="the sessions' folder (an archive)")
@@ -365,9 +501,13 @@ def main(argv: Sequence[str] | None = None) -> int:
             doc = parts[0][0]
             runs = [run for _, rs in parts for run in rs]
             use_model(str(doc.get("model") or MODELS[0]))  # a block before 8c named xmas02sk
+            sets_of = [d.get("player_set") or {} for d, _ in parts]
+            if any(s != sets_of[0] for s in sets_of):
+                raise SystemExit(f"{labels}: the series set different player settings")
             models[side] = {
                 "model": s10.MODEL,
                 "series": names,
+                "player_set": sets_of[0],
                 **s10.model_report(
                     [s10.score_run(r, SCRATCH / x, bar=d["bar"])
                      for x, (d, _) in zip(names, parts, strict=True) for r in d["runs"]]
@@ -379,7 +519,8 @@ def main(argv: Sequence[str] | None = None) -> int:
             blocks[side] = (doc, runs)
         minutes = float(blocks["A"][0]["minutes"])
         v = verdict(blocks["A"][1], blocks["B"][1], minutes)
-        res = {"runs": {k: r for k, (_, r) in blocks.items()}, "verdict": v, "models": models}
+        res = {"runs": {k: r for k, (_, r) in blocks.items()}, "verdict": v, "models": models,
+               "false_boss": false_boss_line(blocks["A"][1], blocks["B"][1], minutes)}  # fmt: skip
         print(json.dumps(res, indent=1, default=str))
         return 0
     if not 5 <= a.minutes <= 600:
@@ -387,7 +528,11 @@ def main(argv: Sequence[str] | None = None) -> int:
         return 2
     folder = SCRATCH / a.label
     use_model(a.model)
-    got = plan_doc(a.label, a.runs, a.minutes, a.screen, folder)
+    sets = player_sets(a.player_set)
+    if isinstance(sets, str):
+        print(f"refused before any input: {sets}", flush=True)
+        return 2
+    got = plan_doc(a.label, a.runs, a.minutes, a.screen, folder, sets=sets)
     if isinstance(got, str):
         print(got, flush=True)
         return 2
@@ -403,7 +548,8 @@ def main(argv: Sequence[str] | None = None) -> int:
     import huntstate_check as hc
 
     (folder / "runner-5b1.py").write_text(hc.git_show(hc.DRIVE_BASE, hc.TARGET))
-    s4.project_file(BOX_ARM, folder).write_text(s10.arm_text(BOX_ARM, a.minutes))
+    s4.project_file(BOX_ARM, folder).write_text(
+        with_player_sets(s10.arm_text(BOX_ARM, a.minutes), sets))  # fmt: skip
     (folder / f"runner-config-{BOX_ARM}.json").write_text(
         json.dumps({s10.NODE: got["vals"][BOX_ARM]}) + "\n")  # fmt: skip
     return SeriesScr(got, folder).run()
