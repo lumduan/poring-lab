@@ -366,3 +366,42 @@ FIT ran 09:04-09:08 (`run-fit.sh`, CPU, nice 10, a 4 GB scope) on `20261120T0837
   this order after v1g2: v1T (seed 2611207), v1Tg (2611208), v1Tk (2611209, sk6a's cells
   `789f23e2...`), as section 4.
 - Immunity was judged ON at 10:21 (two toggles read) and again before this chain.
+
+### Amendment 7 (2026-11-20 11:19 ICT from `date`, BEFORE the T2 pack, the cache or any GPU step): T2, the cache, the training
+
+- **TRAIN (1080) = every TRAIN watch that passes 3c,** decided mechanically by its own C1: v1t2,
+  v1t3, v1k1, plus v1k2 and v1g2 if they pass. Not v1t1 or v1g1.
+- **VAL (1080) = v1f** (FIT, then VAL, like xw1). Its labels use params-1080; no own C1 (a FIT
+  part).
+- **T2:**
+  - The pack: `map_labels.py pack --map xmas_dun02 <the 1080 TRAIN label files> --seed 51
+    --min-fit 0.504` (the 1080 T_h, as the cache writes), the instructions `dc48fb15...`.
+  - 30 per tier species with >= 30 kept labels after the floor.
+  - The pack lives in `/dev/shm/poring-lab-tmp/blind-v1-t2/pack`; the key in
+    `/dev/shm/poring-lab-tmp/x1080/t2/key`, outside the labellers' tree.
+  - Two NEW blind labellers, **AA and AB** (A-Z are spent), with M9's brief and only the paths
+    changed (sha256 656f2d61... / 93a8dee2...). At most 2 agents, staggered.
+  - Scored ONCE by `blind_score.py`.
+  - **The bar per species: each labeller good >= 90 % AND species >= 95 %.**
+    - If a common species (1249 / 1248 / 1265 / 1246) fails: STOP, no cache.
+    - If Garm Baby, the Christmas Goblin or the Stormy Knight fails: that species' boxes in the
+      1080 sessions are MASKED (S4's masked mode, `--mask-sessions`), so the 1080 frames teach
+      nothing wrong about it. The 720 TRAIN keeps its passed labels.
+- **The cache:** S4.4's form from the main checkout.
+  - `--labels map --classes species --class-list config/detector/classes-xmas02-sk.json --kb
+    data/kb --map-params params-1080.json --map-params-sha256 9c73278f...`
+  - `--map-labels` / `--own-c1` for the 1080 TRAIN sessions, `--train` <them>, `--val` <v1f>
+  - `--mask-sessions v1k1 v1k2` (the knight sessions, as sk1a / sk2a), plus any species T2 masks
+  - `--link-cache xmas02-sk-mask-o3h-t-20261114` (the 720 TRAIN, 3,613 frames, and its VAL)
+  - `--image png --cache-id xmas02-v1080-mix-20261120`
+  - The dry run first; the written counts must equal it.
+- **The training** (S4.5's recipe; the main checkout's train.py, unchanged):
+  - `execdev:vision@43200=python -m poring_vision.train --cache /datasets/.framecache/xmas02-v1080-mix-20261120`
+  - `--epochs E --batch 2 --workers 2 --name xmas02-v1080-20261120 --mid-ckpt`
+  - `--weights /datasets/archive/train/xmas02-sk-20261114/weights/last.pt` (sha256 0b43ebbf...)
+  - `--hsv-s 0.2 --close-mosaic 3 --scale 0.1`
+  - Detached by `systemd-run --user`.
+  - **E = min(10, floor(28,800 / (0.64 N + 100)))**, N = the cache's TRAIN frames (section 7),
+    computed from the cache manifest and written here before the launch.
+  - While it trains, the dev lab's detect server is refused (one job per worker). The live copy's
+    worker is separate and not touched.
