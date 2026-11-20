@@ -358,3 +358,54 @@ A count under its minimum is NO VERDICT, never a pass.
   reached together. Found after Amendment 7's commit (b3f23772), still before any pooled number.
 - The pooled pilots are reported apart in the round's results (their labels and the pooled G2),
   so the round can be read with them and without them.
+
+### Amendment 8 (2026-11-21 03:42 ICT from `date`, BEFORE any staging of this round): the chain's end; the pooled G2 PASSES; the stagings' seeds
+
+- **The chain** (22:23-03:23): all 12 pilots played (rc 0) and shipped; 0 deaths.
+  - 8 of 12 ended on stock_keep (the last Fly Wing kept): ifT2, ifH1, ifT4, ifT5, ifH2, ifT6,
+    ifT7, ifT9. 4 ran out their 25-min box: ifT1, ifT3, ifT8, ifT10. The setup restocks 10 Fly
+    Wings; at 1080 most of them go on false goblin alarms (goblin-alarm-1080.md).
+  - Minutes: ifT1 25.4, ifT2 24.2, ifH1 18.8, ifT3 25.3, ifT4 10.6, ifT5 18.9, ifH2 18.5,
+    ifT6 13.1, ifT7 20.2, ifT8 25.4, ifT9 20.8, ifT10 25.3.
+- **The TRAIN labels** (the labeller loop, frozen params ad268afd..., each file's own G2):
+
+  | pilot | item labels | negatives | own G2 fits | own G2 |
+  |---|---|---|---|---|
+  | ifT1 | 28 | 910 | 64 | PASS |
+  | ifT2 | 8 | 896 | 15 | NOT_ENOUGH |
+  | ifT3 | 21 | 1019 | 8 | NOT_ENOUGH |
+  | ifT4 | 0 | 308 | 2 | NOT_ENOUGH |
+  | ifT5 | 8 | 655 | 8 | NOT_ENOUGH |
+  | ifT6 | 0 | 497 | 0 | NOT_ENOUGH |
+  | ifT7 | 5 | 658 | 5 | NOT_ENOUGH |
+  | ifT8 | 7 | 874 | 8 | NOT_ENOUGH |
+  | ifT9 | 12 | 766 | 33 | PASS |
+  | ifT10 | 68 | 807 | 97 | PASS |
+
+  - **The pooled G2 (Amendment 7), 03:27:44 at d8327115** (`fi_labels.py g2 --pool --out
+    g2-pool.json` over the ten files; sha256 `2617d7b7f18edd51...`): admitted alone ifT1, ifT9,
+    ifT10; pooled ifT2-ifT8: **n 46, median |dx| 2.0, |dy| 2.0 px, 76.1 % within 3 px, on 12
+    floor items: PASS**. All seven are admitted.
+  - So all ten TRAIN pilots are admitted: **157 item labels** (108 from the three passing alone,
+    49 from the pool). Reported apart as Amendment 7a says.
+  - ifH1 / ifH2 (held-out) are not labelled before the freeze for T-eval.
+- **The stagings** (section 4; T-I5 passed). The cells are the tool's own plan (`stage_items.py
+  spots --plan`): each spot's 3 x 3 pile plus every near stand (offsets (0,0), (2,0), (-2,0),
+  (0,2)).
+  - The method's check: it reproduces O24's record exactly (the 13 earlier stagings on this map:
+    1,584 distinct cells; fsH1: 0 shared). Scratch `cells.py` (sha256 `ec3821fce4be963d...`),
+    `earlier.json` (`64454e3031fdb584...`).
+  - **ifsH1, the held-out: `--views near --n 6 --seed 2612229`**, spots (214,225), (27,203),
+    (115,82), (115,214), (93,25), (138,179). Its 72 cells share NONE with the 14 earlier
+    stagings (O24's 13 and fsH1) nor with ifs1-ifs3.
+    - 12 spots are not possible: no 12-spot near plan in the seeds searched shares no cell
+      (as O17's 400-seed search found). n 6 is fsH1's size. Seeds 2612100-2612228 each shared a
+      cell; 2612229 is the first that does not.
+  - **ifs1, ifs2, ifs3 (TRAIN): `--views near --n 12`, seeds 2612702, 2612705, 2612707**: the
+    first three seeds from 2612701 whose 144 cells share none with fsH1 (the 720 held-out of 8b),
+    with ifsH1 or with each other. They share 78 / 72 / 78 cells with the 720 TRAIN stagings
+    (TRAIN with TRAIN: allowed).
+  - Each staging: the bag cleared and the DB's save holding none of the set (`held` rc 0);
+    immunity ON, judged on a frame; the zoom and chat checks; the 1 fps recorder; the staging; the
+    ship (`stage_rec.sh`). Immunity OFF and read back after the last one.
+  - The order: ifs1, ifs2, ifs3, then ifsH1, all before the training starts.
