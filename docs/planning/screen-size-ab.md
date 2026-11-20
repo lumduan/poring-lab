@@ -10,7 +10,7 @@ related: [fullscreen-client.md, live-blocks.md, teaching-prerun.md, ../../script
 next_action: "Pre-registered 2026-11-19 22:57 ICT, before any of its data. Run the 1080 block, switch the lab client and session to 1280x720 fullscreen, run the 720 block, then score; then fix what plays worse at 1080 (Batt 2026-11-19 ~22:5x: 'tune 1920x1080 to play as well as possible, like I play')."
 ---
 
-# s11scr: the screen size, 1280x720 against 1920x1080 (pre-registered 2026-11-19 22:57 ICT)
+# s11scr: the screen size, 1280x720 against 1920x1080 (pre-registered 2026-11-19 22:57 ICT; ➡️ the camera zoom was 1.14x the default during every run: xmas02-1080-detector.md Amendment 2)
 
 ## Why
 

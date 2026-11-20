@@ -219,3 +219,45 @@ xmas02sk's and xmas02gb's results are in xmas02-detector.md M11 and S7.6.
     built through ClientView.virtual_frame). A unit under a ghost is UI to the label rule.
   - The runner sees the same ghosts at 1080: in play the bot is blind there, as a person at 1080
     would be behind the real chat window. Reported; this round does not change it.
+
+### Amendment 2 (2026-11-20 08:48 ICT from `date`, before the next recording): the camera ZOOM; v1f invalid; the chat finder
+
+- **v1f (07:57-08:20) stopped after 34 stands.** The watch's chat-window check failed at
+  xmas_dun02 236,248. Its F10 step then cycled the window to 9 lines, and it stopped without
+  typing. 1,350 frames were shipped.
+  - **The cause:** at 1080, over the pink wall, `chat_window.find_any` took the hotbar's white edge
+    as a 1-line chat window above the real one. It returned the first candidate from the top, and
+    the re-check at that place kept it.
+  - **Fixed in bd9664fa:** the fullest candidate wins, and none overlapping the found Basic Info or
+    hotbar is taken. On the real failure frame it reads the 9-line window (26.7 ms). A test was
+    added.
+  - The window was put back to 6 lines with F10 (12 -> 15 -> hidden -> bar -> 3 -> 6, a picture
+    after each press), then read standard (08:26).
+- **FIT on v1f did not fit:**
+  - the offset curve was flat at ~16 px median error at every offset (720: 2.2 px at 120 ms);
+  - T_h was 0.111 (720: 0.536), and terrain was not adopted;
+  - the freeze refused the name.
+- **The cause: the client's CAMERA ZOOM, not the size.**
+  - On v1f's well-fitting samples (NCC >= 0.5, n 17), the sprites lie 13 % (x) / 15 % (y) farther
+    from the centre than the 720 camera predicts.
+  - Against two 11-06 xw2 frames (default zoom, the 720 camera's 2.2 px), the same cells now
+    (184,205 and 93,82) fit at scale **1.138 / 1.140**.
+  - One wheel step down took it to 1.226. Three steps up then gave **1.000**, at both cells
+    (pixel error 10.5 / 9.9, the best of all fits).
+  - The input log shows people's wheel steps to the lab client from the console: 26 down and 7
+    up, between 11-18 14:08 and 11-19 21:25 ICT. The bot sends none.
+  - The zoom survives client restarts: the s11scr switches restarted the client after the last
+    wheel step, and it was still 1.14 this morning.
+- **So the s11scr runs (2026-11-19 23:14 to 11-20 03:13, A and B alike) played at a zoom of 1.14,**
+  not the default that camera_rdp.json was fitted at.
+  - The runner's cell <-> pixel geometry (walk clicks, reach and stand cells, loot cells) used
+    that camera too.
+  - Both arms had the same zoom, so the verdict between sizes stands. Each arm's own level may
+    have been held back. The s10ab baseline (11-17) predates the wheel steps.
+  - Reported here; screen-size-ab.md gets a pointer.
+- **The protocol from now on (every recording of this round):**
+  - before each watch, a zoom check: a virtual picture at one of the two reference cells, fitted
+    against its 11-06 frame by `zoomfit.py` (scratch);
+  - scale 1.000 +- 0.01 to proceed; otherwise wheel steps back to it, read again.
+- **v1f is marked INVALID** (`dataset_ship.py mark-invalid`: kept, refused by the label tools). It
+  is recorded again as v1f at the default zoom. The seed and stands are the same.
