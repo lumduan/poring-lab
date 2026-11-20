@@ -349,3 +349,12 @@ A count under its minimum is NO VERDICT, never a pass.
     and give 8-15 clear fits each, so no single one can reach it.
 - Built: `fi_labels.py g2 --pool` (`pooled_g2`, its test), on branch cursor-p1; it merges after
   the chain with the cursor fix (no code change on main while the chain runs).
+
+### Amendment 7a (2026-11-21 00:31 ICT from `date`): Amendment 7 departs from the 720 round 5 (disclosed)
+
+- The 720 round 5 did NOT admit its thin pilots: fiT14, fiT16, fiT18, fiT19 and fiT22 had fewer
+  than 30 verified fits and stayed out (xmas02-detector.md, the round-5 amendment adding fsTa5).
+- Amendment 7 pools such pilots at 1080 instead. The bar per fit is unchanged; only the count is
+  reached together. Found after Amendment 7's commit (b3f23772), still before any pooled number.
+- The pooled pilots are reported apart in the round's results (their labels and the pooled G2),
+  so the round can be read with them and without them.
