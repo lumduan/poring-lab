@@ -262,7 +262,7 @@ xmas02sk's and xmas02gb's results are in xmas02-detector.md M11 and S7.6.
 - **v1f is marked INVALID** (`dataset_ship.py mark-invalid`: kept, refused by the label tools). It
   is recorded again as v1f at the default zoom. The seed and stands are the same.
 
-### Amendment 3 (2026-11-20 09:08 ICT from `date`): v1f recorded again; the client left the front; FIT from it
+### Amendment 3 (2026-11-20 09:05 ICT from `date`): v1f recorded again; the client left the front; FIT from it
 
 - **v1f, the second recording (08:37-08:59, the default zoom):** 1,296 frames, 22 min,
   `20261120T083735-rdp-xmas02-v1f`, shipped. The watch stopped after 32 stands. Its GM-line
