@@ -79,7 +79,7 @@ def test_panel_rects_are_the_panels_and_their_ghosts_without_the_pointer() -> No
 def test_the_ghosts_are_black_in_the_virtual_frame() -> None:
     """A positive case through the frame builder itself: every ghost rect panel_rects names is
     black in ClientView.virtual_frame's output outside the pasted panels (here the lab's real
-    chat window at its saved 720 pixels, as on 2026-11-20 08:00's client)."""
+    chat window at its saved 720 pixels, as on the 2026-11-20 morning client)."""
     import numpy as np
 
     panels = [{"name": "chat", "virtual": [0, 578, 600, 142], "real_xy": [0, 578]}]

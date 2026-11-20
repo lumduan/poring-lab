@@ -198,7 +198,7 @@ xmas02sk's and xmas02gb's results are in xmas02-detector.md M11 and S7.6.
 
 ## 11. RESULTS and AMENDMENTS (clock-labelled; nothing above is edited after this commit except by a labelled amendment)
 
-### Amendment 1 (2026-11-20 08:2x ICT, before any 1080 recording): the tools as built; the ghosts
+### Amendment 1 (2026-11-20 07:54 ICT from `date`, before any 1080 recording): the tools as built; the ghosts
 
 - **T-V1 to T-V4 merged:** d5ba886a (feat a588a390) and aed717c8.
   - `scripts/rec_paths.py` holds the two paths; map_labels.check_recording and
@@ -209,7 +209,7 @@ xmas02sk's and xmas02gb's results are in xmas02-detector.md M11 and S7.6.
   - d5ba886a went in with one NAS-reading test red: it was skipped in the tmpfs worktree, which has
     no `.env` for LAB_STORE_DIR. aed717c8 fixed it. Tests that read the NAS run from the main
     checkout.
-- **A finding before recording (a picture of the client at 08:00, the virtual picture):**
+- **A finding before recording (a picture of the client at about 07:50, the virtual picture):**
   - At 1920x1080 the real client keeps its windows at their SAVED 720 pixels. panels.json found
     the chat window at real (0, 578).
   - The world behind a real window is unknown, so every virtual frame shows a black GHOST where the
