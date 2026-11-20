@@ -61,11 +61,20 @@ LATTICE_MIN = 2  # the bag is found by at least this many empty-slot ovals
 TABS: dict[str, tuple[int, int]] = {"use": (10, 45), "eqp": (10, 100), "etc": (10, 154),
                                     "fav": (10, 205)}  # fmt: skip
 COUNT_DY, COUNT_ROWS = 18, 9  # the digits' rows from the icon's top
-COUNT_X0, COUNT_X1 = 12, 44  # the band searched, from the icon's x (4 digits end at +41)
-COUNT_FIRST = (14, 15)  # the first glyph's column (a '1' is drawn one column in)
+# the count's place (measured 2026-11-20 on 1 / 2 / 4-digit stacks): it starts at the icon's x + 14
+# (+ 15 for a leading '1', drawn a column in) unless it would pass x + 26: then it ENDS at x + 26
+# ("8" 14-19, "46" 14-26, "1001" 1-26). The band stops before the next slot (its count can start
+# at its own x + 0 = our x + 32)
+COUNT_X0, COUNT_X1 = 0, 28
+COUNT_FIRST = (14, 15)  # a 1- or 2-digit count's first glyph column
+COUNT_END = 26  # a 2+ digit count's last ink column
 COUNT_INK = 3  # a count pixel is pure black: max channel <= this
 DIGIT_GAP = 2  # at most this many blank columns between two digits of one count
 EMPTY_MAX = 4.0  # a square this close (mean |RGB|) to the empty-slot picture is empty
+BG_TOL = 40  # a pixel within this (sum of |RGB|) of the empty slot's is its background
+UNEXPLAINED_MAX = (
+    0.10  # at most this share of the pixels outside the named picture is no background
+)
 # the naming rule of slot_items (the same pictures and thresholds; another background)
 NAME_MAX = 20.0
 RIVAL_RANGE = 30.0
@@ -129,42 +138,42 @@ def find_window(frame_bgr: Any, min_ovals: int = LATTICE_MIN) -> tuple[int, int]
     pixel). Another as good more than half a pitch away = two bags alike: None."""
     empty, tight = oval_cells(frame_bgr)
     dx0, dy0 = ICON0[0] + OVAL_BOX[0], ICON0[1] + OVAL_BOX[1]  # a cell's oval box from the origin
-    oy0 = max(0, PITCH - dy0)  # the ring's top row: dy0 - PITCH from the origin
-    nx = empty.shape[1] - (dx0 + PITCH * COLS)
-    ny = empty.shape[0] - (dy0 + PITCH * ROWS) - oy0
-    if nx <= 0 or ny <= 0 or dx0 < PITCH:
+    H, W = empty.shape
+    # a ring cell beyond the frame shows no oval (a bag pushed to a screen edge): pad with False
+    P = PITCH * 2
+    empty = np.pad(empty, P)
+    tight = np.pad(tight, P)
+    # the tail rule makes the LAST cell empty: only origins whose last cell sits on an oval box
+    # are candidates (a few hundred, not every pixel)
+    ly, lx = dy0 + PITCH * (ROWS - 1), dx0 + PITCH * (COLS - 1)
+    ys, xs = np.nonzero(empty[P : P + H, P : P + W])
+    oy, ox = ys - ly, xs - lx
+    keep = (ox + dx0 >= 0) & (oy + dy0 >= 0)  # the lattice's own cells inside the frame
+    oy, ox = oy[keep] + P, ox[keep] + P  # in the padded arrays
+    if len(oy) == 0:
         return None
-
-    def at(a: np.ndarray, c: int, r: int) -> np.ndarray:
-        y, x = oy0 + dy0 + PITCH * r, dx0 + PITCH * c
-        return a[y : y + ny, x : x + nx]
-
-    count = np.zeros((ny, nx), np.int32)
-    trail = np.zeros((ny, nx), np.int32)
-    alive = np.ones((ny, nx), bool)
-    snug = np.zeros((ny, nx), np.int32)
-    for k in range(SLOTS - 1, -1, -1):  # from the last cell: the trailing run of empty cells
-        c, r = k % COLS, k // COLS
-        e = at(empty, c, r)
-        count += e
-        alive &= e
-        trail += alive
-        snug += e & at(tight, c, r)
-    outside = np.zeros((ny, nx), bool)
-    for r in range(-1, ROWS + 1):
-        for c in range(-1, COLS + 1):
-            if not (0 <= r < ROWS and 0 <= c < COLS):
-                outside |= at(empty, c, r)
+    cells = [(c, r) for r in range(ROWS) for c in range(COLS)]
+    ring = [(c, r) for r in range(-1, ROWS + 1) for c in range(-1, COLS + 1)
+            if not (0 <= r < ROWS and 0 <= c < COLS)]  # fmt: skip
+    cy = np.array([dy0 + PITCH * r for _c, r in cells])
+    cx = np.array([dx0 + PITCH * c for c, _r in cells])
+    e = empty[oy[:, None] + cy[None], ox[:, None] + cx[None]]  # (N, 42) in reading order
+    t = tight[oy[:, None] + cy[None], ox[:, None] + cx[None]]
+    ry = np.array([dy0 + PITCH * r for _c, r in ring])
+    rx = np.array([dx0 + PITCH * c for c, _r in ring])
+    outside = empty[oy[:, None] + ry[None], ox[:, None] + rx[None]].any(axis=1)
+    count = e.sum(axis=1)
+    trail = np.cumprod(e[:, ::-1], axis=1).sum(axis=1)  # the trailing run of empty cells
     ok = (count >= min_ovals) & (trail == count) & ~outside
     if not ok.any():
         return None
-    best = int(np.where(ok, count, -1).max())
-    score = np.where(ok & (count == best), snug, -1)
-    j, i = np.unravel_index(int(np.argmax(score)), score.shape)
-    ys, xs = np.nonzero(score == score[j, i])
-    if np.any((np.abs(ys - j) > PITCH // 2) | (np.abs(xs - i) > PITCH // 2)):
+    best = int(count[ok].max())
+    snug = np.where(ok & (count == best), (e & t).sum(axis=1), -1)
+    k = int(np.argmax(snug))
+    same = snug == snug[k]
+    if np.any((np.abs(oy[same] - oy[k]) > PITCH // 2) | (np.abs(ox[same] - ox[k]) > PITCH // 2)):
         return None
-    return int(i), int(j) + oy0
+    return int(ox[k]) - P, int(oy[k]) - P
 
 
 def window_at(frame_bgr: Any, origin: tuple[int, int]) -> bool:
@@ -228,9 +237,14 @@ def empty_picture(frame_bgr: Any, origin: tuple[int, int]) -> np.ndarray | None:
 # --- which item, how many -----------------------------------------------------------------------
 @dataclass(frozen=True)
 class Pictures:
-    """slot_items' reference pictures composited over one client's empty slot."""
+    """slot_items' reference pictures, compared on each picture's OWN pixels (its non-key ones):
+    whatever the slot draws behind an icon -- the oval, the pink glow of a NEW item (a gradient,
+    measured 255,131-165,247), the white face -- is left out (the lesson of gm_state's 10-29
+    masked references). ``empty``: this client's empty slot, for the rival test's composites."""
 
-    flat: np.ndarray  # (P, n * 3) float32 over COMPARE
+    raw: np.ndarray  # (P, n, 3) float32: the pictures' colours over COMPARE
+    mask: np.ndarray  # (P, n) bool: their own pixels
+    comp: np.ndarray  # (P, n * 3) float32: composited over the empty slot (the rival test)
     ids: tuple[tuple[int, ...], ...]
     names: Mapping[int, str]
 
@@ -238,19 +252,33 @@ class Pictures:
     def over(cls, refs: Any, empty: np.ndarray) -> Pictures:
         import slot_items as si
 
-        rgb = np.asarray(refs.rgb)
-        comp = rgb[..., :3].astype(np.float32)
-        key = np.stack([si.transparent(p) for p in rgb])
-        comp = np.where(key[..., None], np.asarray(empty, np.float32)[None], comp)
-        return cls(comp[:, COMPARE, :].reshape(len(comp), -1), refs.ids, refs.names)
+        rgb = np.asarray(refs.rgb)[..., :3].astype(np.float32)
+        key = np.stack([si.transparent(p) for p in np.asarray(refs.rgb)])
+        comp = np.where(key[..., None], np.asarray(empty, np.float32)[None], rgb)
+        return cls(rgb[:, COMPARE, :], ~key[:, COMPARE],
+                   comp[:, COMPARE, :].reshape(len(comp), -1), refs.ids, refs.names)  # fmt: skip
 
     def distances(self, sq: np.ndarray) -> np.ndarray:
-        o = np.asarray(sq, np.float32)[COMPARE, :].reshape(1, -1)
-        return np.asarray(np.abs(self.flat - o).mean(axis=1))
+        """Each picture's mean |colour difference| over its own pixels."""
+        o = np.asarray(sq, np.float32)[COMPARE, :][None]  # (1, n, 3)
+        diff = np.abs(self.raw - o).mean(axis=2)  # (P, n)
+        n = np.maximum(self.mask.sum(axis=1), 1)
+        return np.asarray((diff * self.mask).sum(axis=1) / n)
+
+    def unexplained(self, sq: np.ndarray, p: int, empty: np.ndarray) -> float:
+        """The share of the square's pixels OUTSIDE picture ``p`` that are no slot background (not
+        the empty slot's own colour, not the glow's pink, not white): an icon bigger than it."""
+        o = np.asarray(sq, np.float32)[COMPARE, :]
+        e = np.asarray(empty, np.float32)[COMPARE, :]
+        bg = ((np.abs(o - e).sum(axis=1) <= BG_TOL)
+              | ((o[:, 0] >= 220) & (o[:, 2] >= 220) & (o[:, 1] <= 215))
+              | (o.min(axis=1) >= 235))  # fmt: skip
+        out = ~self.mask[p]
+        return float((out & ~bg).sum() / max(1, int(out.sum())))
 
     def pair(self, sq: np.ndarray, p: int, q: int) -> tuple[int, float]:
-        a, b = self.flat[p].reshape(-1, 3), self.flat[q].reshape(-1, 3)
-        apart = np.abs(a - b).mean(axis=1) > DIFF_PX
+        a, b = self.comp[p].reshape(-1, 3), self.comp[q].reshape(-1, 3)
+        apart = (np.abs(a - b).mean(axis=1) > DIFF_PX) & (self.mask[p] | self.mask[q])
         n = int(apart.sum())
         if n == 0:
             return 0, 0.0
@@ -278,31 +306,38 @@ class BagSlot:
 
 def read_count(frame_bgr: Any, origin: tuple[int, int], slot: int,
                templates: Mapping[str, Any]) -> int | None:  # fmt: skip
-    """PURE: the stack's count, or None: the pure-black glyphs from COUNT_FIRST, each a digit,
-    at most DIGIT_GAP apart, no leading zero."""
+    """PURE: the stack's count, or None. The band's pure-black glyphs, every one a digit, at most
+    DIGIT_GAP apart, in the count's place: ONE digit from COUNT_FIRST, or 2+ digits whose last
+    ink column is COUNT_END; no leading zero. Anything else (an icon's black pixel, a covered
+    digit) is unread, never a shorter number."""
     import hotbar_count as hb
 
     x, y = icon_xy(origin, slot)
     img = np.asarray(frame_bgr)
     band = img[y + COUNT_DY : y + COUNT_DY + COUNT_ROWS, x + COUNT_X0 : x + COUNT_X1, :3]
-    if band.shape[0] != COUNT_ROWS or band.shape[1] == 0:
+    if band.shape[0] != COUNT_ROWS or band.shape[1] != COUNT_X1 - COUNT_X0:
         return None
-    ink = band.max(axis=2) <= COUNT_INK
-    runs = hb.glyph_runs(ink)
-    if not runs or runs[0][0] + COUNT_X0 not in COUNT_FIRST:
+    runs = hb.glyph_runs(band.max(axis=2) <= COUNT_INK)
+    if not runs:
         return None
-    digits, end = "", None
+    digits = []
     for col, g in runs:
-        if end is not None and col - end > DIGIT_GAP:
-            break
         d = hb.match(g, templates)
         if d is None:
-            return None  # a glyph that is no digit inside the count: unread, never shorter
-        digits += d
-        end = col + g.shape[1]
-    if not digits or (len(digits) > 1 and digits[0] == "0"):
+            return None
+        digits.append((col + COUNT_X0, col + COUNT_X0 + g.shape[1] - 1, d))
+    for (_a0, a1, _da), (b0, _b1, _db) in zip(digits, digits[1:], strict=False):
+        if b0 - a1 - 1 > DIGIT_GAP:
+            return None
+    text = "".join(d for _x0, _x1, d in digits)
+    if len(digits) == 1:
+        if digits[0][0] not in COUNT_FIRST:
+            return None
+    elif digits[-1][1] != COUNT_END:
         return None
-    return int(digits)
+    if len(text) > 1 and text[0] == "0":
+        return None
+    return int(text)
 
 
 def read_slot(frame_bgr: Any, origin: tuple[int, int], slot: int, pics: Pictures,
@@ -332,6 +367,17 @@ def read_slot(frame_bgr: Any, origin: tuple[int, int], slot: int, pics: Pictures
     if d1 > NAME_MAX:
         return BagSlot(slot, "unread", ids, None, d1, d2,
                        f"no known icon (the nearest {pics.name(ids[0])} at {d1:.1f})")  # fmt: skip
+    extra = pics.unexplained(sq, best, empty)
+    if extra > UNEXPLAINED_MAX:
+        return BagSlot(
+            slot,
+            "unread",
+            ids,
+            None,
+            d1,
+            d2,
+            f"the icon has pixels {pics.name(ids[0])}'s picture lacks ({extra:.2f})",
+        )
     pm = min((m for _p, m in rivals), default=float("inf"))
     if pm < PAIR_LEAD:
         return BagSlot(slot, "unread", ids, None, d1, d2, f"two icons alike (lead {pm:.2f})")
@@ -403,6 +449,16 @@ def _grab(r: Any, screen: Any) -> np.ndarray:
     return np.ascontiguousarray(np.asarray(img)[..., :3])
 
 
+def _save_box(frame_bgr: Any, origin: tuple[int, int], path: Path) -> None:
+    """The bag's window only (a lab trial's evidence: our own character; never in a Run)."""
+    from PIL import Image
+
+    x, y = origin
+    box = np.asarray(frame_bgr)[max(0, y) : y + 260, max(0, x) : x + 290, 2::-1]
+    path.parent.mkdir(parents=True, exist_ok=True)
+    Image.fromarray(np.ascontiguousarray(box)).save(path)
+
+
 def _click(agent: Any, r: Any, cx: int, cy: int) -> None:
     """A paced two-motion click at client px (a cold-jump UI click is ignored)."""
     x0, y0, _, _ = _real_client(r)
@@ -418,11 +474,12 @@ def _click(agent: Any, r: Any, cx: int, cy: int) -> None:
 def _park(agent: Any, r: Any) -> None:
     x0, y0, w, h = _real_client(r)
     agent.move(x0 + min(PARK[0], w - 1), y0 + min(PARK[1], h - 1))
-    time.sleep(0.4)
+    time.sleep(0.25)
 
 
 def census(agent: Any, screen: Any, *, refs: Any | None = None,
-           templates: Mapping[str, Any] | None = None) -> dict[str, Any]:  # fmt: skip
+           templates: Mapping[str, Any] | None = None,
+           frames_dir: Path | None = None) -> dict[str, Any]:  # fmt: skip
     """Open the bag (unless it is open), read every tab twice (the reads must agree), and leave it
     as it was found (closed again with Alt+E when the census opened it). r.Stop on anything
     unexpected; the bag is closed first when the census opened it."""
@@ -458,11 +515,15 @@ def census(agent: Any, screen: Any, *, refs: Any | None = None,
             reads = []
             for _ in range(2):
                 f = _grab(r, screen)
-                if find_window(f) not in (origin, None):
+                # cheap first (its own cells); the whole-frame search only when that fails (a
+                # full tab shows no oval): a lattice elsewhere = the bag moved
+                if not window_at(f, origin) and find_window(f) not in (origin, None):
                     raise r.Stop("bag_count: the bag moved while it was read")
                 if empty is None:  # no empty slot seen yet: this tab may show one
                     empty = empty_picture(f, origin)
                     pics = None if empty is None else Pictures.over(refs, empty)
+                if frames_dir is not None:  # the lab's trials only: the bag's own box, per read
+                    _save_box(f, origin, frames_dir / f"{name}-{len(reads)}.png")
                 if pics is None or empty is None:
                     reads.append(None)
                 else:
@@ -565,6 +626,12 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--refs", type=Path, default=None)
     ap.add_argument("--char", default=None)
     ap.add_argument("--out", type=Path, default=None)
+    ap.add_argument(
+        "--frames",
+        type=Path,
+        default=None,
+        help="LAB TRIALS ONLY: save the bag's box per tab read (our own character)",
+    )
     a = ap.parse_args(argv)
     import hotbar_count as hb
     import slot_items as si
@@ -596,7 +663,7 @@ def main(argv: list[str] | None = None) -> int:
 
     agent = r.Agent("bag_count")
     screen = r.Screen()
-    got = census(agent, screen, refs=refs)
+    got = census(agent, screen, refs=refs, frames_dir=a.frames)
     doc: dict[str, Any] = {"census": got}
     if a.cmd == "trial":
         if not a.char:

@@ -69,8 +69,13 @@ def _frame(
         key = si.transparent(bmp)
         sq = f[y : y + 24, x : x + 24]
         sq[~key] = bmp[~key][:, ::-1]
-        cx = x + 14 + (1 if str(n)[0] == "1" else 0)
-        for ch in str(n):
+        text = str(n)
+        width = sum(font[ch].shape[1] for ch in text) + len(text) - 1
+        if len(text) <= 2:  # the client's rule: from x + 14 (+ 1 for a leading '1') ...
+            cx = x + 14 + (1 if text[0] == "1" else 0)
+        else:  # ... unless it would pass x + 26: then it ENDS there
+            cx = x + bc.COUNT_END - width + 1
+        for ch in text:
             g = font[ch]
             f[y + bc.COUNT_DY : y + bc.COUNT_DY + 9, cx : cx + g.shape[1]][g] = 0
             cx += g.shape[1] + 1
