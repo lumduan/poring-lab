@@ -190,7 +190,8 @@ Amendment O.8, ACCEPTED by O1 2026-11-10; tool T-O2), from scripts/fi_labels.py 
                          --fi-labels FILE [FILE ...]
                          --class-list config/detector/classes-xmas02-fi.json
                          --train S [S ...] [--neg-sessions S [S ...] --neg-total 300]
-                         --val p31 [--neg-seed N] [--dry-run] --cache-id ID --image png
+                         --val p31 [--neg-seed N] [--link-cache ID] [--dry-run]
+                         --cache-id ID --image png
 
 - ONE class, ``floor_item`` (id 0; the class file names it, no player); every kept frame with item
   labels is written WHOLE (every label of the rule, fail closed: O.3 (d) already excluded every
@@ -205,7 +206,26 @@ Amendment O.8, ACCEPTED by O1 2026-11-10; tool T-O2), from scripts/fi_labels.py 
   label files' roles, fi_labels.role_refusal), ``--test`` and --eval-test label files always;
 - the label files and the params must agree (rule, map, FROZEN, the sha256), one file per
   session, every named session labelled; ``--dry-run`` reads no image: its counts are the label
-  files' (item frames, item boxes, the negatives drawn) and the estimated shards and bytes.
+  files' (item frames, item boxes, the negatives drawn) and the estimated shards and bytes;
+- the rule is the one fi_labels registers for the params' map and rule; when two share them (the
+  720 rule and the 1080 one, docs/planning/xmas02-items-1080.md T-I1), the params'
+  ``monster_params_sha256`` picks it (item_spec); the roles above are that rule's;
+- the frame is the labels' 1280 x 720 (V2_SIZE): a 1920 x 1080 session is recorded as its VIRTUAL
+  1280 x 720 picture (recorder v8, ``client_view``; rec_paths), so the same check holds for it.
+- ``--link-cache ID`` (xmas02-items-1080.md T-I3: the 720 round 5's TRAIN + the 1080 TRAIN): the
+  finished ITEM cache ``<out>/ID``'s TRAIN joins this one BY REFERENCE, as --labels map links (its
+  rows, shards ``../ID/<shard>``; nothing copied, nothing re-labelled), under ITS OWN item params
+  (the sha256 its manifest's ``fi_labels`` records). The new part's label files are checked
+  against --item-params / --item-params-sha256 only (the one-sha rule holds per part). Refused:
+  a manifest missing or unreadable, not an items cache, of another map or an unknown rule, with
+  other class names or another class list (sha256) than --class-list, a mixed cache itself, a
+  TEST, a TRAIN row its join rule did not admit, or a recorded shard whose size differs on the
+  NAS; a session in both parts. Its VAL is never linked (``val_not_linked``): VAL is the new
+  part's --val (the 1080 FIT session). Every TRAIN session of both parts must pass, by name,
+  EVERY floor-item rule of the map as TRAIN (each round's held-outs stay out). The manifest (and
+  the dry run) add ``linked`` (its provenance) and ``parts`` (per part: its rule, params sha256,
+  sessions and counts: frames, item frames, labels, negatives); the dry run adds
+  ``train_combined``; every row of a mixed cache names its part's ``item_params_sha256``.
 """
 
 from __future__ import annotations
@@ -1787,19 +1807,40 @@ def map_session(
     return row
 
 
-def linked_cache(out: Path, cache_id: str, names: dict[int, str]
-                 ) -> tuple[dict[str, list[str]], dict[str, Any], dict[str, Any]]:  # fmt: skip
-    """``--link-cache``: the finished cache ``<out>/<cache_id>``'s split and session rows, their
-    shard paths made relative to a sibling cache (``../<cache_id>/<shard>``); refused when its
-    class names differ from ``names`` for any id it has, or a recorded shard's size differs on
-    the NAS (stat only: nothing is read or copied)."""
+def linked_manifest(out: Path, cache_id: str) -> tuple[Path, dict[str, Any], str]:
+    """``--link-cache``: the finished cache ``<out>/<cache_id>``'s directory, its manifest and
+    the sha256 of the manifest bytes read; refused unless the id names a sibling directory whose
+    manifest.json exists and reads as a JSON object."""
     if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._-]*", cache_id):
         raise SystemExit(f"--link-cache {cache_id!r}: a cache id (a sibling directory)")
     d = out / cache_id
     mpath = d / "manifest.json"
     if not mpath.exists():
         raise SystemExit(f"--link-cache: {mpath} not found (a finished cache only)")
-    m = json.loads(mpath.read_text())
+    try:
+        raw = mpath.read_bytes()
+        m = json.loads(raw)
+    except (OSError, ValueError) as e:
+        raise SystemExit(f"--link-cache {cache_id}: {mpath} unreadable ({type(e).__name__})"
+                         ) from None  # fmt: skip
+    if not isinstance(m, dict):
+        raise SystemExit(f"--link-cache {cache_id}: {mpath} is not a cache manifest")
+    return d, m, hashlib.sha256(raw).hexdigest()
+
+
+def linked_cache(out: Path, cache_id: str, names: dict[int, str]
+                 ) -> tuple[dict[str, list[str]], dict[str, Any], dict[str, Any]]:  # fmt: skip
+    """``--link-cache``: the finished cache ``<out>/<cache_id>``'s split and session rows, their
+    shard paths made relative to a sibling cache (``../<cache_id>/<shard>``); refused when its
+    class names differ from ``names`` for any id it has, or a recorded shard's size differs on
+    the NAS (stat only: nothing is read or copied)."""
+    return linked_parts(*linked_manifest(out, cache_id), cache_id, names)
+
+
+def linked_parts(d: Path, m: dict[str, Any], manifest_sha: str, cache_id: str,
+                 names: dict[int, str]
+                 ) -> tuple[dict[str, list[str]], dict[str, Any], dict[str, Any]]:  # fmt: skip
+    """linked_cache's checks and rows, on a manifest already read (``d`` its directory)."""
     theirs = {int(k): str(v) for k, v in m["names"].items()}
     wrong = {k: (v, names.get(k)) for k, v in theirs.items() if names.get(k) != v}
     if wrong:
@@ -1814,7 +1855,7 @@ def linked_cache(out: Path, cache_id: str, names: dict[int, str]
         rows[sid] = {**r, "shards": [f"../{cache_id}/{s}" for s in r["shards"]],
                      "linked_from": cache_id}  # fmt: skip
     split = {k: list(m["split"].get(k) or []) for k in ("train", "val", "test")}
-    prov = {"cache_id": cache_id, "manifest_sha256": sha256_of(mpath), "names": len(theirs),
+    prov = {"cache_id": cache_id, "manifest_sha256": manifest_sha, "names": len(theirs),
             "sessions": len(rows), "frames": sum(int(r.get("kept") or 0) for r in rows.values()),
             "shards": len(m["shards"]),
             "bytes": sum(int(i["bytes"]) for i in m["shards"].values())}  # fmt: skip
@@ -1963,6 +2004,50 @@ def item_yolo_lines(f: dict[str, Any], w: int, h: int) -> str:
     return yolo_lines(boxes, w, h, [0] * len(boxes))
 
 
+def item_specs(fl: Any, map_name: str) -> list[Any]:
+    """Every floor-item rule fi_labels registers for ``map_name`` (``FI_MAPS``' values: the 720
+    rule today, the 1080 rule of xmas02-items-1080.md T-I1 beside it), each once."""
+    out: list[Any] = []
+    for s in fl.FI_MAPS.values():
+        if s.name == map_name and all(s is not o for o in out):
+            out.append(s)
+    return out
+
+
+def item_spec(fl: Any, head: dict[str, Any], path: Path) -> Any:
+    """The floor-item rule a frozen item params file was made by: the rule of its map with its
+    rule name; when several share both (the 720 and the 1080 rule of xmas_dun02), the one whose
+    monster params' sha256 the file records (freeze_params writes it; the 1080 rule's are
+    params-1080.json's). No rule of that name: the map's first, so load_params names the
+    mismatch, as before T-I3."""
+    specs = item_specs(fl, str(head.get("map")))
+    if not specs:
+        raise SystemExit(f"{path}: map {head.get('map')!r} has no floor-item rule")
+    named = [s for s in specs if s.rule == head.get("rule")] or specs[:1]
+    if len(named) > 1:
+        named = [s for s in named
+                 if s.monster_params_sha256 == head.get("monster_params_sha256")]  # fmt: skip
+    if len(named) != 1:
+        raise SystemExit(f"{path}: {len(named)} floor-item rules of {head.get('map')} match its "
+                         "rule and its monster_params_sha256")  # fmt: skip
+    return named[0]
+
+
+def train_role_refusals(fl: Any, specs: Sequence[Any], sids: Sequence[str]) -> dict[str, str]:
+    """PURE (xmas02-items-1080.md T-I3): the TRAIN sessions that SOME floor-item rule of the map
+    refuses as TRAIN by name (its held-out, its map's TEST, its FIT / VAL-only or unusable
+    sessions). A mixed cache's two parts were labelled under two rules: each rule's held-outs stay
+    out of TRAIN whichever part names them (the 720 round 5's for 8b, the 1080 round's for 8a)."""
+    out: dict[str, str] = {}
+    for sid in sids:
+        for s in specs:
+            why = fl.role_refusal(s, sid, "train", False)
+            if why is not None:
+                out[sid] = f"{s.rule} ({s.monster_params_sha256[:8]}...): {why}"
+                break
+    return out
+
+
 @dataclass(frozen=True)
 class ItemLabelInputs:
     """``--labels items``: the frozen fi params, one label file per session, the join verdicts."""
@@ -1985,9 +2070,7 @@ class ItemLabelInputs:
             raise SystemExit(f"{a.item_params}: sha256 {sha}, not the frozen "
                              f"{a.item_params_sha256}")  # fmt: skip
         head = json.loads(a.item_params.read_text())
-        spec = fl.FI_MAPS.get(str(head.get("map")))
-        if spec is None:
-            raise SystemExit(f"{a.item_params}: map {head.get('map')!r} has no floor-item rule")
+        spec = item_spec(fl, head, a.item_params)
         params = fl.load_params(a.item_params, spec)
         neg_only = set(a.neg_sessions)
         docs: dict[str, dict[str, Any]] = {}
@@ -2054,7 +2137,7 @@ def item_cache_session(sid: str, part: str, a: argparse.Namespace, sink: ShardSi
         picked = draw_negatives(negs, k, a.neg_seed, f"{ITEM_RULE}:{sid}")
     w, h = V2_SIZE
     row: dict[str, Any] = {"split": part, "path": str(path),
-                           "format": recorded.session_format(manifest), "labels": ITEM_RULE,
+                           "format": recorded.session_format(manifest), "labels": ili.spec.rule,
                            "join_rule": ili.join[sid], "shards": [],
                            "label_item_frames": len(items),
                            "label_item_boxes": sum(len(f["items"]) for f in items),
@@ -2067,7 +2150,7 @@ def item_cache_session(sid: str, part: str, a: argparse.Namespace, sink: ShardSi
         text = "" if neg else item_yolo_lines(f, w, h)
         fid = int(f["frame_id"])
         info = {"session": sid, "frame_id": fid, "t_mono_ns": int(f["t"]), "map": ili.spec.name,
-                "labels": ITEM_RULE, "negative": neg,
+                "labels": ili.spec.rule, "negative": neg,
                 "boxes": [[0, int(it["item_id"]), int(it["floor_id"])]
                           for it in f["items"]]}  # fmt: skip
         meta = json.dumps(info).encode()
@@ -2111,9 +2194,117 @@ def pooled_negatives(ili: ItemLabelInputs, sids: Sequence[str], total: int, seed
     return out
 
 
+SHA256_HEX = re.compile(r"[0-9a-f]{64}")
+
+
+def part_counts(rows: Sequence[dict[str, Any]]) -> dict[str, int]:
+    """PURE: one part's counts from its session rows: sessions, frames written (item frames +
+    negatives), item frames, labels (the item boxes) and negatives."""
+    return {"sessions": len(rows), "frames": sum(int(r["kept"]) for r in rows),
+            "item_frames": sum(int(r["item_frames"]) for r in rows),
+            "labels": sum(int(r["item_boxes"]) for r in rows),
+            "negatives": sum(int(r["negatives"]) for r in rows)}  # fmt: skip
+
+
+@dataclass(frozen=True)
+class LinkedItems:
+    """``--labels items --link-cache ID`` (docs/planning/xmas02-items-1080.md T-I3): a finished
+    item cache's TRAIN joined BY REFERENCE under its OWN item params (never re-labelled)."""
+
+    cache_id: str
+    train: list[str]  # its TRAIN, in its own order
+    rows: dict[str, dict[str, Any]]  # their rows: shards ../ID/<shard>, linked_from, params sha
+    sessions: frozenset[str]  # every session its manifest names (TRAIN, VAL, rows)
+    provenance: dict[str, Any]
+
+
+def linked_item_cache(out: Path, cache_id: str, class_list: Path, specs: Sequence[Any]
+                      ) -> LinkedItems:  # fmt: skip
+    """The item cache ``<out>/<cache_id>`` to link (T-I3): refused unless its manifest reads, it
+    is an items cache of a known floor-item rule of this map (``specs``: item_specs) whose
+    provenance names its params' sha256, its class names AND class list (sha256) are
+    ``class_list``'s, it links nothing itself (two parts only), it has no TEST, every TRAIN row is
+    one its join rule admitted, and its recorded shards hold on the NAS (linked_parts). Only its
+    TRAIN is linked: its VAL (the 720 FIT p31) is left out, recorded as ``val_not_linked``."""
+    d, m, msha = linked_manifest(out, cache_id)
+    where = f"--link-cache {cache_id}"
+    if m.get("labels") != "items":
+        raise SystemExit(f"{where}: not an items cache (labels {m.get('labels')!r})")
+    fi = m.get("fi_labels")
+    if not isinstance(fi, dict) or not SHA256_HEX.fullmatch(str(fi.get("params_sha256"))):
+        raise SystemExit(f"{where}: its manifest names no item params sha256 (fi_labels)")
+    rules = {s.rule for s in specs}
+    map_name = specs[0].name if specs else None
+    if fi.get("map") != map_name or fi.get("rule") not in rules:
+        raise SystemExit(f"{where}: {fi.get('rule')!r} labels of {fi.get('map')!r}, not a "
+                         f"floor-item rule of {map_name} ({sorted(rules)})")  # fmt: skip
+    if m.get("linked") or m.get("parts") or any(
+            isinstance(r, dict) and r.get("linked_from") for r in (m.get("sessions") or {}).values()
+    ):  # fmt: skip
+        raise SystemExit(f"{where}: a mixed cache (it links another): link a plain item cache")
+    want = {str(i): str(n) for i, n in enumerate(json.loads(class_list.read_text())["names"])}
+    if m.get("names") != want:
+        raise SystemExit(f"{where}: its class names {m.get('names')} differ from {class_list}'s "
+                         f"{want}")  # fmt: skip
+    if m.get("class_list_sha256") != sha256_of(class_list):
+        raise SystemExit(f"{where}: built with another class list (sha256 "
+                         f"{m.get('class_list_sha256')}, not {class_list}'s)")  # fmt: skip
+    split, rows, gprov = linked_parts(d, m, msha, cache_id, {int(k): v for k, v in want.items()})
+    if split["test"]:
+        raise SystemExit(f"{where}: an item cache has no TEST ({split['test']})")
+    sha = str(fi["params_sha256"])
+    train: dict[str, dict[str, Any]] = {}
+    for sid in split["train"]:
+        r = rows.get(sid)
+        if r is None or r.get("split") != "train":
+            raise SystemExit(f"{where}: {sid} in its TRAIN without a TRAIN row")
+        if r.get("join_rule") not in (G2_PASS, NEG_ONLY) or r.get("labels") != fi["rule"]:
+            raise SystemExit(f"{where}: {sid}: join {r.get('join_rule')!r}, labels "
+                             f"{r.get('labels')!r}: not an admitted {fi['rule']} row")  # fmt: skip
+        train[sid] = {**r, "item_params_sha256": sha}
+    used = sorted({s.rsplit("/", 1)[1] for r in train.values() for s in r["shards"]})
+    counts = part_counts(list(train.values()))
+    prov = {"cache_id": cache_id, "manifest_sha256": msha, "built_at": m.get("built_at"),
+            "image": m.get("image"), "rule": fi["rule"], "plan": fi.get("plan"),
+            "map": fi["map"], "params": fi.get("params"), "params_sha256": sha,
+            "class_list_sha256": m.get("class_list_sha256"),
+            "label_files": len(fi.get("label_files") or []), "train": list(split["train"]),
+            "val_not_linked": list(split["val"]),
+            "join": {s: train[s]["join_rule"] for s in split["train"]},
+            "train_counts": counts, "shards": len(used),
+            "bytes": sum(int(m["shards"][s]["bytes"]) for s in used),
+            "all_shards": gprov["shards"]}  # fmt: skip
+    names = set(rows) | set(split["train"]) | set(split["val"])
+    return LinkedItems(cache_id, list(split["train"]), train, frozenset(names), prov)
+
+
+def item_parts(ili: ItemLabelInputs, own: dict[str, list[str]], rows: dict[str, dict[str, Any]],
+               linked: LinkedItems) -> dict[str, Any]:  # fmt: skip
+    """PURE (T-I3): the mixed cache's two parts, so the training and the evaluation can tell them
+    apart: each part's rule, params (sha256), sessions and counts. The new part's TRAIN and VAL
+    (its FIT); the linked part's TRAIN only (its VAL is never linked)."""
+    p = ili.provenance
+    lp = linked.provenance
+    return {
+        "new": {"rule": p["rule"], "map": p["map"], "params": p["params"],
+                "params_sha256": p["params_sha256"], "train": list(own["train"]),
+                "val": list(own["val"]),
+                "train_counts": part_counts([rows[s] for s in own["train"]]),
+                "val_counts": part_counts([rows[s] for s in own["val"]])},
+        "linked": {"cache_id": linked.cache_id, "manifest_sha256": lp["manifest_sha256"],
+                   "rule": lp["rule"], "map": lp["map"], "params": lp["params"],
+                   "params_sha256": lp["params_sha256"], "train": list(linked.train), "val": [],
+                   "val_not_linked": list(lp["val_not_linked"]),
+                   "train_counts": dict(lp["train_counts"]), "val_counts": part_counts([])},
+    }  # fmt: skip
+
+
 def items_main(a: argparse.Namespace) -> int:
-    """``--labels items``: the floor-item cache (O.8), dry run or build."""
-    for flag in ("fix", "v1_species_sessions", "item_sessions", "map_labels", "link_cache"):
+    """``--labels items``: the floor-item cache (O.8), dry run or build; with ``--link-cache ID``
+    a finished item cache's TRAIN joins it by reference, under its own params (T-I3)."""
+    import fi_labels as fl
+
+    for flag in ("fix", "v1_species_sessions", "item_sessions", "map_labels"):
         if getattr(a, flag):
             raise SystemExit(f"--{flag.replace('_', '-')} does not belong to --labels items")
     if a.test:
@@ -2138,6 +2329,15 @@ def items_main(a: argparse.Namespace) -> int:
     neg = [s for s in own["train"] if s in set(a.neg_sessions)]
     if sorted(set(a.neg_sessions) - set(neg)):
         raise SystemExit(f"--neg-sessions {sorted(set(a.neg_sessions) - set(neg))}: not in --train")
+    specs = item_specs(fl, ili.spec.name)
+    linked = linked_item_cache(a.out, a.link_cache, a.class_list, specs) if a.link_cache else None
+    if linked is not None and sorted(named & linked.sessions):
+        raise SystemExit(f"--link-cache {linked.cache_id}: {sorted(named & linked.sessions)} in "
+                         "it too: a session is in ONE part")  # fmt: skip
+    roles = train_role_refusals(fl, specs, own["train"] + (linked.train if linked else []))
+    if roles:
+        raise SystemExit(f"TRAIN refused by name by a floor-item rule of {ili.spec.name}: {roles}")
+    pin = ili.provenance["params_sha256"]  # a mixed cache's rows name their part's params
     pooled = pooled_negatives(ili, neg, a.neg_total, a.neg_seed)
     order = [("train", s) for s in own["train"]] + [("val", s) for s in own["val"]]
     if a.dry_run:
@@ -2147,6 +2347,8 @@ def items_main(a: argparse.Namespace) -> int:
                 for part, sid in order}  # fmt: skip
         for r in rows.values():
             r.pop("shards")
+            if linked is not None:
+                r["item_params_sha256"] = pin
         tr = [r for r in rows.values() if r["split"] == "train"]
         out = {"dry_run": True, "labels": "items", "inputs": ili.provenance,
                "names": {"0": ITEM_CLASS}, "sessions": rows,
@@ -2157,6 +2359,11 @@ def items_main(a: argparse.Namespace) -> int:
                    ili.docs[s])[0] for it in f["items"]}) for s in own["train"]),
                "would_refuse_join": sorted(s for s in own["train"]
                                            if ili.join[s] not in (G2_PASS, NEG_ONLY))}  # fmt: skip
+        if linked is not None:  # T-I3: both parts' counts; TRAIN = the new part's + the linked
+            parts = item_parts(ili, own, rows, linked)
+            new_c, old_c = parts["new"]["train_counts"], parts["linked"]["train_counts"]
+            out.update({"linked": linked.provenance, "parts": parts,
+                        "train_combined": {k: new_c[k] + old_c[k] for k in new_c}})  # fmt: skip
         print(json.dumps(out, indent=1))
         return 0
     refused = {s: ili.join[s] for s in own["train"] if ili.join[s] not in (G2_PASS, NEG_ONLY)}
@@ -2165,10 +2372,14 @@ def items_main(a: argparse.Namespace) -> int:
     cache_id = a.cache_id or f"items-{time.strftime('%Y%m%dT%H%M%S')}"
     directory = a.out / cache_id
     split = {k: list(v) for k, v in own.items()}
+    if linked is not None:
+        split["train"] += linked.train
     args = {"labels": a.labels, "k": None, "every": a.every, "every_png": a.every_png,
             "max_per_session": a.max_per_session, "shard_mb": a.shard_mb, "image": a.image,
             "quality": a.quality if a.image == "jpeg" else None, "split": split,
             "fi_labels": ili.provenance}  # fmt: skip
+    if linked is not None:  # an unlinked build keeps its keys (its progress file unchanged)
+        args["link"] = linked.provenance
     sessions: dict[str, Any] = {}
     shards: dict[str, Any] = {}
     if a.resume:
@@ -2180,6 +2391,8 @@ def items_main(a: argparse.Namespace) -> int:
         raise SystemExit(f"{directory} exists: pick another --cache-id (or --resume it)")
     else:
         directory.mkdir(parents=True)
+    if linked is not None:
+        sessions.update(linked.rows)  # by reference: nothing to write
     start = 1 + max((int(n[6:12]) for n in shards), default=-1)
     sink = ShardSink(directory, a.shard_mb << 20, start, shards)
     t0 = time.monotonic()
@@ -2187,6 +2400,8 @@ def items_main(a: argparse.Namespace) -> int:
         if sid in sessions:
             continue
         row = item_cache_session(sid, part, a, sink, ili, pooled.get(sid))
+        if linked is not None:
+            row["item_params_sha256"] = pin
         sink.close()  # a session owns its shards: complete, or absent after a resume
         sessions[sid] = row
         write_json(directory, "progress.json",
@@ -2202,11 +2417,16 @@ def items_main(a: argparse.Namespace) -> int:
         "seconds": round(time.monotonic() - t0, 1), "class_list": str(a.class_list),
         "class_list_sha256": sha256_of(a.class_list), "fi_labels": ili.provenance,
     }  # fmt: skip
+    if linked is not None:  # T-I3: the linked part's provenance and both parts' counts
+        manifest.update({"linked": linked.provenance,
+                         "parts": item_parts(ili, own, sessions, linked)})  # fmt: skip
     for name, doc in (("manifest.json", manifest), ("split.json", split)):
         write_json(directory, name, doc)
-    print(json.dumps({"cache": str(directory),
-                      "frames": sum(int(r["kept"]) for r in sessions.values()),
-                      "shards": len(sink.done), "seconds": manifest["seconds"]}))  # fmt: skip
+    done: dict[str, Any] = {"cache": str(directory),
+                            "frames": sum(int(r["kept"]) for r in sessions.values())}  # fmt: skip
+    if linked is not None:
+        done["frames_written"] = sum(int(sessions[s]["kept"]) for _, s in order)
+    print(json.dumps({**done, "shards": len(sink.done), "seconds": manifest["seconds"]}))
     return 0
 
 
@@ -2393,7 +2613,8 @@ def main(argv: Sequence[str] | None = None) -> int:
     m.add_argument("--own-c1", type=Path, nargs="*", default=[],
                    help="map: map_labels.py check outputs (3c: own C1 = ADDED)")  # fmt: skip
     m.add_argument("--link-cache", default=None,
-                   help="map: a finished cache id under --out, joined BY REFERENCE")  # fmt: skip
+                   help="map / items: a finished cache id under --out, joined BY REFERENCE "
+                        "(items: its TRAIN only, under its own item params; T-I3)")  # fmt: skip
     m.add_argument("--mask-sessions", nargs="*", default=[],
                    help="map: these --train sessions by the MASKED rule (xmas02-detector.md "
                         "S4): excluded / weak_fit labels painted out, not the frame dropped",
@@ -2436,7 +2657,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         return map_main(a)
     if a.map_labels or a.map_params or a.own_c1 or a.link_cache:
         raise SystemExit("--map-labels / --map-params / --own-c1 / --link-cache belong to "
-                         "--labels map")  # fmt: skip
+                         "--labels map (--link-cache: map or items)")  # fmt: skip
     split = {"train": a.train, "val": a.val, "test": a.test}
     seen = [s for ss in split.values() for s in ss]
     if not seen:
