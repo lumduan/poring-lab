@@ -90,3 +90,34 @@ On the lab, the Rogue in prontera 156,180 (no monster), the truth is the lab dat
   item of <group>, unpriced".
 - **Only after B1-B4 hold on every trial:** the Run integration (a census at its start and end),
   then Batt's live trial.
+
+## Amendment 1 (2026-11-20 14:05 ICT from `date`): take 1 of the trials found five things; take 2 restarts the trials
+
+The bar (section 4) is unchanged. Take 1's trial results are VOID, for reasons a)-b); take 2
+runs T2-T6 again from the start.
+
+- **a) The lab database lags the game.** It is written at the server's autosave (<= 5 min,
+  rAthena's default `autosave_time`). T2 was judged against the bag from before its adds: a
+  "wrong" (Red Potion x5 "not in the bag") that was the census being right.
+  - Take 2 waits until the database shows the change and settles (two equal reads 15 s apart).
+- **b) `@delitem` was not allowed** in the lab's group 20, so take 1's removals did nothing, and
+  (a) hid it. Batt approved it at 13:5x ("Add @delitem"). Applied by a guarded
+  `recreate:rathena,sniffer`, read back by a census. An add can fail silently too
+  (`@item 601 199` added nothing), so the truth is the database, never the planned adds.
+  `@item2` is not allowed either: the unidentified item is the baseline's own Sandals (2402,
+  identify 0), present in every trial.
+- **c) A NEW item draws a pink glow** (a gradient, 255,131-165,247) where the oval was.
+  - Icons are now compared on each picture's own pixels.
+  - Guard: the rest of the square must be slot background.
+  - On take 1's frames: 29/29 right, the worst distance 5.2, the nearest rival 22+.
+- **d) A count's place:** from x+14 (x+15 for a leading '1') unless it would pass x+26; then it
+  ENDS at x+26 ("1001" = x+1..26). Take 1's 19 Etc counts, 1 to 1001, all read.
+- **e) A bag at the frame's edge:** its outside ring fell outside the frame and the true place was
+  dropped. A ring cell beyond the frame now counts as "no oval".
+- **Speed (B4):** 21.4 s at first.
+  - The fixed 0.9 s wait after a tab click became "until its slots change". This skin draws no
+    selected-tab cue.
+  - The bag's box only is grabbed once its place is known.
+  - 16.8 s for 28 entries.
+- **Never twice:** an item in two tabs = a click that did not take. The tab is clicked again,
+  else those slots are unread.
