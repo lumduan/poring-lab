@@ -537,3 +537,13 @@ test("round 23: a Blockly menu past the blocks area moves back inside (at most 1
   assert.deepEqual(fitDropDown({ top: 400, bottom: 711 }, area), { shift: -12, shrink: 3 }); // 15 px past the area
   assert.deepEqual(fitDropDown({ top: 98, bottom: 300 }, area), { shift: 6, shrink: 0 }); // above the area's top
 });
+
+test("roles-not-names step 2: an item setting picks from its role's items (the catalogue's role_items)", () => {
+  const d = xmas();
+  const cat = { ...(d.catalogue as CatalogueDoc), role_items: { weapon: [{ id: 1301, label: "an axe" }, { id: 1201, label: "a knife" }], heal: [{ id: 505, label: "a blue one" }] } };
+  const data = { ...d, catalogue: cat };
+  const weapons = refChoices(ref("item", { role: "weapon" }), data);
+  assert.deepEqual(weapons.map((c) => [c.value, c.label, c.group]), [["1301", "an axe", "weapon"], ["1201", "a knife", "weapon"]]);
+  assert.deepEqual(refChoices(ref("item", { role: "heal" }), data).map((c) => c.value), ["505"]);
+  assert.deepEqual(refChoices(ref("item", { role: "weapon" }), d), []); // no KB: no list, nothing guessed
+});

@@ -52,9 +52,12 @@ const f = (name: string) => {
 };
 const tabNamed = (p: Project, node: string, name: string) => nodeById(p, node)!.tabs.find((t) => t.name === name)!;
 
-test("the registry is the engine's: 125 setting blocks in 11 tabs, the keys none, each default valid", () => {
+test("the registry is the engine's: 127 setting blocks in 11 tabs, the keys none, each default valid", () => {
   assert.equal(SETTINGS.version, 3);
-  assert.equal(SETTING_BLOCKS.length, 125); // + fly_first (live-blocks 18), + fly_first_hp (18.11), + fly_first_land and FF_LAND_S (18.17)
+  // + fly_first (live-blocks 18), + fly_first_hp (18.11), + fly_first_land and FF_LAND_S (18.17);
+  // + swap_item and heal_item (roles-not-names.md step 2, 2026-11-20: OPTIONAL blocks)
+  assert.equal(SETTING_BLOCKS.length, 127);
+  assert.deepEqual(SETTING_BLOCKS.filter((s) => s.optional).map((s) => [s.name, s.kind, s.default]), [["swap_item", "item", 1201], ["heal_item", "item", 504]]);
   // matpilot round 20 #5: in the box's tab order (survival before knife); "loop" is "timing"
   assert.deepEqual([...SETTING_TABS], ["survival", "knife", "exits", "respawn", "start", "fight", "aim", "loot", "walk", "safety", "timing"]);
   assert.deepEqual(SETTINGS.fields.filter((x) => !x.block).map((x) => x.name), ["heal_key", "fly_key", "home_key", "knife_key", "dagger_key"]);
@@ -75,7 +78,8 @@ test("the one box shows every setting it runs with, in its group's tab, at our d
   // matpilot round 20 #4a: but the five its own events and functions play (drink, fly_away, bag_full,
   // respawn_button, respawn_ok): no block of them (test_settings.py pins the list to the engine's)
   assert.deepEqual([...BOX_PLAYS_THEM], ["potion_below", "fly_below", "weight_home", "respawn_at", "respawn_confirm_at"]);
-  assert.deepEqual(shown, Object.fromEntries(SETTING_BLOCKS.filter((s) => !BOX_PLAYS_THEM.includes(s.name)).map((s) => [s.var, [s.group, s.default]])));
+  // an OPTIONAL block (the role items) is held only when set: absent = the default
+  assert.deepEqual(shown, Object.fromEntries(SETTING_BLOCKS.filter((s) => !BOX_PLAYS_THEM.includes(s.name) && !s.optional).map((s) => [s.var, [s.group, s.default]])));
   assert.equal(Object.keys(shown).length, 120); // + fly_first (18), + fly_first_hp (18.11), + fly_first_land, FF_LAND_S (18.17)
   // the file the engine and the Run read is the same project (byte-identical canonical)
   const file = JSON.parse(readFileSync(new URL("./fixtures/project_xmas_dun02.json", import.meta.url), "utf8")) as Project;
@@ -94,7 +98,7 @@ test("every setting block round-trips: project -> blocks -> project, exactly", (
     const scope = { node: NODE, tab: t };
     const ws = JSON.parse(JSON.stringify(tabToWorkspace(x, scope))) as Workspace;
     const sets = ws.blocks.blocks.filter((b) => b.type.startsWith("pl_set_"));
-    const held = SETTING_BLOCKS.filter((s) => s.group === t && !BOX_PLAYS_THEM.includes(s.name));
+    const held = SETTING_BLOCKS.filter((s) => s.group === t && !BOX_PLAYS_THEM.includes(s.name) && !s.optional);
     assert.equal(sets.length, held.length, t);
     // in the registry's order (the Python view's), one under the other: never overlapping
     assert.deepEqual(sets.map((b) => b.type), held.map(settingType));
@@ -257,7 +261,7 @@ test("each setting is a block type of its own; the toolbox offers every one in i
     // the header is as narrow as the blocks (the old one was 1,062 px, cut at 1440)
     for (const l of labels) assert.ok(rowUnits([textUnits(l)]) <= SETTING_ROW_BUDGET, `${c.name}: ${l}`);
   }
-  assert.equal(toolboxBlocks(set).length, 125);
+  assert.equal(toolboxBlocks(set).length, 127);
   assert.equal(categoryOf(toolbox({}, { node: "login", main: true }), "Settings"), undefined);
 });
 
@@ -335,7 +339,7 @@ test("matpilot round 20 #5: the block search finds every knife setting by 'knife
   const entries = toolboxBlocks(tb).map(({ category, item }) => ({ category, item, text: String(item.type) }));
   const found = (q: string) => matchEntries(q, entries).map((e) => String(e.item.type));
   const knife = SETTING_BLOCKS.filter((s) => s.group === "knife").map(settingType);
-  assert.equal(knife.length, 6);
+  assert.equal(knife.length, 7); // + swap_item (the idle weapon), 2026-11-20
   for (const t of knife) assert.ok(found("knife").includes(t), t);
   for (const n of ["garm_fly", "garm_confirm", "alarm_fast", "alarm_solo", "GARM_FRESH_S"]) assert.ok(found("garm").includes(settingType(f(n))), n);
   // "loop" finds Control's loop blocks, never a setting (the group is "timing" now)
@@ -392,4 +396,19 @@ test("the identity line follows the Settings page's mode: any character by defau
   const ident = items.find((it) => it.id === "identity");
   assert.ok(ident && !/her |Thief8fce/.test(ident.text));
   assert.ok(!items.some((it) => /\bshe\b|\bher\b/.test(it.text)), "no line assumes who plays");
+});
+
+test("roles-not-names step 2: an item setting is OPTIONAL, held when set, and round-trips as its number", () => {
+  const sw = SETTING_BLOCKS.find((s) => s.name === "swap_item")!;
+  assert.equal(sw.kind, "item");
+  assert.deepEqual(withSettingTabs([tab("main", [])]).find((t) => t.name === "knife")?.vars.swap_item, undefined);
+  const set = withSettingTabs([tab("main", [])], { swap_item: 1301 });
+  assert.deepEqual(set.find((t) => t.name === "knife")?.vars.swap_item, settingLit(1301));
+  assert.deepEqual(settingFields(sw, 1301), { VALUE: "1301" });
+  assert.deepEqual(settingFromFields(sw, { VALUE: " 1301 " }), { value: 1301 });
+  assert.ok("error" in settingFromFields(sw, { VALUE: "an axe" }));
+  assert.equal(settingProblem(sw, 0), "the idle weapon (the swap's item): 0 is not an item (its number)");
+  const def = settingDef(sw);
+  const value = (def.args0 ?? []).find((a) => (a as { name?: string }).name === "VALUE") as { type: string; pick?: { kind: string; ref?: string; role?: string } };
+  assert.deepEqual([value.pick?.kind, value.pick?.ref, value.pick?.role], ["ref", "item", "weapon"]);
 });

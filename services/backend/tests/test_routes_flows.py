@@ -493,3 +493,19 @@ def test_world_reads_are_rate_limited(make: Make) -> None:
     assert codes[:60] == [200] * 60 and codes[60] == 429
     # the map list (round 21) reads files too: the same budget
     assert client.get("/flows/maps?source=sample", headers=H).status_code == 429
+
+
+def test_role_items_lists_the_kbs_weapons_and_heal_items_by_name(tmp_path: Path) -> None:
+    """roles-not-names.md step 2: the catalogue's role_items (an item setting's picker)."""
+    from poring_backend import routes_flows as rf
+
+    kb = tmp_path / "kb"
+    kb.mkdir()
+    (kb / "items.json").write_text(json.dumps({
+        "1301": {"name": "b axe", "type": "weapon"}, "1201": {"name": "a knife", "type": "weapon"},
+        "505": {"name": "c potion", "type": "healing"}, "909": {"name": "d thing", "type": "misc"},
+    }))  # fmt: skip
+    got = rf.role_items(kb)
+    assert got == {"weapon": [{"id": 1201, "label": "a knife"}, {"id": 1301, "label": "b axe"}],
+                   "heal": [{"id": 505, "label": "c potion"}]}  # fmt: skip
+    assert rf.role_items(tmp_path / "none") == {"weapon": [], "heal": []}  # no KB: empty lists

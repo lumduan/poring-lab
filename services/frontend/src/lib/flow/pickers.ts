@@ -56,6 +56,7 @@ export type RefKind =
   | "map" // a map name (GET /flows/maps; the project's maps)
   | "save_map" // a map for the save point: the maps with a Kafra first
   | "stop" // a stop reason (the project's, then the usual ones)
+  | "item" // an item of a role setting (`role`: "weapon" | "heal"; the catalogue's role_items)
   | "node" // a map node of the project (an exit's arrival)
   | "entry" // an entry of the node the block's TO_BLOCK names
   | "window" // an L2 window (the catalogue's `windows`)
@@ -536,6 +537,8 @@ export function refChoices(spec: Extract<PickSpec, { kind: "ref" }>, data: Picke
     }
     case "window":
       return (data.catalogue?.windows ?? []).map((w) => ({ value: w, label: w.replaceAll("_", " "), group: "windows" }));
+    case "item":
+      return (data.catalogue?.role_items?.[spec.role ?? ""] ?? []).map((i) => ({ value: String(i.id), label: i.label, note: `item ${i.id}`, group: spec.role ?? "items" }));
     case "server":
       return (data.catalogue?.servers ?? []).map((s) => ({ value: s.id, label: s.id, note: `${s.status}${s.lab ? " · the lab's" : ""}`, group: "servers" }));
     case "variable":
@@ -555,6 +558,7 @@ const TYPED: Record<RefKind, { re: RegExp; why: string } | null> = {
   node: { re: NAME, why: "a node's name" },
   entry: { re: NAME, why: "an entry's name" },
   window: { re: /^[a-z][a-z0-9_]{0,47}$/, why: "a window name: small letters, digits and _" },
+  item: { re: /^[0-9]{1,6}$/, why: "an item's number" },
   server: { re: KEY, why: "a server's id" },
   variable: { re: NAME, why: "a variable's name: letters, digits and _, a letter first" },
 };

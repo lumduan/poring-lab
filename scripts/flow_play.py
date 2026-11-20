@@ -832,7 +832,8 @@ class HuntCore:
                 self.learned = True
                 self.learn_fn(player)
             a = args_fn(argv)
-            with player_owns_the_start(dh, warn):  # never refuses on them (Batt 2026-11-19)
+            # never refuses on them (Batt 2026-11-19); the player's role items (step 2)
+            with player_owns_the_start(dh, warn), role_items(dh, plan.vals):
                 res.rc = run_fn(a, hook=hook, session=(player.io.agent, player.io.screen), **box)
         except SystemExit as e:  # its preamble's refusal, or ro_agent.Stop inside its session
             res.error = str(e)[:400] or "the runner stopped"
@@ -1676,7 +1677,11 @@ def runner_check(plan: RunnerPlan, *, run_fn: Callable[..., int] | None = None) 
     try:
         dh.no_input_guard()
         a = dh.args_for(plan.argv(CHECK_LABEL, None, None), cmd="check")
-        with contextlib.redirect_stdout(buf), player_owns_the_start(dh, print):
+        with (
+            contextlib.redirect_stdout(buf),
+            player_owns_the_start(dh, print),
+            role_items(dh, plan.vals),
+        ):
             try:
                 (run_fn or dh.run)(a)
             except SystemExit as e:
@@ -1758,6 +1763,56 @@ def knife_swap_off(prep: Prepared, got: Mapping[str, Any]) -> list[str]:
                 "and the dagger worn for it"
             )
     return out
+
+
+# roles-not-names.md step 2 (Batt 2026-11-20: "make it WEAPON, so other classes can use it"): the
+# items of two roles are the player's picks (settings swap_item / heal_item; ours the defaults).
+# The runner keeps them in module tables it reads when used (SLOT_ROLES' "opener" / "potion",
+# STOCK_ITEMS' "potion", HEAL_ORDER), so for the length of one check or hunt core they are swapped
+# here -- the runner file is unchanged (byte-pinned) and a Run at the defaults sees its own tables.
+def item_name(iid: int, kb: Path = ROOT / "data" / "kb" / "items.json") -> str:
+    """The item's display name (the local KB: run-time data, never committed), else "item N"."""
+    try:
+        name = (json.loads(kb.read_text()).get(str(iid)) or {}).get("name")
+    except (OSError, ValueError):
+        name = None
+    return str(name) if name else f"item {iid}"
+
+
+def role_tables(dh: Any, vals: Mapping[str, Any],
+                name: Callable[[int], str] = item_name) -> dict[str, Any]:  # fmt: skip
+    """PURE but for the names: the runner's tables with the picked role items in them -- the
+    same objects when every pick is the runner's own (an identity Run)."""
+    out: dict[str, Any] = {"SLOT_ROLES": dh.SLOT_ROLES, "STOCK_ITEMS": dh.STOCK_ITEMS,
+                           "HEAL_ORDER": dh.HEAL_ORDER}  # fmt: skip
+    weapon, heal = vals.get("swap_item"), vals.get("heal_item")
+    roles = dict(dh.SLOT_ROLES)
+    if isinstance(weapon, int) and weapon not in roles["opener"].items:
+        w = name(weapon)
+        roles["opener"] = dh.SlotRole((weapon,), f"the idle weapon ({w})",
+                                      f"set the idle weapon's key to the {w}'s slot")  # fmt: skip
+    if isinstance(heal, int) and heal not in roles["potion"].items:
+        h = name(heal)
+        roles["potion"] = dh.SlotRole((heal,), f"the heal item ({h})",
+                                      f"set the heal item's key to the {h}'s slot")  # fmt: skip
+        out["STOCK_ITEMS"] = {**dh.STOCK_ITEMS, "potion": heal}
+        out["HEAL_ORDER"] = tuple((r, heal if r == "potion" else i) for r, i in dh.HEAL_ORDER)
+    if roles != dh.SLOT_ROLES:
+        out["SLOT_ROLES"] = roles
+    return out
+
+
+@contextlib.contextmanager
+def role_items(dh: Any, vals: Mapping[str, Any]) -> Iterator[None]:
+    """The picked role items in the runner's tables for the block's duration, then restored."""
+    saved = {k: getattr(dh, k) for k in ("SLOT_ROLES", "STOCK_ITEMS", "HEAL_ORDER")}
+    for k, v in role_tables(dh, vals).items():
+        setattr(dh, k, v)
+    try:
+        yield
+    finally:
+        for k, v in saved.items():
+            setattr(dh, k, v)
 
 
 @contextlib.contextmanager

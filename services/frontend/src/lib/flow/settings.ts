@@ -14,7 +14,7 @@ import type { Lit } from "./ir.ts";
 import type { Project, Tab } from "./project.ts";
 import { SETTINGS_REGISTRY } from "./settings.gen.ts";
 
-export type SettingKind = "key" | "share" | "number" | "int" | "point" | "point_or_none" | "switch" | "choice";
+export type SettingKind = "key" | "share" | "number" | "int" | "point" | "point_or_none" | "switch" | "choice" | "item";
 export type SettingValue = string | number | boolean;
 export type SettingField = {
   name: string; // the runner's name ("knife_hp_min", "vt.D0_PX")
@@ -34,6 +34,8 @@ export type SettingField = {
   needs: [string, SettingValue][];
   default: SettingValue;
   find: string[]; // the words the block search finds it by (its group's and its own)
+  // roles-not-names.md step 2: an optional block (offered and found; a box holds it only when set)
+  optional?: boolean;
 };
 export type SettingGroup = { id: string; title: string; note: string };
 export type SettingsRegistry = { version: number; groups: SettingGroup[]; fields: SettingField[]; keys: string[]; game_px: number[]; tabs: string[]; singular: Record<string, string>; runner_maps: string[] };
@@ -73,6 +75,7 @@ export const settingValueText = (f: SettingField, v: SettingValue): string => wi
 
 /** PURE: why ``v`` cannot be the setting's value (null: it can) -- poring_flow.settings.problem_of. */
 export function settingProblem(f: SettingField, v: unknown): string | null {
+  if (f.kind === "item") return typeof v === "number" && Number.isInteger(v) && v > 0 ? null : `${f.words}: ${String(v)} is not an item (its number)`;
   if (f.kind === "switch") return typeof v === "boolean" ? null : `${f.words}: not on or off`;
   if (f.kind === "choice") return f.options.includes(String(v)) && typeof v === "string" ? null : `${f.words}: ${String(v)} is not one of ${f.options.join(", ")}`;
   if (f.kind === "key") return SETTINGS.keys.includes(String(v)) ? null : `the ${f.words}'s key ${String(v)} is not a row-1 hotbar key (F1-F9)`;
@@ -111,6 +114,7 @@ export function withSettingTabs(tabs: Tab[], values: Record<string, SettingValue
   const out = tabs.map((t) => ({ ...t, vars: { ...t.vars } }));
   for (const f of SETTING_BLOCKS) {
     if (!only(f)) continue;
+    if (f.optional && (values[f.name] ?? f.default) === f.default) continue; // held only when set
     let t = out.find((x) => x.name === f.group);
     if (!t) {
       t = { name: f.group, main: null, defs: [], vars: {} };
@@ -346,6 +350,7 @@ export function settingFields(f: SettingField, v: SettingValue): Record<string, 
       return { VALUE: v === true ? "on" : "off" };
     case "choice":
     case "key":
+    case "item": // the item's number; the picker shows its name
       return { VALUE: String(v) };
     case "share":
       return { VALUE: tidy(Number(v) * 100) };
@@ -376,6 +381,11 @@ export function settingFromFields(f: SettingField, fields: Record<string, unknow
     case "key":
       v = String(fl.VALUE ?? "");
       break;
+    case "item": {
+      const t = String(fl.VALUE ?? "").trim();
+      v = /^[0-9]{1,6}$/.test(t) ? Number(t) : t;
+      break;
+    }
     case "share":
       v = tidy(Number(fl.VALUE) / 100);
       break;

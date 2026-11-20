@@ -97,7 +97,8 @@ def test_the_xmas_dun02_fixture_is_one_box_and_says_what_batt_asked() -> None:
     # every one at its default, but the five the box's own events and functions play (matpilot
     # round 20 #4a: project.ts BOX_PLAYS_THEM, test_settings.py)
     gone = {"potion_below", "fly_below", "weight_home", "respawn_at", "respawn_confirm_at"}
-    assert shown == {f.var: (f.group, f.default) for f in st.BLOCKS if f.name not in gone}
+    assert shown == {f.var: (f.group, f.default) for f in st.BLOCKS
+                     if f.name not in gone and not f.optional}  # fmt: skip  (held only when set)
     assert not x.tabs[0].vars and not x.tabs[1].vars  # main and the keys hold no setting
     save, model, hunt, stop = x.main
     # stage 4a (live-blocks.md 3.4): the trained data before the hunt core

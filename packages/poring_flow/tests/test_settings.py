@@ -71,7 +71,9 @@ def test_the_one_box_holds_every_setting_block_it_uses_at_its_default_in_its_gro
     p = P.from_json(XMAS.read_text())
     (x,) = p.nodes
     got = {k: (t.name, v.value) for t in x.tabs for k, v in t.vars.items()}
-    assert got == {f.var: (f.group, f.default) for f in st.BLOCKS if f.name not in BOX_PLAYS_THEM}
+    # an OPTIONAL block (roles-not-names.md step 2: the role items) is held only when set
+    assert got == {f.var: (f.group, f.default) for f in st.BLOCKS
+                   if f.name not in BOX_PLAYS_THEM and not f.optional}  # fmt: skip
     # 117 since live-blocks 18 (fly_first, dungeon@9.57); 118 since 18.11 (fly_first_hp, 9.58);
     # 120 since 18.17 (fly_first_land and FF_LAND_S, 9.60)
     assert len(got) == 120 and not any(f.var in got for f in st.FIELDS if not f.block)
@@ -356,7 +358,7 @@ def test_the_block_search_finds_every_setting_by_its_groups_words() -> None:
     """matpilot round 20 #5: "knife" found 3 of the 6 knife settings."""
     knife = [f.name for f in st.BLOCKS if "knife" in f.find]
     assert knife == [f.name for f in st.BLOCKS if f.group == "knife"]
-    assert len(knife) == 6
+    assert len(knife) == 7  # 7 since 2026-11-20: swap_item (the idle weapon, an optional block)
     for f in st.BLOCKS:
         assert f.group in f.find and len(set(f.find)) == len(f.find), f.name
     assert {"garm"} <= set(st.BY_NAME["alarm_fast"].find)
@@ -371,3 +373,17 @@ def test_every_kind_reads_back_the_value_it_shows() -> None:
         assert st.problem_of(f, f.default) is None
         assert st.norm(f, f.default) == f.default or f.kind in ("number", "share")
         assert st.comment(f, f.default).startswith(f"# {f.words}")
+
+
+def test_an_item_setting_takes_the_flows_item_value() -> None:
+    """roles-not-names.md step 2: swap_item / heal_item hold item(ID) (ours: 1201, 504)."""
+    f = {x.name: x for x in st.FIELDS}
+    w, h = f["swap_item"], f["heal_item"]
+    assert (w.kind, w.default, h.default) == ("item", 1201, 504)
+    assert not w.tune and w.block and w.group == "knife" and h.group == "survival"
+    assert st.problem_of(w, {"kind": "item", "id": 1301}) is None
+    assert st.problem_of(w, 1301) is None
+    assert st.problem_of(w, "axe") and st.problem_of(w, 0) and st.problem_of(w, True)
+    assert st.norm(w, {"kind": "item", "id": 1301}) == 1301
+    assert st.lit_value(h, {"kind": "item", "id": 505}) == 505
+    assert "item's number" in st.comment(w, 1201)

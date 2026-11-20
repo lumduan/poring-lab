@@ -253,6 +253,9 @@ export interface CatalogueDoc {
   /** the login block's servers (config/environments.yaml: id, status, the lab's): its picker */
   servers?: { id: string; status: string; lab: boolean }[];
   tab_name_rule?: { pattern: string; refused: string[] };
+  // roles-not-names.md step 2: the items a role setting may pick (the local KB: the weapons, the
+  // heal items), each its number and name
+  role_items?: Record<string, { id: number; label: string }[]>;
 }
 
 /** The Python view of a project: one file per tab. */

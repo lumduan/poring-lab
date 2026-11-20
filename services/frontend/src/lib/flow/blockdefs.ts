@@ -645,6 +645,9 @@ export function ownLabelRows(d: BlockDef): BlockDef {
  * the pl_setting extension, blockly-register.ts); and SETTING_NOTE_ROWS rows the editor fills with
  * the lint's "not used" words (hidden while empty). The IR is a plain variable of the tab:
  * `knife_hp_min = 0.5`. Only VALUE, X, Y and AT are saved: every label is a decoration. */
+/** roles-not-names.md step 2: which list of the catalogue's role_items an item setting picks from. */
+const ITEM_ROLES: Record<string, string> = { swap_item: "weapon", heal_item: "heal" };
+
 export function settingDef(f: SettingField): BlockDef {
   const rows = settingRows(f);
   const args: ArgDef[] = [];
@@ -676,6 +679,9 @@ export function settingDef(f: SettingField): BlockDef {
       break;
     case "point":
       args.push(...xy);
+      break;
+    case "item": // roles-not-names.md step 2: an item picked from the role's list (its number kept)
+      args.push({ type: PICK_TEXT, name: "VALUE", text: String(f.default), pick: { kind: "ref", ref: "item", title: f.words, role: ITEM_ROLES[f.name] ?? "" } });
       break;
     case "point_or_none":
       args.push({ type: "field_dropdown", name: "AT", options: [["at", "at"], ["none", "none"]] }, endRow("ROW_AT"), ...xy);

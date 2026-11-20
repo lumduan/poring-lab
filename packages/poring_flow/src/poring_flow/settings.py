@@ -38,7 +38,7 @@ from typing import Any
 VERSION = 3  # 2026-11-14: the settings are blocks (2: the config file, 1: survival.json)
 GAME_PX = (1280, 720)  # the game picture: a point lies inside it
 KEYS = tuple(f"F{i}" for i in range(1, 10))  # hotbar row 1: the keys the runner reads
-KINDS = ("key", "share", "number", "int", "point", "point_or_none", "switch", "choice")
+KINDS = ("key", "share", "number", "int", "point", "point_or_none", "switch", "choice", "item")
 # A setting's PROJECT VARIABLE name where it is not the field's own (stated in ONE place): a
 # dotted runner constant is no variable name, and two field names are catalogue names (a block
 # loot(t), the built-in respawn), which a variable may not take.
@@ -80,11 +80,14 @@ class Field:
     # matpilot round 20 #5: the words the block search finds it by besides its own (its group's,
     # FIND_GROUP, and its own, FIND)
     find: tuple[str, ...] = ()
+    # roles-not-names.md step 2: an OPTIONAL block -- offered and found, but a box holds it only
+    # when a person sets it (absent = the default), so the ready-made boxes stay as they were
+    optional: bool = False
 
     @property
     def tune(self) -> bool:
         """A runner constant set with --tune (no flag of its own, and no switch)."""
-        return not self.flag and self.kind not in ("switch", "choice")
+        return not self.flag and self.kind not in ("switch", "choice", "item")
 
     @property
     def var(self) -> str:
@@ -107,7 +110,11 @@ class Field:
 GROUPS: tuple[tuple[str, str, str], ...] = (
     ("keys", "hotbar keys", "each its own row-1 key, as on her hotbar"),
     ("survival", "heal and escape", "when she drinks, when she flies away"),
-    ("knife", "the weapon swap", "Batt's technique: an idle weapon at rest, the fighting weapon back on"),
+    (
+        "knife",
+        "the weapon swap",
+        "Batt's technique: an idle weapon at rest, the fighting weapon back on",
+    ),
     ("exits", "leaving the map", "when the bag sends her home"),
     ("respawn", "the respawn", "after a death: respawn or not, and the waits"),
     ("start", "the start", "what she needs before the first step"),
@@ -126,8 +133,20 @@ FIELDS: tuple[Field, ...] = (
     Field("heal_key", "keys", "key", "heal item", flag="--heal-key"),
     Field("fly_key", "keys", "key", "Fly Wing", flag="--fly-key"),
     Field("home_key", "keys", "key", "Butterfly Wing", flag="--player-home-key"),
-    Field("knife_key", "keys", "key", "the idle weapon (the swap's)", flag="--steal-opener"),
-    Field("dagger_key", "keys", "key", "the fighting weapon", flag="--dagger-key"),
+    Field("knife_key", "keys", "key", "idle weapon (the swap's)", flag="--steal-opener"),
+    Field("dagger_key", "keys", "key", "fighting weapon", flag="--dagger-key"),
+    # roles-not-names.md step 2 (Batt 2026-11-20: "make it WEAPON, so other classes can use it"):
+    # the ITEMS of two roles, picked by the player; ours are the defaults. Never a runner flag: the
+    # live player (flow_play.role_items) puts them in the runner's own tables for one Run
+    Field(
+        "swap_item",
+        "knife",
+        "item",
+        "the idle weapon (the swap's item)",
+        find=("weapon", "knife", "axe", "sword"),
+        optional=True,
+    ),  # fmt: skip
+    Field("heal_item", "survival", "item", "the heal item", find=("potion", "heal"), optional=True),
     Field(
         "knife_max_s",
         "knife",
@@ -555,7 +574,9 @@ FIELDS: tuple[Field, ...] = (
 _ON, _OFF = True, False
 SWITCHES: tuple[Field, ...] = (
     # the Knife swap
-    Field("knife_swap", "knife", "switch", "the weapon swap (Batt's technique)", flag="--bare-steal"),
+    Field(
+        "knife_swap", "knife", "switch", "the weapon swap (Batt's technique)", flag="--bare-steal"
+    ),
     Field(
         "bare_ready",
         "knife",
@@ -995,6 +1016,7 @@ SWITCHES: tuple[Field, ...] = (
 # the value settings that are in use only with a technique on
 _NEEDS: dict[str, tuple[tuple[str, Any], ...]] = {
     "knife_key": (("knife_swap", _ON),),
+    "swap_item": (("knife_swap", _ON),),
     "dagger_key": (("knife_swap", _ON),),
     "knife_max_s": (("knife_swap", _ON),),
     "knife_hp_min": (("knife_swap", _ON),),
@@ -1025,6 +1047,9 @@ DEFAULTS: dict[str, Any] = {
     "home_key": "F9",
     "knife_key": "F4",
     "dagger_key": "F5",
+    # roles-not-names.md step 2: the role items (the runner's own SLOT_ROLES / STOCK_ITEMS ids)
+    "swap_item": 1201,  # the Knife
+    "heal_item": 504,  # the White Potion
     # the Run settings (dungeon@9.41-9.43): the heal and escape numbers are --strategy P2's own
     "knife_max_s": 8.0,
     "knife_hp_min": 0.50,
@@ -1308,8 +1333,20 @@ def _on_grid(v: float, f: Field) -> bool:
     return f.step <= 0 or abs(v / f.step - round(v / f.step)) < 1e-6
 
 
+def item_id(v: Any) -> int | None:
+    """PURE: an item setting's id: from the flow's item value ({"kind": "item", "id": N}, the
+    Python view's item(N)) or a plain id; None when it is neither."""
+    if isinstance(v, dict) and v.get("kind") == "item":
+        v = v.get("id")
+    if isinstance(v, bool) or not isinstance(v, int) or v <= 0:
+        return None
+    return v
+
+
 def problem_of(f: Field, v: Any) -> str | None:
     """PURE: why ``v`` cannot be ``f``'s value (None: it can)."""
+    if f.kind == "item":
+        return None if item_id(v) is not None else f"{f.words}: {v!r} is not an item (item(ID))"
     if f.kind == "switch":
         return None if isinstance(v, bool) else f"{f.words}: {v!r} is not on or off (True / False)"
     if f.kind == "choice":
@@ -1336,6 +1373,8 @@ def problem_of(f: Field, v: Any) -> str | None:
 
 def norm(f: Field, v: Any) -> Any:
     """A valid value in its one spelling (an int a whole number, a number rounded to 4 places)."""
+    if f.kind == "item":
+        return item_id(v)
     if f.kind in ("switch", "choice"):
         return v
     if f.kind in ("key", "point", "point_or_none"):
@@ -1503,6 +1542,8 @@ def argv(vals: Mapping[str, Any]) -> list[str]:
         if f.name not in vals or not in_use(f.name, vals):
             continue
         v = vals[f.name]
+        if f.kind == "item":  # the live player applies it (flow_play.role_items), never a flag
+            continue
         if f.kind == "switch":
             if v and f.flag:
                 out.append(f.flag)
@@ -1592,6 +1633,8 @@ def with_setting_tabs(tabs: Sequence[Mapping[str, Any]], values: Mapping[str, An
     for f in BLOCKS:
         if only is not None and not only(f):
             continue
+        if f.optional and (values or {}).get(f.name, f.default) == f.default:
+            continue  # an optional block: held only when it is set (absent = the default)
         t = next((x for x in out if x.get("name") == f.group), None)
         if t is None:
             t = {"name": f.group, "main": None, "defs": [], "vars": {}}
@@ -1624,13 +1667,18 @@ def comment(f: Field, v: Any) -> str:
         how = shown(f, v) if problem_of(f, v) is None else "a share: 0.5 = 50 %"
     elif f.kind in ("point", "point_or_none"):
         how = '"X,Y" in the game picture' + (' or "none"' if f.kind == "point_or_none" else "")
+    elif f.kind == "item":
+        how = "the item's number in the game's item table"
     else:
         how = unit_of(f, v)
     return f"# {f.words}" + (f" ({how})" if how else "")
 
 
 def lit_value(f: Field, v: Any) -> Any:
-    """A value as a project literal holds it: a number or a share a float, an int an int."""
+    """A value as a project literal holds it: a number or a share a float, an int an int, an item
+    its id (the block's picker shows its name)."""
+    if f.kind == "item":
+        return item_id(v)
     if f.kind in ("number", "share") and isinstance(v, (int, float)) and not isinstance(v, bool):
         return float(v)
     return v
@@ -1648,6 +1696,7 @@ def registry() -> dict[str, Any]:
                 "group": f.group,
                 "block": f.block,
                 "kind": f.kind,
+                "optional": f.optional,
                 "words": f.words,
                 "lo": f.lo,
                 "hi": f.hi,

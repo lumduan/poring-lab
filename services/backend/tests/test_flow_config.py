@@ -81,6 +81,8 @@ def test_every_setting_has_a_valid_default_and_the_run_flows_are_todays() -> Non
         "fly_first_land": False, "boss_walk": False,
         "unread_step": False,
         "box_detector": "gpu", "hud": True, "hud_fast": 0.2,
+        # roles-not-names.md step 2 (2026-11-20): the role items the live player applies
+        "swap_item": 1201, "heal_item": 504,
     }  # fmt: skip
     got = fr.FLOWS["xmas_dun02_rogue"].defaults
     assert got == today and list(got) == [f.name for f in fc.FIELDS if not f.tune]
@@ -195,7 +197,8 @@ def test_keys_clash_and_the_flags() -> None:
     ok = {"heal_key": "F1", "fly_key": "F8", "home_key": "F9", "knife_key": "F4",
           "dagger_key": "F5", "knife_swap": True}  # fmt: skip
     assert fc.clash(ok) is None
-    assert "the Knife and the dagger are both on F4" in str(fc.clash({**ok, "dagger_key": "F4"}))
+    words = "the idle weapon (the swap's) and the fighting weapon are both on F4"  # roles, 11-20
+    assert words in str(fc.clash({**ok, "dagger_key": "F4"}))
     vals = {**ok, "weight_home": 0.5, "weight_exit": True, "knife_max_s": 8.0, "fly_rate": 150,
             "LOOT_TRIM_HOVERS": 12, "loot": "trim", "vt.D0_PX": 200, "value_target": True,
             "respawn_confirm_at": "none", "respawn": True}  # fmt: skip

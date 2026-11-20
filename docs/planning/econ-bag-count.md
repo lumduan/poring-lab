@@ -121,3 +121,36 @@ runs T2-T6 again from the start.
   - 16.8 s for 28 entries.
 - **Never twice:** an item in two tabs = a click that did not take. The tab is clicked again,
   else those slots are unread.
+
+## Amendment 2 (2026-11-20 15:23 ICT from `date`): take 2 FAILS B1 twice; two reader fixes; take 3 runs T2-T6 again
+
+Take 2's truth was right this time: the database after the autosave settled, so a silently failed
+add (`@item 601 199`, items 927 / 933) simply is not in it.
+
+| trial | entries | B1 | B2 | B3 | B4 | |
+|---|---|---|---|---|---|---|
+| T2 | 16 | pass | 16/16 | pass | 16.3 s | |
+| T3 | 37 (Etc 30) | pass | 37/37 | pass | 18.7 s | |
+| T4 | 19 | pass | 19/19 | pass | 16.0 s | |
+| T5 | 18 | **FAIL** | 17/18 | pass | **27.3 s** | 938 x123 read **12** |
+| T6 | 40 | **FAIL** | 39/40 | pass | 17.7 s | 909 x600 read **60** |
+
+- **The cause (measured on take 2's own frames):** a 3-digit count is drawn from x+14 to x+33
+  ("123" = 15-19, 21-26, 28-33), but the band stopped at x+28. Its last digit was cut and the rest
+  read as a shorter number. A 4-digit count ENDS at x+26 ("1000" = 1-26), and the next slot's
+  4-digit count starts at our x+33.
+- **Fix 1:** `count_of_runs` reads only the measured shapes:
+  - 1 digit 14/15..19; 2 digits ..26; 3 digits ..33; 4 digits 0/1..26.
+  - The runs must be consecutive and all digits, with NO ink within 3 columns before or after the
+    group (a covered digit or a neighbour's: unread, never a shorter number).
+- **Fix 2:** moving the band to x-2 had also moved the icon compare mask (it reused the band's
+  start), so the count digits were compared as icon pixels. The mask now leaves out every column of
+  the count's rows.
+- **A replay of take 2's saved frames with the fixed reader** (NOT a trial; the frames that found
+  the bug): T2-T6 all right, 0 wrong, 0 unread; the worst distance 5.2, the nearest rival 18.5.
+- **A known limit, by design:** a 3-digit count (to x+33) touching the next slot's 4-digit count
+  (from its x+1 = our x+33) makes both unread; they are said, not guessed.
+- **T5's 27.3 s:** the host was loaded at that minute (my frontend test run in the container,
+  14:49). Take 3 runs with the host quiet.
+- **Take 3:** T2-T6 again, fresh bags with new counts (including 3-digit stacks), the same bar and
+  truth. Only when all five pass does the Run integration start.

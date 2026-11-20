@@ -214,6 +214,30 @@ def _envs(state: AppState) -> dict[str, str] | None:
     return project.environments(state.settings.environments_file)
 
 
+ROLE_ITEM_TYPES = {"weapon": ("weapon",), "heal": ("healing",)}  # the KB item types per role
+
+
+def role_items(kb: Path) -> dict[str, list[dict[str, Any]]]:
+    """roles-not-names.md step 2 (Batt 2026-11-20: "make it WEAPON"): per role, the local KB's
+    items of its types -- {"weapon": [{"id", "label"}, ...], "heal": [...]} by name; empty lists
+    when the KB is not built (run-time data, served like the world's labels, never stored)."""
+    try:
+        raw = json.loads((kb / "items.json").read_text())
+    except (OSError, ValueError):
+        raw = {}
+    out: dict[str, list[dict[str, Any]]] = {r: [] for r in ROLE_ITEM_TYPES}
+    for k, v in raw.items() if isinstance(raw, dict) else []:
+        if not (isinstance(v, dict) and str(k).isdigit()):
+            continue
+        t = str(v.get("type") or "").lower()
+        for role, types in ROLE_ITEM_TYPES.items():
+            if t in types:
+                out[role].append({"id": int(k), "label": str(v.get("name") or f"item {k}")})
+    for rows in out.values():
+        rows.sort(key=lambda r: (r["label"].lower(), r["id"]))
+    return out
+
+
 def _kb_root(state: AppState) -> Path:
     return Path(state.settings.data_dir) / "kb"
 
@@ -332,6 +356,8 @@ async def get_catalogue(
         doc = dict(editor.catalogue_doc(client=client, envs=_envs(state)))
         # B2: the hunt block's groups, rule versions and badges (config/flows/hunt, committed)
         doc["hunt_rules"], doc["hunt_rules_error"] = _hunt_rules(state)
+        # roles-not-names.md step 2: the items a role setting picks from (local data, never stored)
+        doc["role_items"] = role_items(_kb_root(state))
         return doc
 
     doc = dict(await _compute(request, state, build))

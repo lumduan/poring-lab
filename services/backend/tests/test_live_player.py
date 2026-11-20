@@ -1146,3 +1146,35 @@ def test_a_read_end_on_another_map_or_with_stop_pressed_ends_the_run(
             hunt=fp.HuntCore("r1", stop, run_fn=unread))  # fmt: skip
     ev2 = events(d)
     assert len(unread.calls) == 1 and ev2[-1]["reason"] == "stopped"
+
+
+# --- roles-not-names.md step 2 (Batt 2026-11-20): the player's role items in the runner's tables
+def test_role_items_at_the_defaults_leave_the_runners_tables_as_they_are() -> None:
+    from poring_flow import settings as st
+
+    got = fp.role_tables(dh, st.DEFAULTS, name=lambda i: f"item {i}")
+    assert got["SLOT_ROLES"] is dh.SLOT_ROLES and got["STOCK_ITEMS"] is dh.STOCK_ITEMS
+    assert got["HEAL_ORDER"] is dh.HEAL_ORDER
+
+
+def test_picked_role_items_are_swapped_in_for_the_block_then_restored() -> None:
+    from poring_flow import settings as st
+
+    before = (dh.SLOT_ROLES, dh.STOCK_ITEMS, dh.HEAL_ORDER)
+    vals = {**st.DEFAULTS, "swap_item": 1301, "heal_item": 505}
+    with fp.role_items(dh, vals):
+        assert dh.SLOT_ROLES["opener"].items == (1301,)
+        assert "the idle weapon" in dh.SLOT_ROLES["opener"].what
+        assert dh.SLOT_ROLES["potion"].items == (505,)
+        assert dh.STOCK_ITEMS["potion"] == 505 and dh.STOCK_ITEMS["fly"] == before[1]["fly"]
+        assert ("potion", 505) in dh.HEAL_ORDER
+        assert dh.SLOT_ROLES["fly"] is before[0]["fly"]  # the other roles are the runner's
+    assert before == (dh.SLOT_ROLES, dh.STOCK_ITEMS, dh.HEAL_ORDER)
+
+
+def test_item_settings_never_reach_the_runners_argv() -> None:
+    from poring_flow import settings as st
+
+    base = st.argv(st.DEFAULTS)
+    picked = st.argv({**st.DEFAULTS, "swap_item": 1301, "heal_item": 505})
+    assert base == picked and not any("item" in a and a != "--loot-items" for a in base)
