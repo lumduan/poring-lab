@@ -556,3 +556,24 @@ Fixed now, so section 8 is scored as 720's was (xmas02-detector.md M6 / S4 / S7.
 - **9. Then:** the worker stopped (verified), the results here, the run archived to the NAS
   (`guarded_build.py archive:`), the scratch shipped the same day. 8c (the play block) only after
   8a and 8b pass; deployment is Batt's decision.
+
+### Amendment 14 (2026-11-20 17:59 ICT from `date`, BEFORE the freeze and before any held-out read): Batt's play is the bar
+
+- **Batt 2026-11-20 ~18:0x** (from his phone, after the report's "the scores against the 720
+  bars"): "เอาการเล่นฉันเป็นเกณฑ์" ("use my play as the bar"). It restates his 11-12 rule: his own
+  run is the bot's bar, and the bot is reported as a share of it.
+- **His run:** `20261112T214008-demo-human-demo-xmas02` (rogue-xmas02.md 4DK; on /economy as
+  `batt-xmas02-20261112`): 30.5 min, 228.5 kills/h, common z/h 135,737, gross OC 173,601, 0
+  deaths. It was played at the lab's 720 window; no human run at 1080 exists.
+- **What changes, decided before any held-out read:**
+  - 8a and 8b are UNCHANGED. They are the detector's floors (recall, precision, alarms, latency):
+    they say nothing about play, and they only gate the play block.
+  - 8c's HEADLINE becomes the share of his run, on the same rulers (series_score.py,
+    time_budget.py compare --target his sid --live 1830, econ_dash): kills/h, loot/h and z/h of
+    each 1080 run AND of the s11scr-720 A runs, each as a % of his.
+  - For scale (recorded before 8c runs): 720 A 129.2 kills/h = 56.5 % of his; 1080 B 72.9 =
+    31.9 %; B2 86.9 = 38.0 % (screen-size-ab.md).
+  - The registered verdict line (SAME as 720 at -2 SE) stays, so the block is judged as planned.
+    A pass line in HIS terms (e.g. ">= N % of his kills/h") needs Batt's number. It was asked on
+    2026-11-20; until he gives it, 8c reports his share beside the registered verdict.
+  - Optional, Batt's choice: a human run of his at 1080 would make the bar like for like.
