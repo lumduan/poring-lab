@@ -724,6 +724,32 @@ def tray_strip() -> tuple[int, int, int, int]:
     return w - 380, h - 36, 340, 22
 
 
+def box_of(img: np.ndarray, x: int, y: int, w: int, h: int) -> np.ndarray:
+    """PURE: ``img[y:y+h, x:x+w]`` as a whole (h, w) box, the parts outside ``img`` 0 (black).
+
+    2026-11-21 (Batt's live Run 11202100, hunt 2's code error): a monster box at the top of the
+    1080 screen put the cursor reader's 64 x 64 crop above the frame; the slice gave NO rows (a
+    negative start), shape (0, 64), and the reader stopped the hunt core. Every grab now returns
+    the size it was asked for: what lies off the frame is black, never a cursor or a unit."""
+    out = np.zeros((h, w, *img.shape[2:]), dtype=img.dtype)
+    ih, iw = img.shape[:2]
+    x0, y0, x1, y1 = max(x, 0), max(y, 0), min(x + w, iw), min(y + h, ih)
+    if x1 > x0 and y1 > y0:
+        out[y0 - y : y1 - y, x0 - x : x1 - x] = img[y0:y1, x0:x1]
+    return out
+
+
+def desktop_clip(x: int, y: int, w: int, h: int, size: tuple[int, int] | None
+                 ) -> tuple[int, int, int, int]:  # fmt: skip
+    """PURE: a desktop box clipped to the desktop: its top-left at 0 or more, and its far edges
+    inside ``size`` when the size is known (None: only the top-left edge is clipped)."""
+    x0, y0 = max(x, 0), max(y, 0)
+    x1, y1 = x + w, y + h
+    if size is not None:
+        x1, y1 = min(x1, size[0]), min(y1, size[1])
+    return x0, y0, x1 - x0, y1 - y0
+
+
 class Screen:
     def __init__(self) -> None:
         self.proc = subprocess.Popen(
@@ -774,7 +800,19 @@ class Screen:
             local = ClientView((0, 0, rw, rh), view.mode, view.world_scale, view.world_centre,
                                view.panels)  # fmt: skip
             vf = local.virtual_frame(real)
-            return t, np.ascontiguousarray(vf[y : y + h, vx : vx + w]), frame_id, path
+            return t, box_of(vf, vx, y, w, h), frame_id, path
+        clip = desktop_clip(x, y, w, h, _DESKTOP)
+        if clip != (x, y, w, h):  # 2026-11-21: a box off the desktop's edge (box_of)
+            cx, cy, cw, ch = clip
+            if cw <= 0 or ch <= 0:
+                t, _, frame_id, path = self._grab_raw(0, 0, 1, 1)
+                return t, np.zeros((h, w, 4), np.uint8), frame_id, path
+            t, sub, frame_id, path = self._grab_raw(cx, cy, cw, ch)
+            return t, box_of(sub, x - cx, y - cy, w, h), frame_id, path
+        return self._helper_grab(x, y, w, h)
+
+    def _helper_grab(self, x: int, y: int, w: int, h: int) -> tuple[int, np.ndarray, int, str]:
+        """One desktop box from the backend's grab helper (the box inside the desktop)."""
         assert self.proc.stdin is not None and self.proc.stdout is not None
         self.proc.stdin.write(f"{x} {y} {w} {h}\n".encode())
         self.proc.stdin.flush()

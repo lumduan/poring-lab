@@ -331,3 +331,21 @@ A count under its minimum is NO VERDICT, never a pass.
   - So **stagings at 1080 (ifs1..ifs3, held-out ifsH1) follow the chain.** T-I5 passed; immunity
     is toggled and JUDGED on a frame before each one, and off again after it.
   - Unattended stagings cannot judge immunity, so they wait for the morning.
+
+### Amendment 7 (2026-11-21 00:28 ICT from `date`): thin TRAIN pilots are judged together
+
+- **ifT2** (24.2 min, shipped): G2 **NOT_ENOUGH**, 15 clear fits (3 floor items; median |dx|
+  1.0, |dy| 1.0 px). **ifT3** (25.3 min, shipped): G2 **NOT_ENOUGH**, 8 fits (2 floor items;
+  2.0, 3.0 px). Neither is admitted by the plan's rule ("each admitted by its own G2").
+  - ifH1 (held-out) played 18.8 min, rc 0, shipped; it is never labelled before T-eval.
+- **The rule from now on**, written before any pooled number is computed (the two per-pilot
+  medians above were seen):
+  - after the chain, the TRAIN label files whose OWN G2 is NOT_ENOUGH are judged TOGETHER:
+    their clear fits pooled, the same bar (median |dx|, |dy| <= 3 px on >= 30 fits);
+  - PASS admits every one of them; FAIL or NOT_ENOUGH admits none;
+  - a file whose own G2 PASSes is admitted alone (ifT1); one whose own G2 FAILs is never pooled;
+  - the pool is one frozen params sha (ad268afd...) and TRAIN only, else it is refused.
+  - Why: the 30-fit minimum is for a stable median; natural pilots pick their loot up in seconds
+    and give 8-15 clear fits each, so no single one can reach it.
+- Built: `fi_labels.py g2 --pool` (`pooled_g2`, its test), on branch cursor-p1; it merges after
+  the chain with the cursor fix (no code change on main while the chain runs).

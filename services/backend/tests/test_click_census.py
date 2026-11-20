@@ -39,6 +39,10 @@ ALLOWED = {
     "scripts/walk11.py": (3, "walk@11 RULE: walk@10's three + the click-instant unit gate"),
     "scripts/idle_click.py": (1, "idle@1 (3.23): the deliberate walk click after two WALK reads, "
                                  "as walk@12 makes it; the signboard hit-area case"),
+    "scripts/cursor_probe_1080.py": (1, "cursor-1080.md P1/P2 (the lab, immune): a walk click "
+                                        "on open ground after two WALK-arrow reads "
+                                        "(cursor_sword's CLEAR by the arrow, never the hand); "
+                                        "its monster hovers move only"),
     "scripts/walk12.py": (3, "walk@12 RULE: walk@11's three, on work-zone points only, with the "
                              "TALK-cell block"),
     "scripts/talk1.py": (2, "talk@1 (3.30): UI clicks only -- LiveIo.click (NEXT, CLOSE, a menu "

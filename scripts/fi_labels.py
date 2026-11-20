@@ -1381,17 +1381,56 @@ def cmd_freeze_v2(a: argparse.Namespace) -> dict[str, Any]:
             "frozen_at": doc["frozen_at"], "commit": doc["commit"]}  # fmt: skip
 
 
+def pooled_g2(docs: Sequence[Mapping[str, Any]]) -> dict[str, Any]:
+    """PURE (xmas02-items-1080.md Amendment 7, 2026-11-21): the TRAIN label files whose OWN G2
+    is NOT_ENOUGH (fewer than 30 clear fits: natural pilots pick their loot up in seconds) are
+    judged TOGETHER -- their clear fits pooled, the same bar (median |dx|, |dy| <= 3 px on >= 30
+    fits): PASS admits every one of them, FAIL or NOT_ENOUGH none. A file whose own G2 PASSes
+    is admitted on its own (not pooled); one whose own G2 FAILs is never pooled. Every pooled
+    file must be TRAIN at one frozen params sha (else the pool is refused)."""
+    own, pooled, refused = [], [], []
+    rows: list[dict[str, Any]] = []
+    for doc in docs:
+        g = g2_summary(g2_rows(doc["frames"], doc["session"]))
+        if g["verdict"] == "PASS":
+            own.append(doc["session"])
+        elif g["verdict"] == "FAIL":
+            refused.append(doc["session"])
+        else:
+            pooled.append(doc)
+            rows += g2_rows(doc["frames"], doc["session"])
+    shas = {d["params_sha256"] for d in pooled}
+    splits = {d["split"] for d in pooled}
+    out: dict[str, Any] = {"admitted_alone": own, "never_pooled": refused,
+                           "pooled": [d["session"] for d in pooled]}  # fmt: skip
+    if pooled and (len(shas) != 1 or splits != {"train"}):
+        return {
+            **out,
+            "verdict": "REFUSED",
+            "why": f"params {sorted(shas)}, splits {sorted(splits)}: one frozen sha, TRAIN",
+        }
+    summary = g2_summary(rows)
+    return {**out, **summary,
+            "admitted_by_pool": [d["session"] for d in pooled] if summary["verdict"] == "PASS"
+            else []}  # fmt: skip
+
+
 def cmd_g2(a: argparse.Namespace) -> dict[str, Any]:
     per = {}
+    docs = []
     for p in a.labels:
         doc = json.loads(p.read_text())
+        docs.append(doc)
         per[doc["session"]] = {"file": str(p), "split": doc["split"],
                                "params_sha256": doc["params_sha256"],
                                "floor_items_in_packets": doc["floor_items_in_packets"],
                                **g2_summary(g2_rows(doc["frames"], doc["session"]))}  # fmt: skip
-    return {"what": "O.6: the join rule's G2 per session (median |dx|, |dy| <= 3 px on >= 30 "
-                    "clear fits)", "checked_at": olf.now_ict(), "commit": olf.git_head(),
-            "per_session": per}  # fmt: skip
+    out = {"what": "O.6: the join rule's G2 per session (median |dx|, |dy| <= 3 px on >= 30 "
+                   "clear fits)", "checked_at": olf.now_ict(), "commit": olf.git_head(),
+           "per_session": per}  # fmt: skip
+    if getattr(a, "pool", False):
+        out["pooled"] = pooled_g2(docs)
+    return out
 
 
 # --- T-I2 (xmas02-items-1080.md 3 and 5): the 1080 constants, FITTED on ifF, then frozen ---------
@@ -2162,6 +2201,8 @@ def main(argv: Sequence[str] | None = None) -> int:
     p = sub.add_parser("g2")
     p.add_argument("labels", type=Path, nargs="+")
     p.add_argument("--out", type=Path, required=True)
+    p.add_argument("--pool", action="store_true",
+                   help="Amendment 7: the NOT_ENOUGH TRAIN files judged together")  # fmt: skip
     p = sub.add_parser("pack")
     p.add_argument("labels", type=Path, nargs="+")
     p.add_argument("--map", default="xmas_dun02", choices=MAP_NAMES)

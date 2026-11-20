@@ -209,6 +209,33 @@ def test_g2_clear_and_summary() -> None:
     assert fl.g2_summary([])["verdict"] == "NOT_ENOUGH"
 
 
+def test_thin_train_files_are_judged_together() -> None:
+    """Amendment 7: NOT_ENOUGH files pooled (all admitted on a PASS, none otherwise); a PASS
+    file stands alone; a FAIL file is never pooled; the pool is one frozen sha, TRAIN only."""
+
+    def doc(sid: str, dxs: list[int], sha: str = "f" * 64, split: str = "train") -> dict[str, Any]:
+        items = [{"floor_id": i % 5, "dx": d, "dy": -d, "ncc": 0.9, "g2_clear": True}
+                 for i, d in enumerate(dxs)]  # fmt: skip
+        return {
+            "session": sid,
+            "split": split,
+            "params_sha256": sha,
+            "frames": [{"frame_id": k, "items": [it]} for k, it in enumerate(items)],
+        }
+
+    thin_a, thin_b = doc("a", [1, 2, 0] * 6), doc("b", [2, 3, 1, 1] * 4)  # 18 + 16 fits
+    alone, bad = doc("c", [1] * 30), doc("d", [5] * 30)
+    g = fl.pooled_g2([thin_a, alone, thin_b, bad])
+    assert g["admitted_alone"] == ["c"] and g["never_pooled"] == ["d"]
+    assert g["pooled"] == ["a", "b"] and g["n"] == 34 and g["verdict"] == "PASS"
+    assert g["admitted_by_pool"] == ["a", "b"]
+    g = fl.pooled_g2([thin_a, doc("e", [4, 5] * 14)])  # 18 + 28 fits, median |dx| 4: none
+    assert g["verdict"] == "FAIL" and g["admitted_by_pool"] == []
+    assert fl.pooled_g2([doc("a", [1] * 10)])["verdict"] == "NOT_ENOUGH"
+    assert fl.pooled_g2([thin_a, doc("v", [1] * 12, split="val")])["verdict"] == "REFUSED"
+    assert fl.pooled_g2([thin_a, doc("x", [1] * 12, sha="0" * 64)])["verdict"] == "REFUSED"
+
+
 def _frame(fid: int, status: str, items: list[dict[str, Any]], reasons: list[str] | None = None,
            n_near: int | None = 1) -> dict[str, Any]:  # fmt: skip
     return {"frame_id": fid, "t": fid * S, "shard": "shard-000000.tar", "offset": fid,

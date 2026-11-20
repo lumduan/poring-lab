@@ -315,6 +315,74 @@ def test_every_cursor_shape_is_read_from_the_real_pixels_around_the_pointer(
     assert (crop == frame[450 - 32 : 450 + 32, 1050 - 32 : 1050 + 32]).all()
 
 
+def test_a_box_off_the_frame_is_whole_and_black_outside(ro: ModuleType) -> None:
+    """2026-11-21 (Batt's live Run 11202100): every grab is the size asked for; what lies off
+    the frame is 0, never an empty or a short array."""
+    img = np.arange(5 * 6 * 4, dtype=np.uint8).reshape(5, 6, 4)
+    assert (ro.box_of(img, 1, 1, 3, 2) == img[1:3, 1:4]).all()  # inside: the plain slice
+    top = ro.box_of(img, 2, -3, 3, 5)  # 3 rows above the top
+    assert top.shape == (5, 3, 4) and (top[:3] == 0).all() and (top[3:] == img[0:2, 2:5]).all()
+    corner = ro.box_of(img, 4, 3, 4, 4)  # past the right and bottom edges
+    assert corner.shape == (4, 4, 4) and (corner[:2, :2] == img[3:5, 4:6]).all()
+    assert (corner[2:] == 0).all() and (corner[:, 2:] == 0).all()
+    assert (ro.box_of(img, -9, -9, 4, 4) == 0).all()  # wholly off it
+    assert ro.desktop_clip(-5, -3, 10, 10, None) == (0, 0, 5, 7)
+    assert ro.desktop_clip(1910, 1075, 20, 20, (1920, 1080)) == (1910, 1075, 10, 5)
+    assert ro.desktop_clip(10, 10, 4, 4, (1920, 1080)) == (10, 10, 4, 4)
+
+
+def test_the_cursor_crop_at_the_top_edge_is_whole_at_1080(
+    ro: ModuleType, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Hunt 2's code error: a monster box at the top of the 1080 screen, its hover point 12 px
+    below the virtual frame's top, the 64 x 64 crop starting 20 px above it. The crop is whole:
+    the 20 rows off the frame black, the rest the real pixels around the real pointer."""
+    monkeypatch.setattr(ro, "real_game_region", lambda: (0, 0, 1920, 1080))
+    monkeypatch.setattr(ro, "desktop", lambda: (1920, 1080))
+    monkeypatch.setattr(ro, "_POINTER", None)
+    rng = np.random.default_rng(11)
+    frame = rng.integers(1, 256, (1080, 1920, 4), dtype=np.uint8)
+    fake = raw_screen(ro, frame)
+    u, v = 700, 12
+    assert ro.real_xy(ro.VIRTUAL_X0 + u, v) == (1050, 18)  # 540 - 1.5 * 348
+    _, crop, _, _ = fake.grab_meta(ro.VIRTUAL_X0 + u - 32, v - 32, 64, 64)
+    assert crop.shape == (64, 64, 4)
+    assert (crop[:20] == 0).all()
+    # crop row r is virtual y r - 20, real y r - 14 (the pointer's box pasted 1:1)
+    assert (crop[20:] == frame[6:50, 1050 - 32 : 1050 + 32]).all()
+
+
+def test_a_desktop_box_off_its_edge_is_clipped_then_padded(
+    ro: ModuleType, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The real path (a 1280x720 fullscreen client: no virtual view): a box above the desktop's
+    top asks the helper only for the part inside it, and comes back whole."""
+    monkeypatch.setattr(ro, "real_game_region", lambda: (0, 0, 1280, 720))
+    monkeypatch.setattr(ro, "_DESKTOP", (1280, 720))
+    frame = np.random.default_rng(3).integers(1, 256, (720, 1280, 4), dtype=np.uint8)
+    asked: list[tuple[int, int, int, int]] = []
+
+    class Helper(ro.Screen):  # type: ignore[misc,name-defined]
+        def __init__(self) -> None:
+            pass
+
+        def _helper_grab(self, x: int, y: int, w: int, h: int) -> Any:
+            asked.append((x, y, w, h))
+            assert x >= 0 and y >= 0 and x + w <= 1280 and y + h <= 720
+            return 5, np.ascontiguousarray(frame[y : y + h, x : x + w]), 9, "bus"
+
+    scr = Helper()
+    t, crop, fid, path = scr._grab_raw(600, -10, 64, 64)
+    assert (t, fid, path) == (5, 9, "bus") and asked == [(600, 0, 64, 54)]
+    assert crop.shape == (64, 64, 4) and (crop[:10] == 0).all()
+    assert (crop[10:] == frame[0:54, 600:664]).all()
+    _, crop2, _, _ = scr._grab_raw(1250, 700, 64, 64)  # past the right and the bottom
+    assert asked[-1] == (1250, 700, 30, 20) and crop2.shape == (64, 64, 4)
+    assert (crop2[:20, :30] == frame[700:720, 1250:1280]).all() and (crop2[20:] == 0).all()
+    _, crop3, _, _ = scr._grab_raw(5, 5, 8, 8)  # inside: one plain helper grab
+    assert asked[-1] == (5, 5, 8, 8) and (crop3 == frame[5:13, 5:13]).all()
+
+
 def test_the_login_dialogs_stay_in_real_pixels_under_the_virtual_client(
     ro: ModuleType, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -351,6 +419,8 @@ def test_a_virtual_box_reads_only_its_real_pixels_and_equals_the_whole_picture_s
         return plain(x, y, w, h)
 
     monkeypatch.setattr(fake, "grab_meta", spy)
+    # T-I5's open-bag check grabs on its own clock (test_ro_agent_panels): not this box's read
+    monkeypatch.setattr(ro, "inventory_tick", lambda screen, now=None: None)
     vx0 = ro.VIRTUAL_X0
     ro.real_xy(vx0 + 640, 330)  # the pointer over the world: its picture is a panel
     boxes = [(600, 300, 64, 64), (0, 0, 230, 150), (1130, 10, 150, 160), (300, 560, 200, 150),
