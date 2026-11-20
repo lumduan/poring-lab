@@ -47,8 +47,12 @@ def _icons(n: int) -> dict[int, np.ndarray]:
     return out
 
 
-def _frame(items: list[tuple[int, int]], icons: dict[int, np.ndarray],
-           font: dict[str, np.ndarray], origin: tuple[int, int] = ORIGIN) -> np.ndarray:  # fmt: skip
+def _frame(
+    items: list[tuple[int, int]],
+    icons: dict[int, np.ndarray],
+    font: dict[str, np.ndarray],
+    origin: tuple[int, int] = ORIGIN,
+) -> np.ndarray:
     """A 1920x1080 BGR frame with a bag at ``origin``: ``items`` (id, count) in reading order,
     then empty slots (white face, the oval)."""
     f = np.full((1080, 1920, 3), 90, np.uint8)
