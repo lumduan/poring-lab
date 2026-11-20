@@ -455,3 +455,22 @@ FIT ran 09:04-09:08 (`run-fit.sh`, CPU, nice 10, a 4 GB scope) on `20261120T0837
 - **The launch** (Amendment 7's command, E = 6), detached as `poring-train-xmas02v1080`:
 
       python3 scripts/guarded_build.py --threshold 30 --sustain 30 "execdev:vision@43200=python -m poring_vision.train --cache /datasets/.framecache/xmas02-v1080-mix-20261120 --epochs 6 --batch 2 --workers 2 --name xmas02-v1080-20261120 --mid-ckpt --weights /datasets/archive/train/xmas02-sk-20261114/weights/last.pt --hsv-s 0.2 --close-mosaic 3 --scale 0.1"
+
+### Amendment 11 (2026-11-20 12:27 ICT from `date`): the training was killed by the LIVE copy's guard; fixed; resumed
+
+- **12:07:27-12:16:53:** the training ran (args.yaml as Amendment 10; mid.pt at 12:15). Then its
+  exec ended rc 137 (SIGKILL). It was not an OOM kill: no kernel OOM, the container's oom_kill is
+  0, and its peak was 10.9 of 11.8 GB.
+- **The cause:** the live copy's guard ended ITS detect server (execdev:vision in
+  poring-lab-live-vision-worker-1) at 12:16:19, when Batt's live Run stopped. It then listed
+  "our GPU processes [1689321, 1694058, 1694061]". Those were the DEV worker's training
+  (`python -m poring_vision.train`) and its loaders on the shared Arc, matched as "ours by
+  command line", and it killed them.
+  - Also: the guard's end-of-step report crashed on its log file. flow_run's SERVE_LOG names the
+    same path (`poring-guarded-execdev-vision.log`) and unlinks it at a server start. Reported;
+    not changed.
+- **Fixed in 2d22893e:** `gpu_ours_exec` drops a process whose cgroup names another docker
+  container. The live copy runs it (fast-forwarded 12:3x).
+  - Run mode (short-lived step containers) is unchanged; that is an open point.
+- **Resumed** (Amendment 7's resume form: `--resume` in place of `--weights ... --scale 0.1`),
+  from mid.pt (sha256 prefix in the commit). The epochs, data and settings are unchanged.
