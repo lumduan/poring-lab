@@ -343,3 +343,26 @@ FIT ran 09:04-09:08 (`run-fit.sh`, CPU, nice 10, a 4 GB scope) on `20261120T0837
   - Not decided yet: whether this is a few stands in a 5-min session, or something at 1080 near
     raised terrain. v1t2's and v1t3's own C1 (about 45 stands each) decide. If either fails too,
     no cache is built until the cause is found (raised stands and terrain-under labels first).
+
+### Amendment 6 (2026-11-20 11:12 ICT from `date`, before v1g2 or any held-out records): TRAIN so far; v1g1 out; v1g2
+
+- **The TRAIN watches' own C1 (3c, <= 0.050 on >= 50 standing labels scored):**
+
+| session | recorded (ICT) | frames labelled | kept labels | own C1 | joins |
+|---|---|---|---|---|---|
+| v1t1 | 09:04-09:09 | 265 | 215 | 11 / 74 = 0.149 | no (Amendment 5) |
+| v1t2 | 09:12-09:43 | 1,593 | 1,903 | 10 / 572 = 0.0175 | YES |
+| v1t3 | 09:46-10:17 | 1,555 | 1,654 | 8 / 419 = 0.0191 | YES |
+| v1g1 | 10:22-10:37 | 735 | 1,455 (Garm Baby 819) | 20 / 356 = **0.0562** | **no** |
+| v1k1 | 10:38-10:54 | 716 | 2,927 (knight 344, goblins 1,386) | 0 / 157 = 0.000 | YES (masked in the cache) |
+| v1k2 | 10:55-11:10 | (labelling) | | | |
+
+- **v1g1's failure is all Garm Baby:** 20 / 200 bad, while the four common species are 0 / 156. At
+  720, gw1 failed the same way (6.21 %) and stayed out; gw2 passed (4.26 %) and joined (M2).
+- **As M2 decided at 720, the rule binds as written.** v1g1 is outside T2's pool and outside
+  TRAIN. More Garm Baby data comes from a NEW watch under 3c: **v1g2**, TRAIN-side stands, seed
+  2611211, the same spawn options (2 Garm Babies per stand, 40 s, 16 stands, 22 min).
+- **The held-outs are recorded now** (the lab is free; nothing reads them before the freeze), in
+  this order after v1g2: v1T (seed 2611207), v1Tg (2611208), v1Tk (2611209, sk6a's cells
+  `789f23e2...`), as section 4.
+- Immunity was judged ON at 10:21 (two toggles read) and again before this chain.
