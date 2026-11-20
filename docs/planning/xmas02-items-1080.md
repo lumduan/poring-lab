@@ -466,3 +466,37 @@ A count under its minimum is NO VERDICT, never a pass.
   - Immunity: ON, judged on the 03:45 frame; no login or recover since (ifs2's stop ended only
     the staging process).
   - ifs1c's checks at 04:40: the zoom 1.000, the chat standard, the layout "1 collapsed battle".
+
+### Amendment 11 (2026-11-21 06:07 ICT from `date`, BEFORE any T2 answer): the TRAIN stagings; the T2 pack
+
+- **The TRAIN stagings, labelled at the freeze, each admitted by its OWN G2:**
+
+  | staging | seed | spots | rc | item labels | negatives | own G2 fits | own G2 |
+  |---|---|---|---|---|---|---|---|
+  | ifs1c | 2612702 | 12 / 12 | 0 | 118 | 244 | 1,283 (48 floor items; 1.0 / 2.0 px, 85.3 %) | PASS |
+  | ifs2b | 2612705 | 12 / 12 | 0 | 82 | 205 | 1,014 (41; 1.0 / 2.0, 88.7 %) | PASS |
+  | ifs3 | 2612707 | 6 / 12 | 1 | 37 | 135 | 401 (20; 1.0 / 2.0, 86.8 %) | PASS |
+
+  - **ifs3 stopped at 05:52:39 after spot 5's views, before a typed line:** the chat window's
+    padlock read neither open nor locked over that cell's pale floor (locked distance 3.5, its
+    shape 0.209; the frame `chat-window/20261121-055237-unreadable.png` shows the standard
+    window). It stopped as built. Its 6 spots are admitted by its own G2. The 6 left were not
+    re-staged (the same cell would stop the same way); the reader is not changed in this round.
+  - Few labels per staging at 1080 (720's fs1: 701): the items are drawn smaller in the bot's
+    1280 x 720 picture, so more fail the fit (ifs1c: item_unfit 398, item_unsprited 369 of 1,109
+    candidates); the open bag during each drop covers the panel's arrow (ui_layout_mismatch 373).
+- **ifsH1 (the held-out staging, seed 2612229, n 6):** its first start (05:56) stopped at its own
+  checks before recording (the same unreadable padlock refused the heal and warp lines where
+  ifs3 stood). One walk click (cursor_probe_1080.walk_click: a point that read the WALK arrow,
+  away from the 2 boxes) moved her; the padlock then read locked. The second start passed every
+  check (zoom 1.000, chat standard, layout "1 collapsed battle") and records from 05:58:42. It is
+  never labelled before the freeze.
+- **The 1080 TRAIN, admitted:** ifT1-ifT10 (157 labels; Amendment 8) + ifs1c, ifs2b, ifs3 (237
+  labels): **394 item labels**. Not admitted: ifs1, ifs1b, ifs2 (Amendments 9-10).
+- **The T2 pack** (section 6; `fi_labels.py pack <the 13 admitted files> --spec 1080 --params
+  <the freeze> --seed 71`, built 06:06:51 from 31a6d394):
+  - 60 crops: N 15 / F 15 / M 10 / E 20 (10 plain, 10 hard; hard NCC 0.473-0.616), 40 floor items;
+  - instructions cff8ee8b... (pinned), reference.png 6a665d79... (28 sprites);
+  - the answer key sha256 `240bf444f219691a237458ab...` (never shown to a labeller);
+  - the labellers: AI (started 06:06) and AJ, new blind subagents that see only the pack; scored
+    once by `fi_blind_score.py` when both have answered, with section 6's bars.
