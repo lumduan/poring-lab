@@ -124,3 +124,19 @@ def test_basic_info_reads_no_row_a_title_an_exp_bar_or_a_badge_can_reach() -> No
     depths = {d for d, _, _ in pf.BASIC_ROWS}
     assert not depths & set(range(87, 108))  # inside the level panel (its EXP bars)
     assert max(depths) < 118 and pf.BASIC_COL[2][1] <= 131  # above the weight's text and badge
+
+
+def test_stack_counts_over_the_left_lines_bottom_keep_all_nine() -> None:
+    """2026-11-20, the live PC's client: each slot's stack count ("592", "570", "11") is drawn over
+    the BOTTOM of its left frame line (black text on the line); 3 of 9 slots failed the search,
+    which wants 9. The left line is checked above the count's rows only."""
+    lum = draw_hotbar(world(), (377, 11))
+    x0, y0 = 377 + pf.HOTBAR_LINE_DX, 11 + pf.HOTBAR_LINE_DY
+    size = 29 - pf.HOTBAR_GAP
+    for i in (0, 4, 7, 8):  # the counted slots: black digits across the line's last rows
+        x = x0 + 29 * i
+        lum[y0 + size - 4 : y0 + size - 1, x - 1 : x + 6] = 0.0
+    got = pf.find_hotbar(lum)
+    assert got is not None and got.origin == (377, 11) and got.score == 9
+    lum[y0 + 6 : y0 + 9, x0 + 29 * 3 - 1 : x0 + 29 * 3 + 4] = 0.0  # ink HIGH on a line: not a frame
+    assert pf.find_hotbar(lum) is None

@@ -53,6 +53,11 @@ HOTBAR_MIN_LINES = 9  # a search wants all 9 boxes (Batt: "9 slots complete = th
 HOTBAR_LINE_DX = 15  # the first slot's left line, from the window's origin (the lab's registry)
 HOTBAR_LINE_DY = 4  # its top edge, from the window's origin
 HOTBAR_MIN_AT = 8  # a re-check at its place: one slot may be covered (the pointer, a tooltip)
+# 2026-11-20 (the live PC's client): a slot's stack count ("592", "570", "11") is drawn over the
+# BOTTOM of its left frame line, so that line was not uniform there and 3 of the 9 slots failed
+# (the search wants 9): the left line is checked only above the count's rows. The lab's frames pass
+# on any part of their lines.
+HOTBAR_COUNT_ROWS = 5
 
 
 # --- Basic Info ------------------------------------------------------------------------------
@@ -142,7 +147,8 @@ def _slots(lum: Luma, pitch: int) -> NDArray[np.bool_]:
     h, w = lum.shape
     if h < size or w < size:
         return np.zeros((0, 0), bool)
-    cm, cs = _running(lum, n, axis=0)  # column runs: (h - n + 1, w), row r = from row r
+    # the left line above the stack count's rows (HOTBAR_COUNT_ROWS)
+    cm, cs = _running(lum, n - HOTBAR_COUNT_ROWS, axis=0)  # column runs, row r = from row r
     left = _frame_line(cm, cs, axis=1)
     rm, rs = _running(lum, n, axis=1)  # row runs: (h, w - n + 1), column c = from column c
     top = _frame_line(rm, rs, axis=0)
