@@ -648,3 +648,28 @@ Fixed now, so section 8 is scored as 720's was (xmas02-detector.md M6 / S4 / S7.
   - Then two pairs of NEW blind labellers, at most two at once (AE / AF, then AG / AH). Each
     score once.
 - **The cache manifest** for the scores: Amendment 10's `3331793f...`.
+
+### Amendment 17 (2026-11-20 19:19 ICT from `date`, BEFORE D1 is measured): A7's GPU line is D1, as section 8a's table says -- Amendment 13 named the wrong instrument
+
+- **DISCLOSED FIRST:** this correction is made AFTER predict_dir's timing over v1T's refs was
+  seen: p50 70.4 / **p95 94.1 ms** (228 calls; the first 8.4 s, the XPU's warm-up, included).
+- **The registered bar:** section 8a's table, A7: "latency: **D1 server p95** <= 35 ms".
+  - D1 is the runner's call: GpuDetector through the detect server (OpenVINO on the Arc,
+    FP32). 720's D1 was p50 20.6 / p95 23.7 ms.
+  - The xmas02-fi round settled the same question (xmas02-detector.md O13 / O15): predict_dir's
+    own wall time (ultralytics' Python on torch-xpu; then p50 61 / p95 78 ms) "is reported, NOT
+    judged", and the bar reads the SERVER's forward time.
+  - Amendment 13 step 7 wrote "predict_dir's own per-call times ... p95 <= 35 ms". That is the
+    instrument O13 had ruled out, and not the table's line.
+- **So A7's GPU line is measured as O15 / S4.6 did:**
+  - a guarded serve step (`poring_vision.detect_server --backend openvino --device GPU
+    --ov-preproc gpu --ov-precision f32`) in the DEV worker, on the dev copy's own socket;
+  - its models from `archive/models`: xmas02v1080 `04b19898...` (copied for this
+    evaluation, read back; SHA256SUMS, the deployed list, unchanged) and xmas02sk
+    `76316fb4...`;
+  - the host client `scripts/fi_gpu_latency.py` (one entry added: xmas02v1080), ONE model a
+    run, over the 200 latency refs (`0a6c1bfd...`), xmas02v1080 then xmas02sk;
+  - the bar reads the server forward p95 (`models.<m>.server.p95`) <= 35 ms; xmas02sk's is
+    reported beside it. The call time is reported.
+- predict_dir's 94.1 ms stays in the results as REPORTED, with this amendment's reason.
+- Batt is told of this correction in the report, as a decision of the parent's he may overrule.
