@@ -71,10 +71,10 @@ def _frame(
         sq[~key] = bmp[~key][:, ::-1]
         text = str(n)
         width = sum(font[ch].shape[1] for ch in text) + len(text) - 1
-        if len(text) <= 2:  # the client's rule: from x + 14 (+ 1 for a leading '1') ...
-            cx = x + 14 + (1 if text[0] == "1" else 0)
-        else:  # ... unless it would pass x + 26: then it ENDS there
-            cx = x + bc.COUNT_END - width + 1
+        # the client's rule: 1-3 digits from x + 14 (+ 1 for a leading '1'); 4 digits END at x + 26
+        # (measured: "1000" = x+1 .. 26)
+        left = x + 14 + (1 if text[0] == "1" else 0)
+        cx = left if len(text) <= 3 else x + 26 - width + 1
         for ch in text:
             g = font[ch]
             f[y + bc.COUNT_DY : y + bc.COUNT_DY + 9, cx : cx + g.shape[1]][g] = 0
@@ -117,8 +117,9 @@ def test_items_and_counts_read_exactly_one_to_four_digits() -> None:
     font, icons = _font(), _icons(12)
     refs = _refs(icons)
     ids = list(icons)
-    items = [(ids[0], 1), (ids[1], 7), (ids[2], 17), (ids[3], 46), (ids[4], 100), (ids[5], 588),
-             (ids[6], 1234), (ids[7], 9)]  # fmt: skip
+    # (a 3-digit count before a 4-digit one touches it -- the next test -- so not side by side here)
+    items = [(ids[0], 1), (ids[1], 7), (ids[2], 17), (ids[3], 46), (ids[4], 100), (ids[5], 9),
+             (ids[6], 1234), (ids[7], 588)]  # fmt: skip
     tab = _read(_frame(items, icons, font), refs, font)
     got = [(b.ids, b.count) for b in tab.items()]
     assert got == [((iid,), n) for iid, n in items]
@@ -185,3 +186,31 @@ def test_an_item_in_two_tabs_means_a_click_that_did_not_take() -> None:
     etc = bc.TabRead("etc", [bc.BagSlot(0, "item", (911,), 46)])
     assert bc.shared_items([use, etc]) == {}
     assert bc.shared_items([use, again, etc]) == {"eqp": {507}}
+
+
+def test_the_measured_count_shapes_and_their_neighbours() -> None:
+    """The runs measured on the trials' frames (icon-relative columns): T5's 123 (the trial that
+    read it as 12 when the band stopped at x+28), T2's 1000, and T2's 46 with the NEXT slot's
+    4-digit count spilling into its band at x+33."""
+    c = bc.count_of_runs
+    assert c([(15, 19, "1"), (21, 26, "2"), (28, 33, "3")]) == 123
+    assert c([(1, 5, "1"), (7, 12, "0"), (14, 19, "0"), (21, 26, "0")]) == 1000
+    assert c([(14, 19, "4"), (21, 26, "6"), (33, 37, "1"), (39, 44, "0")]) == 46
+    assert c([(14, 19, "8")]) == 8 and c([(15, 19, "1")]) == 1
+    # a 4-digit count with its first digit covered: the rest touches it, so unread (never 234)
+    assert c([(7, 12, "2"), (14, 19, "3"), (21, 26, "4")]) is None
+    assert c([(3, 5, None), (7, 12, "2"), (14, 19, "3"), (21, 26, "4")]) is None
+    # a 3-digit count cut by something at its end, or a stray glyph: unread
+    assert c([(15, 19, "1"), (21, 26, "2"), (28, 31, None)]) is None
+    assert c([(14, 19, "0"), (21, 26, "7")]) is None  # a leading zero
+
+
+def test_a_three_digit_count_touching_a_four_digit_neighbour_is_unread() -> None:
+    """The client draws a 3-digit count to x+33 and the next slot's 4-digit count from its x+1
+    (our x+33): they touch, so both are unread -- never a shorter number for either."""
+    font, icons = _font(), _icons(3)
+    refs = _refs(icons)
+    ids = list(icons)
+    tab = _read(_frame([(ids[0], 588), (ids[1], 1234), (ids[2], 5)], icons, font), refs, font)
+    assert [b.slot for b in tab.unread()] == [0, 1]
+    assert [(b.ids, b.count) for b in tab.items()] == [((ids[2],), 5)]

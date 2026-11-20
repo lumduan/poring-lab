@@ -61,13 +61,13 @@ LATTICE_MIN = 2  # the bag is found by at least this many empty-slot ovals
 TABS: dict[str, tuple[int, int]] = {"use": (10, 45), "eqp": (10, 100), "etc": (10, 154),
                                     "fav": (10, 205)}  # fmt: skip
 COUNT_DY, COUNT_ROWS = 18, 9  # the digits' rows from the icon's top
-# the count's place (measured 2026-11-20 on 1 / 2 / 4-digit stacks): it starts at the icon's x + 14
-# (+ 15 for a leading '1', drawn a column in) unless it would pass x + 26: then it ENDS at x + 26
-# ("8" 14-19, "46" 14-26, "1001" 1-26). The band stops before the next slot (its count can start
-# at its own x + 0 = our x + 32)
-COUNT_X0, COUNT_X1 = 0, 28
-COUNT_FIRST = (14, 15)  # a 1- or 2-digit count's first glyph column
-COUNT_END = 26  # a 2+ digit count's last ink column
+# the count's place (measured 2026-11-20 on the trials' 1- to 4-digit stacks, icon-relative x):
+#   1 digit  x+14 .. 19 | 2 digits x+14 .. 26 | 3 digits x+14 .. 33 | 4 digits x+0 .. 26
+# (a leading '1' is drawn one column in: x+15 / x+1). A slot's band also shows its neighbours'
+# digits (the next slot's 4-digit count starts at our x+33), so a count is read only when its runs
+# make exactly one of these shapes with clear columns on both sides; anything else is unread.
+COUNT_X0, COUNT_X1 = -2, 36  # the band searched, from the icon's x
+COUNT_SHAPES = {1: ((14, 15), 19), 2: ((14, 15), 26), 3: ((14, 15), 33), 4: ((0, 1), 26)}
 COUNT_INK = 3  # a count pixel is pure black: max channel <= this
 DIGIT_GAP = 2  # at most this many blank columns between two digits of one count
 EMPTY_MAX = 4.0  # a square this close (mean |RGB|) to the empty-slot picture is empty
@@ -86,9 +86,10 @@ PARK = (640, 640)  # the pointer's rest while a tab is read: client px, off any 
 
 
 def _compare_mask() -> np.ndarray:
-    """PURE: the icon square's compared pixels: not the count's rows and columns."""
+    """PURE: the icon square's compared pixels: not the count's ROWS (from COUNT_DY - 1 down), all
+    columns -- a 4-digit count spans the slot's width (x+0 .. 26)."""
     keep = np.ones((SIZE, SIZE), bool)
-    keep[COUNT_DY - 1 :, COUNT_X0:] = False
+    keep[COUNT_DY - 1 :, :] = False
     return keep
 
 
@@ -304,40 +305,47 @@ class BagSlot:
         return {k: v for k, v in asdict(self).items() if v not in (None, (), "")}
 
 
+def count_of_runs(runs: Sequence[tuple[int, int, str | None]]) -> int | None:
+    """PURE: the count from a band's glyph runs ((first col, last col, the digit or None) in
+    icon-relative columns), or None. A 4-digit shape is tried first, then 1-3 digits: the group's
+    runs consecutive (at most DIGIT_GAP blank columns apart), every one a digit, its first and last
+    columns one of COUNT_SHAPES, and NO ink within DIGIT_GAP + 1 columns before or after it (a
+    covered or a neighbour's digit there: unread, never a shorter number); no leading zero."""
+    for n in (4, 3, 2, 1):
+        starts, last = COUNT_SHAPES[n]
+        for i, (c0, _c1, _d) in enumerate(runs):
+            if c0 not in starts or i + n > len(runs):
+                continue
+            grp = runs[i : i + n]
+            if any(b[0] - a[1] - 1 > DIGIT_GAP for a, b in zip(grp, grp[1:], strict=False)):
+                continue
+            if grp[-1][1] != last or any(d is None for _a, _b, d in grp):
+                continue
+            before = runs[i - 1] if i > 0 else None
+            after = runs[i + n] if i + n < len(runs) else None
+            if before is not None and grp[0][0] - before[1] - 1 <= DIGIT_GAP:
+                return None
+            if after is not None and after[0] - grp[-1][1] - 1 <= DIGIT_GAP:
+                return None
+            text = "".join(str(d) for _a, _b, d in grp)
+            return None if len(text) > 1 and text[0] == "0" else int(text)
+    return None
+
+
 def read_count(frame_bgr: Any, origin: tuple[int, int], slot: int,
                templates: Mapping[str, Any]) -> int | None:  # fmt: skip
-    """PURE: the stack's count, or None. The band's pure-black glyphs, every one a digit, at most
-    DIGIT_GAP apart, in the count's place: ONE digit from COUNT_FIRST, or 2+ digits whose last
-    ink column is COUNT_END; no leading zero. Anything else (an icon's black pixel, a covered
-    digit) is unread, never a shorter number."""
+    """PURE: the stack's count, or None: the band's pure-black glyphs (count_of_runs' shapes)."""
     import hotbar_count as hb
 
     x, y = icon_xy(origin, slot)
     img = np.asarray(frame_bgr)
-    band = img[y + COUNT_DY : y + COUNT_DY + COUNT_ROWS, x + COUNT_X0 : x + COUNT_X1, :3]
-    if band.shape[0] != COUNT_ROWS or band.shape[1] != COUNT_X1 - COUNT_X0:
+    x0, x1 = x + COUNT_X0, x + COUNT_X1
+    if x0 < 0 or x1 > img.shape[1] or y + COUNT_DY + COUNT_ROWS > img.shape[0]:
         return None
-    runs = hb.glyph_runs(band.max(axis=2) <= COUNT_INK)
-    if not runs:
-        return None
-    digits = []
-    for col, g in runs:
-        d = hb.match(g, templates)
-        if d is None:
-            return None
-        digits.append((col + COUNT_X0, col + COUNT_X0 + g.shape[1] - 1, d))
-    for (_a0, a1, _da), (b0, _b1, _db) in zip(digits, digits[1:], strict=False):
-        if b0 - a1 - 1 > DIGIT_GAP:
-            return None
-    text = "".join(d for _x0, _x1, d in digits)
-    if len(digits) == 1:
-        if digits[0][0] not in COUNT_FIRST:
-            return None
-    elif digits[-1][1] != COUNT_END:
-        return None
-    if len(text) > 1 and text[0] == "0":
-        return None
-    return int(text)
+    band = img[y + COUNT_DY : y + COUNT_DY + COUNT_ROWS, x0:x1, :3]
+    runs = [(c + COUNT_X0, c + COUNT_X0 + g.shape[1] - 1, hb.match(g, templates))
+            for c, g in hb.glyph_runs(band.max(axis=2) <= COUNT_INK)]  # fmt: skip
+    return count_of_runs(runs)
 
 
 def read_slot(frame_bgr: Any, origin: tuple[int, int], slot: int, pics: Pictures,
