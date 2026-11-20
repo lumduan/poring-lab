@@ -673,3 +673,57 @@ Fixed now, so section 8 is scored as 720's was (xmas02-detector.md M6 / S4 / S7.
     reported beside it. The call time is reported.
 - predict_dir's 94.1 ms stays in the results as REPORTED, with this amendment's reason.
 - Batt is told of this correction in the report, as a decision of the parent's he may overrule.
+
+### Amendment 18 (2026-11-20 19:29 ICT from `date`): THE RESULT (each scored once) -- 8a and 8b PASS on every line
+
+The frozen last.pt `1a9feeff...`; the cache manifest `3331793f...`; one guarded GPU step
+19:10:52-19:22:23 ("ALL STEPS OK"); the labellers AE / AF (v1T: `91eb6c22...` / `bc9decda...`) and
+AG / AH (v1Tg: `990790e4...` / `05501847...`), each 100 % of its pack, none saw anything but it.
+
+**8a (at 1080, on the 1080 held-outs):**
+
+| line | measure | 720 achieved | bar | 1080 result | verdict |
+|---|---|---|---|---|---|
+| A1 | Q1c recall on v1T, each | 0.98-1.00 | >= 0.95, >= 50 crops | mystcase 0.9833 (60), cruiser 1.0 (55), cookie 1.0 (59), cookie_xmas 1.0 (59) | PASS |
+| A2 | Q1c precision on v1T, each | 0.93-0.94 | >= 0.90 | 1.0 / 1.0 / 1.0 / 1.0 (0 unmatched boxes) | PASS |
+| A3 | Garm Baby Q1s on v1Tg | 1.000 / 0.922 | >= 0.95 / >= 0.88 | 0.9833 / 0.9672 (60 crops) | PASS |
+| A4 | alarm visits fired within 2.5 s, v1Tk | 33 / 33 | at most 1 missed of >= 30 | 34 / 35 (1 missed: a 1-frame visit, v1Tk frame 755) | PASS (at the limit) |
+| A5 | false fires, v1Tk's alarm-free frames | 0 / 98 | <= 1 % of >= 50 | 0 / 169 | PASS |
+| A6 | false fires, v1T + v1Tg's alarm-free frames | 0 / 265 | <= 1 % | 0 / 231 | PASS |
+| A7 GPU | D1 server forward p95 (Amendment 17) | 720 D1 p95 23.7 | <= 35 ms | 25.1 ms (p50 17.6; 200 / 200 on the GPU) | PASS |
+| A7 CPU | p95 vs xmas02sk, interleaved, 16 threads, nice 10 | xmas02sk | <= 1.10 x | 166.3 vs 170.3 ms = 0.976 x | PASS |
+
+- Reported, not judged:
+  - predict_dir's wall time on v1T: p50 70.4 / p95 94.1 ms (Amendment 17's reason).
+  - D1 call times: 1080 p50 62.8 / p95 76.8 ms; xmas02sk p50 24.1 / p95 65.9 ms in its first run,
+    then 63.5 / 76.3 ms (server p95 25.5) when re-run under the same conditions. The first run's
+    lower call time was the host's state, not the model.
+  - v1Tg's Q1c precision 0.83-0.90 (7 unmatched boxes pooled over its crop areas). v1T's Garm
+    Baby: 8 crops, all matched.
+  - The vanishes: v1Tk 377, v1Tg 36, v1T 0.
+
+**8b (at 720, xmas02sk's own held-outs, its own keys and answers; only the predictions new):**
+
+| test | the 1080 model | xmas02sk's own | bar | verdict |
+|---|---|---|---|---|
+| TEST Q1c recall, the four species | 1.0 / 1.0 / 1.0 / 1.0 | 0.983 / 1.0 / 0.983 / 1.0 | >= 0.80 | PASS |
+| TEST Q1c precision | 0.983 / 0.983 / 0.984 / 0.983 | 0.936 / 0.933 / 0.937 / 0.936 | >= 0.80 | PASS |
+| gw3 Garm Baby Q1s recall / precision | 1.0 / 0.967 | 1.0 / 0.922 | >= 0.80 / 0.80 | PASS |
+| sk6a alarm line 1 (visits fired) | 33 / 33 | 33 / 33 | S7's | PASS |
+| line 2a (sk6a's alarm-free frames) | 0 / 98 | 0 / 98 | S7's | PASS |
+| line 2b (TEST + gw3 alarm-free frames) | 0 / 265 | 0 / 265 | S7's | PASS |
+
+- **So no loss at 720:** the 1080 model equals or beats xmas02sk on its own held-outs.
+- **THE VERDICT: 8a and 8b PASS.** By section 8, the play block 8c may run, its headline the share
+  of Batt's run (Amendment 14).
+- **Deployment is Batt's decision.** The model is in `/dev/shm/poring-lab-detector/model` and the
+  NAS `archive/models` (copied for D1; not in SHA256SUMS). It is not in GPU_WEIGHTS, MAP_MODELS
+  or models.yaml.
+- **Files** (`data/train/eval/x1080`, to be archived):
+  - scores: q1-score-v1T `69be6c4c...`, q1-score-v1Tg `39c34ee2...`, alarm-v1Tk `f53904cd...`;
+  - 8b: q1-score720-test `5685f90c...`, q1-score720-gw3 `eaa363c3...`, alarm720-sk6a
+    `59189151...`;
+  - latency: d1-xmas02v1080 `58d9e9e7...`, d1-xmas02sk `4adf5252...` / -again `2c2e5426...`,
+    latency-cpu `c5bdecd0...`;
+  - predictions: q1-pred-v1T `881e0e21...`, q1-pred-v1Tg `06f6f5ef...`, pred-v1Tk-all
+    `cae29ba0...`.
