@@ -409,6 +409,9 @@ def _helper(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, rc: int | None,
         return made[-1]
 
     monkeypatch.setattr(fr, "SCRATCH", tmp_path / "scratch")
+    # SERVE_LOG was built from the REAL scratch at import: unpatched, detect_up unlinked the running
+    # guard's own step log (2026-11-20 12:4x: the 1080 training's, while these tests ran)
+    monkeypatch.setattr(fr, "SERVE_LOG", tmp_path / "scratch" / fr.SERVE_LOG.name)
     monkeypatch.setattr(fr, "writer_busy", lambda _lines: None)
     import types
 
