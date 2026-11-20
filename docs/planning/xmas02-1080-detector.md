@@ -474,3 +474,24 @@ FIT ran 09:04-09:08 (`run-fit.sh`, CPU, nice 10, a 4 GB scope) on `20261120T0837
   - Run mode (short-lived step containers) is unchanged; that is an open point.
 - **Resumed** (Amendment 7's resume form: `--resume` in place of `--weights ... --scale 0.1`),
   from mid.pt (sha256 prefix in the commit). The epochs, data and settings are unchanged.
+
+### Amendment 12 (2026-11-20 12:56 ICT from `date`): the held-outs are recorded and untouched; the resumed training's log
+
+- **The held-outs are all on the NAS:** v1T (11:30), v1Tg (12:04), v1Tk (12:21-12:53, shipped
+  12:53). Each had the zoom check at 1.000 and the chat check before it (chain.log).
+- **One mistaken labelling call, refused by NAME, no frame read.** At 12:54 my train-side
+  labelling script (`run-train.sh`: labels plus own C1) was started on the three held-outs. It
+  must not run on them: 3b, nothing reads them before the freeze.
+  - `map_labels.py labels` refused each at once: "shares frames with TEST (3b): refused". It
+    wrote three 95-byte logs and no labels.
+  - They are read after the freeze, by `--eval-test` only (8a).
+- **The resumed training** (Amendment 11) runs at ~1.0 batch/s, 3,254 batches an epoch (~54 min).
+  At 12:53 it was at epoch 1 of 6, batch 1,474. The ETA for 6 epochs and their validations is
+  ~18:30 ICT.
+- **Its guard's step log was unlinked at ~12:45** while it ran, by my own test run.
+  - The cause: `test_flow_run`'s detect-server tests patched `SCRATCH` but not `SERVE_LOG`
+    (built at import), so `detect_up` unlinked the REAL
+    `/dev/shm/poring-lab-tmp/poring-guarded-execdev-vision.log`. Fixed in d9d1bb9b.
+  - The training is not affected. The guard writes the deleted inode and would read the path back
+    at its end, so `x1080/train/logsync.sh` keeps the path a copy of the inode (at most 15 s
+    stale) until the guard exits.
