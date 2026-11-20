@@ -58,7 +58,8 @@ import stage9_ab as s9  # noqa: E402
 
 VERSION = "9.60"  # dungeon_hunt.FLY_LAND_VERSION: the runner it measures
 NODE = s2.NODE
-PROJECT = s7.PROJECT  # the ready-made box (xmas02sk; fly_first, _hp ON; _land ON since 18.18)
+PROJECT = s7.PROJECT  # the ready-made box (fly_first, _hp ON; _land ON since 18.18; its use_model
+# xmas02v1080 since 2026-11-20, xmas02-1080-detector.md Amendment 24: the arms set MODEL)
 MODEL = "xmas02sk"  # the fixture's use_model (18.15), both arms
 ARMS = {"A": "fly_first_land off: the ready-made box as s10ab measured it (dungeon@9.59's program)",
         "B": "fly_first_land on: a boss sighting only after the landing (9.60)"}  # fmt: skip

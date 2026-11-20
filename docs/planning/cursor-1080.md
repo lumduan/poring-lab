@@ -136,3 +136,78 @@ Why do far-target reads at 1080 show no cursor at all? The candidates, each test
 - The 0.5 s frame lag (the lead is the runner's own rule).
 
 ## 9. RESULTS and AMENDMENTS (clock-labelled)
+
+### Amendment 1 (2026-11-21 00:28 ICT from `date`): Batt's live Run; a crash at the frame's edge, fixed; the trace re-read; the P1 tool
+
+Written before any probe of this round.
+
+- **Batt's live Run 11202100** (his 1080 PC, GPU 100 % of 11,409 detections, xmas02v1080):
+  - 180 min, 311 kills, by hunt core:
+
+    | hunt | span | kills | kills/h | strikes | box targets |
+    |---|---|---|---|---|---|
+    | 1 | 21:01-22:48 (107.1 min) | 234 | 131 | 322 | 558 |
+    | 2 | 22:48-23:27 (38.6 min) | 77 | 120 | 96 | 199 |
+    | 3 | 23:27-00:01 (33.9 min) | 0 | 0 | 0 | 22 |
+
+  - Hunt 1 is 57 % of Batt's 228.5 kills/h, hunt 2 52 %; the whole Run 45 %.
+  - **Hunt 2 ended on a code error in the cursor reader** (23:27:16):
+    `ValueError: could not broadcast input array from shape (3,0,64) into shape (3,64,64)`
+    (cursor_robust._planes, from cursor_sword.check). A box whose hover point lay within 32 px
+    of the virtual frame's TOP asked for crop rows above it; the virtual client's whole-frame
+    path sliced `vf[y:y+h]` with a negative y and returned NO rows. The Run's retry restarted
+    the hunt core 19 s later.
+    - FIXED on branch cursor-p1 (`ro_agent.box_of`, `desktop_clip`): every grab returns the size
+      asked for, the part off the frame (or off the desktop) black. The runner's ring crop at the
+      same point (80 x 80, in the pinned file) is fixed by the same change. Tests:
+      test_ro_agent_fullscreen (the 1080 top-edge crop; the real path's clip and pad).
+    - It merges after the item chain (no code change on main while a block runs).
+  - **Hunt 3 played 34 min with no kill:** 49 Fly Wings (31 "idle", 10 "stuck", 3 "garm", 3
+    "pos_unread", 2 "dead_end"), 0.92 boxes per detection (hunts 1-2: 2.3, 2.2), 7,123 goal
+    events; it ended on "position unread for 30 s", and the next start on "her cell did not read
+    on the minimap readout within 5.0 s".
+    - The minimap never named the map in this Run (best xmas_dun02 0.27 at the start, then
+      0.19, then moc_fild14 0.14, prontera 0.12; a map is named at 0.40).
+    - Not this round's question (it is the position, not the cursor). Recorded for Batt.
+  - The bag count at the start failed ("Alt+E showed no bag"): live still had the code before
+    T-I5 (the 1:1 inventory panel). Live was updated at 00:05 (main d367a1f5).
+- **The trace re-read** (s11scr-diag, 589 checks, offline):
+  - the first read comes at a median 151 ms after the first motion (p90 161);
+  - SWORD and CLEAR are decided at a median ~250 ms (the third read): the client draws the
+    cursor at the new point about 0.25 s after the motions;
+  - "unknown" checks read neither cursor on their FIRST or their LAST read (sword 0.30 / 0.30,
+    walk 0.32 / 0.39 medians); 2 of 248 ever read walk >= 0.85, 11 sword >= 0.60;
+  - none of the 589 points lies within 34 px of a lab panel's virtual box or the frame's edge;
+  - the pointer's jump from the previous check: median 42 px before an unknown, 66 before a
+    sword (a long jump does not explain it).
+  - So whether the cursor arrives LATER than 0.35 s, or not at that point at all, is open:
+    exactly what P1's 1.0 s window and its real 160 x 160 box answer.
+- **The P1 tool** (`scripts/cursor_probe_1080.py`, branch cursor-p1, 14 tests; the older
+  cursor_probe.py is cursor@probe's, unrelated):
+  - `hovers`: the runner's hover point (the box centre), FAR >= 120 px within the runner's
+    220 px reach, the bands alternated, the two motions, then reads for 1.0 s: the reader's
+    64 x 64 crop and the real 160 x 160 around the real pointer per new frame (repeats keep
+    their time only), and the real 160 x 160 around the previous pointer point at the start and
+    at 0.35 s. `--mode walk`: a walk click first (after two WALK-arrow reads; census-registered),
+    the hover 0.15 s after it.
+  - `frames`: P2's bus counters, standing or walking.
+  - `analyse` (offline): each read's recalls and verdict, the black share of the reader's crop,
+    its difference to the real pixels at the point, the cursor searched in the real box (64 x 64
+    slid by 4 px); the hover's class (sword_at_point / sword_offset / walk_at_point / old_place /
+    nothing); the runner's decision replayed inside 0.35 s and at 1.0 s; the first SWORD's time.
+  - The reads are denser than the runner's (no recall in the loop), so the 0.35 s replay is the
+    runner's best case inside its window. 60 hovers of each mode at least (P1's minimum), far and
+    near alternated.
+- **Next:** the item chain ends ~04:30; then the merge; then P1 stand and walk, P2 stand and
+  walk (1080), on the lab, immune.
+
+### Amendment 2 (2026-11-21 00:45 ICT from `date`): the bus writes ~30 frames a second at 1080 too (offline)
+
+- From the runner's own records (hp_read's lf2 frame ids, the bus writer's ids, the rate between
+  consecutive reads 0.05-3 s apart): s11scr-720-r01A **29.8** frames/s (p10 29.3, p90 30.2; 9
+  samples), s11scr-1080-r01B **29.8** (28.3 / 30.4; 24), ifT2-play-r01B (1080, tonight) **29.6**
+  (28.9 / 30.1; 25).
+- So the bus is not slower at 1080: the "fewer new frames" half of candidate 1 is weak at the
+  bus. What the bus cannot say is when the GAME redraws its cursor (the client's own frame
+  rate); P1's 1.0 s reads and P3 answer that. P2 still measures standing against walking.
+- The samples are sparse (lf2 runs only on some reads) and none is split by motion.
