@@ -42,7 +42,7 @@ export const TICK_STEPS: readonly TickStep[] = [
   s("vitals", "safety", "death"),
   s("battle_log", "safety", "the Battle Log: hits, kills, a boss"),
   s("survive", "safety", "the potion, the Fly Wing, Auto Guard"),
-  s("engage", "safety", "a fight begins; the Garm Baby alarm"),
+  s("engage", "safety", "a fight begins; the alarm monsters (the model's alarm list)"),
   s("ui", "safety", "the UI watch; the weight; home"),
   s("upkeep", "safety", "the Knife's HP floor; overweight; HUD"),
   s("fight", "required", "the fight (the recipe's steps)", "fight_target"),

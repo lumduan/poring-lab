@@ -130,3 +130,29 @@ heal item) cannot simply be edited.
   settings.
 - **Tests:** a Run with picks plays the runner's own start check and stock rules on the picked
   ids; a Run without picks equals today's (the same tables, an identity test).
+
+## Amendment 2 (2026-11-20 18:20 ICT from `date`): step 3 as built -- the alarm monsters from the model
+
+- **The runner already reads its alarm from the model.** dungeon_hunt.alarm_classes takes the
+  box model's models.yaml `alarm` list; garm_baby is only the fallback of a model that names
+  none.
+- **New: the player picks them.** An OPTIONAL settings block, `alarm_monsters` (safety tab;
+  needs the alarm on):
+  - its picker lists the node model's classes that the model does not strike: the player, NPCs,
+    warps and untrained classes are left out. The model is the node's use_model, else the map's
+    live detector;
+  - choices: each monster alone, or all of them; empty = the model's own alarm list (the
+    default). A typed comma list of class names is checked like the picker.
+  - New setting kind "monsters" (settings.py monster_names; the editor's monsterNames): at most
+    8 names, small letters, digits and _.
+- **The Run applies it** (flow_play.role_alarm, for the hunt core only, then restored; the runner
+  is unchanged): the pick replaces the model's list. A name the model cannot see, or a monster it
+  strikes, is left out with a WARNING; none left = the model's own list. Never a refusal.
+- **Words:** the tick table's engage step, the engage sensor's note and the aggressive-monster
+  lint now say "the alarm monsters (the model's alarm list)" / "the boss and alarm rules", not
+  "Garm Baby".
+- **No `bosses` list.**
+  - The model's alarm list already holds its boss class (xmas02sk: knight_of_windstorm).
+  - The Battle Log boss read takes the map's boss names from the local KB, not from code.
+- Tests: the pick and its restore, the warnings, the setting's rules, the picker's choices; the
+  settings-related backend files and poring_flow's own pass; frontend 579/579.

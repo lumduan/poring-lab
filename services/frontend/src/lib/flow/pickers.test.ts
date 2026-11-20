@@ -547,3 +547,15 @@ test("roles-not-names step 2: an item setting picks from its role's items (the c
   assert.deepEqual(refChoices(ref("item", { role: "heal" }), data).map((c) => c.value), ["505"]);
   assert.deepEqual(refChoices(ref("item", { role: "weapon" }), d), []); // no KB: no list, nothing guessed
 });
+
+test("roles step 3: the alarm monster picker lists the node model's monsters it does not strike", () => {
+  const sk = { ...MODELS.xmas02, classes: ["player", "mystcase", "cookie", "garm_baby", "g_gobline_xmas", "knight_of_windstorm"], untrained: ["npc", "warp"], alarm: ["garm_baby", "g_gobline_xmas", "knight_of_windstorm"] };
+  const d = xmas(MAIN_TAB, { catalogue: { ...CAT, models: { ...MODELS, xmas02: sk } } as PickerData["catalogue"] });
+  const got = refChoices(ref("monster", { optional: "the model's own list" }), d);
+  assert.deepEqual(got.map((c) => c.value), ["garm_baby", "g_gobline_xmas", "knight_of_windstorm", "garm_baby,g_gobline_xmas,knight_of_windstorm"]);
+  assert.ok(got.slice(0, 3).every((c) => /on its own alarm list/.test(c.note ?? "")));
+  // the empty value is the model's own list; a typed comma list of names is kept as typed
+  assert.equal(refKnown(ref("monster", { optional: "the model's own list" }), "", d), true);
+  // no model for the node's map and none with monsters: nothing to offer
+  assert.deepEqual(refChoices(ref("monster"), xmas(MAIN_TAB, { catalogue: { ...CAT, models: { v1: MODELS.v1 } } as PickerData["catalogue"] })), []);
+});

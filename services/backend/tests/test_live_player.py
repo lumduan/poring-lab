@@ -1300,3 +1300,55 @@ def test_the_hook_adds_the_monster_to_its_events() -> None:
     hook.event({"kind": "kill", "by": "exp_line"}, 4.0)
     assert recs[0]["seen"] == {"name": "garm_baby", "conf": 0.91, "cells": 2}
     assert recs[1]["of"] == "garm_baby" and "of" not in recs[3]
+
+
+# --- roles-not-names.md step 3 (Batt 2026-11-20): the alarm monsters from the trained model ------
+SK = {"classes": ["player", "mystcase", "cookie", "garm_baby", "g_gobline_xmas",
+                  "knight_of_windstorm"],
+      "strikes": ["mystcase", "cookie"],
+      "alarm": ["garm_baby", "g_gobline_xmas", "knight_of_windstorm"]}  # fmt: skip
+
+
+def test_the_players_alarm_pick_replaces_the_models_list_for_one_run() -> None:
+    import dungeon_hunt as dh
+
+    before = dh.alarm_classes
+    assert dh.alarm_classes(SK) == ("garm_baby", "g_gobline_xmas", "knight_of_windstorm")
+    said: list[str] = []
+    with fp.role_alarm(dh, {"alarm_monsters": "knight_of_windstorm"}, said.append):
+        assert dh.alarm_classes(SK) == ("knight_of_windstorm",)
+    assert dh.alarm_classes is before and said == []
+    with fp.role_alarm(dh, {"alarm_monsters": ""}, said.append):  # not set: the model's own
+        assert dh.alarm_classes is before
+
+
+def test_a_pick_the_model_cannot_see_or_strikes_warns_and_keeps_the_rest() -> None:
+    import dungeon_hunt as dh
+
+    said: list[str] = []
+    with fp.role_alarm(dh, {"alarm_monsters": "poring,cookie,garm_baby"}, said.append):
+        assert dh.alarm_classes(SK) == ("garm_baby",)
+    assert "WARNING (the Run plays on)" in said[0] and "poring, cookie" in said[0]
+    said.clear()
+    with fp.role_alarm(dh, {"alarm_monsters": "poring"}, said.append):  # none left: its own list
+        assert dh.alarm_classes(SK) == ("garm_baby", "g_gobline_xmas", "knight_of_windstorm")
+    assert "the model's own alarm list is used" in said[0]
+    assert fp.alarm_pick(SK, ("cookie", "garm_baby")) == ("garm_baby",)
+
+
+def test_the_alarm_monsters_setting_is_a_comma_list_of_model_names() -> None:
+    from poring_flow import settings as st
+
+    f = (
+        st.BY_NAME["alarm_monsters"]
+        if hasattr(st, "BY_NAME")
+        else next(x for x in st.FIELDS if x.name == "alarm_monsters")
+    )
+    assert f.kind == "monsters" and f.optional and f.default == "" and not f.tune
+    assert st.monster_names("") == () and st.norm(f, " garm_baby , knight_of_windstorm ") == (
+        "garm_baby,knight_of_windstorm"
+    )
+    assert st.problem_of(f, "Garm Baby") is not None and st.problem_of(f, "a,a") is not None
+    assert st.problem_of(f, ",".join(f"m{i}" for i in range(9))) is not None  # at most 8
+    assert "alarm_monsters" not in " ".join(st.argv({"alarm_monsters": "garm_baby",
+                                                    "garm_fly": True}))  # fmt: skip

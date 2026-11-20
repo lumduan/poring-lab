@@ -38,7 +38,8 @@ from typing import Any
 VERSION = 3  # 2026-11-14: the settings are blocks (2: the config file, 1: survival.json)
 GAME_PX = (1280, 720)  # the game picture: a point lies inside it
 KEYS = tuple(f"F{i}" for i in range(1, 10))  # hotbar row 1: the keys the runner reads
-KINDS = ("key", "share", "number", "int", "point", "point_or_none", "switch", "choice", "item")
+KINDS = ("key", "share", "number", "int", "point", "point_or_none", "switch", "choice", "item",
+         "monsters")  # fmt: skip
 # A setting's PROJECT VARIABLE name where it is not the field's own (stated in ONE place): a
 # dotted runner constant is no variable name, and two field names are catalogue names (a block
 # loot(t), the built-in respawn), which a variable may not take.
@@ -87,7 +88,7 @@ class Field:
     @property
     def tune(self) -> bool:
         """A runner constant set with --tune (no flag of its own, and no switch)."""
-        return not self.flag and self.kind not in ("switch", "choice", "item")
+        return not self.flag and self.kind not in ("switch", "choice", "item", "monsters")
 
     @property
     def var(self) -> str:
@@ -147,6 +148,18 @@ FIELDS: tuple[Field, ...] = (
         optional=True,
     ),  # fmt: skip
     Field("heal_item", "survival", "item", "the heal item", find=("potion", "heal"), optional=True),
+    # roles-not-names.md step 3 (Batt 2026-11-20: "do not hard-code Garm Baby into a block; let the
+    # user take the names from the trained model"): the monsters the alarm flies on, picked from
+    # the node's model ("" = the model's own alarm list, models.yaml). Never a runner flag: the
+    # live player (flow_play.role_alarm) hands the pick to the runner for one Run
+    Field(
+        "alarm_monsters",
+        "safety",
+        "monsters",
+        "the alarm monsters (the model's own list when not set)",
+        find=("alarm", "monster", "garm", "boss", "fly"),
+        optional=True,
+    ),  # fmt: skip
     Field(
         "knife_max_s",
         "knife",
@@ -1017,6 +1030,7 @@ SWITCHES: tuple[Field, ...] = (
 _NEEDS: dict[str, tuple[tuple[str, Any], ...]] = {
     "knife_key": (("knife_swap", _ON),),
     "swap_item": (("knife_swap", _ON),),
+    "alarm_monsters": (("garm_fly", _ON),),
     "dagger_key": (("knife_swap", _ON),),
     "knife_max_s": (("knife_swap", _ON),),
     "knife_hp_min": (("knife_swap", _ON),),
@@ -1050,6 +1064,7 @@ DEFAULTS: dict[str, Any] = {
     # roles-not-names.md step 2: the role items (the runner's own SLOT_ROLES / STOCK_ITEMS ids)
     "swap_item": 1201,  # the Knife
     "heal_item": 504,  # the White Potion
+    "alarm_monsters": "",  # the node model's own alarm list (models.yaml `alarm`)
     # the Run settings (dungeon@9.41-9.43): the heal and escape numbers are --strategy P2's own
     "knife_max_s": 8.0,
     "knife_hp_min": 0.50,
@@ -1333,6 +1348,24 @@ def _on_grid(v: float, f: Field) -> bool:
     return f.step <= 0 or abs(v / f.step - round(v / f.step)) < 1e-6
 
 
+MONSTER_RE = re.compile(r"[a-z][a-z0-9_]{0,31}")
+MONSTERS_MAX = 8
+
+
+def monster_names(v: Any) -> tuple[str, ...] | None:
+    """PURE: a monsters setting's class names ("" = none: the model's own list), in order, or None
+    when it is not a comma list of model class names (small letters, digits, _; at most 8, no
+    repeat)."""
+    if not isinstance(v, str):
+        return None
+    names = tuple(t.strip() for t in v.split(",") if t.strip())
+    if len(names) > MONSTERS_MAX or len(set(names)) != len(names):
+        return None
+    if not all(MONSTER_RE.fullmatch(n) for n in names):
+        return None
+    return names
+
+
 def item_id(v: Any) -> int | None:
     """PURE: an item setting's id: from the flow's item value ({"kind": "item", "id": N}, the
     Python view's item(N)) or a plain id; None when it is neither."""
@@ -1347,6 +1380,11 @@ def problem_of(f: Field, v: Any) -> str | None:
     """PURE: why ``v`` cannot be ``f``'s value (None: it can)."""
     if f.kind == "item":
         return None if item_id(v) is not None else f"{f.words}: {v!r} is not an item (item(ID))"
+    if f.kind == "monsters":
+        if monster_names(v) is not None:
+            return None
+        return (f"{f.words}: {v!r} is not a list of the model's monster names "
+                f"(\"garm_baby, g_gobline_xmas\"; at most {MONSTERS_MAX})")  # fmt: skip
     if f.kind == "switch":
         return None if isinstance(v, bool) else f"{f.words}: {v!r} is not on or off (True / False)"
     if f.kind == "choice":
@@ -1375,6 +1413,8 @@ def norm(f: Field, v: Any) -> Any:
     """A valid value in its one spelling (an int a whole number, a number rounded to 4 places)."""
     if f.kind == "item":
         return item_id(v)
+    if f.kind == "monsters":
+        return ",".join(monster_names(v) or ())
     if f.kind in ("switch", "choice"):
         return v
     if f.kind in ("key", "point", "point_or_none"):
@@ -1542,7 +1582,7 @@ def argv(vals: Mapping[str, Any]) -> list[str]:
         if f.name not in vals or not in_use(f.name, vals):
             continue
         v = vals[f.name]
-        if f.kind == "item":  # the live player applies it (flow_play.role_items), never a flag
+        if f.kind in ("item", "monsters"):  # the live player applies them (flow_play), never a flag
             continue
         if f.kind == "switch":
             if v and f.flag:
@@ -1669,6 +1709,8 @@ def comment(f: Field, v: Any) -> str:
         how = '"X,Y" in the game picture' + (' or "none"' if f.kind == "point_or_none" else "")
     elif f.kind == "item":
         how = "the item's number in the game's item table"
+    elif f.kind == "monsters":
+        how = "the model's class names, comma-separated; empty = the model's own list"
     else:
         how = unit_of(f, v)
     return f"# {f.words}" + (f" ({how})" if how else "")

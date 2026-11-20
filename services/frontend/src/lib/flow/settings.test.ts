@@ -52,12 +52,12 @@ const f = (name: string) => {
 };
 const tabNamed = (p: Project, node: string, name: string) => nodeById(p, node)!.tabs.find((t) => t.name === name)!;
 
-test("the registry is the engine's: 127 setting blocks in 11 tabs, the keys none, each default valid", () => {
+test("the registry is the engine's: 128 setting blocks in 11 tabs, the keys none, each default valid", () => {
   assert.equal(SETTINGS.version, 3);
   // + fly_first (live-blocks 18), + fly_first_hp (18.11), + fly_first_land and FF_LAND_S (18.17);
   // + swap_item and heal_item (roles-not-names.md step 2, 2026-11-20: OPTIONAL blocks)
-  assert.equal(SETTING_BLOCKS.length, 127);
-  assert.deepEqual(SETTING_BLOCKS.filter((s) => s.optional).map((s) => [s.name, s.kind, s.default]), [["swap_item", "item", 1201], ["heal_item", "item", 504]]);
+  assert.equal(SETTING_BLOCKS.length, 128); // + alarm_monsters (roles-not-names.md step 3)
+  assert.deepEqual(SETTING_BLOCKS.filter((s) => s.optional).map((s) => [s.name, s.kind, s.default]), [["swap_item", "item", 1201], ["heal_item", "item", 504], ["alarm_monsters", "monsters", ""]]);
   // matpilot round 20 #5: in the box's tab order (survival before knife); "loop" is "timing"
   assert.deepEqual([...SETTING_TABS], ["survival", "knife", "exits", "respawn", "start", "fight", "aim", "loot", "walk", "safety", "timing"]);
   assert.deepEqual(SETTINGS.fields.filter((x) => !x.block).map((x) => x.name), ["heal_key", "fly_key", "home_key", "knife_key", "dagger_key"]);
@@ -261,7 +261,7 @@ test("each setting is a block type of its own; the toolbox offers every one in i
     // the header is as narrow as the blocks (the old one was 1,062 px, cut at 1440)
     for (const l of labels) assert.ok(rowUnits([textUnits(l)]) <= SETTING_ROW_BUDGET, `${c.name}: ${l}`);
   }
-  assert.equal(toolboxBlocks(set).length, 127);
+  assert.equal(toolboxBlocks(set).length, 128);
   assert.equal(categoryOf(toolbox({}, { node: "login", main: true }), "Settings"), undefined);
 });
 
@@ -411,4 +411,17 @@ test("roles-not-names step 2: an item setting is OPTIONAL, held when set, and ro
   const def = settingDef(sw);
   const value = (def.args0 ?? []).find((a) => (a as { name?: string }).name === "VALUE") as { type: string; pick?: { kind: string; ref?: string; role?: string } };
   assert.deepEqual([value.pick?.kind, value.pick?.ref, value.pick?.role], ["ref", "item", "weapon"]);
+});
+
+test("roles step 3: the alarm monsters are the model's names, a comma list ('' = the model's own)", async () => {
+  const { monsterNames, settingFromFields, settingProblem, SETTING_BY_NAME } = await import("./settings.ts");
+  assert.deepEqual(monsterNames(""), []);
+  assert.deepEqual(monsterNames(" garm_baby , g_gobline_xmas"), ["garm_baby", "g_gobline_xmas"]);
+  assert.equal(monsterNames("Garm Baby"), null);
+  assert.equal(monsterNames("a,a"), null);
+  const f = SETTING_BY_NAME.get("alarm_monsters");
+  assert.ok(f && f.kind === "monsters" && f.optional);
+  assert.equal(settingProblem(f, ""), null);
+  assert.deepEqual(settingFromFields(f, { VALUE: "garm_baby, knight_of_windstorm" }), { value: "garm_baby,knight_of_windstorm" });
+  assert.ok("error" in settingFromFields(f, { VALUE: "Garm Baby" }));
 });

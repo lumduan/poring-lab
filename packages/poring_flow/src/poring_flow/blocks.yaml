@@ -392,7 +392,7 @@ blocks:
     kind: core
     timeout_s: 1
     live: true  # 5c: in hunt_tick() only
-    note: "SAFETY -- a fight begins; the Garm Baby alarm; every tick, whichever block plays; without it an attack, the Garm Baby alarm and the boss guard would not be seen"
+    note: "SAFETY -- a fight begins; the alarm monsters (the model's alarm list); every tick, whichever block plays; without it an attack, the alarm and the boss guard would not be seen"
   step_ui:
     concept: core.tick_step
     kind: core

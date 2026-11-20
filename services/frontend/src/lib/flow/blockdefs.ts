@@ -683,6 +683,9 @@ export function settingDef(f: SettingField): BlockDef {
     case "item": // roles-not-names.md step 2: an item picked from the role's list (its number kept)
       args.push({ type: PICK_TEXT, name: "VALUE", text: String(f.default), pick: { kind: "ref", ref: "item", title: f.words, role: ITEM_ROLES[f.name] ?? "" } });
       break;
+    case "monsters": // roles-not-names.md step 3: the node model's monsters ("" = its own list)
+      args.push({ type: PICK_TEXT, name: "VALUE", text: String(f.default), pick: { kind: "ref", ref: "monster", title: f.words, optional: "the model's own list" } });
+      break;
     case "point_or_none":
       args.push({ type: "field_dropdown", name: "AT", options: [["at", "at"], ["none", "none"]] }, endRow("ROW_AT"), ...xy);
       break;

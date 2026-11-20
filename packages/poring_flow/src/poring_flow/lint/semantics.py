@@ -607,6 +607,6 @@ def _runner_species(ctx: Ctx, b: ir.MapBlock, sheet: Any,
                 2,
                 b.name,
                 f"mob {i} is aggressive and never struck: it attacks, the runner never answers it; "
-                "the HP events and the runner's own boss and Garm Baby rules decide",
+                "the HP events and the runner's own boss and alarm rules decide",
             )
     _look_alike(ctx, b, hit, never, "struck", "never struck")

@@ -14,7 +14,17 @@ import type { Lit } from "./ir.ts";
 import type { Project, Tab } from "./project.ts";
 import { SETTINGS_REGISTRY } from "./settings.gen.ts";
 
-export type SettingKind = "key" | "share" | "number" | "int" | "point" | "point_or_none" | "switch" | "choice" | "item";
+export type SettingKind = "key" | "share" | "number" | "int" | "point" | "point_or_none" | "switch" | "choice" | "item" | "monsters";
+
+/** roles-not-names.md step 3: a monsters setting's class names ("" = none: the model's own list),
+ * or null when it is not a comma list of class names (at most 8, no repeat) -- settings.py's
+ * monster_names. */
+export function monsterNames(v: unknown): string[] | null {
+  if (typeof v !== "string") return null;
+  const names = v.split(",").map((t) => t.trim()).filter((t) => t !== "");
+  if (names.length > 8 || new Set(names).size !== names.length) return null;
+  return names.every((n) => /^[a-z][a-z0-9_]{0,31}$/.test(n)) ? names : null;
+}
 export type SettingValue = string | number | boolean;
 export type SettingField = {
   name: string; // the runner's name ("knife_hp_min", "vt.D0_PX")
@@ -76,6 +86,7 @@ export const settingValueText = (f: SettingField, v: SettingValue): string => wi
 /** PURE: why ``v`` cannot be the setting's value (null: it can) -- poring_flow.settings.problem_of. */
 export function settingProblem(f: SettingField, v: unknown): string | null {
   if (f.kind === "item") return typeof v === "number" && Number.isInteger(v) && v > 0 ? null : `${f.words}: ${String(v)} is not an item (its number)`;
+  if (f.kind === "monsters") return monsterNames(v) !== null ? null : `${f.words}: ${String(v)} is not a list of the model's monster names`;
   if (f.kind === "switch") return typeof v === "boolean" ? null : `${f.words}: not on or off`;
   if (f.kind === "choice") return f.options.includes(String(v)) && typeof v === "string" ? null : `${f.words}: ${String(v)} is not one of ${f.options.join(", ")}`;
   if (f.kind === "key") return SETTINGS.keys.includes(String(v)) ? null : `the ${f.words}'s key ${String(v)} is not a row-1 hotbar key (F1-F9)`;
@@ -351,6 +362,7 @@ export function settingFields(f: SettingField, v: SettingValue): Record<string, 
     case "choice":
     case "key":
     case "item": // the item's number; the picker shows its name
+    case "monsters": // the class names, comma-separated ("" = the model's own list)
       return { VALUE: String(v) };
     case "share":
       return { VALUE: tidy(Number(v) * 100) };
@@ -384,6 +396,11 @@ export function settingFromFields(f: SettingField, fields: Record<string, unknow
     case "item": {
       const t = String(fl.VALUE ?? "").trim();
       v = /^[0-9]{1,6}$/.test(t) ? Number(t) : t;
+      break;
+    }
+    case "monsters": {
+      const names = monsterNames(String(fl.VALUE ?? ""));
+      v = names === null ? String(fl.VALUE ?? "") : names.join(",");
       break;
     }
     case "share":

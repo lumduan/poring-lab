@@ -412,7 +412,7 @@ def test_a_runner_node_names_what_the_runner_strikes_and_never_strikes() -> None
     # an aggressive monster the runner never strikes: the HP events and its own rules decide
     angry = species(json.loads(XMAS.read_text()), _xmas_world(**{"1251": {"aggressive": True}}))
     assert ("warning", "mob 1251 is aggressive and never struck: it attacks, the runner never "
-            "answers it; the HP events and the runner's own boss and Garm Baby rules "
+            "answers it; the HP events and the runner's own boss and alarm rules "
             "decide") in angry  # fmt: skip
 
 

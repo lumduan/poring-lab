@@ -57,6 +57,7 @@ export type RefKind =
   | "save_map" // a map for the save point: the maps with a Kafra first
   | "stop" // a stop reason (the project's, then the usual ones)
   | "item" // an item of a role setting (`role`: "weapon" | "heal"; the catalogue's role_items)
+  | "monster" // the alarm monsters: the node model's classes it does not strike (step 3)
   | "node" // a map node of the project (an exit's arrival)
   | "entry" // an entry of the node the block's TO_BLOCK names
   | "window" // an L2 window (the catalogue's `windows`)
@@ -539,6 +540,8 @@ export function refChoices(spec: Extract<PickSpec, { kind: "ref" }>, data: Picke
       return (data.catalogue?.windows ?? []).map((w) => ({ value: w, label: w.replaceAll("_", " "), group: "windows" }));
     case "item":
       return (data.catalogue?.role_items?.[spec.role ?? ""] ?? []).map((i) => ({ value: String(i.id), label: i.label, note: `item ${i.id}`, group: spec.role ?? "items" }));
+    case "monster":
+      return alarmChoices(data);
     case "server":
       return (data.catalogue?.servers ?? []).map((s) => ({ value: s.id, label: s.id, note: `${s.status}${s.lab ? " · the lab's" : ""}`, group: "servers" }));
     case "variable":
@@ -559,6 +562,7 @@ const TYPED: Record<RefKind, { re: RegExp; why: string } | null> = {
   entry: { re: NAME, why: "an entry's name" },
   window: { re: /^[a-z][a-z0-9_]{0,47}$/, why: "a window name: small letters, digits and _" },
   item: { re: /^[0-9]{1,6}$/, why: "an item's number" },
+  monster: { re: /^[a-z][a-z0-9_]{0,31}(, ?[a-z][a-z0-9_]{0,31}){0,7}$/, why: "the model's monster names, comma-separated" },
   server: { re: KEY, why: "a server's id" },
   variable: { re: NAME, why: "a variable's name: letters, digits and _, a letter first" },
 };
@@ -610,6 +614,28 @@ export function recipeNames(data: PickerData, model: string | null): Choice[] {
   const have = new Set(functionsOn(data).map((f) => f.name));
   const out = m.strikes.map((c): Choice => ({ value: `attack_${c}`, label: `attack_${c}`, note: `the recipe for ${c.replaceAll("_", " ")} (${m.model})${have.has(`attack_${c}`) ? " · written already" : ""}`, group: have.has(`attack_${c}`) ? "written" : "new" }));
   return out.sort((a, b) => Number(a.group !== "new") - Number(b.group !== "new"));
+}
+
+/** PURE (roles-not-names.md step 3; Batt 2026-11-20: the monster names from the trained model):
+ * the alarm monster choices of the node's model -- its use_model's, else the map's live detector
+ * (not a reference model), else the first live one with monsters -- its classes but the ones it
+ * strikes, the player, NPCs, warps and untrained classes; each alone, then all together. The
+ * empty value (the picker's optional entry) is the model's own alarm list. */
+export function alarmChoices(data: PickerData): Choice[] {
+  const models = data.catalogue?.models ?? {};
+  const node = data.project && data.node ? nodeById(data.project, data.node) : undefined;
+  const map = node?.kind === "map" ? node.map.map : null;
+  const named = nodeModel(data);
+  const live = Object.entries(models).filter(([, m]) => m.kind === "detector" && m.available && !m.reference);
+  const id = named ?? live.find(([, m]) => map !== null && m.maps.includes(map))?.[0] ?? live.find(([, m]) => m.strikes?.length)?.[0];
+  const m = id ? models[id] : undefined;
+  if (!id || !m) return [];
+  const skip = new Set([...(m.strikes ?? []), ...(m.untrained ?? []), "player", "npc", "warp", "monster"]);
+  const can = m.classes.filter((c) => !skip.has(c));
+  const own = new Set(m.alarm ?? []);
+  const out: Choice[] = can.map((c) => ({ value: c, label: c.replaceAll("_", " "), note: `${id}${own.has(c) ? " · on its own alarm list" : ""}`, group: "one monster" }));
+  if (can.length > 1) out.push({ value: can.join(","), label: `all ${can.length}: ${can.map((c) => c.replaceAll("_", " ")).join(", ")}`, note: id, group: "together" });
+  return out;
 }
 
 /** The model a node's main names (its use_model's), else null. */

@@ -964,7 +964,12 @@ class HuntCore:
                 self.learn_fn(player)
             a = args_fn(argv)
             # never refuses on them (Batt 2026-11-19); the player's role items (step 2)
-            with player_owns_the_start(dh, warn), role_items(dh, plan.vals), seen_boxes(seen):
+            with (
+                player_owns_the_start(dh, warn),
+                role_items(dh, plan.vals),
+                role_alarm(dh, plan.vals, warn),
+                seen_boxes(seen),
+            ):
                 res.rc = run_fn(a, hook=hook, session=(player.io.agent, player.io.screen), **box)
         except SystemExit as e:  # its preamble's refusal, or ro_agent.Stop inside its session
             res.error = str(e)[:400] or "the runner stopped"
@@ -1944,6 +1949,47 @@ def role_items(dh: Any, vals: Mapping[str, Any]) -> Iterator[None]:
     finally:
         for k, v in saved.items():
             setattr(dh, k, v)
+
+
+def alarm_pick(model: Mapping[str, Any] | None, want: Sequence[str]) -> tuple[str, ...]:
+    """PURE (roles-not-names.md step 3): the player's alarm monsters that the box model can see
+    and does not strike, in the player's order; empty = none usable (the model's own list)."""
+    classes = set((model or {}).get("classes") or ())
+    strikes = set((model or {}).get("strikes") or ())
+    return tuple(c for c in want if c in classes and c not in strikes)
+
+
+@contextlib.contextmanager
+def role_alarm(dh: Any, vals: Mapping[str, Any],
+               warn: Callable[[str], None] = print) -> Iterator[None]:  # fmt: skip
+    """roles-not-names.md step 3 (Batt 2026-11-20: the monster names from the trained model, never
+    hard-coded): the player's ``alarm_monsters`` pick replaces the box model's own alarm list
+    (dungeon_hunt.alarm_classes, looked up by name when the run starts) for the block's duration,
+    then restored. A name the model cannot see, or a monster it strikes, is left out with a
+    WARNING (never a refusal); none left = the model's own list. Not set = unchanged."""
+    from poring_flow import settings as st
+
+    want = st.monster_names(vals.get("alarm_monsters", "")) or ()
+    if not want:
+        yield
+        return
+    saved = dh.alarm_classes
+
+    def picked(model: Mapping[str, Any] | None) -> tuple[str, ...]:
+        got = alarm_pick(model, want)
+        if len(got) != len(want):
+            left = [c for c in want if c not in got]
+            warn(f"WARNING (the Run plays on): the alarm monster(s) {', '.join(left)} are not "
+                 "monsters this model sees without striking them: "
+                 + (f"the alarm flies on {', '.join(got)}" if got
+                    else "the model's own alarm list is used"))  # fmt: skip
+        return got or tuple(saved(model))
+
+    dh.alarm_classes = picked
+    try:
+        yield
+    finally:
+        dh.alarm_classes = saved
 
 
 @contextlib.contextmanager
