@@ -827,3 +827,40 @@ AG / AH (v1Tg: `990790e4...` / `05501847...`), each 100 % of its pack, none saw 
   - that Run: 20 kills, 34 loot steps, 9 picks in 12.8 min.
   - Its own round at 1080 (the monster model's route: 1080 recordings, labels, training) is
     the next step, pre-registered first. Batt decides when.
+
+### Amendment 23 (2026-11-20 20:52 ICT from `date`): 8c's RESULT (scored once) -- FAIL against 720 and Batt's line; a clear GAIN over the old model at 1080
+
+`screen_ab.py score --a s11scr-720 --b s12scr-1080+s12scr-1080b`. Valid runs: A 2 (r03A 14.4
+min, stock_out), B 2 (r03B never started; 1080b-r01B 10.5 min, stock_keep: both under the 80 %
+rule). Every B run's box loaded xmas02v1080 (no box_model problems); 205 / 205 of B's box
+detections were on the GPU (22-24 ms).
+
+| line | A: 720, xmas02sk | B: 1080, xmas02v1080 | bar | verdict |
+|---|---|---|---|---|
+| deaths | 0 | 0 | B <= A | PASS |
+| kills/h | 129.15 +- 7.65 | 99.25 +- 7.25 | diff -29.9 +- 10.5 >= -2 SE | **FAIL** |
+| loot/h | 155.0 +- 24.4 | 134.4 +- 8.6 | diff -20.6 +- 25.9 >= -2 SE | PASS |
+| errors | 0 | 0 | none new in B | PASS |
+| false boss Fly Wings / h | 6 in 39.5 min = 9.1 | 14 in 39.3 min = 21.4 | diff 12.3 <= 2 SE (Poisson) 13.6 | PASS |
+| **Batt's line (Amendment 20)** | 56.5 % of his | **43.4 %** of his 228.5 kills/h | >= 56.5 % | **FAIL** |
+
+- **THE VERDICT: 8c FAILS.** At 1080 the new model does not play as well as 720 does. 8a / 8b's
+  PASS stands for detection.
+- **Reported, like for like at the SAME screen** (`--a s11scr-1080+s11scr-1080b`, the old
+  xmas02sk at 1080):
+  - kills/h 72.9 -> **99.25** (+26.3 +- 8.2, +36 %);
+  - loot/h 96.2 -> **134.4** (+38.2 +- 16.7, +40 %);
+  - false boss Fly Wings 28.3 -> **21.4 / h**.
+  - So at 1080 the new model is clearly better than the one live uses now. 8b showed no loss at
+    720.
+- **Where the gap to 720 is, by time lost:**
+  1. False Christmas Goblin alarms in play. 12 of B's 14 false flies are g_gobline_xmas; each
+     costs a Fly Wing and a fresh search. On the held-outs' alarm-free frames it fired 0 / 400:
+     the false sightings come from play frames the held-outs did not cover (moving camera,
+     crowds).
+  2. The cursor's read at 1080 (section 10, cause 2).
+  3. The item model at 1080 (cause 3; Amendment 22).
+- The run economies (packets' gross z/h): A 67,607 / 76,507; B 37,354 / 39,352.
+- **Deployment stays Batt's decision.** On the evidence, xmas02v1080 beats xmas02sk at 1080 and
+  equals or beats it at 720 (8b).
+- Files: `s12-score.json` `73b33fdc...`, `s12-vs-old.json` `5fe599a1...` (screen-ab scratch, archived with the series).
