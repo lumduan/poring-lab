@@ -495,3 +495,64 @@ FIT ran 09:04-09:08 (`run-fit.sh`, CPU, nice 10, a 4 GB scope) on `20261120T0837
   - The training is not affected. The guard writes the deleted inode and would read the path back
     at its end, so `x1080/train/logsync.sh` keeps the path a copy of the inode (at most 15 s
     stale) until the guard exits.
+
+### Amendment 13 (2026-11-20 14:27 ICT from `date`, BEFORE the freeze and before any held-out read): the scoring runbook
+
+Fixed now, so section 8 is scored as 720's was (xmas02-detector.md M6 / S4 / S7.4), once.
+
+- **Names:**
+  - N=/mnt/poring-lab-datasets; F=/dev/shm/poring-lab-tmp/x1080/fit (params-1080.json, FROZEN;
+    classes-none.json); T=/dev/shm/poring-lab-tmp/x1080/eval; E=data/train/eval/x1080 (the
+    worker's /data/train/eval/x1080); M=/dev/shm/poring-lab-detector/model.
+  - The held-outs: v1T = 20261120T113048-rdp-xmas02-v1T, v1Tg = 20261120T120438-rdp-xmas02-v1Tg,
+    v1Tk = 20261120T122115-rdp-xmas02-v1Tk.
+  - The cache manifest is Amendment 10's (3331793f...).
+- **0. The freeze:** the guard ends `execdev:vision: OK` and results.csv has 6 rows. The
+  last.pt sha256 is recorded in the next amendment BEFORE step 2.
+- **1. The ONNX export:** M6 step 1's recipe (the temporary RAM env, imgsz (736, 1280),
+  simplify, cpu) gives `xmas02v1080-last-736x1280.onnx` + `.names.json` into M. Their sha256
+  are recorded; the env is removed.
+- **2. The TEST labels** (`--eval-test`; the names are in map_labels' TEST suffixes since
+  Amendment 1), each held-out under params-1080:
+
+        map_labels.py labels --map xmas_dun02 --eval-test $N/<held-out> --params $F/params-1080.json \
+            --classes $F/classes-none.json --out $T/labels-test/<held-out>.json
+
+- **3. The packs and the blind labellers** (A1-A3):
+  - v1T (the four species) and v1Tg (Garm Baby): `map_labels.py pack ... --per-species 60
+    --seed 53`, no fit floor (11-07's evaluation pack ran without one).
+  - The instructions: docs/planning/xmas02-blind-instructions.txt, sha256 dc48fb15...
+  - Two NEW blind labeller agents per pack (at most two at once; each sees its pack, the
+    instructions and its own answers path only): AE / AF for v1T, AG / AH for v1Tg.
+- **4. The refs and the predictions:**
+  - `eval_q1.py refs <key> --out $E/q1-refs-<s>.json --labels-dir $T/labels-test`;
+    v1T's also gets `--latency-200 53`.
+  - Then ONE guarded GPU step:
+    `execdev:vision@1800=python -m poring_vision.predict_dir --weights
+    /data/train/xmas02-v1080-20261120/weights/last.pt --refs ... --out ...`.
+  - For the alarm: the same over EVERY frame of v1Tk and of v1T / v1Tg's alarm-free frames
+    (`units --all-frames`), as S7.4 step 2.
+- **5. The scores, once each:**
+  - `eval_q1.py score KEY A B PRED --cache-manifest <Amendment 10's> --out ...`.
+  - A1 / A2: Q1c.per_species, the four species on v1T, each with >= 50 crops.
+  - A3: Q1.per_species.garm_baby (Q1s: the classes agreeing) on v1Tg.
+- **6. The alarm** (A4-A6):
+  - `eval_q1.py vanishes $N/v1Tk $N/v1T $N/v1Tg --out $E/vanishes.json`.
+  - Then `eval_q1.py alarm --held-out UNITS-v1Tk-all PRED-v1Tk-all --free UNITS-v1T PRED-v1T
+    --free UNITS-v1Tg PRED-v1Tg --vanishes $E/vanishes.json --post-vanish-s 5.0
+    --cache-manifest <Amendment 10's> --out $E/alarm-v1Tk.json`.
+  - A4 = its line 1 (visits fired within 2.5 s), A5 = line 2a, A6 = line 2b.
+- **7. The latency** (A7):
+  - The GPU: predict_dir's own per-call times over v1T's refs, p95 <= 35 ms.
+  - The CPU: `eval_latency.py $E/latency-200-refs.json --model x1080=<step 1's onnx> --model
+    xmas02sk=$M/<the deployed xmas02sk onnx> --out $E/latency-cpu.json` (nice 10 by itself),
+    p95 <= 1.10 x xmas02sk's.
+- **8. 8b** (no loss at 720):
+  - xmas02sk's own 720 held-out keys, answers and refs are REUSED as archived (TEST xw5 / xp1 /
+    X2, gw3, sk6a; nothing re-labelled or re-asked). Only the predictions are new: the 1080 model
+    by the same predict_dir step.
+  - Scored by the same score / alarm commands against S7's bars (lines 1, 2a, 2b; Q1c >= 0.80 /
+    0.80; Garm Baby Q1s >= 0.80 / 0.80), with xmas02sk's own numbers beside them.
+- **9. Then:** the worker stopped (verified), the results here, the run archived to the NAS
+  (`guarded_build.py archive:`), the scratch shipped the same day. 8c (the play block) only after
+  8a and 8b pass; deployment is Batt's decision.
