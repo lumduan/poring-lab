@@ -14,6 +14,23 @@ defaults: one class ``floor_item``, a SEPARATE item model ``xmas02-fi``). Tools 
     fi_labels.py pack LABELS.json... --eval-test --params PARAMS --seed 63 --out JSON    O.9
     fi_labels.py refs LABELS.json... --out REFS.json         predict_dir --refs for the evaluation
 
+AT 1920 x 1080 (docs/planning/xmas02-items-1080.md, tools T-I1, T-I2, T-I4; the virtual 1280 x 720
+picture of the fullscreen client, rec_paths' ``virtual-1080`` path):
+    fi_labels.py fit-1080 PART --out REPORT.json [--workers N]
+                                          T-I2: the 1080 constants FITTED on ifF (nothing frozen)
+    fi_labels.py freeze-1080 --fit REPORT.json [--out PARAMS]
+                                          T-I2: items-params-1080.json, frozen once (its sha256)
+    fi_labels.py label PART --spec 1080 --split train|val --params PARAMS --out LABELS.json
+    fi_labels.py pack LABELS.json... --spec 1080 --params PARAMS --seed 71 --out JSON
+                                          section 6: T2 on the 1080 TRAIN labels
+    fi_labels.py pack LABELS.json... --spec 1080 --round 6 --eval-test --params PARAMS --seed N
+                      --out JSON          T-I4: round 6's evaluation pack
+``--spec 1080`` is XMAS02_FI_1080: the same rule xmas02-fi-1, the 1080 monster params (9c73278f),
+FIT / VAL = ifF, the held-out ifH1 / ifH2 / ifsH1 refused by NAME, and every pixel constant (the
+anchor, the scale, r_label, T_item, the bar, the self box, the margin) READ from its frozen params
+(freeze-1080), never from the 720 values; a recording of the other screen is refused once opened
+(its manifest's path). The 720 spec (the default) is unchanged.
+
 THE RULE (O.3, every value fixed on FIT p31 and frozen by ``freeze``):
 - (a) an item lies on the floor from its ``floor_item_appear`` to its ``floor_item_vanish`` or our
   map change (item_labels.floor_items); on a frame at capture time t it is LABELLED when t_a + 2.2 s
@@ -98,6 +115,7 @@ import map_labels as ml  # noqa: E402
 import orc_camera_check as occ  # noqa: E402
 import orc_labels_fix as olf  # noqa: E402
 import qa_export  # noqa: E402
+import rec_paths  # noqa: E402
 
 from poring_dataset.render import (  # noqa: E402
     Actor,
@@ -140,6 +158,10 @@ R4_NOAURA = ("-rdp-xmas02-fsTn4",)  # fi_eval.R4_NOAURA
 # round 5 is aura-off throughout (O22), so the slot names mean natural / staging here
 R5_EVAL_SEED = 69
 R5_STAGING = ("-rdp-xmas02-fsH1",)  # the second slot (fi_eval.R5_AURA_OFF's staging)
+# xmas02-items-1080.md (round 6, the 1080 item round; T-I4): round 5's evaluation pack, the first
+# slot the natural drops (ifH1 + ifH2, <= 70), the second the staging (ifsH1, <= 50); its seed from
+# the CLI (the plan names none; the parent's amendment records it before the pack is drawn)
+R6_STAGING = ("-xmas02-ifsH1",)  # fi_eval.R6_STAGING (a test pins the two equal)
 PER_FLOOR_ITEM = 3  # O.5 / O.9: at most 3 crops per floor item
 HARD_POOL = 200  # absent points fitted to find the hard ones (one per TRAIN frame, seeded)
 NEG_DX, NEG_DY = 7, 5  # O.1e (fi_study.py): an absent point within +-7 x +-5 cells of ours ...
@@ -152,11 +174,29 @@ SUBS = (3, 6, 9, 12)
 # 2026-11-10 11:1x ICT: 8,795 orange and 88 pale pixels)
 TILE_ORANGE = (202, 125, 86)
 TILE_PALE = (224, 202, 172)
+# --- xmas02-items-1080.md (T-I1, T-I2): the 1080 round ------------------------------------------
+FI_1080 = Path("/dev/shm/poring-lab-tmp/i1080")  # the 1080 item round's RAM folder (Amendment 1)
+X1080_MONSTER = Path("/dev/shm/poring-lab-tmp/x1080/fit/params-1080.json")  # 1080 monster, FROZEN
+X1080_MONSTER_SHA256 = "9c73278f8c1aca1fb315673e3ee350db904407349b7655b14dee4d47c8de0331"
+# the recorder names a session <stamp>-<backend>-xmas02-<label> (20261120T214246-rdp-xmas02-ifF);
+# no backend in the suffixes, so a name is refused whatever path recorded it
+IF_FIT = ("-xmas02-ifF",)  # section 4: FIT / VAL, the absent controls; never TRAIN
+IF_HELD_OUT = ("-xmas02-ifH1", "-xmas02-ifH2", "-xmas02-ifsH1")  # section 4: refused by NAME
+FIT_SCALES_1080 = tuple(round(0.85 + 0.05 * k, 2) for k in range(7))  # 0.85 .. 1.15 (T-I2)
+FIT_R_1080 = gi.R_MEASURE  # the anchor's search around the UNANCHORED prediction (gef10 8's +-10)
+T_GRID = tuple(round(0.05 * k, 2) for k in range(1, 21))  # 0.05 .. 1.00 (O.3 (c)'s 0.05 grid)
+T_ITEM_MAX_RATE = 0.005  # O.3 (c): the smallest T whose FIT absent-control pass rate <= 0.5 %
+ABSENT_POINTS_1080 = 400  # absent points on FIT (one a kept frame; O.1e's rule, absent_points)
+ABSENT_MIN_POINTS = 200  # a 0.5 % rate is resolved only with >= 200 points (one pass in 200)
+BAR_CHECK_WINDOW = (-39.0, 2.0, 36.0, 26.0)  # the 720 FIT bar + 8 px: where the check looks
+BAR_CHECK_MIN_PX = 20  # a frame's bar-coloured pixels for its bar to count as read
 
 
 @dataclass(frozen=True)
 class FiSpec:
-    """One map's floor-item rule (only xmas_dun02's exists: Amendment O)."""
+    """One map's floor-item rule (xmas_dun02's: Amendment O at 720, xmas02-items-1080.md at 1080).
+    A spec whose pixel constants (``anchor_px`` ... ``bar``) are None reads them from its frozen
+    params file only (the 1080 spec: freeze-1080)."""
 
     name: str
     mspec: ml.MapSpec
@@ -169,16 +209,16 @@ class FiSpec:
     sprites: Path  # the decoded item SPR / ACT files
     resnames: Path  # idnum2itemresnametable.txt
     params: Path  # O.3 (g)
-    anchor_px: tuple[float, float]
-    scale: float
-    r_label: int
-    t_item: float
-    bar: Box
+    anchor_px: tuple[float, float] | None
+    scale: float | None
+    r_label: int | None
+    t_item: float | None
+    bar: Box | None
     d_appear_s: float
     d_gone_s: float
     stack_iou: float
     pack_seed: int
-    eval_seed: int
+    eval_seed: int | None
     salt: str
     plan: str
     # params v2 (Amendment O3): the absent rule's sessions (FIT, DEV) and its output file
@@ -186,6 +226,14 @@ class FiSpec:
     params_v2: Path | None = None
     # the species whose drop tables name the floor items (drop_ids); empty: the monster MapSpec's
     drop_species: tuple[int, ...] = ()
+    # T-I1: the screen the spec labels (rec_paths' lab-720 / virtual-1080 path), the virtual
+    # picture's world scale, its RAM folder (packs), and the names role_refusal's reasons cite
+    screen: str = "720"
+    world_scale: float = 1.0
+    work: Path = FI
+    heldout_note: str = "fiT, Amendment O1"
+    fit_note: str = "p31"
+    refused_note: str = "O.0: p30 is the GPU video recording"
 
 
 XMAS02_FI = FiSpec(
@@ -219,7 +267,66 @@ XMAS02_FI = FiSpec(
     # amendment of their own
     drop_species=(1249, 1248, 1265, 1246, 1515, 1607),
 )  # fmt: skip
-FI_MAPS = {"xmas_dun02": XMAS02_FI}
+# T-I1 (xmas02-items-1080.md 3): the same rule on the virtual 1280 x 720 picture of the 1920 x 1080
+# fullscreen client. Its pixel constants are None here: they are FITTED on ifF (fit-1080) and read
+# from items-params-1080.json (freeze-1080) only. The times (2.2 / 0.6 s), the stack IoU, the
+# sprites and the species are the rule's, not pixels: the 720 values
+XMAS02_FI_1080 = FiSpec(
+    name="xmas_dun02",
+    mspec=ml.XMAS02,
+    rule=RULE,
+    val_suffixes=IF_FIT,
+    refused_suffixes=(),
+    eval_suffixes=IF_HELD_OUT,
+    monster_params=X1080_MONSTER,
+    monster_params_sha256=X1080_MONSTER_SHA256,
+    sprites=XMAS02_FI.sprites,
+    resnames=XMAS02_FI.resnames,
+    params=FI_1080 / "items-params-1080.json",
+    anchor_px=None,
+    scale=None,
+    r_label=None,
+    t_item=None,
+    bar=None,
+    d_appear_s=XMAS02_FI.d_appear_s,
+    d_gone_s=XMAS02_FI.d_gone_s,
+    stack_iou=XMAS02_FI.stack_iou,
+    pack_seed=71,  # section 6: T2 on the 1080 TRAIN labels, seed 71
+    eval_seed=None,  # round 6's evaluation pack takes its seed from the CLI (T-I4)
+    salt=XMAS02_FI.salt,  # round 5's method: only the seed differs
+    plan="docs/planning/xmas02-items-1080.md (T-I1, T-I2)",
+    absent_suffixes=IF_FIT,
+    params_v2=None,
+    drop_species=XMAS02_FI.drop_species,
+    screen="1080",
+    world_scale=1.5,  # rec_paths.VIEW_1080's (a test pins the two equal)
+    work=FI_1080,
+    heldout_note="ifH1 / ifH2 / ifsH1, xmas02-items-1080.md 4",
+    fit_note="ifF",
+    refused_note="",
+)
+# every registered floor-item rule (build_frame_cache's item_specs reads the values: two rules
+# of a map sharing the rule name are told apart by their params' monster_params_sha256, which
+# freeze_params and freeze-1080 both write: d4cc0a5d... at 720, 9c73278f... at 1080). The
+# "xmas_dun02" key stays the 720 rule (freeze, freeze-v2); --map takes the MAP names (MAP_NAMES)
+FI_MAPS = {"xmas_dun02": XMAS02_FI, "xmas_dun02@1080": XMAS02_FI_1080}
+MAP_NAMES = sorted({s.name for s in FI_MAPS.values()})
+# every spec by (map, screen); a params file names its spec by its "screen" (spec_for_params)
+FI_SPECS = {("xmas_dun02", "720"): XMAS02_FI, ("xmas_dun02", "1080"): XMAS02_FI_1080}
+SCREENS = ("720", "1080")  # --spec
+
+
+def spec_of(a: argparse.Namespace) -> FiSpec:
+    """The spec a command names: ``--map`` and ``--spec`` (720 when the command has no --spec)."""
+    return FI_SPECS[(a.map, str(getattr(a, "spec", None) or "720"))]
+
+
+def spec_for_params(doc: Mapping[str, Any]) -> FiSpec:
+    """The spec a params file was frozen for: its map and its ``screen`` (none: the 720 files)."""
+    key = (str(doc.get("map")), str(doc.get("screen", "720")))
+    if key not in FI_SPECS:
+        raise SystemExit(f"map {key[0]!r} at {key[1]} has no floor-item rule")
+    return FI_SPECS[key]
 
 
 # --- pure parts --------------------------------------------------------------------------------
@@ -239,17 +346,35 @@ def role_refusal(spec: FiSpec, sid: str, split: str | None, eval_test: bool) -> 
         names = ", ".join(spec.eval_suffixes)
         return f"--eval-test reads the held-out only (a name ending in {names})"
     if on(spec.eval_suffixes):
-        return "the floor items' held-out (fiT, Amendment O1): --eval-test only"
+        return f"the floor items' held-out ({spec.heldout_note}): --eval-test only"
+    for other in FI_SPECS.values():  # T-I1: another screen's held-out is never labelled here
+        if other is not spec and other.name == spec.name and on(other.eval_suffixes):
+            return f"the {other.screen} floor items' held-out: --eval-test under its own spec only"
     if spec.mspec.is_test(sid, None):
         return "shares frames with the map's TEST (3b; gw3, Amendment M)"
     if on(spec.refused_suffixes):
-        return "not usable (O.0: p30 is the GPU video recording)"
+        return f"not usable ({spec.refused_note})"
     if split == "val" and not on(spec.val_suffixes):
         return f"--split val is FIT only ({', '.join(spec.val_suffixes)}; O.6)"
     if split == "train" and on(spec.val_suffixes):
-        return "FIT (p31) is VAL only (O.6): --split val"
+        return f"FIT ({spec.fit_note}) is VAL only (O.6): --split val"
     if split not in ("train", "val"):
         return f"--split {split}: train or val"
+    return None
+
+
+def screen_refusal(spec: FiSpec, manifest: Mapping[str, Any]) -> str | None:
+    """PURE (T-I1): why an OPENED recording may not be labelled under ``spec``: the 720 spec labels
+    the lab's 720 path only, the 1080 spec the virtual 1080 path at its world scale (rec_paths);
+    a constant fitted on one screen never labels the other's pixels."""
+    path = rec_paths.path_of(manifest)
+    want = "lab-720" if spec.screen == "720" else "virtual-1080"
+    if path != want:
+        return f"a {path or 'refused'} recording: the {spec.screen} spec labels {want} only"
+    if want == "virtual-1080":
+        ws = float((manifest.get("client_view") or {}).get("world_scale", 0.0))
+        if abs(ws - spec.world_scale) > 1e-6:
+            return f"world scale {ws}, not the {spec.screen} spec's {spec.world_scale}"
     return None
 
 
@@ -267,15 +392,95 @@ def cheb(a: Sequence[float], b: Sequence[float]) -> float:
     return max(abs(float(a[0]) - float(b[0])), abs(float(a[1]) - float(b[1])))
 
 
+def self_box_of(prm: Mapping[str, Any], me: tuple[float, float]) -> Box:
+    """Our self box at our anchor ``me``. A params file of another screen (its ``screen`` key: the
+    1080 one) carries its own (w, h, pad); a 720 file has no ``screen`` and keeps gef10_items' box
+    (labels v2's 34 x 74 + 4 px) exactly as before."""
+    if "screen" not in prm:
+        return gi.self_box(me)
+    sb = prm["self_box"]
+    w, h, pad = float(sb["w"]), float(sb["h"]), float(sb["pad"])
+    return (me[0] - w / 2 - pad, me[1] - h - pad, me[0] + w / 2 + pad, me[1] + pad)
+
+
+def margin_of(prm: Mapping[str, Any]) -> float:
+    """The clear-view margin: the params' (another screen's) or MARGIN_PX (a 720 file)."""
+    return MARGIN_PX if "screen" not in prm else float(prm["g2"]["margin_px"])
+
+
+def bar_1080(bar: Sequence[float], world_scale: float, about: str) -> list[float]:
+    """PURE (T-I2): the 720 FIT bar (x0, y0, x1, y1 from her foot point) at native size in the
+    virtual frame: its size / world_scale, scaled about her FOOT POINT ("feet": its offset from her
+    feet native too) or about its own CENTRE ("centre": its place below her feet keeps the
+    world's scale, only its size is native)."""
+    s = float(world_scale)
+    if about == "feet":
+        return [round(float(v) / s, 4) for v in bar]
+    if about == "centre":
+        cx, cy = (bar[0] + bar[2]) / 2, (bar[1] + bar[3]) / 2
+        hw, hh = (bar[2] - bar[0]) / 2 / s, (bar[3] - bar[1]) / 2 / s
+        return [round(cx - hw, 4), round(cy - hh, 4), round(cx + hw, 4), round(cy + hh, 4)]
+    raise SystemExit(f"bar scaled about {about!r}: feet or centre")
+
+
+# T-I2's bar rule as the parent gave it: native-size, / 1.5 about her foot point. NOTE (a smoke
+# of this tool, 2026-11-20 ~22:2x ICT, scratch, NOT a fit: bar_check on 60 frames of the 1080
+# MONSTER FIT v1f, 20261120T083735): the bar-coloured pixels lay at (-20.8, 11.1, 19.2, 17.1)
+# from her feet, the size / 1.5 at the 720 place; 15.2 % of them inside the "feet" box, 98.6 %
+# inside the "centre" box (the reader on 720 fiT19: (-30.75, 10.11, 29.25, 19.11) against the
+# measured (-31, 10, 28, 18), 83.4 % inside). Which one is frozen is the plan's decision;
+# fit-1080's bar_check reports both on ifF.
+BAR_ABOUT_1080 = "feet"
+
+
+def constants_1080(world_scale: float, about: str = BAR_ABOUT_1080) -> dict[str, Any]:
+    """PURE (T-I2): the 1080 pixel constants that are SET BY RULE, not fitted. The virtual 1280 x
+    720 picture resamples the 1920 x 1080 client's world by 1 / world_scale about the centre
+    (fullscreen-client.md; rec_paths); a thing drawn at NATIVE size inside the world shrinks with
+    it, a world-size thing keeps its 720 size:
+    - the bar (our small HP / SP bar under her) is native-size: the 720 FIT bar / world_scale,
+      about her foot point (``about`` "feet": its offset from her feet is native pixels too) or
+      about its own centre ("centre"; bar_1080, BAR_ABOUT_1080);
+    - the self box (her body) is world-size: labels v2's 34 x 74 + 4 px, unchanged;
+    - r_label and the clear-view margin bound the item sprite's window, and the item sprites are
+      world-size (drawn in the world at a fixed scale, O.1b): unchanged;
+    - the unit box (a unit's body) is world-size: unchanged (recorded, as in the 720 params).
+    The anchor, the sprite scale and T_item are FITTED (fit-1080)."""
+    s = float(world_scale)
+    bar, r = XMAS02_FI.bar, XMAS02_FI.r_label
+    assert bar is not None and r is not None
+    return {
+        "world_scale": s,
+        "bar_px": bar_1080(bar, s, about),
+        "bar_about": about,
+        "bar_px_by_about": {k: bar_1080(bar, s, k) for k in ("feet", "centre")},
+        "bar_720_px": list(bar),
+        "self_box": {"w": gi.SELF_W, "h": gi.SELF_H, "pad": gi.SELF_PAD},
+        "r_label": int(r),
+        "margin_px": MARGIN_PX,
+        "unit_box": list(gi.UNIT_BOX),
+        "rule": {
+            "bar_px": f"native-size: the 720 FIT bar (-31, +10, +28, +18), its size / "
+                      f"world_scale, about {'her foot point' if about == 'feet' else 'its centre'}",
+            "self_box": "world-size (her body): the 720 box",
+            "r_label": "world-size (the item sprite's search): the 720 value",
+            "margin_px": "world-size (the item sprite's window): the 720 value",
+            "unit_box": "world-size (a unit's body): the 720 box",
+        },
+    }  # fmt: skip
+
+
 def frame_reasons(
     preds: Mapping[int, Box], phases: Sequence[str], me: tuple[float, float],
     units: Sequence[tuple[float, float]], size: tuple[int, int],
     rects: Sequence[tuple[int, int, int, int]], bar: Box, stack_iou: float,
+    selfb: Box | None = None,
 ) -> tuple[list[str], list[int]]:  # fmt: skip
     """PURE (O.3 (d), before the fit): the frame's exclusion reasons and the floor ids to fit.
     ``preds``: floor id -> the ANCHORED box of every item ON the floor; ``phases``: every nearby
     item's phase; ``rects``: UI windows (x, y, w, h). Wholly behind the UI or off the region: not
-    drawn, no label."""
+    drawn, no label. ``selfb``: our self box (self_box_of; None: gef10_items' at ``me``)."""
+    sb = gi.self_box(me) if selfb is None else selfb
     why: list[str] = []
     if "settling" in phases:
         why.append("item_settling")
@@ -295,7 +500,7 @@ def frame_reasons(
         why.append("stacked")
     for fid in vis:
         b = preds[fid]
-        if gi.overlaps(b, gi.self_box(me)):
+        if gi.overlaps(b, sb):
             why.append("under_self")
         if gi.overlaps(b, gi.at(me, bar)):
             why.append("under_bar")
@@ -307,15 +512,18 @@ def frame_reasons(
 def g2_clear(box: Box, me: tuple[float, float], units: Sequence[tuple[float, float]],
              others: Sequence[Box], size: tuple[int, int],
              rects: Sequence[tuple[int, int, int, int]], bar: Box,
-             under: str | None) -> bool:  # fmt: skip
-    """PURE (O.4 / O.6): the view is a CLEAR one for G2 (the module docstring)."""
-    if gi.overlaps(box, gi.self_box(me)) or gi.overlaps(box, gi.at(me, bar)):
+             under: str | None, selfb: Box | None = None,
+             margin: float = MARGIN_PX) -> bool:  # fmt: skip
+    """PURE (O.4 / O.6): the view is a CLEAR one for G2 (the module docstring). ``selfb`` and
+    ``margin``: the params' (self_box_of, margin_of); the defaults are the 720 values."""
+    sb = gi.self_box(me) if selfb is None else selfb
+    if gi.overlaps(box, sb) or gi.overlaps(box, gi.at(me, bar)):
         return False
     if any(gi.overlaps(box, gi.at(u, gi.UNIT_BOX)) for u in units):
         return False
     if any(gi.overlaps(box, o) for o in others):
         return False
-    return gi.inside(box, size, rects, MARGIN_PX) and under is None
+    return gi.inside(box, size, rects, margin) and under is None
 
 
 def g2_summary(fits: Sequence[Mapping[str, Any]], bar: float = G2_BAR_PX,
@@ -396,6 +604,18 @@ def pack_short(picks: Sequence[Mapping[str, Any]], by: Mapping[str, int], eval_t
         return {"items": R2_PACK_ITEMS - len(picks)} if len(picks) < R2_PACK_ITEMS else {}
     got = Counter("aura" if p.get("aura") else "no_aura" for p in picks)
     return {k: n - got[k] for k, n in R2_EVAL_SIZES.items() if got[k] < n}
+
+
+def round_refusal(spec: FiSpec, rnd: int, eval_test: bool) -> str | None:
+    """PURE (T-I4): rounds 1-5 are the 720 spec's (as they were); round 6 is the 1080 round's
+    evaluation; the 1080 spec packs T2 (round 1's strata, its seed 71) or round 6."""
+    if spec.screen == "720":
+        return "--round 6 is the 1080 round: --spec 1080" if rnd == 6 else None
+    if rnd in (2, 3, 4, 5):
+        return f"--round {rnd} is a 720 round: not under the {spec.screen} spec"
+    if rnd == 1 and eval_test:
+        return f"the {spec.screen} spec's evaluation pack is --round 6"
+    return None
 
 
 def r2_picks(cands: Sequence[Mapping[str, Any]], eval_test: bool, seed: int, salt: str,
@@ -661,14 +881,21 @@ def frozen_sheets(prm: Mapping[str, Any]) -> FrozenSheets:
     return FrozenSheets(prm["items"], Path(prm["sprites_dir"]), prm.get("items_excluded", ()))
 
 
-def freeze_params(spec: FiSpec, table: Mapping[str, Any], monster: Mapping[str, Any],
-                  monster_sha: str, provenance: Mapping[str, Any]) -> dict[str, Any]:  # fmt: skip
-    """PURE (O.3 (g)): the frozen params document (O-D2's values, O1)."""
+def monster_check(spec: FiSpec, monster: Mapping[str, Any], monster_sha: str) -> None:
+    """PURE: refuses unless ``monster`` is the spec's FROZEN monster params (the 1d offset)."""
     if monster_sha != spec.monster_params_sha256 or monster.get("status") != "FROZEN":
         raise SystemExit(
             f"{spec.monster_params}: not the frozen monster params "
             f"({spec.monster_params_sha256[:8]}...): the 1d offset comes from it"
         )
+
+
+def freeze_params(spec: FiSpec, table: Mapping[str, Any], monster: Mapping[str, Any],
+                  monster_sha: str, provenance: Mapping[str, Any]) -> dict[str, Any]:  # fmt: skip
+    """PURE (O.3 (g)): the frozen params document (O-D2's values, O1)."""
+    monster_check(spec, monster, monster_sha)
+    if spec.anchor_px is None or spec.scale is None or spec.bar is None:
+        raise SystemExit(f"{spec.name} at {spec.screen}: its constants are fitted (freeze-1080)")
     return {
         "rule": spec.rule, "status": "FROZEN", "map": spec.name, "plan": spec.plan,
         "accepted_by": "Amendment O1 (2026-11-10 10:29 ICT): O-D2, frozen when T-O1 first "
@@ -736,6 +963,8 @@ def load_params(path: Path, spec: FiSpec) -> dict[str, Any]:
         raise SystemExit(f"{path}: not {spec.rule} params of {spec.name}")
     if d.get("status") != "FROZEN":
         raise SystemExit(f"{path}: {d.get('status')}: FROZEN params only")
+    if str(d.get("screen", "720")) != spec.screen:  # T-I1: a 720 file has no "screen"
+        raise SystemExit(f"{path}: {d.get('screen', '720')} params, not the {spec.screen} spec's")
     return d
 
 
@@ -760,7 +989,9 @@ def _predict(sheet: SpriteSheet, cell: tuple[float, float], scene: Any,
     return gi.anchored(at_scale(p, float(prm["scale"])), prm["anchor_px"])
 
 
-def _label_frame(ref: qa_export.JpegRef) -> dict[str, Any]:
+def _label_frame(ref: qa_export.JpegRef,
+                 bgr: npt.NDArray[np.uint8] | None = None) -> dict[str, Any]:  # fmt: skip
+    """One candidate frame under the rule (``bgr``: the frame already read, else read here)."""
     J = olf._JOB
     sess: ml.RecSession = J["sess"]
     floors: list[il.Floor] = J["floors"]
@@ -777,7 +1008,8 @@ def _label_frame(ref: qa_export.JpegRef) -> dict[str, Any]:
     scene = sess.scene(world)
     if scene is None:
         return {**base, "status": "exclude", "reasons": ["no_scene"], "items": [], "n_near": None}
-    bgr = ml.read_png(ref)
+    if bgr is None:
+        bgr = ml.read_png(ref)
     if not sess.layout_ok(bgr):
         return {**base, "status": "exclude", "reasons": ["ui_layout_mismatch"], "items": [],
                 "n_near": None}  # fmt: skip
@@ -821,9 +1053,10 @@ def _label_frame(ref: qa_export.JpegRef) -> dict[str, Any]:
     if eval_test:
         base["floor"] = floor_rows
     size, rects = sess.lab.size, sess.lab.ui_rects
+    selfb, margin = self_box_of(prm, me), margin_of(prm)
     why, vis = frame_reasons({k: v[2].box for k, v in preds.items()}, [ph for _f, ph in near], me,
                              units, size, rects, tuple(prm["bar_px"]),
-                             float(prm["stack_iou"]))  # fmt: skip
+                             float(prm["stack_iou"]), selfb)  # fmt: skip
     reasons += why
     valid = olf.valid_map(size, rects)
     r, t_item = int(prm["r_label"]), float(prm["t_item"])
@@ -847,7 +1080,8 @@ def _label_frame(ref: qa_export.JpegRef) -> dict[str, Any]:
             "unfit": unfit, "under": under,
             "rel": None if sp is None else [round(f.x - sp[0], 1), round(f.y - sp[1], 1)],
             "age_s": round((t - f.t_a) / NS, 2),
-            "g2_clear": g2_clear(b, me, units, others, size, rects, tuple(prm["bar_px"]), under),
+            "g2_clear": g2_clear(b, me, units, others, size, rects, tuple(prm["bar_px"]), under,
+                                 selfb, margin),
         })  # fmt: skip
         if unfit:
             reasons.append("item_unfit")
@@ -951,7 +1185,7 @@ def cmd_freeze(a: argparse.Namespace) -> dict[str, Any]:
 
 
 def cmd_label(a: argparse.Namespace) -> dict[str, Any]:
-    spec = FI_MAPS[a.map]
+    spec = spec_of(a)
     split = None if a.eval_test else a.split
     path = ml.parse_part(a.part)[0]
     if ml.parse_part(a.part)[1] is not None:
@@ -980,6 +1214,8 @@ def cmd_label(a: argparse.Namespace) -> dict[str, Any]:
         raise SystemExit("the map's RSW differs from the frozen params'")
     sess = ml.RecSession.open(a.part, spec.mspec, a.layout_templates)
     why = role_refusal(spec, sess.sid, split, a.eval_test)  # by the manifest's id too
+    if why is None:  # T-I1: and the screen it was recorded on (its manifest's path)
+        why = screen_refusal(spec, sess.lab.manifest)
     if why is not None:
         raise SystemExit(f"{sess.sid}: {why}: refused")
     refs = sess.candidates_at(float(prm["offset_ms"]))
@@ -1001,6 +1237,8 @@ def cmd_label(a: argparse.Namespace) -> dict[str, Any]:
         "counts": count_labels(frames),
         "g2": g2_summary(g2_rows(frames, sess.sid)),
     }  # fmt: skip
+    if spec.screen != "720":  # T-I1: a 1080 label file says so (a 720 one stays as it was)
+        out.update({"screen": spec.screen, "world_scale": spec.world_scale})
     if model is not None:
         out["model"] = model
         out["kills"], out["kills_summary"] = kills_for_eval(sess, floors, prm)
@@ -1016,13 +1254,15 @@ def absent_fits(
     layout: Path,
     n: int = ABSENT_POINTS,
     seed: str = ABSENT_SEED,
+    sessions: dict[str, ml.RecSession] | None = None,
 ) -> tuple[list[dict[str, Any]], dict[int, list[float]]]:
     """Params v2's measurement (O3; O2's per-sprite check as a tool): ``n`` absent points of
     O.1e's rule on the docs' kept frames (absent_points, ``random.Random(seed)``), and at each
     one the colour fit (+-r_label, the params' scale and anchor) of EVERY distinct sprite of the
     table, its sub-cell drawn by ``random.Random(frame_id)`` / ``random.Random(frame_id + 1)``.
-    Returns the points (their provenance and fits) and the fits per sprite (its smallest id)."""
-    sessions: dict[str, ml.RecSession] = {}
+    Returns the points (their provenance and fits) and the fits per sprite (its smallest id).
+    ``sessions``: sessions already open, by id (fit-1080's), else each is opened from the store."""
+    sessions = {} if sessions is None else sessions
     pts = absent_points(docs, spec, prm, sheets, sessions, layout, n, random.Random(seed),
                         fit=False)  # fmt: skip
     groups = absent_groups(prm["items"])
@@ -1135,6 +1375,403 @@ def cmd_g2(a: argparse.Namespace) -> dict[str, Any]:
             "per_session": per}  # fmt: skip
 
 
+# --- T-I2 (xmas02-items-1080.md 3 and 5): the 1080 constants, FITTED on ifF, then frozen ---------
+
+
+def _rank(values: Sequence[float], q: float) -> float:
+    """PURE: the nearest-rank percentile (q in 0..100) of a non-empty sequence."""
+    s = sorted(values)
+    return float(s[max(1, math.ceil(q / 100 * len(s))) - 1])
+
+
+def fit_constants(per_scale: Mapping[float, Sequence[Mapping[str, Any]]],
+                  min_fits: int = G2_MIN_FITS) -> dict[str, Any]:  # fmt: skip
+    """PURE (T-I2): the sprite scale and the anchor from the FIT session's views at every scale of
+    the grid. A row is one view of an item ON the floor (frame_id, floor_id) with its best colour
+    fit (ncc, dx, dy) around the UNANCHORED prediction, ``edge`` (the fit at the search edge) and
+    ``g2_clear`` (G2's clear view, at that scale's box):
+    - the COMMON views are clear at every scale (one set, so the scales are compared alike);
+    - per scale, the median NCC over the common views; the best scale has the highest (a tie: the
+      one nearer 1.0, then the smaller);
+    - the anchor is the median (dx, dy) of the best scale's clear views not at the search edge.
+    NOT_ENOUGH when the common views or the anchor's fits are fewer than ``min_fits`` (G2's 30)."""
+    scales = sorted(per_scale)
+    clear = {s: {(int(v["frame_id"]), int(v["floor_id"])): v for v in per_scale[s]
+                 if v.get("g2_clear")} for s in scales}  # fmt: skip
+    common = set.intersection(*(set(c) for c in clear.values())) if scales else set()
+    rows: dict[float, dict[str, Any]] = {}
+    for s in scales:
+        nccs = [float(clear[s][k]["ncc"]) for k in common]
+        rows[s] = {"views": len(per_scale[s]), "clear": len(clear[s]),
+                   "clear_at_edge": sum(1 for v in clear[s].values() if v.get("edge")),
+                   "median_ncc_common": round(statistics.median(nccs), 4) if nccs
+                   else None}  # fmt: skip
+    out: dict[str, Any] = {"scales": {f"{s:.2f}": r for s, r in rows.items()},
+                           "common_views": len(common), "min_fits": min_fits}  # fmt: skip
+    ranked = [s for s in scales if rows[s]["median_ncc_common"] is not None]
+    if not ranked:
+        return {**out, "best_scale": None, "anchor": None, "verdict": "NOT_ENOUGH"}
+    best = max(ranked, key=lambda s: (rows[s]["median_ncc_common"], -round(abs(s - 1.0), 6), -s))
+    fits = [v for v in clear[best].values() if not v.get("edge")]
+    anchor = None
+    if fits:
+        nccs = [float(v["ncc"]) for v in fits]
+        anchor = {"dx": float(statistics.median(int(v["dx"]) for v in fits)),
+                  "dy": float(statistics.median(int(v["dy"]) for v in fits)), "n": len(fits),
+                  "floor_items": len({int(v["floor_id"]) for v in fits}),
+                  "edge_left_out": rows[best]["clear_at_edge"],
+                  "ncc_p5": round(_rank(nccs, 5), 4),
+                  "ncc_median": round(statistics.median(nccs), 4)}  # fmt: skip
+    ok = len(common) >= min_fits and anchor is not None and anchor["n"] >= min_fits
+    return {**out, "best_scale": best, "anchor": anchor, "verdict": "READY" if ok else "NOT_ENOUGH"}
+
+
+def view_weights(item_ids: Sequence[int], groups: Mapping[int, Sequence[int]]) -> dict[int, float]:
+    """PURE (T-I2): each distinct sprite's share of FIT's clear item views (a view counts for its
+    sprite's smallest id, absent_groups' key; an id of no sprite is left out)."""
+    rep = {int(i): int(r) for r, ids in groups.items() for i in ids}
+    c = Counter(rep[int(i)] for i in item_ids if int(i) in rep)
+    n = sum(c.values())
+    return {r: c[r] / n for r in sorted(c)} if n else {}
+
+
+def absent_rates(fits: Mapping[int, Sequence[float]], weights: Mapping[int, float],
+                 grid: Sequence[float] = T_GRID,
+                 max_rate: float = T_ITEM_MAX_RATE) -> list[dict[str, Any]]:  # fmt: skip
+    """PURE (T-I2): the FIT absent controls' pass rate (a fit >= T) at every T of the grid, two
+    ways, both from freeze-v2's measurement (absent_fits: EVERY distinct sprite at each point):
+    - ``rate_all``: over every (point, sprite) fit, pooled (reported);
+    - ``rate_views``: each sprite's own rate weighted by its share of FIT's clear item views. The
+      720 study's absent control (O.1e) was a view's OWN sprite at an empty point of its frame, so
+      this is that control's expected rate; T_item's rule (``meets_rule``: <= ``max_rate``) reads
+      it. A sprite with views but no absent fit leaves the weights (they are renormalised)."""
+    allv = [float(x) for v in fits.values() for x in v]
+    w = {int(r): float(x) for r, x in weights.items() if fits.get(int(r))}
+    tot = sum(w.values())
+    out = []
+    for t in grid:
+        k = sum(x >= t for x in allv)
+        per = {r: sum(float(x) >= t for x in fits[r]) / len(fits[r]) for r in w}
+        vw = sum(w[r] * per[r] for r in w) / tot if tot > 0 else None
+        out.append({"t": t, "pass_all": k, "n_all": len(allv),
+                    "rate_all": round(k / len(allv), 5) if allv else None,
+                    "rate_views": None if vw is None else round(vw, 5),
+                    "meets_rule": vw is not None and vw <= max_rate})  # fmt: skip
+    return out
+
+
+def t_item_of(rows: Sequence[Mapping[str, Any]]) -> float | None:
+    """PURE (O.3 (c)'s rule): the smallest T of the grid whose absent pass rate meets the rule."""
+    ok = [float(r["t"]) for r in rows if r.get("meets_rule")]
+    return min(ok) if ok else None
+
+
+def bar_pixels(mask: npt.NDArray[np.bool_], origin: tuple[int, int], me: tuple[float, float],
+               boxes: Mapping[str, Sequence[float]]) -> dict[str, Any]:  # fmt: skip
+    """PURE (T-I2's bar check): the bar-coloured pixels of a window (``origin``: its top-left in
+    the frame) relative to her foot point ``me``: their count, their bbox (pixel edges) and, per
+    named box (x0, y0, x1, y1 from her foot point), how many pixel centres lie inside it."""
+    ys, xs = np.nonzero(mask)
+    if len(xs) == 0:
+        return {"n": 0, "bbox": None, "inside": {k: 0 for k in boxes}}
+    px, py = xs + origin[0], ys + origin[1]
+    cx, cy = px + 0.5 - me[0], py + 0.5 - me[1]
+    inside = {k: int(((cx >= b[0]) & (cx <= b[2]) & (cy >= b[1]) & (cy <= b[3])).sum())
+              for k, b in boxes.items()}  # fmt: skip
+    return {"n": int(len(xs)), "inside": inside,
+            "bbox": [round(float(px.min() - me[0]), 2), round(float(py.min() - me[1]), 2),
+                     round(float(px.max() + 1 - me[0]), 2),
+                     round(float(py.max() + 1 - me[1]), 2)]}  # fmt: skip
+
+
+def bar_check(rows: Sequence[Mapping[str, Any] | None], boxes: Mapping[str, Sequence[float]],
+              chosen: str, bar_720: Sequence[float],
+              min_px: int = BAR_CHECK_MIN_PX) -> dict[str, Any]:  # fmt: skip
+    """PURE (T-I2): the check of the 1080 bar on FIT's item-free frames with the repo's reader of
+    her bar's colours (route_preview._bar_mask: the green HP row and the blue SP row): the median
+    bbox of the bar-coloured pixels around her foot point and the share inside each candidate box
+    (``boxes``: bar_1080's "feet" and "centre"; ``chosen`` the rule's, BAR_ABOUT_1080). A CHECK,
+    reported: the bar is set by constants_1080's rule, not by this."""
+    read = [r for r in rows if r is not None]
+    got = [r for r in read if int(r["n"]) >= min_px]
+    rule_box = boxes[chosen]
+    out: dict[str, Any] = {
+        "available": True,
+        "reader": "route_preview._bar_mask (the green HP row and the blue SP row; written at 720)",
+        "frames": "FIT's item-free judged frames at the fitted scale and anchor",
+        "window_px": list(BAR_CHECK_WINDOW), "min_px": min_px, "frames_read": len(read),
+        "frames_with_bar": len(got), "rule_about": chosen, "rule_bar_px": list(rule_box),
+        "boxes_px": {k: list(b) for k, b in boxes.items()}, "bar_720_px": list(bar_720),
+    }  # fmt: skip
+    if not got:
+        return {**out, "median_bbox_px": None, "share_inside": None,
+                "median_bbox_inside_rule_box": None}  # fmt: skip
+    med = [round(statistics.median(float(r["bbox"][i]) for r in got), 2) for i in range(4)]
+    n = sum(int(r["n"]) for r in got)
+    share = {k: round(sum(int(r["inside"][k]) for r in got) / n, 4) for k in boxes}
+    inside = (rule_box[0] <= med[0] and rule_box[1] <= med[1] and med[2] <= rule_box[2]
+              and med[3] <= rule_box[3])  # fmt: skip
+    return {**out, "median_bbox_px": med, "share_inside": share,
+            "median_bbox_inside_rule_box": inside}  # fmt: skip
+
+
+def _bar_read(bgr: npt.NDArray[np.uint8], me: tuple[float, float],
+              boxes: Mapping[str, Sequence[float]]) -> dict[str, Any] | None:  # fmt: skip
+    import route_preview as rp  # the repo's reader of her bar's colours
+
+    h, w = bgr.shape[:2]
+    wx0, wy0, wx1, wy1 = BAR_CHECK_WINDOW
+    x0, y0 = max(0, math.floor(me[0] + wx0)), max(0, math.floor(me[1] + wy0))
+    x1, y1 = min(w, math.ceil(me[0] + wx1)), min(h, math.ceil(me[1] + wy1))
+    if x1 <= x0 or y1 <= y0:
+        return None
+    return bar_pixels(rp._bar_mask(bgr[y0:y1, x0:x1]), (x0, y0), me, boxes)
+
+
+def fit_base_params(spec: FiSpec, consts: Mapping[str, Any], offset_ms: float) -> dict[str, Any]:
+    """PURE (T-I2): the label pass's params for fit-1080's passes: the rule's times and IoU, the
+    1080 rule constants (constants_1080), the 1080 monster offset and NO NCC floor (t_item -1:
+    T_item is fitted after them); the scale, the anchor and the search are set per pass."""
+    return {"screen": spec.screen, "world_scale": spec.world_scale,
+            "d_appear_s": spec.d_appear_s, "d_gone_s": spec.d_gone_s,
+            "stack_iou": spec.stack_iou, "offset_ms": float(offset_ms),
+            "bar_px": list(consts["bar_px"]), "self_box": dict(consts["self_box"]),
+            "g2": {"margin_px": float(consts["margin_px"])}, "t_item": -1.0}  # fmt: skip
+
+
+def _fit_frame(ref: qa_export.JpegRef) -> dict[str, Any]:
+    """fit-1080's first pass (forked workers read olf._JOB): the frame read ONCE, then the label
+    pass's own frame rule (_label_frame: the projection, the exclusions, the colour fit, G2's
+    clear view) at every scale of the grid around the UNANCHORED prediction. A frame with no
+    item near is the same at every scale (one call)."""
+    J = olf._JOB
+    bgr = ml.read_png(ref)
+    fits: dict[str, list[dict[str, Any]]] = {}
+    n_near = None
+    for s, prm in J["fit_params"].items():
+        J["params"] = prm
+        row = _label_frame(ref, bgr)
+        n_near = row.get("n_near")
+        if not n_near:
+            break
+        r = int(prm["r_label"])
+        fits[f"{s:.2f}"] = [{"floor_id": it["floor_id"], "item_id": it["item_id"],
+                             "dx": it["dx"], "dy": it["dy"], "ncc": it["ncc"],
+                             "edge": olf.at_edge(int(it["dx"]), int(it["dy"]), r),
+                             "g2_clear": bool(it["g2_clear"])} for it in row["items"]]  # fmt: skip
+    return {"frame_id": ref.frame_id, "n_near": n_near, "fits": fits}
+
+
+def _fit2_frame(ref: qa_export.JpegRef) -> dict[str, Any]:
+    """fit-1080's second pass: the label pass's frame rule at the FITTED scale and anchor (still
+    no NCC floor), and the bar check on the item-free judged frames."""
+    J = olf._JOB
+    bgr = ml.read_png(ref)
+    row = _label_frame(ref, bgr)
+    bar = None
+    if row.get("n_near") == 0 and row.get("me") is not None:
+        bar = _bar_read(bgr, (float(row["me"][0]), float(row["me"][1])), J["bar_boxes"])
+    return {"row": row, "bar": bar}
+
+
+def cmd_fit_1080(a: argparse.Namespace) -> dict[str, Any]:
+    """T-I2: the 1080 constants FITTED on the FIT session (ifF); nothing is frozen here."""
+    spec = XMAS02_FI_1080
+    path, spots = ml.parse_part(a.part)
+    if spots is not None:
+        raise SystemExit(f"{a.part}: whole sessions only")
+    why = role_refusal(spec, path.name, "val", False)  # the NAME, before anything is read
+    if why is not None:
+        raise SystemExit(f"{a.part}: {why}: refused (fit-1080 reads the FIT session only)")
+    if a.out.resolve().is_relative_to(ROOT):
+        raise SystemExit(f"{a.out}: client-derived (sprite hashes): never inside the repo")
+    mraw = spec.monster_params.read_bytes()
+    monster = json.loads(mraw)
+    monster_check(spec, monster, sha256_bytes(mraw))
+    drops = a.drops or ROOT / "data" / "kb" / "drops.json"
+    sprites, resnames = a.sprites or spec.sprites, a.resnames or spec.resnames
+    table = sprite_table(drop_ids(spec, drops), sprites, resnames)
+    sheets = FrozenSheets(table, sprites)
+    occl = ml.occluders(spec.mspec)
+    sess = ml.RecSession.open(a.part, spec.mspec, a.layout_templates)
+    why = role_refusal(spec, sess.sid, "val", False) or screen_refusal(spec, sess.lab.manifest)
+    if why is not None:
+        raise SystemExit(f"{sess.sid}: {why}: refused")
+    consts = constants_1080(spec.world_scale)
+    offset = float(monster["offset_ms"])
+    base = fit_base_params(spec, consts, offset)
+    grid = {s: {**base, "scale": s, "anchor_px": [0.0, 0.0], "r_label": FIT_R_1080}
+            for s in FIT_SCALES_1080}  # fmt: skip
+    refs = sess.candidates_at(offset)
+    floors = il.floor_items(sess.lab.timeline.events)
+    olf._JOB.update(sess=sess, floors=floors, sheets=sheets, occluders=occl, params=grid[1.0],
+                    eval_test=False, fit_params=grid,
+                    bar_boxes=consts["bar_px_by_about"])  # fmt: skip
+    p1 = olf.run_parallel(_fit_frame, refs, a.workers)
+    per_scale = {s: [{**v, "frame_id": f["frame_id"]} for f in p1
+                     for v in f["fits"].get(f"{s:.2f}", [])] for s in FIT_SCALES_1080}  # fmt: skip
+    fc = fit_constants(per_scale)
+    tool = Path(__file__).resolve()
+    report: dict[str, Any] = {
+        "what": "T-I2: the 1080 item constants FITTED on the FIT session (nothing frozen)",
+        "kind": "fit-1080", "rule": spec.rule, "map": spec.name, "screen": spec.screen,
+        "world_scale": spec.world_scale, "plan": spec.plan, "part": a.part, "session": sess.sid,
+        "monster_params": str(spec.monster_params), "monster_params_sha256": sha256_bytes(mraw),
+        "offset_ms": offset, "rule_constants": consts,
+        "search": {"scales": list(FIT_SCALES_1080), "r_px": FIT_R_1080,
+                   "around": "the UNANCHORED prediction (anchor 0, 0)"},
+        "frames_recorded": len(sess.refs), "candidates": len(refs),
+        "candidate_drops": dict(sorted(sess.dropped.items())),
+        "floor_items_in_packets": len(floors), "fit": fc,
+        "items": table, "drops": str(drops), "drops_sha256": olf.sha256_file(drops),
+        "sprites_dir": str(sprites), "resnames": str(resnames),
+        "resnames_sha256": olf.sha256_file(resnames),
+        "occluders": {"rsw_sha256": occl.provenance()["rsw_sha256"],
+                      "terrain": spec.mspec.terrain},
+        "tool": str(tool.relative_to(ROOT)), "tool_sha256": olf.sha256_file(tool),
+        "fitted_at": olf.now_ict(), "commit": olf.git_head(),
+    }  # fmt: skip
+    if fc["verdict"] != "READY":
+        return {**report, "verdict": "NOT_ENOUGH", "why": ["the scale and anchor fits (fit)"]}
+    # the pass's params, with the sprite table as a params file holds it (absent_fits reads it)
+    prm2 = {**base, "scale": float(fc["best_scale"]), "r_label": int(consts["r_label"]),
+            "anchor_px": [float(fc["anchor"]["dx"]), float(fc["anchor"]["dy"])],
+            "items": table}  # fmt: skip
+    olf._JOB["params"] = prm2
+    p2 = olf.run_parallel(_fit2_frame, refs, a.workers)
+    frames = [x["row"] for x in p2]
+    doc = {"session": sess.sid, "split": "val", "frames": frames}
+    points, fits = absent_fits([doc], spec, prm2, sheets, a.layout_templates, n=a.absent_points,
+                               seed=ABSENT_SEED, sessions={sess.sid: sess})  # fmt: skip
+    groups = absent_groups(table)
+    weights = view_weights([int(it["item_id"]) for f in frames for it in f["items"]
+                            if it.get("g2_clear")], groups)  # fmt: skip
+    rates = absent_rates(fits, weights)
+    t_item = t_item_of(rates)
+    excluded, per = absent_rule(fits, groups, t_item) if t_item is not None else ([], {})
+    why_not = []
+    if t_item is None:
+        why_not.append("no T on the grid meets the absent rule")
+    if len(points) < ABSENT_MIN_POINTS:
+        why_not.append(f"{len(points)} absent points < {ABSENT_MIN_POINTS}")
+    report.update({
+        "provisional_params": {k: v for k, v in prm2.items() if k != "items"},
+        "at_fit": {"counts": count_labels(frames), "g2": g2_summary(g2_rows(frames, sess.sid)),
+                   "note": "the label rule at the fitted scale and anchor, no NCC floor: G2 here "
+                           "previews T1 (T1 is the label pass under the frozen params)"},
+        "absent": {"points": len(points), "points_drawn": a.absent_points,
+                   "min_points": ABSENT_MIN_POINTS, "seed": ABSENT_SEED,
+                   "point_rule": "O.1e via fi_labels.absent_points on the kept frames at the "
+                                 "fitted scale and anchor (no NCC floor)",
+                   "sub_rule": "random.Random(frame_id) / random.Random(frame_id + 1) over 3, 6, "
+                               "9, 12",
+                   "fit": f"colour NCC +-{prm2['r_label']} px, scale {prm2['scale']}, anchor "
+                          f"{prm2['anchor_px']}",
+                   "view_weights": {str(k): round(v, 4) for k, v in weights.items()},
+                   "t_grid": rates, "t_item_rule": "the smallest T of the 0.05 grid whose FIT "
+                   "absent-control pass rate (rate_views) is <= 0.5 % (O.3 (c))",
+                   "t_item": t_item, "max_rate": ABSENT_MAX_RATE, "per_sprite": per,
+                   "items_excluded": excluded,
+                   "kept_max_rate": max((r["rate"] for r in per.values() if not r["excluded"]),
+                                        default=None)},
+        "bar_check": bar_check([x["bar"] for x in p2], consts["bar_px_by_about"],
+                               consts["bar_about"], consts["bar_720_px"]),
+        "verdict": "NOT_ENOUGH" if why_not else "READY", "why": why_not,
+    })  # fmt: skip
+    return report
+
+
+def freeze_1080_params(spec: FiSpec, report: Mapping[str, Any], report_sha: str,
+                       monster: Mapping[str, Any], monster_sha: str,
+                       provenance: Mapping[str, Any]) -> dict[str, Any]:  # fmt: skip
+    """PURE (T-I2): items-params-1080.json from a READY fit-1080 report of the FIT session: the
+    v2 schema (the absent rule's exclusions) with the fitted anchor, scale and T_item, the rule's
+    constants (constants_1080, re-derived and compared), the monster params' and the report's
+    sha256. Refuses a report of another kind, screen, session or monster params, or not READY."""
+    monster_check(spec, monster, monster_sha)
+    if report.get("kind") != "fit-1080" or str(report.get("screen")) != spec.screen:
+        raise SystemExit(f"not a fit-1080 report of the {spec.screen} spec")
+    sid = str(report.get("session"))
+    why = role_refusal(spec, sid, "val", False)
+    if why is not None:
+        raise SystemExit(f"{sid}: {why}: not a report of the FIT session")
+    if report.get("monster_params_sha256") != monster_sha or report.get("rule") != spec.rule:
+        raise SystemExit("the report was fitted under other monster params or another rule")
+    if report.get("verdict") != "READY":
+        raise SystemExit(f"the fit report says {report.get('verdict')}: nothing to freeze")
+    consts = constants_1080(spec.world_scale)
+    if report.get("rule_constants") != consts:
+        raise SystemExit("the report's rule constants are not this tool's (constants_1080)")
+    fc, ab = report["fit"], report["absent"]
+    return {
+        "rule": spec.rule, "status": "FROZEN", "map": spec.name, "screen": spec.screen,
+        "world_scale": spec.world_scale, "plan": spec.plan,
+        "accepted_by": "xmas02-items-1080.md 3 (T-I2) and 5: fitted on the FIT session by "
+                       "fit-1080; frozen when freeze-1080 first writes this file (its sha256 is "
+                       "recorded before any TRAIN label)",
+        "class": CLASS_NAME,
+        "anchor_px": [float(fc["anchor"]["dx"]), float(fc["anchor"]["dy"])],
+        "scale": float(fc["best_scale"]),
+        "fit": "masked colour NCC (the 3 channels as one vector), the best offset",
+        "r_label": int(consts["r_label"]), "t_item": float(ab["t_item"]),
+        "bar_px": list(consts["bar_px"]), "bar_720_px": list(consts["bar_720_px"]),
+        "self_box": dict(consts["self_box"]), "unit_box": list(consts["unit_box"]),
+        "unit_back_s": gi.UNIT_BACK_NS / NS, "constants_rule": dict(consts["rule"]),
+        "stack_iou": spec.stack_iou, "d_appear_s": spec.d_appear_s, "d_gone_s": spec.d_gone_s,
+        "sub_table": {"OX": gi.OX, "OY": gi.OY}, "offset_ms": float(monster["offset_ms"]),
+        "k": olf.K, "min_pixels": label_check.MIN_PIXELS,
+        "monster_params": str(spec.monster_params), "monster_params_sha256": monster_sha,
+        "g2": {"bar_px": G2_BAR_PX, "min_fits": G2_MIN_FITS,
+               "margin_px": float(consts["margin_px"])},
+        "items": dict(report["items"]),
+        "items_unsprited": sorted(int(k) for k, v in report["items"].items() if v is None),
+        "version": 2,
+        "absent_rule": {
+            "what": "an id whose sprite fits >= t_item on MORE than max_rate of the absent points "
+                    "is treated as item_unsprited (never labelled; its frames excluded)",
+            "t_item": float(ab["t_item"]), "max_rate": ab["max_rate"], "points": ab["points"],
+            "seed": ab["seed"], "point_rule": ab["point_rule"], "sub_rule": ab["sub_rule"],
+            "fit": ab["fit"], "per_sprite": ab["per_sprite"], "t_item_rule": ab["t_item_rule"]},
+        "items_excluded": list(ab["items_excluded"]),
+        "fit_report_sha256": report_sha, "fit_session": sid,
+        "fitted_at": report.get("fitted_at"), "fit_commit": report.get("commit"),
+        "drops": report["drops"], "drops_sha256": report["drops_sha256"],
+        "sprites_dir": report["sprites_dir"], "resnames": report["resnames"],
+        "resnames_sha256": report["resnames_sha256"], "occluders": dict(report["occluders"]),
+        **provenance,
+    }  # fmt: skip
+
+
+def cmd_freeze_1080(a: argparse.Namespace) -> dict[str, Any]:
+    """T-I2: items-params-1080.json, frozen ONCE from a READY fit-1080 report; prints its sha256."""
+    spec = XMAS02_FI_1080
+    out: Path = a.out or spec.params
+    if out.exists():
+        raise SystemExit(f"{out} exists: the 1080 params are frozen ONCE (T-I2); a change is a "
+                         "new amendment and a new file")  # fmt: skip
+    if out.resolve().is_relative_to(ROOT):
+        raise SystemExit(f"{out}: client-derived (sprite hashes): never inside the repo")
+    raw = a.fit.read_bytes()
+    mraw = spec.monster_params.read_bytes()
+    tool = Path(__file__).resolve()
+    prov = {"fit_report": str(a.fit), "tool": str(tool.relative_to(ROOT)),
+            "tool_sha256": olf.sha256_file(tool), "frozen_at": olf.now_ict(),
+            "commit": olf.git_head()}  # fmt: skip
+    doc = freeze_1080_params(spec, json.loads(raw), sha256_bytes(raw), json.loads(mraw),
+                             sha256_bytes(mraw), prov)  # fmt: skip
+    frozen_sheets(doc)  # the sprite files still hash as the report's table (refuses otherwise)
+    if ml.occluders(spec.mspec).provenance()["rsw_sha256"] != doc["occluders"]["rsw_sha256"]:
+        raise SystemExit("the map's RSW differs from the fit report's")
+    out.parent.mkdir(parents=True, exist_ok=True)
+    data = (json.dumps(doc, indent=1, ensure_ascii=False) + "\n").encode()
+    out.write_bytes(data)
+    return {"what": "T-I2: the frozen 1080 xmas02-fi-1 params", "out": str(out),
+            "sha256": sha256_bytes(data), "fit_report_sha256": doc["fit_report_sha256"],
+            "anchor_px": doc["anchor_px"], "scale": doc["scale"], "t_item": doc["t_item"],
+            "bar_px": doc["bar_px"], "items_excluded": doc["items_excluded"],
+            "frozen_at": prov["frozen_at"], "commit": prov["commit"]}  # fmt: skip
+
+
 # --- T2-items (O.5) and the evaluation's pack (O.9) ----------------------------------------------
 
 
@@ -1163,6 +1800,8 @@ def check_pack_docs(spec: FiSpec, docs: Sequence[Mapping[str, Any]], eval_test: 
         sid = str(doc["session"])
         if doc.get("rule") != spec.rule or doc.get("params_sha256") != params_sha:
             raise SystemExit(f"{sid}: not {spec.rule} labels under the given frozen params")
+        if str(doc.get("screen", "720")) != spec.screen:  # T-I1 (a 720 file has no "screen")
+            raise SystemExit(f"{sid}: {doc.get('screen', '720')} labels, not the {spec.screen}")
         if eval_test:
             if doc.get("eval_test") is not True or role_refusal(spec, sid, None, True):
                 raise SystemExit(f"{sid}: the evaluation's pack takes --eval-test fiT labels only")
@@ -1227,8 +1866,9 @@ def absent_points(docs: Sequence[Mapping[str, Any]], spec: FiSpec, prm: Mapping[
         me = anchor_and_depth(scene, scene.player)[0]
         units = _units(sess, world, scene, tw)
         b = p.box
-        if not gi.inside(b, sess.lab.size, sess.lab.ui_rects, MARGIN_PX) or \
-                gi.overlaps(b, gi.self_box(me)) or gi.overlaps(b, gi.at(me, tuple(prm["bar_px"]))) \
+        if not gi.inside(b, sess.lab.size, sess.lab.ui_rects, margin_of(prm)) or \
+                gi.overlaps(b, self_box_of(prm, me)) or \
+                gi.overlaps(b, gi.at(me, tuple(prm["bar_px"]))) \
                 or any(gi.overlaps(b, gi.at(u, gi.UNIT_BOX)) for u in units):  # fmt: skip
             continue
         row: dict[str, Any] = {"session": sid, "split": split, "frame_id": f["frame_id"],
@@ -1307,13 +1947,18 @@ def order_entries(entries: Sequence[Mapping[str, Any]], seed: int, salt: str
 def cmd_pack(a: argparse.Namespace) -> dict[str, Any]:
     from PIL import Image
 
-    spec = FI_MAPS[a.map]
+    spec = spec_of(a)
     rnd = getattr(a, "round", 1)
-    r2 = rnd in (2, 3, 4, 5)  # rounds 3-5 (O17 / O20 / O26) pack as round 2, own seed + slots
-    if rnd in (3, 4, 5):
+    why = round_refusal(spec, rnd, bool(a.eval_test))
+    if why is not None:
+        raise SystemExit(why)
+    # rounds 3-6 (O17 / O20 / O26 / items-1080 T-I4) pack as round 2, own seed + slots
+    r2 = rnd in (2, 3, 4, 5, 6)
+    if rnd in (3, 4, 5, 6):
         if not a.eval_test:
             raise SystemExit(f"--round {rnd}: the evaluation's pack only (--eval-test)")
-        want = {3: R3_EVAL_SEED, 4: R4_EVAL_SEED, 5: R5_EVAL_SEED}[rnd]
+        # round 6: the seed from the CLI (T-I4), recorded in the key
+        want = {3: R3_EVAL_SEED, 4: R4_EVAL_SEED, 5: R5_EVAL_SEED, 6: a.seed}[rnd]
     elif r2:
         want = R2_EVAL_SEED if a.eval_test else R2_PACK_SEED
     else:
@@ -1331,7 +1976,7 @@ def cmd_pack(a: argparse.Namespace) -> dict[str, Any]:
     sheets = frozen_sheets(prm)
     cands = pool_labels(docs)
     if r2:
-        second = {3: R3_NOAURA, 4: R4_NOAURA, 5: R5_STAGING}.get(rnd, R2_NOAURA)
+        second = {3: R3_NOAURA, 4: R4_NOAURA, 5: R5_STAGING, 6: R6_STAGING}.get(rnd, R2_NOAURA)
         picks = r2_picks(cands, a.eval_test, a.seed, spec.salt, second)
     elif a.eval_test:
         picks = draw_strata([{**c, "stratum": "X"} for c in cands], {"X": EVAL_ITEMS}, a.seed,
@@ -1359,8 +2004,8 @@ def cmd_pack(a: argparse.Namespace) -> dict[str, Any]:
     )
     entries = order_entries(entries, a.seed, spec.salt)
     tag = "eval" if a.eval_test else "t2"
-    root = a.pack_dir or FI / f"pack-{tag}-seed{a.seed}"
-    keyd = a.key_dir or FI / f"key-{tag}-seed{a.seed}"
+    root = a.pack_dir or spec.work / f"pack-{tag}-seed{a.seed}"
+    keyd = a.key_dir or spec.work / f"key-{tag}-seed{a.seed}"
     for d in (root, keyd):
         if d.resolve().is_relative_to(ROOT):
             raise SystemExit(f"{d}: client pixels never go inside the repo")
@@ -1378,6 +2023,8 @@ def cmd_pack(a: argparse.Namespace) -> dict[str, Any]:
                            "reference_sha256": olf.sha256_file(root / "reference.png"),
                            "label_files": [{"file": str(p), "sha256": olf.sha256_file(p)}
                                            for p in a.labels], "crops": {}}  # fmt: skip
+    if spec.screen != "720":  # T-I4: a 1080 key names its screen and round (720 keys unchanged)
+        key.update({"screen": spec.screen, "round": rnd})
     for i, e in enumerate(entries, 1):
         cid = f"{i:03d}"
         sess = _open(e["session"], spec, a.layout_templates, sessions)
@@ -1447,23 +2094,37 @@ def main(argv: Sequence[str] | None = None) -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawTextHelpFormatter)
     sub = ap.add_subparsers(dest="cmd", required=True)
     p = sub.add_parser("freeze")
-    p.add_argument("--map", default="xmas_dun02", choices=sorted(FI_MAPS))
+    p.add_argument("--map", default="xmas_dun02", choices=MAP_NAMES)
     p.add_argument("--sprites", type=Path, default=None)
     p.add_argument("--resnames", type=Path, default=None)
     p.add_argument("--drops", type=Path, default=None)
     p.add_argument("--out", type=Path, default=None, help="default: the map's O.3 (g) path")
     p.add_argument("--report", type=Path, default=None)
     p = sub.add_parser("freeze-v2")
-    p.add_argument("--map", default="xmas_dun02", choices=sorted(FI_MAPS))
+    p.add_argument("--map", default="xmas_dun02", choices=MAP_NAMES)
     p.add_argument("--v1", type=Path, required=True, help="the v1 params (FROZEN)")
     p.add_argument("--labels", type=Path, nargs="+", required=True,
                    help="FIT p31 and DEV p38's label files under v1")  # fmt: skip
     p.add_argument("--layout-templates", type=Path, default=LAYOUT_TEMPLATES)
     p.add_argument("--out", type=Path, default=None, help="default: the map's params v2 path")
     p.add_argument("--report", type=Path, default=None)
+    p = sub.add_parser("fit-1080")
+    p.add_argument("part", help="the 1080 FIT session (a name ending in -xmas02-ifF)")
+    p.add_argument("--sprites", type=Path, default=None)
+    p.add_argument("--resnames", type=Path, default=None)
+    p.add_argument("--drops", type=Path, default=None)
+    p.add_argument("--absent-points", type=int, default=ABSENT_POINTS_1080)
+    p.add_argument("--workers", type=int, default=1)
+    p.add_argument("--layout-templates", type=Path, default=LAYOUT_TEMPLATES)
+    p.add_argument("--out", type=Path, required=True, help="the fit report (RAM, not the repo)")
+    p = sub.add_parser("freeze-1080")
+    p.add_argument("--fit", type=Path, required=True, help="a READY fit-1080 report")
+    p.add_argument("--out", type=Path, default=None, help="default: the 1080 spec's params path")
+    p.add_argument("--report", type=Path, default=None)
     p = sub.add_parser("label")
     p.add_argument("part")
-    p.add_argument("--map", default="xmas_dun02", choices=sorted(FI_MAPS))
+    p.add_argument("--map", default="xmas_dun02", choices=MAP_NAMES)
+    p.add_argument("--spec", choices=SCREENS, default="720", help="T-I1: the screen's spec")
     p.add_argument("--split", choices=("train", "val"), default=None)
     p.add_argument("--eval-test", action="store_true")
     p.add_argument("--model", type=Path, default=None)
@@ -1477,11 +2138,13 @@ def main(argv: Sequence[str] | None = None) -> int:
     p.add_argument("--out", type=Path, required=True)
     p = sub.add_parser("pack")
     p.add_argument("labels", type=Path, nargs="+")
-    p.add_argument("--map", default="xmas_dun02", choices=sorted(FI_MAPS))
+    p.add_argument("--map", default="xmas_dun02", choices=MAP_NAMES)
+    p.add_argument("--spec", choices=SCREENS, default="720", help="T-I1: the screen's spec")
     p.add_argument("--params", type=Path, required=True)
     p.add_argument("--seed", type=int, required=True)
-    p.add_argument("--round", type=int, choices=(1, 2, 3, 4, 5), default=1,
-                   help="O15: round 2's seeds (65 T2-r2, 66 the evaluation) and sizes")  # fmt: skip
+    p.add_argument("--round", type=int, choices=(1, 2, 3, 4, 5, 6), default=1,
+                   help="O15: round 2's seeds (65 T2-r2, 66 the evaluation) and sizes; "
+                        "6: the 1080 round's evaluation (T-I4, --spec 1080)")  # fmt: skip
     p.add_argument("--eval-test", action="store_true")
     p.add_argument("--pack-dir", type=Path, default=None)
     p.add_argument("--key-dir", type=Path, default=None)
@@ -1498,14 +2161,31 @@ def main(argv: Sequence[str] | None = None) -> int:
     if a.cmd == "label" and a.eval_test and a.split is not None:
         raise SystemExit("label: --eval-test has no --split")
     out = {"freeze": cmd_freeze, "freeze-v2": cmd_freeze_v2, "label": cmd_label, "g2": cmd_g2,
-           "pack": cmd_pack, "refs": cmd_refs}[a.cmd](a)  # fmt: skip
-    dest = a.report if a.cmd in ("freeze", "freeze-v2") else a.out
+           "pack": cmd_pack, "refs": cmd_refs, "fit-1080": cmd_fit_1080,
+           "freeze-1080": cmd_freeze_1080}[a.cmd](a)  # fmt: skip
+    dest = a.report if a.cmd in ("freeze", "freeze-v2", "freeze-1080") else a.out
     if dest is not None:
         dest.parent.mkdir(parents=True, exist_ok=True)
         dest.write_text(json.dumps(out) + "\n")
     summary = {k: v for k, v in out.items() if k != "frames"}
+    if a.cmd == "fit-1080":  # the verdict first; the sprite table and the grids are in --out
+        summary = fit_summary(out)
     print(json.dumps(summary, indent=1)[:8000])
     return 0
+
+
+def fit_summary(report: Mapping[str, Any]) -> dict[str, Any]:
+    """PURE: fit-1080's printed lines (the whole report is written to --out)."""
+    ab = report.get("absent") or {}
+    fc = report.get("fit") or {}
+    return {"verdict": report.get("verdict"), "why": report.get("why"),
+            "session": report.get("session"), "best_scale": fc.get("best_scale"),
+            "anchor": fc.get("anchor"), "common_views": fc.get("common_views"),
+            "scales": fc.get("scales"), "t_item": ab.get("t_item"),
+            "absent_points": ab.get("points"), "items_excluded": ab.get("items_excluded"),
+            "g2_at_fit": (report.get("at_fit") or {}).get("g2"),
+            "bar_check": report.get("bar_check"), "fitted_at": report.get("fitted_at"),
+            "commit": report.get("commit")}  # fmt: skip
 
 
 if __name__ == "__main__":
