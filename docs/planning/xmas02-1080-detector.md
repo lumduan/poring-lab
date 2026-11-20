@@ -406,7 +406,7 @@ FIT ran 09:04-09:08 (`run-fit.sh`, CPU, nice 10, a 4 GB scope) on `20261120T0837
   - While it trains, the dev lab's detect server is refused (one job per worker). The live copy's
     worker is separate and not touched.
 
-### Amendment 8 (2026-11-20 11:31 ICT from `date`, BEFORE the T2 pack): v1g2 fails too; TRAIN is final
+### Amendment 8 (2026-11-20 11:36 ICT from `date`, BEFORE the T2 pack): v1g2 fails too; TRAIN is final
 
 - **v1g2 (11:14-11:30): own C1 32 / 468 = 0.0684.** Fails, so it does not join.
   - Garm Baby is 26 of the 32 bad (26 / 249 = 10.4 %, v1g1: 20 / 200 = 10.0 %).
