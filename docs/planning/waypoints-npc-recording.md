@@ -111,3 +111,36 @@ owner: Batt
    the hunt map's first point.
 
 Not now: the ML page (after this, Batt). The Kafra storage moves, selling (their own steps).
+
+## Amendment 1 (2026-11-20 14:25 ICT from `date`): matpilot's design answer, and what this plan adopts
+
+matpilot (its session, from lumduan/matpilot main 4022c87) answered the five questions. Its own
+code: `src/lib/mats/path.ts`, `path-edit.ts`, `src/lib/blocks/incoming.ts`,
+`add-to-tab.ts`, `src/lib/sim/spread.ts`; ADR 0016.
+- **No recording by demonstration in matpilot.** A child taps points on the mat's picture.
+  - The path is a list (point / straight / turn / wait / speed, at most 60).
+  - `planPath` plans each point's moves from where the robot REALLY is after the moves before
+    it, so rounding does not pile up.
+  - The planned steps are inserted INLINE as ordinary move blocks (no live link back).
+- **Its advice for us** (its views, adopted here as the plan's design):
+  - a) **A named recording with a picker,** not inline expansion. A 3-map walk inline would be
+    unreadable. `walk_path("to_town")` and `talk_npc("kafra store")` take a picker of the
+    recorded names; the waypoints show and edit in their own view.
+  - b) **Record raw reads, then THIN them** (drop points closer than a minimum step; keep turns and
+    map changes; matpilot's MIN_SEGMENT_MM). Show the thinned path for editing before saving.
+    Every waypoint carries its map's name and an ARRIVAL RADIUS.
+  - c) **Plan each leg from the CURRENT read, never from the plan** (planPath's lesson).
+  - d) **A waypoint is a checkpoint with a radius.** On re-localizing, resume at the nearest
+    waypoint AHEAD in path order (already map_routes.next_index's rule), never the nearest by
+    distance.
+  - e) **Landmarks over digits:** a map change, a warp's arrival cell, an NPC's dialog are hard
+    re-sync points.
+  - f) **A LOST state with a time box,** then the existing recovery (a Fly Wing). The learner sees
+    it as a block ("if lost for 10 s: ...").
+  - g) **The flowchart READ-ONLY,** generated from the same structure as the Python (a box per
+    block, a diamond per if / until / while). Never a third editable view (three-way sync).
+- **Its UI lessons** (from a child using it): pictures and handles first, exact numbers for quick
+  changes; a simple mode that still works; nothing changes in a program without a click (offered
+  like a paste, with Undo and Dismiss).
+- **Its license:** MIT, "Copyright (c) 2026 Sarat Sonsuk" (LICENSE at 4022c87). A port of its code
+  is recorded in THIRD_PARTY.md first (rule 4's reuse rule).
