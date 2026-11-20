@@ -200,3 +200,14 @@ Written before any probe of this round.
     near alternated.
 - **Next:** the item chain ends ~04:30; then the merge; then P1 stand and walk, P2 stand and
   walk (1080), on the lab, immune.
+
+### Amendment 2 (2026-11-21 00:45 ICT from `date`): the bus writes ~30 frames a second at 1080 too (offline)
+
+- From the runner's own records (hp_read's lf2 frame ids, the bus writer's ids, the rate between
+  consecutive reads 0.05-3 s apart): s11scr-720-r01A **29.8** frames/s (p10 29.3, p90 30.2; 9
+  samples), s11scr-1080-r01B **29.8** (28.3 / 30.4; 24), ifT2-play-r01B (1080, tonight) **29.6**
+  (28.9 / 30.1; 25).
+- So the bus is not slower at 1080: the "fewer new frames" half of candidate 1 is weak at the
+  bus. What the bus cannot say is when the GAME redraws its cursor (the client's own frame
+  rate); P1's 1.0 s reads and P3 answer that. P2 still measures standing against walking.
+- The samples are sparse (lf2 runs only on some reads) and none is split by motion.
