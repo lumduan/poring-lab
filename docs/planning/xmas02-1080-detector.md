@@ -418,3 +418,28 @@ FIT ran 09:04-09:08 (`run-fit.sh`, CPU, nice 10, a 4 GB scope) on `20261120T0837
     (the party) 114 + 172, and v1t3's.
   - T2 checks those labels (the pack draws Garm Baby crops from these sessions). Bar A3 on v1Tg
     decides whether that is enough.
+
+### Amendment 9 (2026-11-20 11:55 ICT from `date`, BEFORE the cache): T2 PASSES on every species
+
+- **The pack:** v1t2 + v1t3 + v1k1 + v1k2, seed 51, min-fit 0.504. 210 crops, 30 per species of
+  the tier [1249, 1248, 1265, 1246, 1515, 1607, 1251].
+  - The pools after the floor: 1,948 / 1,065 / 733 / 740 / 484 / 2,053 / 458.
+  - answer_key sha256 7e1148fe...; reference.png d389551c... (byte-identical to the 720 packs).
+- **The labellers:** AA (answers 35afd15b...) and AB (caf4c7fb...), NEW, briefs as Amendment 7.
+  - Both validated their own JSON with a short script that read only pack.json and their own
+    answers. The brief asks for that check.
+- **Scored once** (`blind_score.py`):
+
+| species | AA good / species | AB good / species | verdict |
+|---|---|---|---|
+| Myst Case 1249 | 100 / 100 | 100 / 100 | PASS |
+| Cruiser 1248 | 96.7 / 100 | 96.7 / 100 | PASS |
+| Cookie 1265 | 100 / 100 | 100 / 100 | PASS |
+| Christmas Cookie 1246 | 100 / 100 | 100 / 100 | PASS |
+| Garm Baby 1515 | 100 / 100 | 100 / 100 | PASS |
+| Christmas Goblin 1607 | 100 / 100 | 90.0 / 100 | PASS (at the bar) |
+| Stormy Knight 1251 | 100 / 100 | 96.7 / 100 | PASS |
+
+  - Agreement: q1 210, q2 206, q3 210 of 210.
+- **So no species is masked beyond the pre-registered knight-session masks.** The cache and the
+  training run as Amendment 7.
