@@ -339,8 +339,8 @@ def main(argv: Sequence[str] | None = None) -> int:
     dg.add_argument("labels", nargs="+", help="run labels (or series labels: every run of it)")
     dg.add_argument("--demo", type=Path, default=s2.DEMO, help="the sessions' folder (an archive)")
     sc = sub.add_parser("score")
-    sc.add_argument("--a", required=True, help="the 720 block's label")
-    sc.add_argument("--b", required=True, help="the 1080 block's label")
+    sc.add_argument("--a", required=True, help="the 720 block's label (X+Y: two series)")
+    sc.add_argument("--b", required=True, help="the 1080 block's label (X+Y: two series)")
     sc.add_argument("--json", action="store_true")
     sc.add_argument("--no-econ-update", action="store_true")
     a = ap.parse_args(argv)
@@ -356,17 +356,26 @@ def main(argv: Sequence[str] | None = None) -> int:
     if a.cmd == "score":
         blocks = {}
         models: dict[str, Any] = {}
-        for side, label in (("A", a.a), ("B", a.b)):
-            doc, runs = score_block(label)
+        for side, labels in (("A", a.a), ("B", a.b)):
+            # "X+Y": a block completed by a second series after a stop (s11scr-1080 + 1080b)
+            names = labels.split("+")
+            parts = [score_block(x) for x in names]
+            if len({str(d.get("model") or MODELS[0]) for d, _ in parts}) != 1:
+                raise SystemExit(f"{labels}: the series name different models")
+            doc = parts[0][0]
+            runs = [run for _, rs in parts for run in rs]
             use_model(str(doc.get("model") or MODELS[0]))  # a block before 8c named xmas02sk
             models[side] = {
                 "model": s10.MODEL,
+                "series": names,
                 **s10.model_report(
-                    [s10.score_run(r, SCRATCH / label, bar=doc["bar"]) for r in doc["runs"]]
+                    [s10.score_run(r, SCRATCH / x, bar=d["bar"])
+                     for x, (d, _) in zip(names, parts, strict=True) for r in d["runs"]]
                 ),
-            }
+            }  # fmt: skip
             if not a.no_econ_update:
-                print(s7.econ_update(doc["runs"]), flush=True)
+                for d, _ in parts:
+                    print(s7.econ_update(d["runs"]), flush=True)
             blocks[side] = (doc, runs)
         minutes = float(blocks["A"][0]["minutes"])
         v = verdict(blocks["A"][1], blocks["B"][1], minutes)
