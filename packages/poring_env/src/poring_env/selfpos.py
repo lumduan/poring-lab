@@ -41,6 +41,9 @@ could do it; the agent's step check (a cell moves by at most one per step) catch
 from __future__ import annotations
 
 import json
+import os
+import threading
+import time
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field, replace
 from pathlib import Path
@@ -366,6 +369,59 @@ def _parse(  # noqa: PLR0911
     return Reading((x, y), "ok", glyphs, row)
 
 
+# --- the re-read before believing a jump (Batt 2026-11-20: "retry the read: it may read wrong") ---
+# A player's Run (the Run helper sets CONFIRM_READS_ENV) must not end on ONE misread: the live PC's
+# 10:46 Run ended on (116, 21) read right after (115, 217) ("217" read as "21"). A base read that
+# JUMPS from the last believed read (the runner's own is_jump numbers) comes back as mode "light",
+# which the runner's PosConfirm counts only when the read before it agrees; a second read at the
+# new place within JUMP_CONFIRM_S is believed (a real map change still stops the run, one read
+# later). The runner itself is unchanged (dungeon_hunt.py is byte-pinned by the A/B proofs).
+CONFIRM_READS_ENV = "PORING_CONFIRM_READS"
+JUMP_CELLS, JUMP_S_PER_CELL, JUMP_SLACK = 20, 0.15, 5  # dungeon_hunt's JUMP_CELLS / WALK_* numbers
+JUMP_CONFIRM_S = 1.0  # dungeon_hunt.CONFIRM_S
+
+
+def _jumps(a: tuple[int, int], b: tuple[int, int], dt: float) -> bool:
+    d = max(abs(a[0] - b[0]), abs(a[1] - b[1]))
+    return d > max(JUMP_CELLS, dt / JUMP_S_PER_CELL + JUMP_SLACK)
+
+
+class JumpGuard:
+    """Which base reads are doubtful (``judge``): a jump from the last believed read, not yet
+    seen twice. Thread-safe (the runner's main thread and its HP loop both read)."""
+
+    def __init__(self) -> None:
+        self.ok: tuple[float, tuple[int, int]] | None = None
+        self.flagged: tuple[float, tuple[int, int]] | None = None
+        self._lock = threading.Lock()
+
+    def judge(self, xy: tuple[int, int], t: float) -> bool:
+        """True: doubtful (a lone jump). False: believed (and remembered)."""
+        with self._lock:
+            if self.ok is None or not _jumps(self.ok[1], xy, t - self.ok[0]):
+                self.ok, self.flagged = (t, xy), None
+                return False
+            fl = self.flagged
+            if fl is not None and t - fl[0] <= JUMP_CONFIRM_S and not _jumps(fl[1], xy, t - fl[0]):
+                self.ok, self.flagged = (t, xy), None  # a second read at the new place
+                return False
+            self.flagged = (t, xy)
+            return True
+
+
+GUARD = JumpGuard()
+
+
+def guarded(reading: Reading, t: float | None = None, guard: JumpGuard = GUARD) -> Reading:
+    """A base reading, marked "light" (doubtful) when ``guard`` judges it a lone jump -- only
+    while CONFIRM_READS_ENV is "1" (a player's Run); otherwise unchanged."""
+    if reading.xy is None or reading.mode != "base" or os.environ.get(CONFIRM_READS_ENV) != "1":
+        return reading
+    if guard.judge(reading.xy, time.monotonic() if t is None else t):
+        return replace(reading, mode="light", light_reason="jump_unconfirmed")
+    return reading
+
+
 def read_minimap(
     game_region_bgr: npt.NDArray[np.uint8],
     templates: DigitTemplates,
@@ -375,12 +431,13 @@ def read_minimap(
 ) -> Reading:
     """The readout with its reason (evaluation, logs). ``rect``: game-region pixels (x, y, w, h);
     default: the ``minimap_xy`` element at the minimap window's measured origin. ``light``: the
-    light-strip fallback (read_rect)."""
+    light-strip fallback (read_rect). In a player's Run a lone jump comes back doubtful
+    (``guarded``)."""
     x, y, w, h = default_rect() if rect is None else rect
     region = game_region_bgr[y : y + h, x : x + w]
     if region.shape[0] != h or region.shape[1] != w:
         return Reading(None, "rect_outside_frame")
-    return read_rect(to_gray(region), templates, light=light)
+    return guarded(read_rect(to_gray(region), templates, light=light))
 
 
 def read_minimap_xy(

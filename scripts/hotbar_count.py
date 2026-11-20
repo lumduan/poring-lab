@@ -24,7 +24,9 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import sys
+import time
 from pathlib import Path
 
 import numpy as np
@@ -82,10 +84,35 @@ def match(g: npt.NDArray[np.bool_], templates: dict[str, npt.NDArray[np.bool_]])
     return best_d if best <= 1 and second >= best + 3 else None
 
 
+# Batt 2026-11-20 ("retry the read: it may read wrong"): in a player's Run (the Run helper sets
+# poring_env.selfpos.CONFIRM_READS_ENV) an EMPTY slot (0, which ends the run as stock_out) is
+# believed only when a second read ZERO_CONFIRM_S later also sees it empty; the first reads None
+# (unreadable), which the runner re-reads 1 s later (dungeon@8.4). The live PC's 11:55 Run ended
+# on one 0 between two unreadable reads, its Fly Wings still on F8. Lab A/B runs are unchanged.
+CONFIRM_READS_ENV = "PORING_CONFIRM_READS"  # poring_env.selfpos.CONFIRM_READS_ENV (a test pins it)
+ZERO_CONFIRM_S = (0.5, 10.0)
+_ZEROS: dict[int, float] = {}
+
+
+def confirmed_zero(slot: int, now: float | None = None) -> bool:
+    """An empty read of ``slot``: believe it (True) or call it unreadable this time (False)."""
+    if os.environ.get(CONFIRM_READS_ENV) != "1":
+        return True
+    now = time.monotonic() if now is None else now
+    first = _ZEROS.get(slot)
+    if first is not None and ZERO_CONFIRM_S[0] <= now - first <= ZERO_CONFIRM_S[1]:
+        del _ZEROS[slot]
+        return True
+    if first is None or now - first > ZERO_CONFIRM_S[1]:
+        _ZEROS[slot] = now
+    return False
+
+
 def read_count(frame_gray: Gray, slot: int,
                templates: dict[str, npt.NDArray[np.bool_]]) -> int | None:  # fmt: skip
-    """PURE: slot ``slot``'s count from a game-region gray frame; 0 for an empty slot (no digit
-    and no icon); None when unreadable."""
+    """Slot ``slot``'s count from a game-region gray frame; 0 for an empty slot (no digit and no
+    icon); None when unreadable. PURE but in a player's Run, where an empty slot needs a second
+    read (``confirmed_zero``)."""
     x0, y0, x1, y1 = box(slot)
     ink = frame_gray[y0:y1, x0:x1] < INK
     # 2026-11-13: an ICON's stray ink is no digit -- a digit's ink spans the box's height (all ten
@@ -95,7 +122,10 @@ def read_count(frame_gray: Gray, slot: int,
     if not gs:
         ix0, iy0, ix1, iy1 = ICON
         icon = frame_gray[iy0:iy1, ix0 + PITCH * slot : ix1 + PITCH * slot]
-        return 0 if float((icon < ICON_DARK).mean()) < ICON_EMPTY_SHARE else None
+        if float((icon < ICON_DARK).mean()) >= ICON_EMPTY_SHARE:
+            return None
+        return 0 if confirmed_zero(slot) else None
+    _ZEROS.pop(slot, None)  # digits: whatever they say, the slot is not empty
     digits = [match(g, templates) for g in gs]
     if any(d is None for d in digits) or len(digits) > 2:
         return None
