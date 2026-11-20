@@ -66,3 +66,32 @@ def test_in_a_players_run_an_empty_slot_never_reads_zero(monkeypatch: pytest.Mon
 def test_without_the_env_an_empty_slot_is_zero_at_once(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.delenv(hb.CONFIRM_READS_ENV, raising=False)
     assert hb.read_count(_empty_slot_frame(), 7, {}) == 0
+
+
+def _left_frame(slot: int, text: str, templates: dict[str, np.ndarray]) -> np.ndarray:
+    """The live client's layout: the mark, then the count left-aligned (hotbar_count.MARK/LEFT)."""
+    f = np.full((720, 1280), 230.0)
+    mx0, my0, mx1, my1 = hb.MARK
+    f[my0:my1, mx0 + hb.PITCH * slot : mx1 + hb.PITCH * slot] = 0.0
+    x = hb.LEFT[0] + hb.PITCH * slot
+    for ch in text:
+        g = templates[ch]
+        f[hb.LEFT[1] : hb.LEFT[1] + g.shape[0], x : x + g.shape[1]][g] = 0.0
+        x += g.shape[1] + 1
+    return f
+
+
+def test_the_left_aligned_count_after_the_mark_reads() -> None:
+    """2026-11-20: the live client draws a mark, then the count left-aligned (588, 60, 111, 528)."""
+    rng = np.random.default_rng(3)
+    t = {str(d): rng.random((9, 6)) > 0.45 for d in range(10)}
+    for g in t.values():
+        g[0, :] = True  # every digit spans the box's height (top and bottom rows)
+        g[-1, :] = True
+    t["1"] = t["1"][:, :5]
+    for slot, text in ((0, "588"), (6, "60"), (8, "111"), (7, "528"), (2, "1")):
+        f = _left_frame(slot, text, t)
+        assert hb.left_layout(f, slot)
+        assert hb.read_count(f, slot, t) == int(text)
+    plain = np.full((720, 1280), 230.0)
+    assert not hb.left_layout(plain, 0)  # no mark: the lab's layout, as before

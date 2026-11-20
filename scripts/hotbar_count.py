@@ -44,6 +44,16 @@ CAL_ORIGIN = (300 - 80, 70 - 77)  # the calibration grabs: full-screen [70:120, 
 Gray = npt.NDArray[np.float64]
 
 
+# 2026-11-20, the live PC's client (its 2-row hotbar): a slot's count FOLLOWS a small "v" mark at
+# the slot's bottom-left, LEFT-aligned, up to 4 digits -- slot k's mark in game-region x [257 + 29 k,
+# 260 + 29 k), rows 31-32; its digits from x 262 + 29 k, rows 27-35 -- in the SAME glyphs as the
+# lab's (the templates match its 588 / 60 / 111 exactly). The lab's right-aligned box above caught
+# only part of them (None on every slot, and the 1-row bar clipped them). The mark picks the layout.
+MARK = (257, 31, 260, 33)  # slot 0's mark (x0, y0, x1, y1), end-exclusive (3 + 2 px of ink)
+MARK_INK = 0.75  # the share of the mark box that is ink when the mark is drawn
+LEFT = (262, 27, 290, 36)  # slot 0's left-aligned count box (4 digits on the 7 px pitch)
+
+
 def gray(frame: npt.NDArray[np.uint8]) -> Gray:
     return np.asarray(frame[..., :3], dtype=np.float64).mean(axis=2)
 
@@ -66,6 +76,45 @@ def glyphs(ink: npt.NDArray[np.bool_]) -> list[npt.NDArray[np.bool_]]:
             out.append(ink[:, start:i])
             start = None
     return out
+
+
+def glyph_runs(ink: npt.NDArray[np.bool_]) -> list[tuple[int, npt.NDArray[np.bool_]]]:
+    """PURE: ``glyphs`` with each glyph's first column."""
+    cols = ink.any(axis=0)
+    out: list[tuple[int, npt.NDArray[np.bool_]]] = []
+    start = None
+    for i, c in enumerate([*cols, False]):
+        if c and start is None:
+            start = i
+        elif not c and start is not None:
+            out.append((start, ink[:, start:i]))
+            start = None
+    return out
+
+
+def left_layout(frame_gray: Gray, slot: int) -> bool:
+    """PURE: slot ``slot`` draws the live client's mark before its count (``LEFT`` applies)."""
+    x0, y0, x1, y1 = MARK
+    box = frame_gray[y0:y1, x0 + PITCH * slot : x1 + PITCH * slot]
+    return box.size > 0 and float((box < INK).mean()) >= MARK_INK
+
+
+def read_left(frame_gray: Gray, slot: int,
+              templates: dict[str, npt.NDArray[np.bool_]]) -> int | None:  # fmt: skip
+    """PURE: the left-aligned count after the mark: the full-height glyphs from the box's first
+    column, read left to right until the first that is not a digit; None when none is."""
+    x0, y0, x1, y1 = LEFT
+    ink = frame_gray[y0:y1, x0 + PITCH * slot : x1 + PITCH * slot] < INK
+    runs = [(c, g) for c, g in glyph_runs(ink) if g[0].any() and g[-1].any()]
+    if not runs or runs[0][0] > 1:
+        return None
+    digits = ""
+    for _c, g in runs:
+        d = match(g, templates)
+        if d is None:
+            break
+        digits += d
+    return int(digits) if digits and (len(digits) == 1 or digits[0] != "0") else None
 
 
 def match(g: npt.NDArray[np.bool_], templates: dict[str, npt.NDArray[np.bool_]]) -> str | None:
@@ -102,6 +151,10 @@ def read_count(frame_gray: Gray, slot: int,
     """Slot ``slot``'s count from a game-region gray frame; 0 for an empty slot (no digit and no
     icon); None when unreadable -- and, in a player's Run (``player_run``), None for an empty
     slot too: a player's stock never ends the run."""
+    if left_layout(frame_gray, slot):  # the live PC's client: the mark, then the count (MARK)
+        got = read_left(frame_gray, slot, templates)
+        if got is not None:
+            return got
     x0, y0, x1, y1 = box(slot)
     ink = frame_gray[y0:y1, x0:x1] < INK
     # 2026-11-13: an ICON's stray ink is no digit -- a digit's ink spans the box's height (all ten
