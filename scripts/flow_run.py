@@ -99,6 +99,9 @@ SCRATCH = lab_env.shm("tmp")
 RUN_MODES_ENV = "PORING_INPUT_MODES"
 RUN_INPUT_MODES = "ASSIST,BOT"
 RUN_PAUSE_ENV = "PORING_PAUSE_AWAY"  # ro_agent.AWAY_ENV: a Run waits while the game is off screen
+RUN_CONFIRM_ENV = (
+    "PORING_CONFIRM_READS"  # poring_env.selfpos.CONFIRM_READS_ENV: re-read before a run-ending read
+)
 # the run log's last lines in the status (the page's log; Batt 2026-11-18); 300 since 2026-11-19
 # for the /flows Logs tab (Batt: "the bot stops by itself and I cannot see why")
 LOG_TAIL_N = 300
@@ -1185,6 +1188,9 @@ class Helper:
             "TMPDIR": str(SCRATCH),
             RUN_MODES_ENV: RUN_INPUT_MODES,
             RUN_PAUSE_ENV: "1",  # it waits while the game is off the screen (Batt 2026-11-18)
+            # Batt 2026-11-20 ("retry the read, it may read wrong"): a read that would END a
+            # player's Run is read again first (poring_env.selfpos.guarded, hotbar_count)
+            RUN_CONFIRM_ENV: "1",
         }  # a Run plays in ASSIST or BOT, never HUMAN
         self.stop_file = self.run_dir / STOP_NAME
         self.stop_file.unlink(missing_ok=True)
