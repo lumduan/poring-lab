@@ -1809,3 +1809,15 @@
     position: static;
   }
 }
+
+/* "What she does": its title and the time choice (the Run's / the server's clock) on one line */
+.run-story-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+.run-story-head select {
+  max-width: 100%;
+}

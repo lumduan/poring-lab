@@ -15,7 +15,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import type { Live } from "@/components/flows/LiveRun";
-import { ACTIVE, liveLabel, monitorTiles, REFUSALS } from "@/lib/flow/liverun";
+import { ACTIVE, liveLabel, monitorTiles, REFUSALS, STORY_CLOCKS, storyStamp, type StoryClock } from "@/lib/flow/liverun";
 import { browserStorage, KEYS, readChoice, writeChoice } from "@/lib/flow/prefs";
 import type { Project } from "@/lib/flow/project";
 import {
@@ -25,7 +25,6 @@ import {
   RETRY_CHOICES,
   RETRY_WAIT_CHOICES,
   type RetryOptions,
-  storyTime,
   TIME_CHOICES,
   timeWords,
   withTimeLimit,
@@ -260,16 +259,34 @@ export function RunStateBox({ live }: { live: Live }) {
 /** What she does (newest first): the Run helper's story of the session's events, in words. */
 export function RunStory({ live }: { live: Live }) {
   const story = [...(live.st?.live?.story ?? [])].reverse();
+  const tz = live.st?.live?.tz;
+  // Batt 2026-11-20: the time counted from the Run's start, or the server's clock (by its time
+  // zone); this browser remembers the choice
+  const store = useMemo(() => browserStorage(), []);
+  const [clock, setClock] = useState<StoryClock>(() => readChoice(store, KEYS.storyClock, STORY_CLOCKS, "run"));
+  const pick = (c: StoryClock) => {
+    setClock(c);
+    writeChoice(store, KEYS.storyClock, c);
+  };
   return (
     <div className="box stack run-story">
-      <div className="strong">What she does (newest first)</div>
+      <div className="row run-story-head">
+        <span className="strong">What she does (newest first)</span>
+        <label className="muted">
+          Time{" "}
+          <select className="field" data-testid="story-clock" value={clock} onChange={(e) => pick(e.target.value === "clock" ? "clock" : "run")}>
+            <option value="run">the Run&apos;s (from its start)</option>
+            <option value="clock">the clock{tz ? ` (the server's, ${tz})` : " (the server's)"}</option>
+          </select>
+        </label>
+      </div>
       {story.length === 0 ? (
         <div className="muted">Nothing yet: the lines come from the Run&apos;s own events while she plays.</div>
       ) : (
         <ol className="logs-story" data-testid="logs-story">
           {story.map((s, i) => (
             <li key={`${story.length - i}-${s.t_s}`}>
-              <span className="muted">{storyTime(s.t_s)}</span> {s.words}
+              <span className="muted">{storyStamp(s, clock)}</span> {s.words}
             </li>
           ))}
         </ol>

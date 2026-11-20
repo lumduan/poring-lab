@@ -395,6 +395,20 @@ Amendment B); a not-adopted model is never offered.
     browser remembers it); the checklist and Run; then the Run's state line, "what she does" and
     its log.
   - No Knife row (a Rogue's technique): a steal counts as an item gained.
+  - ➡️ 2026-11-20 (Batt): two columns; "what she does" (newest first) on the right.
+    - Its lines name the monster as the HUD labels it: the model's class name, the detector's
+      confidence and the distance in cells, e.g. "aims at cookie_xmas 87% 3 cells", "a fight
+      starts (box): cookie_xmas 87% 3 cells at (79, 242)", "a kill: cookie_xmas (exp_line)".
+    - Its **Time** choice: the Run's own (m:ss from its start), or the clock (HH:MM:SS, the bot
+      server's clock in its time zone, named beside it, e.g. UTC+07:00). This browser remembers
+      the choice.
+  - ➡️ 2026-11-20 (Batt, econ-bag-count.md Amendment 3): Run options' **The Economy**: count the
+    bag at the Run's start and at its end (on by default; ~17 s each; Alt+E, the four tabs, closed
+    again).
+    - After Stop the bot stops hunting, counts, then ends: "count, then stop". A second Stop
+      ends at once with no count.
+    - The change between the two counts is the Run's economy, written for the Economy page.
+    - A count that fails only warns. Off: no count, no economy. This bot server's setting.
   - The text below is from before 2026-11-20 and names the two old panes.
   ➡️ 2026-11-19 ~15:2x (Batt, ADR-0020 Amendment U): the bottom panes end with **Logs** (after Hunt
   rules): the Run's state and counts, "what she does" newest first (her walks and why, the

@@ -124,6 +124,7 @@ reason and its words.
 from __future__ import annotations
 
 import argparse
+import collections
 import contextlib
 import io
 import json
@@ -667,15 +668,118 @@ class HuntResult:
                                                                         "stock_keep")))  # fmt: skip
 
 
+# Batt 2026-11-20 ("tell the monster's name and %, and the cell, as in the HUD; we have the names
+# from the model"): the hunt core's lines name the monster it aims at -- the model's own class name,
+# the detector's confidence and the distance in cells, the numbers the console's HUD draws. The
+# runner is pinned, so for this Run only the player keeps what the HUD's units and the detector
+# returned (operator_hud.units; unit_detector's detect), and its hook adds the matching box to the
+# box_target / engage events it mirrors, and the target's name to strike / kill. Display only.
+SEEN_N = 8  # the recent box sets kept (the detector runs every ~0.3 s)
+SEEN_PX = 1.5  # a struck box is a seen box within this many px on every edge
+
+
+def chebyshev(rel: Any) -> int | None:
+    """PURE: the distance in cells of a relative cell, or None."""
+    try:
+        return max(abs(int(rel[0])), abs(int(rel[1])))
+    except (TypeError, ValueError, IndexError):
+        return None
+
+
+class Seen:
+    """The recent boxes as (x0, y0, x1, y1, name, conf, cells); shared by the detector's thread."""
+
+    def __init__(self) -> None:
+        self.sets: collections.deque[list[tuple[Any, ...]]] = collections.deque(maxlen=SEEN_N)
+        self.lock = threading.Lock()
+
+    def add(self, boxes: Sequence[Any], cells: Sequence[Any] | None = None) -> None:
+        rows = []
+        for i, b in enumerate(boxes):
+            try:
+                name = str(getattr(b, "species", None) or getattr(b, "cls", "") or "monster")
+                rel = cells[i] if cells is not None and i < len(cells) else None
+                rows.append((float(b.x0), float(b.y0), float(b.x1), float(b.y1), name,
+                             float(getattr(b, "score", 0.0)), chebyshev(rel)))  # fmt: skip
+            except (AttributeError, TypeError, ValueError):
+                continue
+        if rows:
+            with self.lock:
+                self.sets.append(rows)
+
+    def find(self, box: Sequence[Any] | None) -> dict[str, Any] | None:
+        """The newest seen box at ``box`` (px): its name, conf and cells (the HUD's first)."""
+        try:
+            want = [float(v) for v in (box or [])][:4]
+        except (TypeError, ValueError):
+            return None
+        if len(want) != 4:
+            return None
+        with self.lock:
+            sets = list(self.sets)
+        best: dict[str, Any] | None = None
+        for rows in reversed(sets):
+            for r_ in rows:
+                if all(abs(a - b) <= SEEN_PX for a, b in zip(r_[:4], want, strict=True)):
+                    got = {"name": r_[4], "conf": round(r_[5], 3), "cells": r_[6]}
+                    if got["cells"] is not None:
+                        return got
+                    best = best or got
+        return best
+
+
+@contextlib.contextmanager
+def seen_boxes(seen: Seen) -> Iterator[None]:
+    """For one hunt core: the HUD's units and the detector's boxes also go to ``seen``."""
+    import operator_hud as oh
+    import unit_detector as ud
+
+    units0 = oh.units
+    dets = [(c, c.detect) for c in (ud.UnitDetector, ud.GpuDetector)]
+
+    def units(
+        boxes: Sequence[Any],
+        region: Sequence[int],
+        desktop: Sequence[int],
+        cells: Sequence[Any] | None = None,
+        ids: Sequence[Any] | None = None,
+    ) -> Any:
+        out = units0(boxes, region, desktop, cells, ids)
+        with contextlib.suppress(Exception):
+            seen.add(boxes, cells)
+        return out
+
+    def wrap(f: Callable[..., Any]) -> Callable[..., Any]:
+        def detect(self: Any, img: Any, *a: Any, **k: Any) -> Any:
+            got = f(self, img, *a, **k)
+            with contextlib.suppress(Exception):
+                seen.add(got)
+            return got
+
+        return detect
+
+    oh.units = units  # type: ignore[assignment]
+    for c, f in dets:
+        c.detect = wrap(f)  # type: ignore[method-assign]
+    try:
+        yield
+    finally:
+        oh.units = units0  # type: ignore[assignment]
+        for c, f in dets:
+            c.detect = f  # type: ignore[method-assign]
+
+
 class HuntHook:
     """The runner's TICK HOOK (dungeon@9.48) and its event mirror: the player's stop, read access
     to the runner's HUD values each tick, the runner's events into the player's own record."""
 
-    def __init__(self, player: LivePlayer, res: HuntResult) -> None:
+    def __init__(self, player: LivePlayer, res: HuntResult, seen: Seen | None = None) -> None:
         self.player, self.res = player, res
         self.last: Any = None
         self._hp_t = -1e9
         self._hp0 = Hp0Watch()
+        self.seen = seen or Seen()  # the boxes the HUD / the detector saw (the story's words)
+        self.target_name: str | None = None
 
     def tick(self, view: Any) -> str | None:
         self.res.ticks += 1
@@ -706,6 +810,7 @@ class HuntHook:
 
     def event(self, rec: Mapping[str, Any], t_mono: float) -> None:
         k = rec.get("kind")
+        extra = self._seen_of(k, rec)
         if k == "run_end":
             self.res.reason = str(rec.get("reason") or "")
         elif k == "player_end":
@@ -718,10 +823,34 @@ class HuntHook:
             self._hp_t = t_mono
         elif k not in MIRROR:
             return
-        out = dict(rec)
+        out = {**rec, **extra}
         if k in ("run_start", "run_end"):
             out["kind"] = f"hunt_{k}"
         self.player.rec.ev(out)
+
+    def _seen_of(self, k: Any, rec: Mapping[str, Any]) -> dict[str, Any]:
+        """The monster of a box_target / engage (Seen), and the target's name on a strike /
+        kill; the fight's end forgets it. Display only (the story's words)."""
+        if k in ("box_target", "engage") and rec.get("box"):
+            got = self.seen.find(rec.get("box"))
+            pick = rec.get("pick")
+            if got is None and isinstance(pick, Mapping) and pick.get("species"):
+                got = {"name": str(pick["species"]), "conf": None, "cells": None}
+            if got is not None and got.get("cells") is None and k == "engage":
+                here = getattr(self.last, "pos", None)
+                spot = rec.get("spot")
+                if here is not None and spot:
+                    with contextlib.suppress(TypeError, ValueError, IndexError):
+                        got = {**got, "cells": chebyshev((spot[0] - here[0], spot[1] - here[1]))}
+            if got is not None:
+                self.target_name = got["name"]
+                return {"seen": got}
+            return {}
+        if k in ("strike", "kill") and self.target_name:
+            return {"of": self.target_name}
+        if k == "fight_end":
+            self.target_name = None
+        return {}
 
 
 class DriveHook(HuntHook):
@@ -819,7 +948,9 @@ class HuntCore:
                            "default_species": list(plan.default_species)}
                           if "box_recipes" in box else {}),
                        **({"loop": plan.loop} if plan.loop else {})})  # fmt: skip
-        hook = DriveHook(player, res) if plan.loop else HuntHook(player, res)  # 5b-2: its loop
+        seen = Seen()
+        hook = (DriveHook(player, res, seen) if plan.loop
+                else HuntHook(player, res, seen))  # fmt: skip  # 5b-2: its loop
 
         def warn(words: str) -> None:
             say(words)
@@ -833,7 +964,7 @@ class HuntCore:
                 self.learn_fn(player)
             a = args_fn(argv)
             # never refuses on them (Batt 2026-11-19); the player's role items (step 2)
-            with player_owns_the_start(dh, warn), role_items(dh, plan.vals):
+            with player_owns_the_start(dh, warn), role_items(dh, plan.vals), seen_boxes(seen):
                 res.rc = run_fn(a, hook=hook, session=(player.io.agent, player.io.screen), **box)
         except SystemExit as e:  # its preamble's refusal, or ro_agent.Stop inside its session
             res.error = str(e)[:400] or "the runner stopped"

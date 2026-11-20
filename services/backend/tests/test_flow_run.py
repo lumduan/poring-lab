@@ -751,3 +751,49 @@ def test_a_second_stop_ends_the_run_at_once_skipping_the_bag_count(
     assert h.state == "stopping" and h.stop_file.exists() and sent == []
     h.stop("r2")
     assert sent == [(4242, fr.signal.SIGINT)] and "no bag count" in h.detail
+
+
+# --- Batt 2026-11-20: the monster's name, %, cells as in the HUD; the Run's time or the clock ----
+def test_the_story_names_the_monster_as_the_hud_does() -> None:
+    seen = {"name": "cookie_xmas", "conf": 0.874, "cells": 3}
+    assert fr.unit_words(seen) == "cookie_xmas 87% 3 cells"
+    assert fr.unit_words({**seen, "cells": 1}) == "cookie_xmas 87% 1 cell"
+    assert fr.unit_words({"name": "cookie_xmas", "conf": None, "cells": None}) == "cookie_xmas"
+    assert fr.unit_words(None) is None and fr.unit_words({"conf": 0.5}) is None
+    box = [1.0, 2.0, 3.0, 4.0]
+    assert fr.event_words({"kind": "box_target", "box": box, "seen": seen}) == (
+        "aims at cookie_xmas 87% 3 cells"
+    )
+    assert fr.event_words({"kind": "box_target", "box": box}) == "aims at a monster on the screen"
+    assert fr.event_words(
+        {"kind": "engage", "by": "miss_cue", "seen": seen, "spot": [79, 242]}
+    ) == ("a fight starts (miss_cue): cookie_xmas 87% 3 cells at (79, 242)")
+    assert fr.event_words({"kind": "engage", "by": "box"}) == "a fight starts (box)"
+    assert fr.event_words({"kind": "strike", "end": "damage", "of": "cookie_xmas"}) == (
+        "strikes cookie_xmas: a hit"
+    )
+    assert fr.event_words({"kind": "kill", "by": "exp_line", "of": "cookie_xmas"}) == (
+        "a kill: cookie_xmas (exp_line)"
+    )
+    assert fr.event_words({"kind": "kill", "by": "exp_line"}) == "a kill (exp_line)"
+
+
+def test_each_story_line_carries_the_servers_clock_and_its_zone(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import time
+
+    monkeypatch.setenv("TZ", "Asia/Bangkok")
+    time.tzset()
+    try:
+        # the wall clock = the monotonic one + 1_763_633_946 s: 2025-11-20 10:19:06 UTC
+        lv = fr.Live(wall_minus_mono_s=1_763_633_946.0)
+        lv.feed({"kind": "run_start", "t_ns": 0})
+        lv.feed({"kind": "walk", "t_ns": 105_000_000_000, "to": [91, 210], "why": "search"})
+        line = lv.story[-1]
+        assert line["t_s"] == 105 and line["at"] == "17:20:51"  # ICT = UTC+7
+        assert lv.summary()["tz"] == "UTC+07:00" == fr.server_tz()
+        assert fr.Live().clock_at(5) is None  # no clock given: no "at" (the Run's time only)
+    finally:
+        monkeypatch.delenv("TZ")
+        time.tzset()

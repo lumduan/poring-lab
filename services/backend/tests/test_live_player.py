@@ -1252,3 +1252,51 @@ def test_the_bag_count_is_a_run_option_on_by_default() -> None:
         == "bag_count: true or false"
     )
     assert ro.parse({"retry_max": 3, "retry_wait_s": 20})[0] == ro.DEFAULTS  # an older file
+
+
+# --- Batt 2026-11-20: the story names the monster the HUD names (Seen; the runner unchanged) -----
+def test_seen_finds_the_struck_box_with_the_huds_cells_first() -> None:
+    import types
+
+    b = types.SimpleNamespace(x0=634.9, y0=385.9, x1=662.3, y1=436.1, score=0.874,
+                              cls="monster", species="cookie_xmas")  # fmt: skip
+    seen = fp.Seen()
+    seen.add([b])  # the detector's boxes: no cells
+    assert seen.find([634.9, 385.9, 662.3, 436.1]) == {"name": "cookie_xmas", "conf": 0.874,
+                                                       "cells": None}  # fmt: skip
+    hud = types.SimpleNamespace(x0=635.0, y0=386.0, x1=662.0, y1=436.0, score=0.874,
+                                cls="cookie_xmas")  # fmt: skip
+    seen.add([hud], [(2, -3)])  # the HUD's unit: its cell offset
+    assert seen.find([634.9, 385.9, 662.3, 436.1])["cells"] == 3  # type: ignore[index]
+    assert seen.find([100.0, 100.0, 120.0, 140.0]) is None and seen.find(None) is None
+    assert fp.chebyshev((2, -3)) == 3 and fp.chebyshev(None) is None
+
+
+def test_seen_boxes_records_for_one_hunt_core_and_restores() -> None:
+    import operator_hud as oh
+    import unit_detector as ud
+
+    before = (oh.units, ud.UnitDetector.detect, ud.GpuDetector.detect)
+    seen = fp.Seen()
+    with fp.seen_boxes(seen):
+        assert oh.units is not before[0] and ud.UnitDetector.detect is not before[1]
+    assert (oh.units, ud.UnitDetector.detect, ud.GpuDetector.detect) == before
+
+
+def test_the_hook_adds_the_monster_to_its_events() -> None:
+    import types
+
+    recs: list[dict[str, Any]] = []
+    player = types.SimpleNamespace(rec=types.SimpleNamespace(ev=recs.append))
+    hook = fp.HuntHook(player, fp.HuntResult())  # type: ignore[arg-type]
+    hook.last = types.SimpleNamespace(pos=(77, 240))
+    b = types.SimpleNamespace(x0=1057.5, y0=258.4, x1=1092.9, y1=304.1, score=0.91,
+                              cls="monster", species="garm_baby")  # fmt: skip
+    hook.seen.add([b])
+    hook.event({"kind": "engage", "by": "box", "box": [1057.5, 258.4, 1092.9, 304.1],
+                "spot": [79, 242]}, 1.0)  # fmt: skip
+    hook.event({"kind": "kill", "by": "exp_line"}, 2.0)
+    hook.event({"kind": "fight_end", "kills": 1}, 3.0)
+    hook.event({"kind": "kill", "by": "exp_line"}, 4.0)
+    assert recs[0]["seen"] == {"name": "garm_baby", "conf": 0.91, "cells": 2}
+    assert recs[1]["of"] == "garm_baby" and "of" not in recs[3]

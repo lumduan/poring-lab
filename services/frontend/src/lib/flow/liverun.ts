@@ -112,8 +112,23 @@ export type LiveSummary = {
   end: { reason?: string; home?: boolean; dead?: boolean; respawned?: boolean; words?: string };
   // 2026-11-19 (Batt: a Logs tab -- what she does, is she attacking): the last events in words
   retries?: number;
-  story?: { t_s: number | null; words: string }[];
+  // Batt 2026-11-20 ("the Run's time, or the real time: the server's, by its time zone"): each
+  // line's clock time ("at", HH:MM:SS) in the server's zone, which "tz" names (e.g. UTC+07:00)
+  story?: StoryLine[];
+  tz?: string;
 };
+
+export type StoryLine = { t_s: number | null; words: string; at?: string };
+export type StoryClock = "run" | "clock";
+export const STORY_CLOCKS: readonly StoryClock[] = ["run", "clock"];
+
+/** PURE: a story line's time as chosen: the Run's own (m:ss from its start) or the server's clock
+ * (HH:MM:SS in its time zone); the Run's when a line has no clock time (an older helper). */
+export function storyStamp(s: StoryLine, clock: StoryClock): string {
+  if (clock === "clock" && s.at) return s.at;
+  if (s.t_s === null || s.t_s === undefined || s.t_s < 0) return "";
+  return `${Math.floor(s.t_s / 60)}:${String(s.t_s % 60).padStart(2, "0")}`;
+}
 
 /** PURE: the live line while she plays: HP, what she does, the counts, the time (of the time box). */
 export function liveLine(l: LiveSummary | null | undefined, minutes: number | null): string | null {

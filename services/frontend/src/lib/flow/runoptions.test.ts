@@ -49,3 +49,12 @@ test("a story line's time from the run's start", () => {
   assert.equal(storyTime(65), "1:05");
   assert.equal(storyTime(3_600), "60:00");
 });
+
+test("what she does: the Run's time or the server's clock (Batt 2026-11-20)", async () => {
+  const { storyStamp, STORY_CLOCKS } = await import("./liverun.ts");
+  assert.deepEqual([...STORY_CLOCKS], ["run", "clock"]);
+  assert.equal(storyStamp({ t_s: 105, words: "x", at: "17:19:06" }, "run"), "1:45");
+  assert.equal(storyStamp({ t_s: 105, words: "x", at: "17:19:06" }, "clock"), "17:19:06");
+  assert.equal(storyStamp({ t_s: 105, words: "x" }, "clock"), "1:45"); // an older helper: no clock
+  assert.equal(storyStamp({ t_s: null, words: "x" }, "run"), "");
+});

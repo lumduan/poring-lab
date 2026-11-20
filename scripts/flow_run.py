@@ -67,6 +67,7 @@ from __future__ import annotations
 
 import argparse
 import contextlib
+import datetime as dt
 import json
 import math
 import os
@@ -482,6 +483,22 @@ STRIKE_END = {"damage": "a hit", "arrow": "she walks to it", "walked": "she walk
 HP_STEP = 10  # an HP line when it moves this many points from the last one said
 
 
+def unit_words(seen: Any) -> str | None:
+    """PURE (Batt 2026-11-20: "the monster's name and %, and the cell, as in the HUD"): the HUD's
+    own label of a seen box -- the model's class name, its confidence, its distance in cells --
+    e.g. "cookie_xmas 87% 3 cells" (services/frontend/src/lib/hud.ts unitLabel); None: no box."""
+    if not isinstance(seen, Mapping) or not seen.get("name"):
+        return None
+    out = str(seen["name"])[:32]
+    conf = seen.get("conf")
+    if isinstance(conf, (int, float)) and not isinstance(conf, bool):
+        out += f" {round(float(conf) * 100)}%"
+    cells = seen.get("cells")
+    if isinstance(cells, int) and not isinstance(cells, bool):
+        out += " 1 cell" if cells == 1 else f" {cells} cells"
+    return out
+
+
 def _cell(v: Any) -> str:
     try:
         return f"({int(v[0])}, {int(v[1])})"
@@ -503,17 +520,22 @@ def event_words(e: Mapping[str, Any]) -> str | None:
         return f"chooses where to explore next{near}"
     if k == "box_target":
         if e.get("box"):
-            return "aims at a monster on the screen"
+            unit = unit_words(e.get("seen"))
+            return f"aims at {unit}" if unit else "aims at a monster on the screen"
         return "looks for a monster in reach: none chosen"
     if k == "recipe":
         how = "the Knife swap first" if e.get("knife") else "plain strikes"
         return f"a {e.get('species') or 'monster'}: {how}"
     if k == "engage":
-        return f"a fight starts ({e.get('by') or '?'})"
+        unit = unit_words(e.get("seen"))
+        at = f" at {_cell(e['spot'])}" if e.get("spot") else ""
+        return f"a fight starts ({e.get('by') or '?'}){': ' + unit if unit else ''}{at}"
     if k == "strike":
-        return f"strikes: {STRIKE_END.get(str(e.get('end')), str(e.get('end') or '?'))}"
+        of = f" {str(e['of'])[:32]}" if e.get("of") else ""
+        return f"strikes{of}: {STRIKE_END.get(str(e.get('end')), str(e.get('end') or '?'))}"
     if k == "kill":
-        return f"a kill ({e.get('by') or '?'})"
+        of = f": {str(e['of'])[:32]}" if e.get("of") else ""
+        return f"a kill{of} ({e.get('by') or '?'})"
     if k == "unlock":
         return f"lets go of the target ({e.get('why') or '?'})"
     if k == "fight_end":
@@ -552,6 +574,19 @@ def event_words(e: Mapping[str, Any]) -> str | None:
     return None
 
 
+def wall_minus_mono() -> float:
+    """The wall clock minus CLOCK_MONOTONIC now, in seconds (the story's clock times)."""
+    return time.time() - time.monotonic()
+
+
+def server_tz() -> str:
+    """This server's time zone as a person reads it, e.g. "UTC+07:00" (the process's zone: TZ, else
+    /etc/localtime)."""
+    off = dt.datetime.now().astimezone().utcoffset() or dt.timedelta(0)
+    m = int(off.total_seconds() // 60)
+    return f"UTC{'+' if m >= 0 else '-'}{abs(m) // 60:02d}:{abs(m) % 60:02d}"
+
+
 @dataclass
 class Live:
     """PURE: the live summary of one run's session events (fed line by line)."""
@@ -578,11 +613,26 @@ class Live:
     last_event: str | None = None
     retries: int = 0  # code-error retries (Batt 2026-11-19)
     story: list[dict[str, Any]] = field(default_factory=list)  # the Logs tab (STORY_N)
+    # Batt 2026-11-20 ("the time: the Run's time, or the real time -- the server's, by its time
+    # zone"): the wall clock minus the monotonic one (s), given once by the helper (the run's
+    # events carry the shared CLOCK_MONOTONIC); each story line then also carries its clock time
+    # in the server's time zone ("at"), and the summary names the zone ("tz")
+    wall_minus_mono_s: float | None = None
     _hp_said: int | None = None
+
+    def clock_at(self, t: Any) -> str | None:
+        """The event's clock time, "HH:MM:SS", in this server's time zone (None: no clock)."""
+        if self.wall_minus_mono_s is None or not isinstance(t, int):
+            return None
+        return dt.datetime.fromtimestamp(t / 1e9 + self.wall_minus_mono_s).astimezone().strftime(
+            "%H:%M:%S")  # fmt: skip
 
     def _tell(self, t: Any, words: str) -> None:
         el = None if self.t0_ns is None or not isinstance(t, int) else round((t - self.t0_ns) / 1e9)
-        self.story.append({"t_s": el, "words": words[:240]})
+        line: dict[str, Any] = {"t_s": el, "words": words[:240]}
+        if (at := self.clock_at(t)) is not None:
+            line["at"] = at
+        self.story.append(line)
         del self.story[:-STORY_N]
 
     def feed(self, e: Mapping[str, Any]) -> None:
@@ -665,7 +715,8 @@ class Live:
                 "steals": self.steals, "potions": self.potions, "flies": self.flies,
                 "node": self.node, "keys": self.keys, "fired": self.fired,
                 "last_event": self.last_event, "end": dict(self.end),
-                "retries": self.retries, "story": list(self.story)}  # fmt: skip
+                "retries": self.retries, "story": list(self.story),
+                "tz": server_tz()}  # fmt: skip
 
 
 def session_of(label: str | None, demo: Path) -> Path | None:
@@ -1174,7 +1225,7 @@ class Helper:
             self.config, self.config_src = (vals, src) if vals else (None, None)
         else:
             self.config, self.config_src = None, None
-        self.live, self.live_off, self.end_png = Live(), 0, None
+        self.live, self.live_off, self.end_png = Live(wall_minus_mono_s=wall_minus_mono()), 0, None
         self.run_log = RunLog(identity=run_identity())
         self.run_log_off = 0
         pfile = self.run_dir / PROJECT_FILE
