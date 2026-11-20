@@ -577,3 +577,25 @@ Fixed now, so section 8 is scored as 720's was (xmas02-detector.md M6 / S4 / S7.
     A pass line in HIS terms (e.g. ">= N % of his kills/h") needs Batt's number. It was asked on
     2026-11-20; until he gives it, 8c reports his share beside the registered verdict.
   - Optional, Batt's choice: a human run of his at 1080 would make the bar like for like.
+
+### Amendment 15 (2026-11-20 18:44 ICT from `date`, BEFORE step 2 and before any held-out read): THE FREEZE
+
+- **The training ended** 18:40 ICT; its systemd unit is inactive. The guard's last line is
+  `execdev:vision: OK` (capture stall 0.0 %), and `ALL STEPS OK`.
+- **results.csv has 6 rows** (the validation set v1f, not a held-out):
+
+| epoch | mAP50 | mAP50-95 |
+|---|---|---|
+| 1 | 0.99357 | 0.92027 |
+| 2 | 0.99369 | 0.92222 |
+| 3 | 0.99350 | 0.92627 |
+| 4 | 0.99372 | 0.92826 |
+| 5 | 0.99354 | 0.93037 |
+| 6 | 0.99394 | 0.93105 |
+
+- **FROZEN: `data/train/xmas02-v1080-20261120/weights/last.pt`, sha256
+  `1a9feeff003842a4625a589287b315d9884140ac989517ffc10b7b95c0cca236`** (5,533,274 bytes). It is
+  the model Amendment 13's steps score.
+- best.pt (`3f7f75088b14...`) is NOT used (Amendment 13 names last.pt).
+- Nothing of v1T, v1Tg or v1Tk has been read: no labels, packs or predictions. The next steps
+  are Amendment 13's 1-9, in order.
