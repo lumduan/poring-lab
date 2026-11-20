@@ -173,3 +173,21 @@ def test_diag_of_counts_the_runner_records() -> None:
 def test_diag_of_empty_is_safe() -> None:
     d = sa.diag_of([])
     assert d["kills_h"] is None and d["cursor_box"] == {} and d["strikes_per_kill"] is None
+
+
+def test_a_block_names_its_model_xmas02sk_unless_8c_names_the_1080_one(tmp_path: Path) -> None:
+    """xmas02-1080-detector.md 8c (Amendment 19): --model sets stage10's box model; the plan keeps
+    it; the default is s11scr's."""
+    import unit_detector as ud
+
+    assert sa.MODELS[0] == "xmas02sk" == ud.MAP_MODELS["xmas_dun02"].gpu
+    assert "xmas02v1080" in [m.gpu for m in ud.MAP_REFERENCES["xmas_dun02"]]
+    before = sa.s10.MODEL
+    try:
+        sa.use_model("xmas02v1080")
+        assert sa.s10.MODEL == "xmas02v1080"
+        assert sa.plan_doc("s12x", 3, 20, "1080", tmp_path, base=_base())["model"] == "xmas02v1080"
+        with pytest.raises(ValueError):
+            sa.use_model("v1")
+    finally:
+        sa.s10.MODEL = before

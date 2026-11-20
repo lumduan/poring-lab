@@ -546,10 +546,19 @@ def table(scores: Sequence[Score]) -> str:
     return "\n".join(rows)
 
 
+def fp_bag_env() -> str:
+    """flow_play's switch for the Run's bag count (BAG_COUNT_ENV), named here without importing
+    flow_play (a heavy import for a series' parent)."""
+    return "PORING_BAG_COUNT"
+
+
 # --- the live steps (each a child process; the series runs them one at a time) --------------------
 def env() -> dict[str, str]:
     e = {**os.environ, "PYTHONDONTWRITEBYTECODE": "1", "TMPDIR": "/dev/shm/poring-lab-tmp",
-         "TZ": "Asia/Bangkok"}  # fmt: skip
+         "TZ": "Asia/Bangkok",
+         # econ-bag-count.md (2026-11-20): a measured series never counts the bag (the A/B arms
+         # differ only by what each series names; its economy is the packets')
+         fp_bag_env(): "0"}  # fmt: skip
     e["PATH"] = str(Path.home() / ".local/bin") + ":" + e.get("PATH", "/usr/bin:/bin")
     return e
 

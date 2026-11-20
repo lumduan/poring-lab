@@ -117,7 +117,7 @@ def test_run_hands_the_box_files_to_the_box_watcher() -> None:
 
 
 def test_the_runner_takes_the_maps_own_or_its_reference_by_the_box_file() -> None:
-    own, (ref,) = ud.MAP_MODELS["xmas_dun02"], ud.MAP_REFERENCES["xmas_dun02"]
+    own, ref = ud.MAP_MODELS["xmas_dun02"], ud.MAP_REFERENCES["xmas_dun02"][0]  # xmas02gb first
 
     def doc(m: ud.MapModel, mid: str) -> dict[str, Any]:
         return {"id": mid, "file": m.onnx, "sha256": m.sha256[:12], "maps": ["xmas_dun02"],

@@ -727,3 +727,33 @@ AG / AH (v1Tg: `990790e4...` / `05501847...`), each 100 % of its pack, none saw 
     latency-cpu `c5bdecd0...`;
   - predictions: q1-pred-v1T `881e0e21...`, q1-pred-v1Tg `06f6f5ef...`, pred-v1Tk-all
     `cae29ba0...`.
+
+### Amendment 19 (2026-11-20 19:44 ICT from `date`, BEFORE 8c's first run): 8c as it runs
+
+- **The model is nameable, NOT deployed:**
+  - registered as the map's second REFERENCE: unit_detector XMAS02V1080 in
+    MAP_REFERENCES["xmas_dun02"], GPU_WEIGHTS["xmas02v1080"] (the NAS last.pt `1a9feeff...`,
+    the ONNX `04b19898...`), models.yaml `xmas02v1080` (reference: true, its why says "NOT
+    deployed");
+  - MAP_MODELS stays xmas02sk. The live copy is unchanged (it updates only on Batt's word).
+- **The block:** `screen_ab.py run --label s12scr-1080 --screen 1080 --runs 3 --minutes 20 --model
+  xmas02v1080`.
+  - The new `--model` sets stage10's box model, checks and pins (its default stays s11scr's
+    xmas02sk).
+  - s11scr's setup and protocol otherwise: the ready-made box (s10ab's B), the lab's Rogue not
+    immune, stage2_ab's setup before every run, the MVP alive.
+  - A measured series never counts the bag (stage2_ab's env, `PORING_BAG_COUNT=0`): the Run
+    integration of 2026-11-20 is kept out of the arms.
+- **Judged as registered (section 8c), against s11scr-720's A runs:**
+  - kills/h, loot/h, deaths and errors, each SAME at -2 SE;
+  - false boss Fly Wings per hour no higher than A's beyond 2 SE.
+  - Reported: goblin boxes per frame, the player found per frame, the cursor's unknown share.
+- **Disclosed:** the A runs played main of 2026-11-19 (s11scr, ~23:xx). This block plays main of
+  2026-11-20, which also changed the readers' re-read rules (W) and the role-word and story
+  patches (inert for this box). So the A/B difference is the model and a day of code, not the
+  model alone.
+- **Reported beside it, the like-for-like model comparison at the SAME screen:** s11scr-1080b's
+  B runs (xmas02sk at 1080), scored with the same tool.
+- **Headline (Amendment 14):** each block's kills/h, loot/h and z/h as a % of Batt's run (228.5
+  kills/h, 135,737 common z/h).
+- Deployment stays Batt's decision, whatever 8c says.

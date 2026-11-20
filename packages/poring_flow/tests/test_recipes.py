@@ -96,15 +96,18 @@ def test_the_model_classes_are_the_monsters_the_runner_strikes() -> None:
     import unit_detector as ud
 
     xmas = models.models().models["xmas02"]
-    (ref,) = ud.MAP_REFERENCES["xmas_dun02"]  # 18.15: xmas02 is the map's reference model
+    # 18.15: xmas02 is the map's reference model (the first; + xmas02v1080, 1080 Amendment 18)
+    ref = ud.MAP_REFERENCES["xmas_dun02"][0]
     assert xmas.strikes == list(ref.collapse)  # garm_baby: not struck
     assert "garm_baby" in xmas.classes and "garm_baby" not in xmas.strikes
     sk = models.models().models["xmas02sk"]  # 18.15: the map's own since 2026-11-17
     assert sk.strikes == list(ud.MAP_MODELS["xmas_dun02"].collapse) == xmas.strikes
     for alarm in ("garm_baby", "g_gobline_xmas", "knight_of_windstorm"):
         assert alarm in sk.classes and alarm not in sk.strikes and alarm in sk.alarm
+    x1080 = models.models().models["xmas02v1080"]  # 1080 Amendment 18: xmas02sk's classes
+    assert x1080.strikes == sk.strikes and x1080.alarm == sk.alarm
     assert all(not m.strikes for k, m in models.models().models.items()
-               if k not in ("xmas02", "xmas02sk"))  # fmt: skip
+               if k not in ("xmas02", "xmas02sk", "xmas02v1080"))  # fmt: skip
     with pytest.raises(ValueError, match="strikes name classes"):
         models.ModelSpec(kind="detector", status="live", file="a.onnx", sha256="0" * 12,
                          classes=["a", "b"], strikes=["b", "a"], why="x")  # fmt: skip

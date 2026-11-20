@@ -267,3 +267,11 @@ def test_a_short_run_that_died_played(tmp_path: Path) -> None:
     c.write_text("flow_play refused before any input: the start check: ...\\n")
     assert ab.died_in(a) and ab.died_in(b)
     assert not ab.died_in(c) and not ab.died_in(tmp_path / "missing.log")
+
+
+def test_a_measured_series_never_counts_the_bag() -> None:
+    """econ-bag-count.md (2026-11-20): the Run's bag count is off in every series run (the arms
+    differ only by what each series names); flow_play reads the same switch."""
+    import flow_play as fp
+
+    assert ab.env()[ab.fp_bag_env()] == "0" and ab.fp_bag_env() == fp.BAG_COUNT_ENV

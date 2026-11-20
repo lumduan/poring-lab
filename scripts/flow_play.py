@@ -2282,7 +2282,8 @@ def play(prep: Prepared, lio: LiveIO, *, label: str, stop_file: Path | None,
     end, words = "failed", None
     from poring_env import runoptions
 
-    if census is None and isinstance(lio, PixelIO) and runoptions.load(fr.DIR).bag_count:
+    if (census is None and isinstance(lio, PixelIO) and runoptions.load(fr.DIR).bag_count
+            and os.environ.get(BAG_COUNT_ENV) != "0"):  # fmt: skip
         import bag_count
 
         census = bag_count.census
@@ -2358,6 +2359,7 @@ def play(prep: Prepared, lio: LiveIO, *, label: str, stop_file: Path | None,
 # once (the helper's SIGINT), so that count is skipped -- and writes the Run's economy
 # (scripts/econ_bag.py) for the /economy page. A count that fails warns: the Run plays on.
 BagCensus = Callable[[Any, Any], dict[str, Any]]
+BAG_COUNT_ENV = "PORING_BAG_COUNT"  # "0": no count in this process (stage2_ab's measured series)
 NO_END_COUNT = ("input_refused", "error", "stopped_by_parent", "dead")  # no keys at those ends
 
 

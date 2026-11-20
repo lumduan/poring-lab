@@ -364,7 +364,7 @@ def test_box_model_refused_takes_only_the_model_the_detector_loads_on_the_map() 
     # because the box names its file; xmas02sk is the map's own (the ready-made functions box)
     assert dh.box_model_refused(xmas, "xmas_dun02") is None
     assert dh.box_model_refused(xmas, "xmas_dun02", detector="cpu") is None
-    (ref,) = ud.MAP_REFERENCES["xmas_dun02"]
+    ref = ud.MAP_REFERENCES["xmas_dun02"][0]  # xmas02gb (+ xmas02v1080: 1080 Amendment 18)
     assert xmas["file"] == ref.onnx and ref.sha256.startswith(xmas["sha256"])
     sk = live.hunt_plan(
         pj.compile_project(pj.from_json(FUNCTIONS.read_text())).flow, "xmas_dun02"

@@ -83,6 +83,19 @@ def screen_problem(screen: str, env: Mapping[str, str], grab: tuple[int, int] | 
     return None
 
 
+# xmas02-1080-detector.md 8c (Amendment 19): a block may name another of the map's loadable models
+# (unit_detector MAP_MODELS / MAP_REFERENCES); the default is s11scr's, the fixture's xmas02sk
+MODELS = ("xmas02sk", "xmas02v1080")
+
+
+def use_model(model: str) -> None:
+    """The block's model for stage10's box, checks and pins (its module constant, read at call
+    time): set before its plan, run or score."""
+    if model not in MODELS:
+        raise ValueError(f"the model {model!r} is not one of {MODELS}")
+    s10.MODEL = model
+
+
 def plan_doc(label: str, n: int, minutes: float, screen: str, folder: Path,
              base: Mapping[str, Any] | None = None) -> dict[str, Any] | str:  # fmt: skip
     """PURE but for stage10's reads: the block's series document, or a refusal. ``base``: a
@@ -94,7 +107,7 @@ def plan_doc(label: str, n: int, minutes: float, screen: str, folder: Path,
     secs = int(round(minutes * 60))
     runs = runs_of(label, n, screen, s2.dh_cells() if base is None else ((1, 1), (2, 2)))
     return {
-        "version": got["version"], "label": label, "screen": screen,
+        "version": got["version"], "label": label, "screen": screen, "model": s10.MODEL,
         "screen_want": {k: SCREENS[screen][k] for k in ("session", "region")},
         "runs_n": n, "minutes": minutes, "box_arm": BOX_ARM, "arm": arm,
         "vals": {BOX_ARM: got["vals"][BOX_ARM]}, "bar": {**s10.BAR, "screen": BAR},
@@ -316,6 +329,12 @@ def main(argv: Sequence[str] | None = None) -> int:
         p.add_argument("--screen", required=True, choices=sorted(SCREENS))
         p.add_argument("--runs", type=int, default=3)
         p.add_argument("--minutes", type=int, default=20)
+        p.add_argument(
+            "--model",
+            choices=MODELS,
+            default=MODELS[0],
+            help="the box's use_model (8c: the 1080 model; default s11scr's)",
+        )
     dg = sub.add_parser("diag", help="the runner's own records, per run (REPORTED only)")
     dg.add_argument("labels", nargs="+", help="run labels (or series labels: every run of it)")
     dg.add_argument("--demo", type=Path, default=s2.DEMO, help="the sessions' folder (an archive)")
@@ -336,20 +355,29 @@ def main(argv: Sequence[str] | None = None) -> int:
         return 0
     if a.cmd == "score":
         blocks = {}
+        models: dict[str, Any] = {}
         for side, label in (("A", a.a), ("B", a.b)):
             doc, runs = score_block(label)
+            use_model(str(doc.get("model") or MODELS[0]))  # a block before 8c named xmas02sk
+            models[side] = {
+                "model": s10.MODEL,
+                **s10.model_report(
+                    [s10.score_run(r, SCRATCH / label, bar=doc["bar"]) for r in doc["runs"]]
+                ),
+            }
             if not a.no_econ_update:
                 print(s7.econ_update(doc["runs"]), flush=True)
             blocks[side] = (doc, runs)
         minutes = float(blocks["A"][0]["minutes"])
         v = verdict(blocks["A"][1], blocks["B"][1], minutes)
-        res = {"runs": {k: r for k, (_, r) in blocks.items()}, "verdict": v}
+        res = {"runs": {k: r for k, (_, r) in blocks.items()}, "verdict": v, "models": models}
         print(json.dumps(res, indent=1, default=str))
         return 0
     if not 5 <= a.minutes <= 600:
         print("refused before any input: --minutes is the Run config's: 5..600", flush=True)
         return 2
     folder = SCRATCH / a.label
+    use_model(a.model)
     got = plan_doc(a.label, a.runs, a.minutes, a.screen, folder)
     if isinstance(got, str):
         print(got, flush=True)

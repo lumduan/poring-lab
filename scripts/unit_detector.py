@@ -111,11 +111,20 @@ XMAS02SK = MapModel(
     {s: "monster" for s in XMAS02_SPECIES},
     gpu="xmas02sk",
 )
+# xmas02-1080-detector.md Amendment 18 (2026-11-20): the 1080 model (xmas02sk's classes, trained on
+# the 1080 mix) PASSED 8a and 8b. A REFERENCE model only, for the 8c play block (a box loads it by
+# naming it in use_model); NOT deployed -- MAP_MODELS stays xmas02sk until Batt decides.
+XMAS02V1080 = MapModel(
+    "xmas02v1080-last-736x1280.onnx",
+    "04b198988789da0d743d251c88b1b9ab882d2a0e4afd28fcb1c595b34e77794b",
+    {s: "monster" for s in XMAS02_SPECIES},
+    gpu="xmas02v1080",
+)
 MAP_MODELS: dict[str, MapModel] = {"xmas_dun02": XMAS02SK}
 # live-blocks.md 18.15 (dungeon@9.59): a map's OTHER loadable models -- the reference arms', the
 # rollback -- each by its own pinned file. The runner loads one only when the box's use_model names
 # its file (dungeon_hunt.box_model_refused / BoxWatch); with no use_model the map's MAP_MODELS one.
-MAP_REFERENCES: dict[str, tuple[MapModel, ...]] = {"xmas_dun02": (XMAS02GB,)}
+MAP_REFERENCES: dict[str, tuple[MapModel, ...]] = {"xmas_dun02": (XMAS02GB, XMAS02V1080)}
 
 
 class DetectorUnavailable(RuntimeError):
@@ -377,6 +386,11 @@ GPU_WEIGHTS: dict[str, GpuWeights] = {
                            "0b43ebbfe8e2bb5c4333d2297520f4f05d9ce79b6fa1cdcde12663879d167a10",
                            "xmas02sk-last-736x1280.onnx",
                            "76316fb4e58102aaf015de597eec2b188f9f103e29fb4ca74f87d2f636d19473"),
+    # xmas02-1080-detector.md Amendment 18: the frozen last.pt (archived to the NAS, re-hashed)
+    "xmas02v1080": GpuWeights("/datasets/archive/train/xmas02-v1080-20261120/weights/last.pt",
+                              "1a9feeff003842a4625a589287b315d9884140ac989517ffc10b7b95c0cca236",
+                              "xmas02v1080-last-736x1280.onnx",
+                              "04b198988789da0d743d251c88b1b9ab882d2a0e4afd28fcb1c595b34e77794b"),
 }  # fmt: skip
 
 

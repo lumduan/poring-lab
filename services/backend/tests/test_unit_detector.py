@@ -213,7 +213,7 @@ def test_the_deployed_xmas02_entry() -> None:
     }
     for alarm in ("garm_baby", "g_gobline_xmas", "knight_of_windstorm"):
         assert alarm not in spec.collapse
-    (ref,) = ud.MAP_REFERENCES["xmas_dun02"]
+    ref = ud.MAP_REFERENCES["xmas_dun02"][0]  # xmas02gb (+ xmas02v1080: 1080 Amendment 18)
     assert ref.onnx == "xmas02gb-last-736x1280.onnx" and ref.gpu == "xmas02gb"
     assert ref.sha256.startswith("b22d972b")  # M9's export of M8's last.pt
     assert ref.collapse == spec.collapse and "garm_baby" not in ref.collapse
@@ -223,7 +223,7 @@ def test_the_deployed_xmas02_entry() -> None:
 def test_map_model_picks_the_maps_own_or_a_reference_by_file() -> None:
     """18.15: a box's use_model chooses among the map's models by file; anything else fails closed
     before a detector exists."""
-    own, (ref,) = ud.MAP_MODELS["xmas_dun02"], ud.MAP_REFERENCES["xmas_dun02"]
+    own, ref = ud.MAP_MODELS["xmas_dun02"], ud.MAP_REFERENCES["xmas_dun02"][0]  # xmas02gb first
     assert ud.map_model("xmas_dun02") is own and ud.map_model("xmas_dun02", None) is own
     assert ud.map_model("xmas_dun02", own.onnx) is own
     assert ud.map_model("xmas_dun02", ref.onnx) is ref
@@ -581,7 +581,8 @@ def test_for_map_gpu_takes_the_maps_own_weights(
 
 def test_the_deployed_gpu_weights_and_the_server_step() -> None:
     assert ud.MAP_MODELS["xmas_dun02"].gpu == "xmas02sk"  # 18.15 (2026-11-17)
-    assert [m.gpu for m in ud.MAP_REFERENCES["xmas_dun02"]] == ["xmas02gb"]  # s9ab's A
+    # s9ab's A, then the 1080 model (xmas02-1080-detector.md Amendment 18: 8c's arm, not deployed)
+    assert [m.gpu for m in ud.MAP_REFERENCES["xmas_dun02"]] == ["xmas02gb", "xmas02v1080"]
     assert ud.GPU_WEIGHTS["v1"].sha256.startswith("03d5397961")
     assert ud.GPU_WEIGHTS["xmas02"].sha256.startswith("5c5bb67a74")  # kept for a rollback
     assert ud.GPU_WEIGHTS["xmas02gb"].sha256.startswith("85fb37a4cb")  # M8's frozen last.pt

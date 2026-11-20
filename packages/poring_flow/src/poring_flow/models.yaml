@@ -80,6 +80,23 @@ models:
     mobs: {mystcase: [1249], cruiser: [1248], cookie: [1265], cookie_xmas: [1246], garm_baby: [1515]}
     strikes: [mystcase, cruiser, cookie, cookie_xmas]
     why: "xmas02-gb: PASSED its held-out score 2026-11-10 (docs/planning/xmas02-detector.md M11), deployed on xmas_dun02 (M12) until xmas02sk (2026-11-17, live-blocks.md 18.15); now the REFERENCE arm's model; garm_baby is its alarm class (the runner never strikes it); npc and warp are EMPTY fixed classes (Amendment H)"
+  # the id `xmas02v1080` is the 1080 model (xmas02-1080-detector.md): xmas02sk's classes, trained on
+  # the 1080 mix; it PASSED 8a and 8b (Amendment 18). A REFERENCE model ONLY, registered so the 8c
+  # play block's box can name it (unit_detector MAP_REFERENCES); NOT deployed: the map's detector
+  # stays xmas02sk (MAP_MODELS) until Batt decides
+  xmas02v1080:
+    kind: detector
+    status: live
+    reference: true
+    file: xmas02v1080-last-736x1280.onnx
+    sha256: 04b198988789
+    maps: [xmas_dun02]
+    classes: [player, mystcase, cruiser, cookie, cookie_xmas, garm_baby, g_gobline_xmas, knight_of_windstorm]
+    untrained: [npc, warp]
+    mobs: {mystcase: [1249], cruiser: [1248], cookie: [1265], cookie_xmas: [1246], garm_baby: [1515], g_gobline_xmas: [1607], knight_of_windstorm: [1251]}
+    strikes: [mystcase, cruiser, cookie, cookie_xmas]
+    alarm: [garm_baby, g_gobline_xmas, knight_of_windstorm]
+    why: "xmas02-1080: 8a and 8b PASSED 2026-11-20 (docs/planning/xmas02-1080-detector.md Amendment 18: A1-A7 at 1080, no loss at 720); registered as a REFERENCE for the 8c play block only (loadable by naming it in use_model); NOT deployed, Batt's decision"
   stormy-v1:
     kind: boss_recognizer
     status: not_adopted
