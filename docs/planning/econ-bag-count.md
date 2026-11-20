@@ -154,3 +154,29 @@ add (`@item 601 199`, items 927 / 933) simply is not in it.
   14:49). Take 3 runs with the host quiet.
 - **Take 3:** T2-T6 again, fresh bags with new counts (including 3-digit stacks), the same bar and
   truth. Only when all five pass does the Run integration start.
+
+## Amendment 3 (2026-11-20 17:07 ICT from `date`): take 3 PASSES B1-B4 on every trial; the Run integration starts
+
+| trial | entries | B1 (0 wrong) | B2 (>= 98 %) | B3 (as found) | B4 (<= 20 s) |
+|---|---|---|---|---|---|
+| T2 | 15 (a 4-digit 1100) | pass | 15/15 | pass | 17.7 s |
+| T3 | 37 (Etc 30; 3-digit 101-105) | pass | 37/37 | pass | 17.8 s |
+| T4 | 19 (shared icon 2401 / 2402; 3-digit 555) | pass | 19/19 | pass | 16.4 s |
+| T5 | 18 (3-digit 456; look-alike wings 602 / 12324) | pass | 18/18 | pass | 16.7 s |
+| T6 | 40 (a 4-digit 1000) | pass | 40/40 | pass | 18.3 s |
+
+- **T5 ran twice.** The first time (15:59) its census never began: the lab client stopped drawing
+  (black / minimised; the agent's terminal in front) and the mux refused a key,
+  `client_not_foreground`. `ro_agent.py recover gm` relaunched it at 16:04. The leftovers were
+  removed and the bag was the baseline again (from the database, saved at the logout); T5 and T6
+  then ran fresh.
+- **Take 3's T2 tested less than designed.** My weight sums were 10x off: the item table's 70 is a
+  weight of 7.0, so Red Potion x120 and White Potion x93 would have overweighted her and were
+  refused. The database truth showed it, and T3 / T5 cover the 3-digit stacks.
+- **THE VERDICT:** the bag counter meets the pre-registered bar offline.
+- **Next, the Run integration** (Batt 2026-11-20, his choice for a Stop: "count, then stop"):
+  - a census at the Run's start, before the first hunt;
+  - and at its end, including after a Stop: the bot stops hunting, counts (~17 s, keys only),
+    closes the bag, then ends. A second Stop skips the count (no economy for that Run);
+  - the Run's economy is `econ_bag`'s entry, written for the /economy page;
+  - a census that fails warns and the Run plays on (never a lock).
