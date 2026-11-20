@@ -968,6 +968,7 @@ class HuntCore:
                 player_owns_the_start(dh, warn),
                 role_items(dh, plan.vals),
                 role_alarm(dh, plan.vals, warn),
+                near_alarm(dh, plan.vals),
                 seen_boxes(seen),
             ):
                 res.rc = run_fn(a, hook=hook, session=(player.io.agent, player.io.screen), **box)
@@ -1990,6 +1991,44 @@ def role_alarm(dh: Any, vals: Mapping[str, Any],
         yield
     finally:
         dh.alarm_classes = saved
+
+
+def near_keeps(box: Any, near_px: float, sure: float, her: tuple[float, float]) -> bool:
+    """PURE (goblin-alarm-1080.md rule A): an alarm box counts unless its centre lies within
+    ``near_px`` of her body's point ``her`` and it scores under ``sure``."""
+    cx, cy = (float(box.x0) + float(box.x1)) / 2, (float(box.y0) + float(box.y1)) / 2
+    return math.hypot(cx - her[0], cy - her[1]) > near_px or float(box.score) >= sure
+
+
+@contextlib.contextmanager
+def near_alarm(dh: Any, vals: Mapping[str, Any]) -> Iterator[None]:
+    """goblin-alarm-1080.md rule A (2026-11-21): at 1080 the monster she fights, beside her, reads
+    as an alarm monster (17 of 17 false goblin sightings of the FIT pilots lay within 40 px of one).
+    While the player's ``alarm_near_px`` is in use and above 0, the runner's alarm rule
+    (dungeon_hunt.alarm_seen, looked up by name at each call) is given only the boxes
+    ``near_keeps`` keeps: one within that distance of her body's point (FOOT_PX raised by BODY_UP)
+    passes only at ``alarm_near_score`` or more. The streak and the rest of the rule are the
+    runner's own; the runner file stays byte-identical. Off (0, or the alarm off) = unchanged."""
+    from poring_flow import settings as st
+
+    near_px = float(vals.get("alarm_near_px") or 0.0)
+    if near_px <= 0 or not st.in_use("alarm_near_px", vals):
+        yield
+        return
+    sure = float(vals.get("alarm_near_score", st.DEFAULTS["alarm_near_score"]))
+    her = (float(dh.FOOT_PX[0]), float(dh.FOOT_PX[1] - dh.BODY_UP))
+    saved = dh.alarm_seen
+
+    def seen(alarm: Any, now: float, *args: Any, **kw: Any) -> Any:
+        t, boxes = alarm
+        return saved((t, [b for b in boxes if near_keeps(b, near_px, sure, her)]), now, *args,
+                     **kw)  # fmt: skip
+
+    dh.alarm_seen = seen
+    try:
+        yield
+    finally:
+        dh.alarm_seen = saved
 
 
 @contextlib.contextmanager

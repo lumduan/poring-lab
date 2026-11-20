@@ -85,9 +85,12 @@ def test_the_defaults_are_valid_settings_and_the_strategys_own() -> None:
         assert k in fc.BY_NAME and not fc.BY_NAME[k].tune, k  # a flag or a switch of its own
         assert fc.problem_of(fc.BY_NAME[k], v) is None, (k, v)
     # an item setting (roles-not-names.md step 2) has the flow's default too: the player applies it
-    # and step 3's alarm monsters (a monsters setting)
+    # and step 3's alarm monsters (a monsters setting); and the live player's own numbers
+    # (goblin-alarm-1080.md rule A: Field.player)
     own = {
-        x.name for x in fc.FIELDS if x.flag or x.kind in ("switch", "choice", "item", "monsters")
+        x.name
+        for x in fc.FIELDS
+        if x.flag or x.player or x.kind in ("switch", "choice", "item", "monsters")
     }
     assert own == set(f.defaults)  # every flag and switch has the flow's default
     assert fc.clash(f.defaults) is None

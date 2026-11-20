@@ -136,3 +136,23 @@ true one, and does play at 1080 gain from it?
   - A and confirm 3 show 7 true episodes where today shows 6: a false near sighting just before a
     true far one joins them into one episode under today's rule.
 - The held-out (section 5) is unchanged: ifT4, ifT5, ifH2, ifT6..ifT10.
+
+### Amendment 2 (2026-11-21 01:01 ICT from `date`): rule A built as the player's settings, OFF by default
+
+- Built ahead of the held-out verdict, on branch goblin-alarm, NOT merged (it merges only if
+  section 5 passes; the play bar sets it per arm):
+  - two OPTIONAL setting blocks in the safety tab: `alarm_near_px` (0-200 px, step 5; **default
+    0 = off**, today's alarm) and `alarm_near_score` (0.50-1.00; default 0.85; in use only
+    while alarm_near_px is above 0), both needing garm_fly;
+  - a new Field attribute `player`: the live player applies the setting, never a runner flag
+    nor a --tune constant (the runner is byte-pinned); argv() skips it;
+  - `flow_play.near_alarm`: for the hunt core's run, dungeon_hunt.alarm_seen (looked up by name
+    at each of its three call sites) is given only the boxes `near_keeps` keeps; the streak and
+    the rest of the rule are the runner's; restored after;
+  - the ready-made boxes and their fixtures are unchanged (optional blocks are held only when a
+    person sets them).
+- Tests: test_live_player (off by default, off with the alarm off, the rule, restored, applied by
+  the hunt core), test_flow_config / test_flow_run / test_settings_blocks pins, the frontend's
+  registry test (130 blocks; run in frontend-dev after the merge), settings.gen.ts regenerated;
+  mypy strict clean on settings.py.
+- When its bars pass, the default becomes 60 by its own amendment and Batt's report.

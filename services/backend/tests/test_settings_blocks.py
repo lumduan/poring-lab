@@ -92,11 +92,18 @@ BOX_PLAYS_THEM = {"potion_below", "fly_below", "weight_home", "respawn_at", "res
 def test_the_one_box_with_its_blocks_at_their_defaults_plays_todays_argv() -> None:
     d = one_box()
     held = {k for t in d["nodes"][0]["tabs"] for k in t["vars"]}
-    # the OPTIONAL blocks (the role items and the alarm monsters, roles-not-names.md steps 2-3) are
-    # held only when set
+    # the OPTIONAL blocks (the role items and the alarm monsters, roles-not-names.md steps 2-3;
+    # the near-her alarm rule's two, goblin-alarm-1080.md) are held only when set
     assert held == {f.var for f in fc.BLOCKS if f.name not in BOX_PLAYS_THEM and not f.optional}
+    assert {f.name for f in fc.BLOCKS if f.optional} == {
+        "swap_item",
+        "heal_item",
+        "alarm_monsters",
+        "alarm_near_px",
+        "alarm_near_score",
+    }
     # 120: + fly_first (18), + fly_first_hp (18.11), + fly_first_land and FF_LAND_S (18.17)
-    assert len(held) == len(fc.BLOCKS) - 5 - 3 == 120
+    assert len(held) == len(fc.BLOCKS) - 5 - 5 == 120
     assert hunt_argv(json.dumps(d)) == TODAY
 
 

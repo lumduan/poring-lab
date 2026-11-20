@@ -84,11 +84,15 @@ class Field:
     # roles-not-names.md step 2: an OPTIONAL block -- offered and found, but a box holds it only
     # when a person sets it (absent = the default), so the ready-made boxes stay as they were
     optional: bool = False
+    # goblin-alarm-1080.md (2026-11-21): a setting the LIVE PLAYER applies (flow_play, for one Run),
+    # never a runner flag nor a --tune constant (the runner file is byte-pinned)
+    player: bool = False
 
     @property
     def tune(self) -> bool:
-        """A runner constant set with --tune (no flag of its own, and no switch)."""
-        return not self.flag and self.kind not in ("switch", "choice", "item", "monsters")
+        """A runner constant set with --tune (no flag of its own, no switch, not the player's)."""
+        return (not self.flag and not self.player
+                and self.kind not in ("switch", "choice", "item", "monsters"))  # fmt: skip
 
     @property
     def var(self) -> str:
@@ -959,6 +963,35 @@ SWITCHES: tuple[Field, ...] = (
         "--alarm-solo",
         needs=(("alarm_fast", _ON),),
     ),  # fmt: skip
+    # goblin-alarm-1080.md rule A (2026-11-21): at 1080 the monster she fights, beside her, reads
+    # as an alarm monster (17 of 17 false goblin sightings in the FIT pilots); an alarm box this
+    # close to her body passes only at a sure score. The live player applies it (flow_play
+    # near_alarm), never a runner flag. 0 px = off: today's alarm (the default until its bars pass)
+    Field(
+        "alarm_near_px",
+        "safety",
+        "number",
+        "the alarm: a box this close to her needs a sure score (0 = off)",
+        0.0,
+        200.0,
+        5.0,
+        unit="px",
+        needs=(("garm_fly", _ON),),
+        optional=True,
+        player=True,
+    ),  # fmt: skip
+    Field(
+        "alarm_near_score",
+        "safety",
+        "share",
+        "the alarm: the score a box that close needs",
+        0.5,
+        1.0,
+        0.01,
+        needs=(("alarm_near_px", "!off"),),
+        optional=True,
+        player=True,
+    ),  # fmt: skip
     Field(
         "fly_first",
         "safety",
@@ -1065,6 +1098,8 @@ DEFAULTS: dict[str, Any] = {
     "swap_item": 1201,  # the Knife
     "heal_item": 504,  # the White Potion
     "alarm_monsters": "",  # the node model's own alarm list (models.yaml `alarm`)
+    "alarm_near_px": 0.0,  # goblin-alarm-1080.md rule A: off until its bars pass (then 60)
+    "alarm_near_score": 0.85,
     # the Run settings (dungeon@9.41-9.43): the heal and escape numbers are --strategy P2's own
     "knife_max_s": 8.0,
     "knife_hp_min": 0.50,
@@ -1240,6 +1275,8 @@ FIND: dict[str, tuple[str, ...]] = {
     "garm_confirm": ("garm", "alarm"),
     "alarm_fast": ("garm", "alarm", "hud"),
     "alarm_solo": ("garm", "alarm"),
+    "alarm_near_px": ("garm", "alarm", "goblin", "near", "fight"),
+    "alarm_near_score": ("garm", "alarm", "goblin", "near"),
     "fly_first": ("boss", "knight", "fly", "wing", "first"),
     "fly_first_hp": ("hp", "fly", "wing", "first"),
     "fly_first_land": ("boss", "fly", "wing", "land", "stale", "teleport"),
@@ -1582,7 +1619,7 @@ def argv(vals: Mapping[str, Any]) -> list[str]:
         if f.name not in vals or not in_use(f.name, vals):
             continue
         v = vals[f.name]
-        if f.kind in ("item", "monsters"):  # the live player applies them (flow_play), never a flag
+        if f.kind in ("item", "monsters") or f.player:  # the live player's (flow_play)
             continue
         if f.kind == "switch":
             if v and f.flag:
