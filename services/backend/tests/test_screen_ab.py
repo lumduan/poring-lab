@@ -194,3 +194,73 @@ def test_a_block_names_its_model_xmas02sk_unless_8c_names_the_1080_one(tmp_path:
             sa.use_model("v1")
     finally:
         sa.s10.MODEL = before
+
+
+# --- goblin-alarm-1080.md 6: a block's PLAYER settings (rule A's alarm_near_px) ---------------
+def test_player_sets_take_player_settings_only() -> None:
+    assert sa.player_sets([]) == {}
+    assert sa.player_sets(["alarm_near_px=60"]) == {"alarm_near_px": 60.0}
+    assert sa.player_sets(["alarm_near_px=60", "alarm_near_score=0.9"]) == {
+        "alarm_near_px": 60.0, "alarm_near_score": 0.9}  # fmt: skip
+    assert "not a player setting" in sa.player_sets(["garm_confirm=3"])  # a runner's
+    assert "not a player setting" in sa.player_sets(["fly_first_land=true"])
+    assert "a setting's name" in sa.player_sets(["no_such_thing=1"])
+    assert "a setting's name" in sa.player_sets(["alarm_near_px"])
+    assert "given twice" in sa.player_sets(["alarm_near_px=60", "alarm_near_px=50"])
+    assert "not a number" in sa.player_sets(["alarm_near_px=sixty"])
+    assert isinstance(sa.player_sets(["alarm_near_px=900"]), str)  # outside 0..200
+
+
+def test_a_player_set_block_differs_in_that_setting_alone() -> None:
+    """The real box (stage10's B): rule A set, the runner's argv / box / keys / loop unchanged,
+    the project hash new; the box's own text untouched."""
+    import stage10_ab as s10
+
+    from poring_flow import project as pj
+
+    text = s10.arm_text("B", 20)
+    got = sa.player_set_arm(text, {"alarm_near_px": 60.0}, 1200)
+    assert isinstance(got, dict), got
+    base = sa.s5c.vals_of(text)
+    assert isinstance(base, dict) and base["alarm_near_px"] == 0.0  # OFF in the box
+    assert got["vals"]["alarm_near_px"] == 60.0
+    assert {k for k in got["vals"] if got["vals"][k] != base.get(k)} == {"alarm_near_px"}
+    assert got["project_hash"] != pj.project_hash(pj.from_json(text))
+    assert sa.with_player_sets(text, {}) == text
+    # the same value as the box's: nothing to differ, still the box's settings
+    same = sa.player_set_arm(text, {"alarm_near_score": 0.85}, 1200)
+    assert isinstance(same, dict) and same["vals"] == base
+
+
+def test_plan_doc_carries_the_block_s_player_settings(tmp_path: Path) -> None:
+    import stage10_ab as s10
+
+    text = s10.arm_text("B", 20)
+    doc = sa.plan_doc("gob-b", 3, 20, "1080", tmp_path, base=_base(),
+                      sets={"alarm_near_px": 60.0}, base_text=text)  # fmt: skip
+    assert isinstance(doc, dict), doc
+    assert doc["player_set"] == {"alarm_near_px": 60.0}
+    assert doc["vals"]["B"]["alarm_near_px"] == 60.0
+    h = doc["arm"]["project_hash"]
+    assert h != "h" * 64
+    for r in doc["runs"]:
+        assert r["argv"][r["argv"].index("--project-hash") + 1] == h
+    plain = sa.plan_doc("gob-a", 3, 20, "1080", tmp_path, base=_base())
+    assert isinstance(plain, dict) and plain["player_set"] == {}
+
+
+def _boss_run(minutes: float, false: int, true: int = 0) -> dict[str, Any]:
+    boss = [{"false": True}] * false + [{"false": False}] * true
+    return {"found": True, "rc": 0, "minutes": minutes, "boss": boss}
+
+
+def test_the_false_boss_line() -> None:
+    a = [_boss_run(20, 6), _boss_run(20, 5), _boss_run(20, 6)]  # 17 in 1 h
+    b = [_boss_run(20, 1, 1), _boss_run(20, 0), _boss_run(20, 1)]  # 2 in 1 h
+    line = sa.false_boss_line(a, b, 20)
+    assert (line["a"], line["b"], line["a_per_h"], line["b_per_h"]) == (17, 2, 17.0, 2.0)
+    assert line["verdict"] == "lower" and line["se"] == round((17 + 2) ** 0.5, 2)
+    assert sa.false_boss_line(a, a, 20)["verdict"] == "not lower"
+    assert sa.false_boss_line(a, b[:1], 20)["verdict"] == "INCONCLUSIVE"  # 1 valid run
+    short = [_boss_run(5, 0), _boss_run(5, 0)]  # under 80 % of the time box: not valid
+    assert sa.false_boss_line(a, short, 20)["verdict"] == "INCONCLUSIVE"

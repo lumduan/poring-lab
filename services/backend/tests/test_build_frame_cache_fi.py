@@ -301,3 +301,44 @@ def test_o17_session_negs_raise_an_item_sessions_negatives(bfc: ModuleType) -> N
     assert bfc.session_neg_count("x-rdp-hunt-xmas02-fiT6", 24, ["fiT6"], 150) == 150
     assert bfc.session_neg_count("x-rdp-hunt-xmas02-fiT6", 600, ["fiT6"], 150) == 200
     assert bfc.session_neg_count("x-rdp-xmas02-fs2", 92, ["fiT6"], 150) == 30
+
+
+def test_pooled_g2_admits_thin_train_files_together(
+    bfc: ModuleType, world: dict[str, Any], capsys: pytest.CaptureFixture[str]
+) -> None:
+    """xmas02-items-1080.md Amendment 7: two TRAIN files with too few clear fits each (18 + 18)
+    pass G2 together under --pooled-g2 (G2_POOLED: admitted, the pool in the provenance); without
+    the flag they stay NOT_ENOUGH (refused); a pool that fails admits none."""
+    p39 = "20261109T140000-rdp-hunt-xmas02-p39"
+    refs = recorder_session(world["datasets"], p39, 60)
+    for sid in (P38, p39):
+        doc = json.loads(world["files"][P38].read_text())
+        if sid == p39:
+            doc.update(session=sid, part=sid, frames=frames_doc(refs, 33))
+        for f in doc["frames"]:
+            for it in f["items"]:
+                it["g2_clear"] = f["frame_id"] < 10  # 9 item frames x 2 = 18 clear fits
+        world["files"][sid] = write(world["tmp"] / f"{sid}.json", doc)
+    args = argv(world, "--train", P38, p39, XW2, "--val", P31, "--neg-sessions", XW2,
+                files=[P38, p39, P31, XW2])  # fmt: skip
+    out = dry(bfc, capsys, args)
+    assert {out["sessions"][s]["join_rule"] for s in (P38, p39)} == {"G2_NOT_ENOUGH"}
+    assert sorted(out["would_refuse_join"]) == sorted([P38, p39])
+    assert "pooled_g2" not in out["inputs"]
+    out = dry(bfc, capsys, [*args, "--pooled-g2"])
+    assert {out["sessions"][s]["join_rule"] for s in (P38, p39)} == {"G2_POOLED"}
+    assert out["would_refuse_join"] == [] and out["sessions"][XW2]["join_rule"] == "NEGATIVE_ONLY"
+    pg = out["inputs"]["pooled_g2"]
+    assert pg["verdict"] == "PASS" and pg["n"] == 36
+    assert sorted(pg["admitted_by_pool"]) == sorted([P38, p39]) and pg["admitted_alone"] == []
+    for sid in (P38, p39):  # the same thin files 4 px off: the pool FAILs, none admitted
+        doc = json.loads(world["files"][sid].read_text())
+        for f in doc["frames"]:
+            for it in f["items"]:
+                it["dx"] = 4
+        write(world["files"][sid], doc)
+    out = dry(bfc, capsys, [*args, "--pooled-g2"])
+    assert out["inputs"]["pooled_g2"]["verdict"] == "FAIL"
+    assert sorted(out["would_refuse_join"]) == sorted([P38, p39])
+    with pytest.raises(SystemExit, match="join rule"):
+        bfc.main([*args, "--pooled-g2"])
