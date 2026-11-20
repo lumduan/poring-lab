@@ -599,3 +599,52 @@ Fixed now, so section 8 is scored as 720's was (xmas02-detector.md M6 / S4 / S7.
 - best.pt (`3f7f75088b14...`) is NOT used (Amendment 13 names last.pt).
 - Nothing of v1T, v1Tg or v1Tk has been read: no labels, packs or predictions. The next steps
   are Amendment 13's 1-9, in order.
+
+### Amendment 16 (2026-11-20 19:10 ICT from `date`, BEFORE any labeller sees a pack and before any prediction exists): steps 1-3 as done; how 4-8 run
+
+- **Step 1, the ONNX export** (M6's recipe, the archived env `build.sh` `0b1db27c...`; 18:44-18:45,
+  a 1.6 GB RAM env, removed after): torch 2.15.0+cpu, ultralytics 8.4.165, opset 18, input
+  [1, 3, 736, 1280], output [1, 14, 19320].
+  - **`xmas02v1080-last-736x1280.onnx` sha256
+    `04b198988789da0d743d251c88b1b9ab882d2a0e4afd28fcb1c595b34e77794b`.**
+  - Its names `535a31c7...`: player, npc, warp, mystcase, cruiser, cookie, cookie_xmas,
+    garm_baby, g_gobline_xmas, knight_of_windstorm. The same file as xmas02sk's names.
+  - In `/dev/shm/poring-lab-detector/model`. NOT registered, NOT deployed.
+- **Step 2, the TEST labels** (params-1080, FROZEN; 18:44-19:07):
+  - v1T `da978011...`, v1Tg `b37014db...`, v1Tk `e1d110d8...`.
+- **Step 3, the packs** (seed 53, 60 a species, no floor; instructions `dc48fb15...`;
+  `reference.png` `2cae63ad...`, the 720 packs' own):
+  - **v1T:** 248 crops = 60 each of 1249 / 1248 / 1265 / 1246, plus 8 Garm Baby (its whole
+    pool). The key `3a84eb72...`; 264 files, list `f9cd1f95...`.
+  - **v1Tg:** 275 crops = 60 each of 1249 / 1248 / 1265 and Garm Baby (pool 812), plus 35 of
+    1246 (its pool). The key `c7283176...`; 292 files, list `0fe5622c...`.
+  - The labellers' copies: `/dev/shm/poring-lab-tmp/blind-v1T/pack`, `blind-v1Tg/pack`. The
+    keys are outside them.
+  - The briefs: T2's (M9's), with the names and paths changed: AE `94ed9cfc...`, AF
+    `160611ce...` (v1T), AG `c5966994...`, AH `a9654be6...` (v1Tg).
+- **v1Tk gets a key too**, ONLY as the units tool's list of label files (`eval_q1.py units` reads
+  its sources and params). The same pack call, key `535b5ef0...`. No labeller sees that pack.
+- **The alarm's free sets are the PACK frames, as the 720 bar's were.** S7's `--free` sets were
+  the TEST and gw3 PACK frames' units and q1 predictions: 0 / 265 = 231 + 34. Here:
+  - the free sets are v1T's and v1Tg's pack frames (units from their keys, the q1-refs'
+    predictions);
+  - the held-out set is EVERY frame of v1Tk (`units --all-frames`, refs from the recording's
+    index: S7's archived `refs_all.py`, `d70f5275...`).
+  - Amendment 13's "every frame ... of v1T / v1Tg's alarm-free frames" is read this way: the
+    720 figure it is compared with was measured on pack frames.
+- **The refs:** q1-refs-v1T 228 frames `ba082ee7...` (+ latency-200 `0a6c1bfd...`, seed 53),
+  q1-refs-v1Tg 225 `474512dc...`, refs-v1Tk-all 1,755 `6e84ced4...` (each image signature and
+  member name checked).
+- **8b reuses xmas02sk's 720 inputs as archived**, each hash matching its 720 record:
+  - keys `fc9facb1...` (TEST, labellers C / D `01808a2b...` / `9c3817ba...`) and
+    `99f2acc7...` (gw3, G / H `42c6bae1...` / `76dd9859...`);
+  - refs `c640936a...` / `0144eab7...` and sk6a-all `aee87fe1...`;
+  - units-test / units-gw3 / units-sk6a-all and vanishes-s7, all from `archive/train/eval`.
+- **Steps 4-8 run as Amendment 13** with ONE guarded GPU step (`sh -c`, several predict_dir
+  calls, last.pt `1a9feeff...`, imgsz 1280, conf 0.25):
+  - v1T's refs with `--timing` (A7's GPU line);
+  - v1Tg's refs and v1Tk's all-frame refs;
+  - the three 720 refs (8b).
+  - Then two pairs of NEW blind labellers, at most two at once (AE / AF, then AG / AH). Each
+    score once.
+- **The cache manifest** for the scores: Amendment 10's `3331793f...`.
