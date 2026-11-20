@@ -1352,3 +1352,59 @@ def test_the_alarm_monsters_setting_is_a_comma_list_of_model_names() -> None:
     assert st.problem_of(f, ",".join(f"m{i}" for i in range(9))) is not None  # at most 8
     assert "alarm_monsters" not in " ".join(st.argv({"alarm_monsters": "garm_baby",
                                                     "garm_fly": True}))  # fmt: skip
+
+
+# --- goblin-alarm-1080.md rule A: the near-her alarm rule, the live player's patch --------------
+def _abox(cx: float, cy: float, score: float, cls: str = "g_gobline_xmas") -> Any:
+    import unit_detector as ud
+
+    return ud.Box(cx - 20, cy - 30, cx + 20, cy + 30, score, cls)
+
+
+def test_the_near_alarm_rule_is_off_by_default_and_never_a_runner_flag() -> None:
+    from poring_flow import settings as st
+
+    f, g = st.BY_NAME["alarm_near_px"], st.BY_NAME["alarm_near_score"]
+    assert f.player and g.player and not f.tune and not g.tune
+    assert f.default == 0.0 and g.default == 0.85 and f.unit == "px"
+    vals = {**st.flag_defaults(), "alarm_near_px": 60.0}
+    assert not [x for x in st.argv(vals) if "near" in x]
+    saved = dh.alarm_seen
+    with fp.near_alarm(dh, st.flag_defaults()):  # 0 px: the runner's own rule
+        assert dh.alarm_seen is saved
+    with fp.near_alarm(dh, {**vals, "garm_fly": False}):  # the alarm off: not in use
+        assert dh.alarm_seen is saved
+
+
+def test_the_near_alarm_rule_drops_unsure_boxes_beside_her_for_one_run() -> None:
+    from poring_flow import settings as st
+
+    her_x, her_y = dh.FOOT_PX[0], dh.FOOT_PX[1] - dh.BODY_UP
+    near = _abox(her_x + 10, her_y + 20, 0.78)  # her fight's neighbour, under 0.85
+    sure = _abox(her_x - 15, her_y, 0.91, "garm_baby")
+    far = _abox(her_x + 300, her_y - 100, 0.40)
+    vals = {**st.flag_defaults(), "garm_fly": True, "alarm_near_px": 60.0}
+    saved = dh.alarm_seen
+    with fp.near_alarm(dh, vals):
+        assert dh.alarm_seen is not saved
+        # the runner's call shape: (grab time, its alarm boxes), now, streak / need / solo
+        assert dh.alarm_seen((5.0, [near]), 5.0, streak=3, need=2, solo=0.7) is None
+        assert dh.alarm_seen((5.0, [near, far]), 5.0, streak=2, need=2, solo=0.7) is far
+        assert dh.alarm_seen((5.0, [near, sure]), 5.0, streak=1, need=2, solo=0.7) is sure
+        assert dh.alarm_seen((5.0, [far]), 5.0, streak=1, need=2, solo=0.7) is None  # 0.4 < 0.7
+    assert dh.alarm_seen is saved  # restored
+    assert saved((5.0, [near]), 5.0, streak=3, need=2, solo=0.7) is near  # today's rule
+    with fp.near_alarm(dh, {**vals, "alarm_near_score": 0.75}):
+        assert dh.alarm_seen((5.0, [near]), 5.0, streak=3, need=2, solo=0.7) is near
+
+
+def test_near_keeps_is_the_distance_and_the_sure_score() -> None:
+    her = (641.0, 336.0)
+    assert not fp.near_keeps(_abox(641 + 60, 336, 0.5), 60.0, 0.85, her)  # at 60 px: near
+    assert fp.near_keeps(_abox(641 + 61, 336, 0.5), 60.0, 0.85, her)
+    assert fp.near_keeps(_abox(641, 336, 0.85), 60.0, 0.85, her)  # sure enough
+
+
+def test_the_hunt_core_applies_the_near_alarm_rule() -> None:
+    src = inspect.getsource(fp.HuntCore.play)
+    assert "near_alarm(dh, plan.vals)" in src

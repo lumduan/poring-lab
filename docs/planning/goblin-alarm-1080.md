@@ -113,3 +113,82 @@ true one, and does play at 1080 gain from it?
 4. The play bar, after the cursor round's.
 
 ## 9. RESULTS and AMENDMENTS (clock-labelled)
+
+### Amendment 1 (2026-11-21 00:42 ICT from `date`): the replay tool built; its check on the FIT pilots
+
+- `scripts/alarm_replay.py` (branch goblin-alarm, 9 tests; merged after the item chain with the
+  flow_play patch's branch, no code change on main while the chain runs).
+- **A slip, fixed before any held-out read:** the first FIT run read no start record (the
+  runner's first record is `run_start`, the tool asked for `hunt_run_start`) and fell back to
+  defaults in silence (garm_baby only, no solo): 5 episodes. The tool now refuses a session
+  without its start record (a test).
+- **The FIT pilots** (ifT1, ifT2, ifH1, ifT3; 1.526 h; the parameters were set on them, so this
+  checks the tool, not the rule; `replay-fit.json` sha256 `0e91a003a39a631a...`):
+
+  | rule | episodes | false | false / h | true | true lost |
+  |---|---|---|---|---|---|
+  | today (need 2, solo 0.7, the HUD twin fed) | 28 | 22 (all g_gobline_xmas) | 14.41 | 6 | - |
+  | A, near-her | 8 | 1 | 0.66 | 7 | 0 |
+  | confirm 3 | 13 | 6 | 3.93 | 7 | 0 |
+
+  - today's 22 false episodes: the nearest unit Myst Case (1249) 15, Christmas Cookie (1246) 6,
+    1265 once; the score's own count was 23 false flies (21 goblin), so the replay matches it.
+  - A and confirm 3 show 7 true episodes where today shows 6: a false near sighting just before a
+    true far one joins them into one episode under today's rule.
+- The held-out (section 5) is unchanged: ifT4, ifT5, ifH2, ifT6..ifT10.
+
+### Amendment 2 (2026-11-21 01:01 ICT from `date`): rule A built as the player's settings, OFF by default
+
+- Built ahead of the held-out verdict, on branch goblin-alarm, NOT merged (it merges only if
+  section 5 passes; the play bar sets it per arm):
+  - two OPTIONAL setting blocks in the safety tab: `alarm_near_px` (0-200 px, step 5; **default
+    0 = off**, today's alarm) and `alarm_near_score` (0.50-1.00; default 0.85; in use only
+    while alarm_near_px is above 0), both needing garm_fly;
+  - a new Field attribute `player`: the live player applies the setting, never a runner flag
+    nor a --tune constant (the runner is byte-pinned); argv() skips it;
+  - `flow_play.near_alarm`: for the hunt core's run, dungeon_hunt.alarm_seen (looked up by name
+    at each of its three call sites) is given only the boxes `near_keeps` keeps; the streak and
+    the rest of the rule are the runner's; restored after;
+  - the ready-made boxes and their fixtures are unchanged (optional blocks are held only when a
+    person sets them).
+- Tests: test_live_player (off by default, off with the alarm off, the rule, restored, applied by
+  the hunt core), test_flow_config / test_flow_run / test_settings_blocks pins, the frontend's
+  registry test (130 blocks; run in frontend-dev after the merge), settings.gen.ts regenerated;
+  mypy strict clean on settings.py.
+- When its bars pass, the default becomes 60 by its own amendment and Batt's report.
+
+### Amendment 3 (2026-11-21 03:25 ICT from `date`): THE HELD-OUT REPLAY -- PASS (scored once, 03:24)
+
+- Run once at 03:24:25 after the chain's last pilot shipped (03:23:16), with the tool and the
+  parameters of Amendment 1 unchanged (NEAR_PX 60, NEAR_SOLO 0.85):
+
+      alarm_replay.py replay ifT4-play ifT5-play ifH2-play ifT6-play ifT7-play ifT8-play \
+          ifT9-play ifT10-play --json --out replay-heldout.json
+
+  `replay-heldout.json` sha256 `25cfa855a0a3bf51...`. Every held-out pilot shipped: 8 sessions,
+  2.481 h of play (each session's settings: need 2, solo 0.7, the HUD twin fed, alarm classes
+  garm_baby / g_gobline_xmas / knight_of_windstorm).
+
+  | rule | episodes | false | false / h | true | post-vanish | true lost |
+  |---|---|---|---|---|---|---|
+  | today | 64 | 43 (all g_gobline_xmas) | 17.33 | 19 | 2 | - |
+  | **A, near-her** | 28 | 7 (all g_gobline_xmas) | **2.82** | 19 | 2 | **0** |
+  | confirm 3 | 39 | 18 (all g_gobline_xmas) | 7.26 | 19 | 2 | 0 |
+
+- **The bars (section 5):**
+  - false episodes an hour: A 2.82 = 16.3 % of today's 17.33 (bar <= 30 %): **PASS**;
+  - true episodes lost: 0 (0 at >= 2 cells): **PASS**. The 19 true episodes' alarm units were
+    7.96-14.0 cells from her (garm_baby, g_gobline_xmas and knight_of_windstorm all among them).
+  - **VERDICT: PASS.**
+- Reported (section 5): today's false episodes by the nearest unit's job: Myst Case (1249) 30,
+  Christmas Cookie (1246) 8, 1248 4, none on screen 1. 39 of today's 43 lie within 60 px of her
+  body's point; the highest false score 0.85.
+- Descriptive, after the verdict (the same functions, nothing re-scored;
+  `heldout-episodes.json`): rule A's 7 remaining false episodes:
+  - 1 inside 60 px (29 px from her) at a score of exactly 0.85 (the bar is >= 0.85);
+  - 6 outside it, 64-212 px from her, scores 0.28-0.74;
+  - each box 5-41 px from a real monster (Myst Case 4, Cookie 2, 1248 1). So the same cause (a
+    fought or nearby monster read as the goblin) reaches beyond 60 px in a few cases.
+- Next (section 8): the flow_play patch merges now, still OFF by default; the play bar (section 6)
+  runs after the cursor round's play; the default becomes 60 only by its own amendment after
+  the play bar and Batt's report.

@@ -85,6 +85,8 @@ def test_every_setting_has_a_valid_default_and_the_run_flows_are_todays() -> Non
         "swap_item": 1201, "heal_item": 504,
         # step 3: the alarm monsters ("" = the node model's own alarm list)
         "alarm_monsters": "",
+        # goblin-alarm-1080.md rule A (the live player's; 0 px = off)
+        "alarm_near_px": 0.0, "alarm_near_score": 0.85,
     }  # fmt: skip
     got = fr.FLOWS["xmas_dun02_rogue"].defaults
     assert got == today and list(got) == [f.name for f in fc.FIELDS if not f.tune]
