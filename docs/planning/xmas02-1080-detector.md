@@ -757,3 +757,22 @@ AG / AH (v1Tg: `990790e4...` / `05501847...`), each 100 % of its pack, none saw 
 - **Headline (Amendment 14):** each block's kills/h, loot/h and z/h as a % of Batt's run (228.5
   kills/h, 135,737 common z/h).
 - Deployment stays Batt's decision, whatever 8c says.
+
+### Amendment 20 (2026-11-20 19:53 ICT from `date`, BEFORE 8c is scored; run 1 of 3 playing): Batt's decisions
+
+- **8c's pass line in Batt's terms** (asked 2026-11-20; his pick): **mean kills/h of the valid
+  1080 runs >= 56.5 % of his run**, i.e. >= 129.1 kills/h, the 720 bot's level (s11scr-720 A).
+  - It is judged BESIDE the registered lines (SAME at -2 SE, deaths, errors, false boss Fly
+    Wings). Both are reported.
+- **A7's correction (Amendment 17): ACCEPTED by Batt** ("รับ"). A7-GPU is the D1 server line: PASS.
+- **The model on live, for Batt's own test** ("put the 18:40 model in live; I will test it first"):
+  - the live copy was fast-forwarded to f6acc171 at ~19:5x;
+  - it carries the reference registration, so his box loads it by naming `xmas02v1080` in
+    use_model; the ONNX is in the shared /dev/shm/poring-lab-detector/model and the NAS;
+  - live's default stays xmas02sk. Deployment as the default is still his decision (after 8c).
+- **Disclosed for 8c:**
+  - the live console's guarded build and recreate ran during run 1 (~19:5x-20:0x): heavy CPU on
+    the same host;
+  - any live Run of Batt's shares the Arc GPU with the block's detect server.
+  - The block's runs record their own timings (box_target det_ms), so this can be checked per
+    run.

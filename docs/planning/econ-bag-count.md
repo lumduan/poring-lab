@@ -180,3 +180,13 @@ add (`@item 601 199`, items 927 / 933) simply is not in it.
     closes the bag, then ends. A second Stop skips the count (no economy for that Run);
   - the Run's economy is `econ_bag`'s entry, written for the /economy page;
   - a census that fails warns and the Run plays on (never a lock).
+
+## Amendment 4 (2026-11-20 19:53 ICT from `date`): the wings stay unpriced (Batt)
+
+- Each wing shares its icon with a Novice twin that has no NPC price: the Fly Wing with the
+  Novice Fly Wing, the Butterfly Wing with the Novice Butterfly Wing. The bag cannot tell them
+  apart, so econ_bag prices a group only when its members' prices agree, and a wing group stays
+  unpriced (cost 0).
+- Recommended: price a group by its one NPC-sold member. **Batt 2026-11-20: "ปีกไม่ต้องใส่ราคา"
+  (do not price the wings).** The rule stays as built. The economy still shows the wings' USED
+  counts; they are not in the cost.
