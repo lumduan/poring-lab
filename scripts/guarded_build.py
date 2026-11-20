@@ -737,6 +737,8 @@ def leftovers(container: str | None, gpu: bool, host: bytes | None) -> list[str]
         if pids is None:
             left.append("GPU unverifiable (nvidia-smi failed)")
         else:
+            # run mode keeps "ours by command line" (its step container is short-lived); the
+            # exec mode below excludes another copy's worker (in_other_container, 2026-11-20)
             ours = own_pids(b"poring_vision", pids)
             if ours:
                 left.append(f"our GPU processes {ours}")
@@ -756,12 +758,23 @@ def pid_cgroup(pid: int) -> str:
         return ""
 
 
+def in_other_container(pid: int, cid: str | None) -> bool:
+    """The process lives in ANOTHER docker container: its cgroup names a docker-<id>.scope that is
+    not ``cid``'s. 2026-11-20: two copies of the lab on one host (dev and live) share one GPU, and
+    the live copy's guard, ending its detect server, counted the DEV worker's training (python -m
+    poring_vision.train, "ours by command line") as its own leftover and SIGKILLed it (rc 137)."""
+    cg = pid_cgroup(pid)
+    return "docker-" in cg and not (cid and f"docker-{cid}.scope" in cg)
+
+
 def gpu_ours_exec(worker: str, pids: list[int], procs: dict[int, Any]) -> list[int]:
     """GPU compute processes of ours in exec mode: in the worker (its processes, or its cgroup for
-    one that is exiting), or ours by command line anywhere (poring_vision)."""
+    one that is exiting), or ours by command line (poring_vision) -- but never one inside another
+    container (``in_other_container``: another copy's worker on the same GPU)."""
     cid = docker_state(worker)[1]
     inside = {p for p in pids if p in procs or (cid and f"docker-{cid}.scope" in pid_cgroup(p))}
-    return sorted(set(own_pids(b"poring_vision", pids)) | inside)
+    named = {p for p in own_pids(b"poring_vision", pids) if not in_other_container(p, cid)}
+    return sorted(named | inside)
 
 
 def exec_leftovers(worker: str, host: bytes | None) -> list[str]:

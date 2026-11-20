@@ -1153,3 +1153,25 @@ def test_our_training_yields_while_a_co_tenant_computes_then_walks_back(
     assert f"DUTY the co-tenant idle {fr.YIELD_HOLD_S:g} s: back to (200 ms step sleep)" in out
     assert fr.YIELD_MS in seen and seen[-1] == fr.DUTY_LEVELS_MS[1]
     assert seen.index(fr.YIELD_MS) < len(seen) - 1  # the yield came first, then the level
+
+
+def test_another_copys_worker_on_the_same_gpu_is_never_ours(
+    gb: ModuleType, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """2026-11-20: the live copy's guard, ending its detect server, SIGKILLed the dev worker's
+    training -- "ours by command line" matched python -m poring_vision.train in ANOTHER container.
+    A process in another container is never this step's, whatever its command line."""
+    mine, other = "a" * 64, "b" * 64
+    cg = {
+        11: f"0::/system.slice/docker-{mine}.scope\n",
+        22: f"0::/system.slice/docker-{other}.scope\n",
+        33: "0::/user.slice/user-1000.slice\n",
+    }
+    monkeypatch.setattr(gb, "pid_cgroup", lambda pid: cg.get(pid, ""))
+    monkeypatch.setattr(gb, "docker_state", lambda name: ("running", mine))
+    monkeypatch.setattr(
+        gb, "own_pids", lambda pattern, pids=None: [p for p in (pids or []) if p in cg]
+    )
+    assert gb.gpu_ours_exec("live-worker", [11, 22, 33], {}) == [11, 33]  # never 22
+    assert not gb.in_other_container(11, mine) and gb.in_other_container(22, mine)
+    assert not gb.in_other_container(33, mine)  # a host process: still checked by its name
