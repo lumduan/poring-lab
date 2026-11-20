@@ -312,3 +312,22 @@ A count under its minimum is NO VERDICT, never a pass.
   the bars are the held-outs'.
 - (`fi_labels.py g2` takes no `--spec`: the label file carries its rule.)
 - TRAIN labels start with the chain's pilots, each admitted by its own G2.
+
+### Amendment 6 (2026-11-20 22:57 ICT from `date`): the overnight chain; natural pilots are thin in items; stagings follow it
+
+- **The chain** (`/dev/shm/poring-lab-tmp/i1080/chain.sh`, from 22:23):
+  - order: ifT1, ifT2, ifH1, ifT3, ifT4, ifT5, ifH2, ifT6, ifT7, ifT8, ifT9, ifT10, 25 min each;
+  - stop rule: it stops at the first pilot that does not finish and ship (a person first);
+  - a labeller (`label_loop.sh`) labels each TRAIN pilot at the freeze once it ships, then
+    runs G2. Held-outs are never passed to it (the spec refuses them by name).
+  - pilot_rec.sh now warps onto xmas_dun02 (114 23) and waits 8 s before the zoom check: from
+    another map the loading screen outlasted the check's 2.5 s wait and it read "1.29".
+- **ifT1:** 25.4 min, rc 0, shipped.
+  - 938 of 1,097 candidate frames kept, **28 item labels** (16 floor items in the packets).
+  - G2: n 64, median |dx| 2.0, |dy| 3.0 px, 90.6 % within 3: **PASS** (dy at its limit).
+- **Natural pilots carry few item labels** (ifF 30, ifT1 28): she picks loot up within seconds.
+  - Ten pilots give ~300. The 720 round 5 trained on 3,913 labels, most of them from stagings
+    (fs1 alone: 701).
+  - So **stagings at 1080 (ifs1..ifs3, held-out ifsH1) follow the chain.** T-I5 passed; immunity
+    is toggled and JUDGED on a frame before each one, and off again after it.
+  - Unattended stagings cannot judge immunity, so they wait for the morning.
