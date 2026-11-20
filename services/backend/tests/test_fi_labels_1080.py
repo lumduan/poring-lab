@@ -56,7 +56,8 @@ def test_the_1080_spec_reads_every_pixel_constant_from_its_params() -> None:
     assert SPEC.eval_suffixes == ("-xmas02-ifH1", "-xmas02-ifH2", "-xmas02-ifsH1")
     assert (SPEC.screen, SPEC.world_scale) == ("1080", rec_paths.VIEW_1080["world_scale"]) == \
         ("1080", 1.5)  # fmt: skip
-    assert SPEC.rule == fl.RULE and SPEC.mspec is ml.XMAS02 and SPEC.name == "xmas_dun02"
+    assert SPEC.rule == fl.RULE_1080 == "xmas02-fi-1-1080" and fl.RULE == "xmas02-fi-1"
+    assert SPEC.mspec is ml.XMAS02 and SPEC.name == "xmas_dun02"
     assert (SPEC.pack_seed, SPEC.eval_seed, SPEC.salt) == (71, None, "xmas02-fi")
     assert (SPEC.sprites, SPEC.resnames) == (fl.XMAS02_FI.sprites, fl.XMAS02_FI.resnames)
     assert SPEC.drop_species == fl.XMAS02_FI.drop_species and SPEC.params_v2 is None
@@ -70,10 +71,10 @@ def test_the_1080_spec_reads_every_pixel_constant_from_its_params() -> None:
 
 def test_the_cache_tells_the_two_rules_apart_and_refuses_both_rules_held_out() -> None:
     """build_frame_cache (T-I3) finds a params file's rule among FI_MAPS' values by its map and
-    rule name, then by its monster_params_sha256; and refuses as TRAIN any session that SOME rule
-    of the map refuses as TRAIN by name (role_refusal)."""
+    rule NAME (each screen's rule has its own), then by its monster_params_sha256; and refuses
+    as TRAIN any session that SOME rule of the map refuses as TRAIN by name (role_refusal)."""
     rules = [s for s in fl.FI_MAPS.values() if s.name == "xmas_dun02"]
-    assert rules == [fl.XMAS02_FI, SPEC] and {s.rule for s in rules} == {fl.RULE}
+    assert rules == [fl.XMAS02_FI, SPEC] and [s.rule for s in rules] == [fl.RULE, fl.RULE_1080]
     shas = {s.monster_params_sha256[:8] for s in rules}
     assert shas == {"d4cc0a5d", "9c73278f"}  # what freeze_params / freeze-1080 record
 
@@ -114,17 +115,25 @@ def test_1080_fit_is_val_only_and_val_is_ifF_only() -> None:
         assert fl.role_refusal(SPEC, sid, None, True) is not None
 
 
-def test_the_720_spec_refuses_the_1080_held_out_by_name() -> None:
-    """A 1080 held-out under the 720 spec (any role) is refused by NAME, before anything is
-    read; the 720 spec's own names keep their old reasons (test_fi_labels.py)."""
+def test_the_720_spec_refuses_the_1080_held_out_by_name(tmp_path: Path) -> None:
+    """A 1080 held-out under the 720 spec (any role) is refused by NAME before anything is read
+    (foreign_refusal, in the label pass); role_refusal stays each spec's own roles (the frame
+    cache asks both rules), the 720 spec's own names keep their old reasons (test_fi_labels.py)."""
     old = fl.XMAS02_FI
     for sid in HELD:
-        for split in ("train", "val"):
-            assert "1080 floor items' held-out" in str(fl.role_refusal(old, sid, split, False))
+        assert "1080 floor items' held-out" in str(fl.foreign_refusal(old, sid))
+        assert fl.foreign_refusal(SPEC, sid) is None
+        assert fl.role_refusal(old, sid, "train", False) is None  # not the 720 rule's role
         assert fl.role_refusal(old, sid, None, True) is not None
-    assert "720 floor items' held-out" in str(
-        fl.role_refusal(SPEC, "20261112T110000-rdp-xmas02-fsH1", "train", False)
-    )
+        with pytest.raises(SystemExit, match="1080 floor items' held-out.*refused"):
+            fl.main(["label", str(tmp_path / sid), "--split", "train", "--params",
+                     str(tmp_path / "no-params.json"),
+                     "--out", str(tmp_path / "o.json")])  # fmt: skip
+    fsh1 = "20261112T110000-rdp-xmas02-fsH1"
+    assert "720 floor items' held-out" in str(fl.foreign_refusal(SPEC, fsh1))
+    assert "TEST" in str(fl.role_refusal(SPEC, fsh1, "train", False))  # the map's TEST names it
+    for sid in (FIT, TRAIN, "20261109T133046-rdp-hunt-xmas02-p38"):
+        assert fl.foreign_refusal(old, sid) is None and fl.foreign_refusal(SPEC, sid) is None
 
 
 def test_label_spec_1080_refuses_by_name_before_reading(tmp_path: Path) -> None:
@@ -146,16 +155,24 @@ def test_screen_refusal_keeps_each_spec_on_its_own_screen() -> None:
 
 
 def test_load_params_keeps_the_screens_apart(tmp_path: Path) -> None:
+    """Two guards: the rule's name and the file's screen."""
     p = tmp_path / "p.json"
     p.write_text(json.dumps({"rule": fl.RULE, "map": "xmas_dun02", "status": "FROZEN"}))
     assert fl.load_params(p, fl.XMAS02_FI)["status"] == "FROZEN"  # a 720 file: no "screen"
-    with pytest.raises(SystemExit, match="720 params, not the 1080"):
+    with pytest.raises(SystemExit, match="not xmas02-fi-1-1080 params"):
         fl.load_params(p, SPEC)
     assert fl.spec_for_params(json.loads(p.read_text())) is fl.XMAS02_FI
+    p.write_text(json.dumps({"rule": fl.RULE_1080, "map": "xmas_dun02", "status": "FROZEN"}))
+    with pytest.raises(SystemExit, match="720 params, not the 1080"):  # no "screen"
+        fl.load_params(p, SPEC)
     p.write_text(json.dumps({"rule": fl.RULE, "map": "xmas_dun02", "status": "FROZEN",
                              "screen": "1080"}))  # fmt: skip
-    assert fl.load_params(p, SPEC)["screen"] == "1080"
     with pytest.raises(SystemExit, match="1080 params, not the 720"):
+        fl.load_params(p, fl.XMAS02_FI)
+    p.write_text(json.dumps({"rule": fl.RULE_1080, "map": "xmas_dun02", "status": "FROZEN",
+                             "screen": "1080"}))  # fmt: skip
+    assert fl.load_params(p, SPEC)["screen"] == "1080"
+    with pytest.raises(SystemExit, match="not xmas02-fi-1 params"):
         fl.load_params(p, fl.XMAS02_FI)
     assert fl.spec_for_params(json.loads(p.read_text())) is SPEC
     with pytest.raises(SystemExit, match="no floor-item rule"):
@@ -474,7 +491,7 @@ TABLE = {"911": {"resname": "a", "act_sha256": "1", "spr_sha256": "2"}, "4206": 
 def _report(**kw: Any) -> dict[str, Any]:
     """A READY fit-1080 report (synthetic; the shape cmd_fit_1080 writes)."""
     rep: dict[str, Any] = {
-        "kind": "fit-1080", "rule": fl.RULE, "screen": "1080", "world_scale": 1.5,
+        "kind": "fit-1080", "rule": fl.RULE_1080, "screen": "1080", "world_scale": 1.5,
         "session": FIT, "monster_params_sha256": fl.X1080_MONSTER_SHA256,
         "rule_constants": json.loads(json.dumps(fl.constants_1080(1.5))),
         "fit": {"best_scale": 1.05, "anchor": {"dx": -3.0, "dy": 1.5, "n": 120},
@@ -494,8 +511,8 @@ def _report(**kw: Any) -> dict[str, Any]:
 def test_freeze_1080_params_writes_the_fitted_and_the_rule_constants(tmp_path: Path) -> None:
     doc = fl.freeze_1080_params(SPEC, _report(), "f" * 64, MONSTER, fl.X1080_MONSTER_SHA256,
                                 {"commit": "x"})  # fmt: skip
-    assert (doc["rule"], doc["status"], doc["screen"], doc["map"]) == (fl.RULE, "FROZEN", "1080",
-                                                                      "xmas_dun02")  # fmt: skip
+    assert (doc["rule"], doc["status"], doc["screen"]) == (fl.RULE_1080, "FROZEN", "1080")
+    assert doc["map"] == "xmas_dun02"
     assert doc["anchor_px"] == [-3.0, 1.5] and doc["scale"] == 1.05 and doc["t_item"] == 0.6
     assert doc["bar_px"] == fl.constants_1080(1.5)["bar_px"] and doc["r_label"] == 10
     assert doc["self_box"] == {"w": 34.0, "h": 74.0, "pad": 4.0}
@@ -518,6 +535,7 @@ def test_freeze_1080_params_writes_the_fitted_and_the_rule_constants(tmp_path: P
     ({"session": TRAIN}, "not a report of the FIT session"),
     ({"session": "20261109T082234-rdp-hunt-xmas02-p31"}, "not a report of the FIT session"),
     ({"monster_params_sha256": "0" * 64}, "other monster params"),
+    ({"rule": "xmas02-fi-1"}, "another rule"),
     ({"verdict": "NOT_ENOUGH"}, "says NOT_ENOUGH"),
     ({"rule_constants": {**fl.constants_1080(1.5), "r_label": 16}}, "rule constants"),
 ])  # fmt: skip
@@ -618,7 +636,7 @@ def test_round6_pack_draws_natural_first_slot_and_staging_second() -> None:
 
 
 def test_check_pack_docs_keeps_the_screens_apart() -> None:
-    base = {"rule": fl.RULE, "params_sha256": "p"}
+    base = {"rule": fl.RULE_1080, "params_sha256": "p"}
     held = {**base, "session": HELD[0], "split": "eval", "eval_test": True, "screen": "1080"}
     fl.check_pack_docs(SPEC, [held], True, "p")
     with pytest.raises(SystemExit, match="720 labels, not the 1080"):
@@ -626,5 +644,7 @@ def test_check_pack_docs_keeps_the_screens_apart() -> None:
     train = {**base, "session": TRAIN, "split": "train", "screen": "1080"}
     fit = {**base, "session": FIT, "split": "val", "screen": "1080"}
     fl.check_pack_docs(SPEC, [fit, train], False, "p")  # T2 (section 6)'s pool
-    with pytest.raises(SystemExit, match="1080 labels, not the 720"):
+    with pytest.raises(SystemExit, match="not xmas02-fi-1 labels"):  # the rule's name first
         fl.check_pack_docs(fl.XMAS02_FI, [train], False, "p")
+    with pytest.raises(SystemExit, match="1080 labels, not the 720"):  # then the screen
+        fl.check_pack_docs(fl.XMAS02_FI, [{**train, "rule": fl.RULE}], False, "p")

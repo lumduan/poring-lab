@@ -25,8 +25,9 @@ picture of the fullscreen client, rec_paths' ``virtual-1080`` path):
                                           section 6: T2 on the 1080 TRAIN labels
     fi_labels.py pack LABELS.json... --spec 1080 --round 6 --eval-test --params PARAMS --seed N
                       --out JSON          T-I4: round 6's evaluation pack
-``--spec 1080`` is XMAS02_FI_1080: the same rule xmas02-fi-1, the 1080 monster params (9c73278f),
-FIT / VAL = ifF, the held-out ifH1 / ifH2 / ifsH1 refused by NAME, and every pixel constant (the
+``--spec 1080`` is XMAS02_FI_1080: rule xmas02-fi-1's text under its own name xmas02-fi-1-1080
+(RULE_1080), the 1080 monster params (9c73278f), FIT / VAL = ifF, the held-out ifH1 / ifH2 /
+ifsH1 refused by NAME (under either spec: foreign_refusal), and every pixel constant (the
 anchor, the scale, r_label, T_item, the bar, the self box, the margin) READ from its frozen params
 (freeze-1080), never from the 720 values; a recording of the other screen is refused once opened
 (its manifest's path). The 720 spec (the default) is unchanged.
@@ -129,6 +130,9 @@ from poring_dataset.sprites import compose_frame, parse_act, parse_spr  # noqa: 
 Box = tuple[float, float, float, float]
 NS = 1_000_000_000
 RULE = "xmas02-fi-1"
+# T-I1: the 1080 spec's rule -- (a)-(f) as RULE, its own frozen constants -- under its own name, so
+# a params or label file names its screen's rule (build_frame_cache.item_spec matches the name)
+RULE_1080 = "xmas02-fi-1-1080"
 CLASS_NAME = "floor_item"
 FI = Path("/dev/shm/poring-lab-tmp/xmas-fi")  # client-derived inputs and outputs: RAM (rule 7)
 NAS = lab_env.store_dir()  # the storage folder (LAB_STORE_DIR)
@@ -267,14 +271,14 @@ XMAS02_FI = FiSpec(
     # amendment of their own
     drop_species=(1249, 1248, 1265, 1246, 1515, 1607),
 )  # fmt: skip
-# T-I1 (xmas02-items-1080.md 3): the same rule on the virtual 1280 x 720 picture of the 1920 x 1080
-# fullscreen client. Its pixel constants are None here: they are FITTED on ifF (fit-1080) and read
-# from items-params-1080.json (freeze-1080) only. The times (2.2 / 0.6 s), the stack IoU, the
-# sprites and the species are the rule's, not pixels: the 720 values
+# T-I1 (xmas02-items-1080.md 3): the same rule (RULE_1080) on the virtual 1280 x 720 picture of
+# the 1920 x 1080 fullscreen client. Its pixel constants are None here: they are FITTED on ifF
+# (fit-1080) and read from items-params-1080.json (freeze-1080) only. The times (2.2 / 0.6 s), the
+# stack IoU, the sprites and the species are the rule's, not pixels: the 720 values
 XMAS02_FI_1080 = FiSpec(
     name="xmas_dun02",
     mspec=ml.XMAS02,
-    rule=RULE,
+    rule=RULE_1080,
     val_suffixes=IF_FIT,
     refused_suffixes=(),
     eval_suffixes=IF_HELD_OUT,
@@ -305,10 +309,10 @@ XMAS02_FI_1080 = FiSpec(
     fit_note="ifF",
     refused_note="",
 )
-# every registered floor-item rule (build_frame_cache's item_specs reads the values: two rules
-# of a map sharing the rule name are told apart by their params' monster_params_sha256, which
-# freeze_params and freeze-1080 both write: d4cc0a5d... at 720, 9c73278f... at 1080). The
-# "xmas_dun02" key stays the 720 rule (freeze, freeze-v2); --map takes the MAP names (MAP_NAMES)
+# every registered floor-item rule (build_frame_cache's item_specs reads the values, item_spec
+# matches a params file's rule NAME: xmas02-fi-1 at 720, xmas02-fi-1-1080 at 1080; both params
+# record their monster_params_sha256 too, d4cc0a5d... / 9c73278f...). The "xmas_dun02" key
+# stays the 720 rule (freeze, freeze-v2); --map takes the MAP names (MAP_NAMES)
 FI_MAPS = {"xmas_dun02": XMAS02_FI, "xmas_dun02@1080": XMAS02_FI_1080}
 MAP_NAMES = sorted({s.name for s in FI_MAPS.values()})
 # every spec by (map, screen); a params file names its spec by its "screen" (spec_for_params)
@@ -347,9 +351,6 @@ def role_refusal(spec: FiSpec, sid: str, split: str | None, eval_test: bool) -> 
         return f"--eval-test reads the held-out only (a name ending in {names})"
     if on(spec.eval_suffixes):
         return f"the floor items' held-out ({spec.heldout_note}): --eval-test only"
-    for other in FI_SPECS.values():  # T-I1: another screen's held-out is never labelled here
-        if other is not spec and other.name == spec.name and on(other.eval_suffixes):
-            return f"the {other.screen} floor items' held-out: --eval-test under its own spec only"
     if spec.mspec.is_test(sid, None):
         return "shares frames with the map's TEST (3b; gw3, Amendment M)"
     if on(spec.refused_suffixes):
@@ -360,6 +361,18 @@ def role_refusal(spec: FiSpec, sid: str, split: str | None, eval_test: bool) -> 
         return f"FIT ({spec.fit_note}) is VAL only (O.6): --split val"
     if split not in ("train", "val"):
         return f"--split {split}: train or val"
+    return None
+
+
+def foreign_refusal(spec: FiSpec, sid: str) -> str | None:
+    """PURE (T-I1): a name ANOTHER spec of the map holds back as its held-out is never read under
+    ``spec`` (the label pass checks it by NAME before anything is read). role_refusal stays one
+    spec's roles; the frame cache asks every rule of the map (build_frame_cache's
+    train_role_refusals)."""
+    for other in FI_SPECS.values():
+        if other is not spec and other.name == spec.name and \
+                any(sid.endswith(x) for x in other.eval_suffixes):  # fmt: skip
+            return f"the {other.screen} floor items' held-out: --eval-test under its own spec only"
     return None
 
 
@@ -1190,7 +1203,8 @@ def cmd_label(a: argparse.Namespace) -> dict[str, Any]:
     path = ml.parse_part(a.part)[0]
     if ml.parse_part(a.part)[1] is not None:
         raise SystemExit(f"{a.part}: whole sessions only (no spots on {spec.name})")
-    why = role_refusal(spec, path.name, split, a.eval_test)  # the NAME, before anything is read
+    # the NAME, before anything is read (and another screen's held-out: foreign_refusal)
+    why = role_refusal(spec, path.name, split, a.eval_test) or foreign_refusal(spec, path.name)
     if why is not None:
         raise SystemExit(f"{a.part}: {why}: refused")
     params_raw = a.params.read_bytes()
@@ -1213,8 +1227,9 @@ def cmd_label(a: argparse.Namespace) -> dict[str, Any]:
     if occl.provenance()["rsw_sha256"] != prm["occluders"]["rsw_sha256"]:
         raise SystemExit("the map's RSW differs from the frozen params'")
     sess = ml.RecSession.open(a.part, spec.mspec, a.layout_templates)
-    why = role_refusal(spec, sess.sid, split, a.eval_test)  # by the manifest's id too
-    if why is None:  # T-I1: and the screen it was recorded on (its manifest's path)
+    # by the manifest's id too; T-I1: and the screen it was recorded on (its manifest's path)
+    why = role_refusal(spec, sess.sid, split, a.eval_test) or foreign_refusal(spec, sess.sid)
+    if why is None:
         why = screen_refusal(spec, sess.lab.manifest)
     if why is not None:
         raise SystemExit(f"{sess.sid}: {why}: refused")
@@ -1765,7 +1780,7 @@ def cmd_freeze_1080(a: argparse.Namespace) -> dict[str, Any]:
     out.parent.mkdir(parents=True, exist_ok=True)
     data = (json.dumps(doc, indent=1, ensure_ascii=False) + "\n").encode()
     out.write_bytes(data)
-    return {"what": "T-I2: the frozen 1080 xmas02-fi-1 params", "out": str(out),
+    return {"what": f"T-I2: the frozen 1080 {spec.rule} params", "out": str(out),
             "sha256": sha256_bytes(data), "fit_report_sha256": doc["fit_report_sha256"],
             "anchor_px": doc["anchor_px"], "scale": doc["scale"], "t_item": doc["t_item"],
             "bar_px": doc["bar_px"], "items_excluded": doc["items_excluded"],
