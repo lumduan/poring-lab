@@ -443,7 +443,11 @@ def bar_1080(bar: Sequence[float], world_scale: float, about: str) -> list[float
 # inside the "centre" box (the reader on 720 fiT19: (-30.75, 10.11, 29.25, 19.11) against the
 # measured (-31, 10, 28, 18), 83.4 % inside). Which one is frozen is the plan's decision;
 # fit-1080's bar_check reports both on ifF.
-BAR_ABOUT_1080 = "feet"
+# ➡️ 2026-11-20 (the plan's rule, "measured on the 1080 virtual frames"; xmas02-items-1080.md
+# Amendment 3): "centre" -- the measured place (98.6 % inside on v1f; the "feet" guess 15.2 %).
+# freeze-1080 must see it again on ifF (>= 95 % inside), else no freeze.
+BAR_ABOUT_1080 = "centre"
+BAR_INSIDE_MIN = 0.95
 
 
 def constants_1080(world_scale: float, about: str = BAR_ABOUT_1080) -> dict[str, Any]:
@@ -1717,6 +1721,13 @@ def freeze_1080_params(spec: FiSpec, report: Mapping[str, Any], report_sha: str,
     consts = constants_1080(spec.world_scale)
     if report.get("rule_constants") != consts:
         raise SystemExit("the report's rule constants are not this tool's (constants_1080)")
+    # Amendment 3: the frozen bar box must hold the bar on the FIT session too (>= 95 % inside)
+    share = ((report.get("bar_check") or {}).get("share_inside") or {}).get(BAR_ABOUT_1080)
+    if not isinstance(share, (int, float)) or share < BAR_INSIDE_MIN:
+        raise SystemExit(
+            f"the bar check on the FIT session: {share!r} of the bar inside the "
+            f"{BAR_ABOUT_1080!r} box, under {BAR_INSIDE_MIN}: nothing to freeze"
+        )
     fc, ab = report["fit"], report["absent"]
     return {
         "rule": spec.rule, "status": "FROZEN", "map": spec.name, "screen": spec.screen,

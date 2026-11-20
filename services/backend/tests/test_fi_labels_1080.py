@@ -183,23 +183,25 @@ def test_load_params_keeps_the_screens_apart(tmp_path: Path) -> None:
 
 
 def test_constants_1080_scale_the_native_bar_only() -> None:
-    """The bar is native-size: the 720 FIT bar's size / 1.5, about her foot point by default
-    (BAR_ABOUT_1080, the rule as given) or about its own centre; her body, the search, the margin
-    and the unit box are world-size: unchanged. At world scale 1.0 the rule IS 720."""
-    assert fl.BAR_ABOUT_1080 == "feet"
+    """The bar is native-size: the 720 FIT bar's size / 1.5, about its own centre (BAR_ABOUT_1080,
+    Amendment 3: the measured place) or about her foot point (the first guess); her body, the
+    search, the margin and the unit box are world-size: unchanged. At world scale 1.0 the rule IS
+    720."""
+    assert fl.BAR_ABOUT_1080 == "centre"
     c = fl.constants_1080(1.5)
-    assert c["bar_about"] == "feet" and c["bar_px"] == c["bar_px_by_about"]["feet"]
-    assert c["bar_px"] == [round(-31 / 1.5, 4), round(10 / 1.5, 4), round(28 / 1.5, 4), 12.0]
+    assert c["bar_about"] == "centre" and c["bar_px"] == c["bar_px_by_about"]["centre"]
+    feet = fl.constants_1080(1.5, "feet")["bar_px"]
+    assert feet == [round(-31 / 1.5, 4), round(10 / 1.5, 4), round(28 / 1.5, 4), 12.0]
     assert c["bar_720_px"] == [-31.0, 10.0, 28.0, 18.0]
     centre = c["bar_px_by_about"]["centre"]  # (-1.5, 14) +- (29.5, 4) / 1.5
     assert centre == [round(-1.5 - 29.5 / 1.5, 4), round(14 - 4 / 1.5, 4),
                       round(-1.5 + 29.5 / 1.5, 4), round(14 + 4 / 1.5, 4)]  # fmt: skip
-    for box in (c["bar_px"], centre):
+    for box in (feet, centre):
         width, height = box[2] - box[0], box[3] - box[1]
         assert abs(width - 59 / 1.5) < 1e-3 and abs(height - 8 / 1.5) < 1e-3
-    assert fl.constants_1080(1.5, "centre")["bar_px"] == centre
+    assert fl.constants_1080(1.5, "centre")["bar_px"] == centre == c["bar_px"]
     assert "its centre" in fl.constants_1080(1.5, "centre")["rule"]["bar_px"]
-    assert "her foot point" in c["rule"]["bar_px"]
+    assert "about its centre" in c["rule"]["bar_px"]
     with pytest.raises(SystemExit, match="feet or centre"):
         fl.constants_1080(1.5, "top")
     assert c["self_box"] == {"w": 34.0, "h": 74.0, "pad": 4.0}
@@ -502,10 +504,21 @@ def _report(**kw: Any) -> dict[str, Any]:
         "items": TABLE, "drops": "d.json", "drops_sha256": "dd", "sprites_dir": "/dev/shm/x",
         "resnames": "r.txt", "resnames_sha256": "rr",
         "occluders": {"rsw_sha256": "rsw", "terrain": None},
+        "bar_check": {"share_inside": {"centre": 0.986, "feet": 0.152}},
         "fitted_at": "2026-11-21 01:00:00 ICT", "commit": "abc", "verdict": "READY",
     }  # fmt: skip
     rep.update(kw)
     return rep
+
+
+def test_freeze_1080_refuses_a_bar_box_that_misses_the_bar_on_ifF() -> None:
+    """Amendment 3: the frozen bar box (BAR_ABOUT_1080, "centre") must hold >= 95 % of the bar's
+    pixels on the FIT session, else nothing is frozen."""
+    assert fl.BAR_INSIDE_MIN == 0.95
+    for bad in ({"share_inside": {"centre": 0.94}}, {"share_inside": {}}, None):
+        with pytest.raises(SystemExit, match="bar check on the FIT session"):
+            fl.freeze_1080_params(SPEC, _report(bar_check=bad), "f" * 64, MONSTER,
+                                  fl.X1080_MONSTER_SHA256, {"commit": "x"})  # fmt: skip
 
 
 def test_freeze_1080_params_writes_the_fitted_and_the_rule_constants(tmp_path: Path) -> None:
