@@ -66,6 +66,11 @@
 #                  the Geffen Kafra's own save cell (npc/kafras/kafras.txt: savepoint "geffen",119,40).
 #                  rAthena atcommand.cpp ACMD_FUNC(save) -> pc_setsavepoint. Through the name + job
 #                  check like every group-20 line.
+#   delitem        lab only (Batt, 2026-11-20 ~13:53, his answer "Add @delitem" to: the bag-count
+#                  trials add test items with @item and could not remove them): the trials of
+#                  docs/planning/econ-bag-count.md remove exactly what they add. rAthena atcommand.cpp
+#                  ACMD_FUNC(delitem) -> pc_delitem on the character's own inventory. Through the
+#                  name + job check like every group-20 line.
 # LogCommands: every command lands in atcommandlog (offline audit). Inherits Player for the basics.
 # No permissions beyond Player's otherwise: no zeny commands, no any_warp, no hide_session (the stat
 # commands: only the six above, since 2026-11-05).
@@ -109,3 +114,4 @@ Body:
       luk: true
       die: true
       save: true
+      delitem: true

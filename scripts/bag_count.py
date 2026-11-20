@@ -443,10 +443,30 @@ def _real_client(r: Any) -> tuple[int, int, int, int]:
     return int(x), int(y), int(w), int(h)
 
 
-def _grab(r: Any, screen: Any) -> np.ndarray:
+def _grab(r: Any, screen: Any, box: tuple[int, int, int, int] | None = None) -> np.ndarray:
+    """The real client (client px), or only ``box`` (x, y, w, h in client px) of it: a whole
+    1920x1080 frame through the grab pipe is ~8 MB, the bag's box ~0.4 MB."""
     x, y, w, h = _real_client(r)
+    if box is not None:
+        bx, by, bw, bh = box
+        x0, y0 = max(0, bx), max(0, by)
+        x1, y1 = min(w, bx + bw), min(h, by + bh)
+        _, img = screen.grab(x + x0, y + y0, x1 - x0, y1 - y0)
+        out = np.zeros((bh, bw, 3), np.uint8)  # outside the client: black (no oval there)
+        out[y0 - by : y1 - by, x0 - bx : x1 - bx] = np.asarray(img)[..., :3]
+        return out
     _, img = screen.grab(x, y, w, h)
     return np.ascontiguousarray(np.asarray(img)[..., :3])
+
+
+AROUND = 2 * PITCH  # the margin grabbed around the bag (its ring check reaches one pitch out)
+
+
+def bag_box(origin: tuple[int, int]) -> tuple[int, int, int, int]:
+    """PURE: the client box grabbed once the bag's place is known: the window and AROUND."""
+    w = ICON0[0] + PITCH * COLS + 2 * AROUND
+    h = ICON0[1] + PITCH * ROWS + 2 * AROUND
+    return origin[0] - AROUND, origin[1] - AROUND, w, h
 
 
 def _save_box(frame_bgr: Any, origin: tuple[int, int], path: Path) -> None:
@@ -468,7 +488,33 @@ def _click(agent: Any, r: Any, cx: int, cy: int) -> None:
     agent.move(x, y)
     time.sleep(0.6)
     agent.click(x, y)
-    time.sleep(0.9)
+
+
+def grid_signature(frame_bgr: Any, origin: tuple[int, int]) -> np.ndarray:
+    """PURE: each slot square's mean colour (42 x 3): what changes when another tab shows."""
+    out = np.zeros((SLOTS, 3), np.float32)
+    for s in range(SLOTS):
+        sq = square(frame_bgr, origin, s)
+        if sq is not None:
+            out[s] = sq.reshape(-1, 3).mean(axis=0)
+    return out
+
+
+TAB_WAIT_S = 0.9  # the longest wait for a clicked tab's slots to change (the old fixed wait)
+
+
+def shared_items(tabs: Sequence[TabRead]) -> dict[str, set[int]]:
+    """PURE: per tab, its item ids that an EARLIER tab holds too. Every item is in one tab only
+    (its type's, or Fav), so a shared id means a tab click did not take (the old tab read again)."""
+    seen: set[int] = set()
+    out: dict[str, set[int]] = {}
+    for t in tabs:
+        ids = {i for b in t.items() for i in b.ids}
+        dup = ids & seen
+        if dup:
+            out[t.tab] = dup
+        seen |= ids
+    return out
 
 
 def _park(agent: Any, r: Any) -> None:
@@ -506,29 +552,39 @@ def census(agent: Any, screen: Any, *, refs: Any | None = None,
         if origin is None:
             raise r.Stop("bag_count: Alt+E showed no bag (no oval lattice found)")
         out["origin"] = list(origin)
+        box = bag_box(origin)
+        local = (AROUND, AROUND)  # the origin inside the box
         empty = empty_picture(f, origin)
         pics = None if empty is None else Pictures.over(refs, empty)
-        tabs = []
-        for name, (tx, ty) in TABS.items():
+        tabs: list[TabRead] = []
+        before = grid_signature(f, origin)
+
+        def read_one(name: str, tx: int, ty: int, before: np.ndarray) -> tuple[TabRead, Any]:
+            nonlocal empty, pics
             _click(agent, r, origin[0] + tx, origin[1] + ty)
             _park(agent, r)
+            t_end = time.monotonic() + TAB_WAIT_S  # until its slots change, or the old wait
+            while time.monotonic() < t_end:
+                g = _grab(r, screen, box)
+                if np.abs(grid_signature(g, local) - before).max() > 2.0:
+                    break
+                time.sleep(0.1)
             reads = []
             for _ in range(2):
-                f = _grab(r, screen)
-                # cheap first (its own cells); the whole-frame search only when that fails (a
-                # full tab shows no oval): a lattice elsewhere = the bag moved
-                if not window_at(f, origin) and find_window(f) not in (origin, None):
+                f = _grab(r, screen, box)  # the bag's box only (its place is known)
+                # its own cells; a full tab shows no oval: then no lattice ELSEWHERE in the box
+                if not window_at(f, local) and find_window(f) not in (local, None):
                     raise r.Stop("bag_count: the bag moved while it was read")
                 if empty is None:  # no empty slot seen yet: this tab may show one
-                    empty = empty_picture(f, origin)
+                    empty = empty_picture(f, local)
                     pics = None if empty is None else Pictures.over(refs, empty)
                 if frames_dir is not None:  # the lab's trials only: the bag's own box, per read
-                    _save_box(f, origin, frames_dir / f"{name}-{len(reads)}.png")
+                    _save_box(f, local, frames_dir / f"{name}-{len(reads)}.png")
                 if pics is None or empty is None:
                     reads.append(None)
                 else:
-                    reads.append(read_tab(f, origin, pics, empty, templates))
-                time.sleep(0.3)
+                    reads.append(read_tab(f, local, pics, empty, templates))
+                time.sleep(0.2)
             tab = TabRead(name)
             if reads[0] is None or reads[1] is None:
                 tab.slots = [BagSlot(s, "unread", why="no empty slot seen to compare with")
@@ -539,7 +595,23 @@ def census(agent: Any, screen: Any, *, refs: Any | None = None,
                     why = "two reads disagree"
                     tab.slots.append(a if same else BagSlot(a.slot, "unread", a.ids, None, a.d1,
                                                             a.d2, why))  # fmt: skip
+            return tab, f
+
+        for name, (tx, ty) in TABS.items():
+            tab, last = read_one(name, tx, ty, before)
+            if shared_items([*tabs, tab]).get(name):  # the click did not take: once more
+                tab, last = read_one(name, tx, ty, before)
+                dup = shared_items([*tabs, tab]).get(name)
+                if dup:
+                    why = "an earlier tab's item: the tab click did not take"
+                    tab.slots = [
+                        b
+                        if not set(b.ids) & dup
+                        else BagSlot(b.slot, "unread", b.ids, None, b.d1, b.d2, why)
+                        for b in tab.slots
+                    ]
             tabs.append(tab)
+            before = grid_signature(last, local)
         out["tabs"] = [t.record() for t in tabs]
         out["totals"] = bag_totals(tabs)
         out["unread"] = sum(len(t.unread()) for t in tabs)

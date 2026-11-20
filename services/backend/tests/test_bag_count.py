@@ -177,3 +177,11 @@ def test_read_count_alone(n: int) -> None:
     font, icons = _font(), _icons(1)
     f = _frame([(1000, n)], icons, font)
     assert bc.read_count(f, ORIGIN, 0, font) == n
+
+
+def test_an_item_in_two_tabs_means_a_click_that_did_not_take() -> None:
+    use = bc.TabRead("use", [bc.BagSlot(0, "item", (507,), 8), bc.BagSlot(1, "empty")])
+    again = bc.TabRead("eqp", [bc.BagSlot(0, "item", (507,), 8), bc.BagSlot(1, "empty")])
+    etc = bc.TabRead("etc", [bc.BagSlot(0, "item", (911,), 46)])
+    assert bc.shared_items([use, etc]) == {}
+    assert bc.shared_items([use, again, etc]) == {"eqp": {507}}
