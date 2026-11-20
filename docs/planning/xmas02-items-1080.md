@@ -500,3 +500,22 @@ A count under its minimum is NO VERDICT, never a pass.
   - the answer key sha256 `240bf444f219691a237458ab...` (never shown to a labeller);
   - the labellers: AI (started 06:06) and AJ, new blind subagents that see only the pack; scored
     once by `fi_blind_score.py` when both have answered, with section 6's bars.
+
+### Amendment 12 (2026-11-21 06:15 ICT from `date`): T2 PASSES (scored once, 06:14)
+
+- The blind labellers AI and AJ (new subagents that saw only the pack) answered all 60 crops
+  (answers sha256 `b4ff62c8f2db3166...`, `db052a5bdb1c988b...`). `fi_blind_score.py --key
+  <key-t2-seed71> AI AJ` (score sha256 recorded with the scratch):
+
+  | labeller | good box, 40 item crops | item-present right, 60 | N | F | M | E right |
+  |---|---|---|---|---|---|---|
+  | AI | **0.925** (37) | **0.950** (57) | 0.80 (12/15) | 1.00 | 1.00 | 19/20 (1 unsure) |
+  | AJ | **0.925** (37) | **0.967** (58) | 0.80 (12/15) | 1.00 | 1.00 | 20/20 |
+
+  - Bars (section 6): good >= 0.90 and present right >= 0.95, each labeller: **PASS, PASS ->
+    T2 PASS.** No fallback (the pooled bars hold).
+  - Agreement: q1 59 / 60, q2 60 / 60. Both answered "unsure" on the same two near crops (a
+    small object at a fading monster's arm) and "off" on the same near crop (a candy cane's
+    tail out of the box). Near-her (N) is the weak stratum at 1080 (0.80 for both): reported.
+- Next (section 7): the cache (the 720 round 5 linked, --pooled-g2 for the seven pooled pilots),
+  then the training from xmas02fi5's last.pt.
