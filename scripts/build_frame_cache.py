@@ -1954,6 +1954,14 @@ ITEM_NEG_PER = 3  # O.8: 1 negative per 3 written item frames of the same sessio
 ITEM_NEG_TOTAL = 300  # O.8: pooled from the immune watches (xw2 / xw3 / gw2)
 ITEM_NEG_SEED = 2611101  # the negatives' draw (recorded in the progress file and the manifest)
 G2_PASS, NEG_ONLY = "G2_PASS", "NEGATIVE_ONLY"
+# xmas02-items-1080.md Amendment 7 (2026-11-21), with --pooled-g2 only: a TRAIN label file whose
+# OWN G2 is NOT_ENOUGH, admitted because the pool of every such file of this build passed G2
+# (fi_labels.pooled_g2, recomputed from the label files); the 720 rounds never set it
+G2_POOLED = "G2_POOLED"
+ITEM_ADMITTED = (G2_PASS, NEG_ONLY, G2_POOLED)  # a new part's TRAIN join verdicts a build takes
+POOL_KEYS = ("verdict", "n", "bar_px", "min_fits", "floor_items", "median_abs_dx",
+             "median_abs_dy", "within_3px", "admitted_alone", "never_pooled", "pooled",
+             "admitted_by_pool", "why")  # fmt: skip
 
 
 def item_frame_rows(doc: dict[str, Any]) -> tuple[list[dict[str, Any]], list[dict[str, Any]],
@@ -2104,11 +2112,20 @@ class ItemLabelInputs:
             else:  # O.6: the session's OWN G2, recomputed from its label file
                 v = fl.g2_summary(fl.g2_rows(doc["frames"], sid))["verdict"]
                 join[sid] = G2_PASS if v == "PASS" else f"G2_{v}"
+        pool: dict[str, Any] | None = None
+        if getattr(a, "pooled_g2", False):  # xmas02-items-1080.md Amendment 7, recomputed here
+            pool = fl.pooled_g2([d for s, d in docs.items()
+                                 if d["split"] == "train" and s not in neg_only])  # fmt: skip
+            for sid in pool.get("admitted_by_pool") or []:
+                join[sid] = G2_POOLED
+            pool = {k: pool.get(k) for k in POOL_KEYS}
         prov = {"rule": spec.rule, "plan": spec.plan, "map": spec.name,
                 "params": str(a.item_params), "params_sha256": sha, "label_files": files,
                 "join": dict(sorted(join.items())), "neg_sessions": sorted(neg_only),
                 "neg_per": ITEM_NEG_PER, "neg_total": a.neg_total, "neg_seed": a.neg_seed,
                 "class": ITEM_CLASS}  # fmt: skip
+        if pool is not None:
+            prov["pooled_g2"] = pool
         return cls(spec, params, docs, join, prov)
 
 
@@ -2358,7 +2375,7 @@ def items_main(a: argparse.Namespace) -> int:
                "train_floor_items": sum(len({it["floor_id"] for f in item_frame_rows(
                    ili.docs[s])[0] for it in f["items"]}) for s in own["train"]),
                "would_refuse_join": sorted(s for s in own["train"]
-                                           if ili.join[s] not in (G2_PASS, NEG_ONLY))}  # fmt: skip
+                                           if ili.join[s] not in ITEM_ADMITTED)}  # fmt: skip
         if linked is not None:  # T-I3: both parts' counts; TRAIN = the new part's + the linked
             parts = item_parts(ili, own, rows, linked)
             new_c, old_c = parts["new"]["train_counts"], parts["linked"]["train_counts"]
@@ -2366,7 +2383,7 @@ def items_main(a: argparse.Namespace) -> int:
                         "train_combined": {k: new_c[k] + old_c[k] for k in new_c}})  # fmt: skip
         print(json.dumps(out, indent=1))
         return 0
-    refused = {s: ili.join[s] for s in own["train"] if ili.join[s] not in (G2_PASS, NEG_ONLY)}
+    refused = {s: ili.join[s] for s in own["train"] if ili.join[s] not in ITEM_ADMITTED}
     if refused:
         raise SystemExit(f"O.6's join rule: not admitted {refused}")
     cache_id = a.cache_id or f"items-{time.strftime('%Y%m%dT%H%M%S')}"
@@ -2646,6 +2663,10 @@ def main(argv: Sequence[str] | None = None) -> int:
                    help="items: the negatives drawn from --neg-sessions (O.8: 300)")  # fmt: skip
     f.add_argument("--neg-seed", type=int, default=ITEM_NEG_SEED,
                    help="items: the seed of every negative draw")  # fmt: skip
+    f.add_argument("--pooled-g2", action="store_true",
+                   help="items: xmas02-items-1080.md Amendment 7 -- the TRAIN label files whose "
+                        "own G2 is NOT_ENOUGH are judged together (fi_labels.pooled_g2); a PASS "
+                        "admits them (G2_POOLED)")  # fmt: skip
     a = ap.parse_args(argv)
     if a.mask_sessions and a.labels != "map":
         raise SystemExit("--mask-sessions belongs to --labels map (xmas02-detector.md S4)")
