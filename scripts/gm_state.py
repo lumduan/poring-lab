@@ -238,17 +238,24 @@ def check(screen: Any, profile: str = "standard") -> dict[str, Any]:
 
 
 def _weight(frames: tuple[Any, Any]) -> list[int] | None:
-    """The weight readout, two equal reads on the two frames (poring_env.weight), or None."""
+    """The weight readout, two equal reads on the two frames (poring_env.weight), or None. When
+    the lab's glyphs read nothing, this client's own font (hp_percent.read_weight, 2026-11-20: the
+    live PC's client), again two equal reads."""
     from poring_env import weight as wt
 
     path = _path()
     gpath = (r.ROOT / wt.DEFAULT_TEMPLATES if path == "rdp"
              else _root(path) / wt.DEFAULT_TEMPLATES.name)  # fmt: skip
-    if path != "rdp" and not gpath.exists():
-        return None  # recorded, not gated: RDP-cut glyphs are never read on another path's frames
-    glyphs = wt.load_weight_glyphs(gpath)
-    v = wt.stable_value([wt.read_weight(f, glyphs) for f in frames])
-    return None if v is None else list(v)
+    # recorded, not gated: RDP-cut glyphs are never read on another path's frames
+    if path == "rdp" or gpath.exists():
+        glyphs = wt.load_weight_glyphs(gpath)
+        v = wt.stable_value([wt.read_weight(f, glyphs) for f in frames])
+        if v is not None:
+            return list(v)
+    import hp_percent as hpp
+
+    reads = [hpp.read_weight(f) for f in frames]
+    return list(reads[0]) if reads[0] is not None and all(x == reads[0] for x in reads) else None
 
 
 def notice_shares(frame: Any, refs: dict[str, Any]) -> dict[str, float]:

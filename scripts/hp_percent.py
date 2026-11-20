@@ -161,6 +161,79 @@ def read_font(band: Bin, font: Mapping[str, Bin]) -> int | None:
     return v if v <= 100 else None
 
 
+# 2026-11-20: the WEIGHT line in a client's own font -- "Weight : 1685 / 4200  Zeny : 33,287" on the
+# live PC's client, rows 119-127 with Basic Info at the origin, in the percent's font (its 1, 0 and
+# 5 matched when its 6 was cut from this line). The lab's weight reader (poring_env.weight) knows
+# the lab's 7 px font only, so a live Run read no weight and its weight home could never fire.
+# The line's runs: label letters (no digit), then N's digits (a '1' leaves 3 blank columns, others
+# 1), the '/' (one run, no digit, 6+ rows tall, its top to the right of its bottom), M's digits.
+# A number needs more than DIGIT_GAP blank columns on both sides: an unread glyph touching it means
+# a digit is hidden (never a shorter number).
+WEIGHT_DY = 65  # the weight line's band, this many rows below the HP's (119 - Y0)
+WEIGHT_SEARCH = (30, 219)  # the box's columns, left of its right border
+DIGIT_GAP = 3  # at most this many blank columns between two digits of one number
+SLASH_ROWS = 6  # the '/' spans at least this many rows (a comma 2, a colon's dots apart)
+
+
+def is_slash(run: Bin) -> bool:
+    """PURE: a run drawn as '/': 2-6 columns, SLASH_ROWS+ rows, its top ink right of its bottom."""
+    rows = np.where(run.any(axis=1))[0]
+    if not 2 <= run.shape[1] <= 6 or len(rows) == 0 or rows[-1] - rows[0] + 1 < SLASH_ROWS:
+        return False
+    top = np.where(run[rows[0]])[0].mean()
+    bottom = np.where(run[rows[-1]])[0].mean()
+    return bool(top > bottom)
+
+
+def read_weight_font(band: Bin, font: Mapping[str, Bin]) -> tuple[int, int] | None:
+    """PURE: (N, M) from the weight line's band in a client's own font, or None: the FIRST
+    "digits / digits" on the line (the zeny's "33,287" after it has a comma, never a '/')."""
+    rs = runs(band, *WEIGHT_SEARCH)
+    named = []
+    for x, r in rs:
+        n = name_run(r, font)
+        named.append((x, x + r.shape[1], n[0] if n is not None and n[0].isdigit() else None, r))
+    i = 0
+    while i < len(named):
+        if named[i][2] is None:
+            i += 1
+            continue
+        j = i  # the digit group from i: digits, each at most DIGIT_GAP blank columns apart
+        while (j + 1 < len(named) and named[j + 1][2] is not None
+               and named[j + 1][0] - named[j][1] <= DIGIT_GAP):  # fmt: skip
+            j += 1
+        k = j + 1
+        if i > 0 and named[i][0] - named[i - 1][1] <= DIGIT_GAP:
+            i = k  # an unread glyph right before it: part of a number is hidden
+            continue
+        if k + 1 < len(named) and named[k][2] is None and is_slash(named[k][3]):
+            m0 = m1 = k + 1
+            if named[m0][2] is not None:
+                while (m1 + 1 < len(named) and named[m1 + 1][2] is not None
+                       and named[m1 + 1][0] - named[m1][1] <= DIGIT_GAP):  # fmt: skip
+                    m1 += 1
+                if m1 + 1 < len(named) and named[m1 + 1][0] - named[m1][1] <= DIGIT_GAP:
+                    return None  # an unread glyph right after M: part of it is hidden
+                a = "".join(str(t[2]) for t in named[i : j + 1])
+                b = "".join(str(t[2]) for t in named[m0 : m1 + 1])
+                ok_a = len(a) == 1 or a[0] != "0"
+                if ok_a and b[0] != "0" and len(a) <= 6 and len(b) <= 6:
+                    return int(a), int(b)
+            return None  # the first '/' on the line did not read: never a later pair
+        i = k
+    return None
+
+
+def read_weight(client_bgr: Any) -> tuple[int, int] | None:
+    """The weight line read with each of this client's own fonts (``client_fonts``), or None."""
+    band = ink(client_bgr, WEIGHT_DY)
+    for font in client_fonts().values():
+        got = read_weight_font(band, font)
+        if got is not None:
+            return got
+    return None
+
+
 def client_fonts(folder: Path | None = None) -> dict[str, dict[str, Bin]]:
     """This client's fonts from GLYPHS' folder (re-read when a file changes; none -> {})."""
     folder = folder or GLYPHS.parent

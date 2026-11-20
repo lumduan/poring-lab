@@ -120,3 +120,56 @@ def test_client_fonts_read_from_files(tmp_path: Path) -> None:
     (tmp_path / f"{hp.FONT_PREFIX}broken.npz").write_bytes(b"no")
     got = hp.client_fonts(tmp_path)
     assert list(got) == ["live"] and set(got["live"]) == {"0", "1", "5", "%"}
+
+
+def _weight_line(font: dict[str, np.ndarray], parts: list[tuple[int, str]]) -> np.ndarray:
+    """A Basic Info frame whose weight line (WEIGHT_DY below the HP's) carries ``parts``: (x, text)
+    pieces, '/' and ',' drawn as the client draws them, ':' as two dots, letters as a block."""
+    img = np.full((200, 400, 3), 255, np.uint8)
+    y = hp.Y0 + hp.WEIGHT_DY
+    slash = np.array([[c == "#" for c in r] for r in
+                      ["..#", "..#", ".#.", ".#.", ".#.", "#..", "#..", "#..", "..."]])  # fmt: skip
+    for x, text in parts:
+        for ch in text:
+            if ch == " ":
+                x += 4
+                continue
+            if ch == "/":
+                gl = slash
+            elif ch == ",":
+                gl = np.zeros((9, 1), bool)
+                gl[7:9] = True
+            elif ch == ":":
+                gl = np.zeros((9, 1), bool)
+                gl[2] = gl[6] = True
+            elif ch in font:
+                gl = font[ch]
+            else:
+                gl = np.ones((7, 5), bool)  # a letter: no digit of the font
+            img[y : y + gl.shape[0], x : x + gl.shape[1]][gl] = 0
+            x += gl.shape[1] + 1
+    return img
+
+
+def test_the_weight_line_reads_in_this_clients_font(monkeypatch: pytest.MonkeyPatch) -> None:
+    """2026-11-20: the live client's "Weight : 1685 / 4200  Zeny : 33,287" (rows 119-127)."""
+    font = _thin_font()
+    font["4"], font["2"] = font["5"][:, ::-1].copy(), font["0"].copy()
+    font["2"][4, 2] = True  # distinct from the 0
+    monkeypatch.setattr(hp, "client_fonts", lambda folder=None: {"live": font})
+    img = _weight_line(font, [(43, "Wx :"), (86, "1505 / 4200"), (150, "Zy : 15,100")])
+    assert hp.read_weight(img) == (1505, 4200)
+    band = hp.ink(img, hp.WEIGHT_DY)
+    assert hp.read_weight_font(band, font) == (1505, 4200)
+    # the zeny's comma is no '/': a line without a weight reads None, never (15, 100)
+    zeny_only = _weight_line(font, [(43, "Wx :"), (150, "Zy : 15,100")])
+    assert hp.read_weight(zeny_only) is None
+    # a covered digit (an unknown run in N) reads None, never a shorter number
+    covered = _weight_line(font, [(43, "Wx :"), (86, "15x5 / 4200")])
+    assert hp.read_weight(covered) is None
+    covered_m = _weight_line(font, [(43, "Wx :"), (86, "1505 / 42x0")])
+    assert hp.read_weight(covered_m) is None
+    # a leading zero is no weight
+    assert hp.read_weight(_weight_line(font, [(86, "0150 / 4200")])) is None
+    monkeypatch.setattr(hp, "client_fonts", lambda folder=None: {})
+    assert hp.read_weight(img) is None  # no font of this client: as before
