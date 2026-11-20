@@ -328,3 +328,169 @@ def test_o22_round5_has_one_aura_off_stratum_with_its_sources() -> None:
                                             "fsH1": {"hit": 20, "n": 20}}  # fmt: skip
     with pytest.raises(SystemExit, match="no stratum"):
         fe.i1_strata([_crop("20261111T153427-rdp-hunt-xmas02-fiT13", 1, box)], pred, "r5")
+
+
+# --- round 6 (xmas02-items-1080.md 8a, the 1080 item round; T-I4) ---------------------------------
+
+R6_H1, R6_H2 = "20261121T050000-rdp-xmas02-ifH1", "20261121T060000-rdp-xmas02-ifH2"
+R6_S1 = "20261121T070000-rdp-xmas02-ifsH1"
+
+
+def staged_as(sid: str) -> Staged:
+    """The staged list, every frame, crop and prediction renamed to the session ``sid``."""
+    st = staged()
+    st.pred = {k.replace(SID, sid): v for k, v in st.pred.items()}
+    st.crops = [{**c, "session": sid} for c in st.crops]
+    return st
+
+
+def r6_latency() -> dict[str, Any]:
+    return {**lat_ok(), "gpu_server_item": {"n": 300, "p95": 17.0},
+            "gpu_server_deployed": {"n": 300, "p95": 16.67}, "comparator": "xmas02fi5"}  # fmt: skip
+
+
+def test_r6_names_and_its_own_bar_values() -> None:
+    assert fe.R6_HELD_OUT == ("-xmas02-ifH1", "-xmas02-ifH2", "-xmas02-ifsH1")
+    assert fe.STRATA["r6"] == (fe.R6_HELD_OUT, (), fe.R6_PILOTS)
+    b = fe.bars_of("r6")
+    assert (b["i1_recall"], b["i1_precision"]) == (0.90, 0.95)
+    assert {k: v for k, v in b.items() if k not in ("i1_recall", "i1_precision")} == {
+        k: v for k, v in fe.BARS.items() if k not in ("i1_recall", "i1_precision")
+    }
+    for rnd in (None, "r2", "r3", "r4", "r5"):  # rounds 2-5 keep their bars
+        assert fe.bars_of(rnd) is fe.BARS
+    assert fe.BARS["i1_recall"] == 0.85 and fe.BARS["i1_precision"] == 0.85
+
+
+def test_r6_i1h_is_the_pooled_held_out_at_0_90_with_natural_and_staging_apart() -> None:
+    box = [10.0, 10.0, 30.0, 30.0]
+    crops = ([_crop(R6_H1, i, box) for i in range(25)] + [_crop(R6_H2, 100 + i, box)
+             for i in range(10)] + [_crop(R6_S1, 200 + i, box) for i in range(20)])  # fmt: skip
+    pred = {fe.frame_key(c["session"], c["frame_id"]): [box] for c in crops}
+    for c in crops[:2] + crops[35:38]:  # natural 33 / 35, staging 17 / 20: pooled 50 / 55
+        pred[fe.frame_key(c["session"], c["frame_id"])] = []
+    got = fe.i1_strata(crops, pred, "r6", fe.bars_of("r6"))
+    assert set(got) == {"i1h"} and got["i1h"]["bar"] == 0.9
+    assert (got["i1h"]["num"], got["i1h"]["den"], got["i1h"]["verdict"]) == (50, 55, "PASS")
+    assert got["i1h"]["by_source"] == {"ifH1": {"hit": 23, "n": 25}, "ifH2": {"hit": 10, "n": 10},
+                                       "ifsH1": {"hit": 17, "n": 20}}  # fmt: skip
+    pred[fe.frame_key(R6_H2, 100)] = []  # 49 / 55 = 0.891: FAIL at 0.90 (a PASS at 0.85)
+    assert fe.i1_strata(crops, pred, "r6", fe.bars_of("r6"))["i1h"]["verdict"] == "FAIL"
+    assert fe.i1_strata(crops, pred, "r6")["i1h"]["verdict"] == "PASS"  # BARS' 0.85
+    apart = fe.i1_apart(crops, pred, fe.STRATA_APART["r6"])
+    assert (apart["natural"]["num"], apart["natural"]["den"]) == (32, 35)
+    assert (apart["staging"]["num"], apart["staging"]["den"]) == (17, 20)
+    assert apart["natural"]["target_095"] is False and "verdict" not in apart["natural"]
+    with pytest.raises(SystemExit, match="no stratum"):  # round 5's held-out is not round 6's
+        fe.i1_strata([_crop("20261112T093311-rdp-hunt-xmas02-fiH1", 1, box)], pred, "r6")
+    short = fe.i1_strata(crops[:39], pred, "r6", fe.bars_of("r6"))
+    assert short["i1h"]["verdict"] == "NO_VERDICT"  # under 40 evaluated crops
+
+
+def test_r6_evaluate_uses_its_bars_and_the_comparator() -> None:
+    """The staged list as ifH1 (natural drops: I2-I4 read it), its four FALSE boxes cleared and
+    four more TRUE boxes (a second box on items 10-13): I1h 36 / 40 = 0.90 PASS, precision 40 / 40
+    PASS (>= 40 boxes), I5 vs the comparator PASS -> PASS. One more miss: I1h 35 / 40 = 0.875
+    FAILS at 0.90 (it passed round 5's 0.85); the four FALSE boxes back: precision 40 / 44 =
+    0.909 FAILS at 0.95."""
+
+    def more_true(st: Staged) -> Staged:
+        for fid in (10, 11, 12, 13):
+            k = fe.frame_key(R6_H1, fid)
+            st.pred[k] = [*st.pred[k], st.pred[k][0]]
+        return st
+
+    st = more_true(staged_as(R6_H1))
+    for fid in (1, 2):
+        st.pred[fe.frame_key(R6_H1, fid)] = st.pred[fe.frame_key(R6_H1, fid)][:1]
+    for fid in (41, 42):
+        st.pred[fe.frame_key(R6_H1, fid)] = []
+    doc = {**st.doc(), "session": R6_H1}
+    res = fe.evaluate([doc], {"gpu": {"frames": st.pred}}, st.crops, ANCHOR, r6_latency(), "r6")
+    g = res["per_predictions"]["gpu"]
+    assert g["i1_strata"]["i1h"]["num"] == 36 and g["i1_strata"]["i1h"]["verdict"] == "PASS"
+    assert (g["i1_precision"]["true"], g["i1_precision"]["false"]) == (40, 0)
+    assert g["i1_precision"]["bar"] == 0.95 and g["i1_precision"]["verdict"] == "PASS"
+    assert g["i1_apart"]["natural"]["den"] == 40 and g["i1_apart"]["staging"]["den"] == 0
+    assert g["i2"]["den"] == 25 and g["i3"]["frames"] == 600 and g["i4"]["den"] == 50
+    assert res["i5"]["gpu"]["verdict"] == "PASS" and res["i5"]["comparator"] == "xmas02fi5"
+    assert res["i5"]["gpu"]["ratio"] == round(17.0 / 16.67, 4)
+    assert res["verdict"] == "PASS"
+    st.pred[fe.frame_key(R6_H1, 7)] = []
+    res = fe.evaluate([doc], {"gpu": {"frames": st.pred}}, st.crops, ANCHOR, r6_latency(), "r6")
+    assert res["per_predictions"]["gpu"]["i1_strata"]["i1h"]["verdict"] == "FAIL"
+    assert res["verdict"] == "FAIL"
+    st = more_true(staged_as(R6_H1))  # the four FALSE boxes kept: 40 / 44 = 0.909 < 0.95
+    res = fe.evaluate([doc], {"gpu": {"frames": st.pred}}, st.crops, ANCHOR, r6_latency(), "r6")
+    p = res["per_predictions"]["gpu"]["i1_precision"]
+    assert (p["true"], p["false"], p["verdict"]) == (40, 4, "FAIL")
+    assert (
+        fe.evaluate([doc], {"gpu": {"frames": st.pred}}, st.crops, ANCHOR, r6_latency(), None)[
+            "per_predictions"
+        ]["gpu"]["i1_precision"]["verdict"]
+        == "PASS"
+    )  # 0.85
+    lat = {**r6_latency(), "gpu_server_item": {"n": 300, "p95": 19.0}}  # 1.14 x the comparator
+    assert fe.evaluate([doc], {"gpu": {"frames": st.pred}}, st.crops, ANCHOR, lat,
+                       "r6")["i5"]["gpu"]["verdict"] == "FAIL"  # fmt: skip
+    lat = {**r6_latency(), "gpu_server_item": {"n": 150, "p95": 16.0}}
+    assert fe.evaluate([doc], {"gpu": {"frames": st.pred}}, st.crops, ANCHOR, lat,
+                       "r6")["i5"]["gpu"]["verdict"] == "NO_VERDICT"  # fmt: skip
+
+
+def _r6_files(tmp_path: Path, **change: Any) -> list[str]:
+    """fi_eval's round-6 inputs on disk (1080 label file, params, key, predictions, I5)."""
+    st = staged_as(R6_H1)
+    params = tmp_path / "items-params-1080.json"
+    pscreen = change.get("pscreen", "1080")
+    params.write_text(json.dumps({"anchor_px": list(ANCHOR), "screen": pscreen}))
+    doc = {**st.doc(), "session": change.get("session", R6_H1), "params": str(params),
+           "screen": change.get("screen", "1080")}  # fmt: skip
+    if doc["screen"] is None:
+        del doc["screen"]
+    lab = tmp_path / "l.json"
+    lab.write_text(json.dumps(doc))
+    pred = tmp_path / "pred.json"
+    pred.write_text(json.dumps({"frames": st.pred}))
+    key = {"eval_test": True, "screen": "1080", "round": change.get("round", 6),
+           "crops": {c["crop"]: {"truth": "item", **c} for c in st.crops}}  # fmt: skip
+    kp = tmp_path / "key.json"
+    kp.write_text(json.dumps(key))
+    both = tmp_path / "both.json"
+    both.write_text(json.dumps([c["crop"] for c in st.crops]))
+    item, comp = tmp_path / "gpu-new.json", tmp_path / "gpu-fi5.json"
+    item.write_text(json.dumps({"models": {"xmas02fi6": {"server": {"n": 300, "p95": 17.0}}}}))
+    comp.write_text(json.dumps({"models": {"xmas02fi5": {"server": {"n": 300, "p95": 16.67}}}}))
+    lat = tmp_path / "lat.json"
+    lat.write_text(json.dumps({"ms": {"xmas02fi6": {"n": 300, "p95": 650.0},
+                                      "xmas02fi5": {"n": 300, "p95": 651.2}}}))  # fmt: skip
+    servers = [str(comp), str(item)] if change.get("swap") else [str(item), str(comp)]
+    return ["--labels", str(lab), "--predictions", f"gpu={pred}", "--key", str(kp),
+            "--evaluated", str(both), "--strata", "r6", "--gpu-server", *servers,
+            "--cpu-latency", str(lat), "--cpu-item", "xmas02fi6", "--out",
+            str(tmp_path / "out.json")]  # fmt: skip
+
+
+def test_r6_main_reads_1080_inputs_only_and_needs_the_comparator(tmp_path: Path) -> None:
+    args = _r6_files(tmp_path)
+    assert fe.main([*args, "--comparator", "xmas02fi5"]) == 0
+    out = json.loads((tmp_path / "out.json").read_text())
+    assert out["bars"]["i1_recall"] == 0.9 and out["strata"] == "r6"
+    assert out["i5"]["cpu"]["deployed_p95_ms"] == 651.2 and out["i5"]["comparator"] == "xmas02fi5"
+    assert out["i5"]["gpu"]["deployed_p95_ms"] == 16.67
+    with pytest.raises(SystemExit, match="--comparator"):  # r6 needs it
+        fe.main(args)
+    r5 = [x if x != "r6" else "r5" for x in args]
+    with pytest.raises(SystemExit, match="--comparator"):  # and only r6 takes it
+        fe.main([*r5, "--comparator", "xmas02fi5"])
+    with pytest.raises(SystemExit, match="compares with --comparator"):
+        fe.main([*args, "--comparator", "xmas02fi5", "--cpu-deployed", "xmas02gb"])
+    with pytest.raises(SystemExit, match="the second file must hold xmas02fi5"):
+        fe.main([*_r6_files(tmp_path, swap=True), "--comparator", "xmas02fi5"])
+    for change, match in (({"screen": None}, "720 label files"),
+                          ({"session": "20261112T093311-rdp-hunt-xmas02-fiH1"}, "held-out"),
+                          ({"pscreen": "720"}, "not 1080 params"),
+                          ({"round": 5}, "not round 6's pack")):  # fmt: skip
+        with pytest.raises(SystemExit, match=match):
+            fe.main([*_r6_files(tmp_path, **change), "--comparator", "xmas02fi5"])
+    assert fe.round_inputs_refusal("r5", [{"session": "x"}], {}, {}) is None  # r2-r5: unchanged

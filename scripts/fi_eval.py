@@ -40,6 +40,18 @@ ROUND 2 (Amendment O15, 2026-11-10 night; ``--strata r2``, the tests written bef
 - I5 GPU (O14 had no verdict: its call-time harness adds ~35 ms to every model): the detect
   server's forward p95 (scripts/fi_gpu_latency.py, one model a run, the same frames), <= 1.10 x
   the deployed xmas02gb's AND <= 35 ms, on >= 200 calls each (``--gpu-server``).
+
+ROUND 6 (docs/planning/xmas02-items-1080.md 8a, the 1080 item round; ``--strata r6``, T-I4):
+- the 1080 held-out (ifH1, ifH2: natural drops; ifsH1: the staging), labelled under the 1080
+  params (fi_labels.py label --spec 1080 --eval-test) and packed by ``pack --round 6``;
+- I1h: recall on the pooled held-out >= 0.90 on >= 40 evaluated crops; the natural drops alone
+  and the staging alone are REPORTED beside it (``i1_apart``, Batt's 95 % with the natural ones);
+- I1 precision >= 0.95; I2 >= 0.80 on >= 20; I3 <= 1 / 200 and in her 5 x 5 <= 1 / 500; I4 <= 5 %
+  on >= 40 kills (I2-I4 on the natural-drop pilots, as round 5);
+- I5 against a COMPARATOR model named on the CLI (``--comparator``, xmas02fi5 this round): GPU
+  the detect server's forward p95 <= 35 ms AND <= 1.10 x the comparator's (``--gpu-server ITEM
+  COMPARATOR``), CPU p95 <= 1.10 x the comparator's (``--cpu-deployed`` = the comparator).
+A count under its minimum is NO VERDICT, never a pass. Rounds 2-5 are unchanged.
 OFFLINE: JSON files only (no pixel, no packet read here, no GPU).
 """
 
@@ -84,10 +96,19 @@ R4_NOAURA = ("-rdp-xmas02-fsTn4",)
 # O22 (round 5, Batt 2026-11-11: the aura OFF): the whole held-out is aura-off -- ONE stratum
 R5_PILOTS = ("-rdp-hunt-xmas02-fiH1", "-rdp-hunt-xmas02-fiH2")
 R5_AURA_OFF = (*R5_PILOTS, "-rdp-xmas02-fsH1")
+# xmas02-items-1080.md 4 (round 6, the 1080 round): its held-out by NAME (fi_labels.IF_HELD_OUT;
+# a test pins them equal), ONE pooled stratum I1h; the natural drops and the staging apart
+R6_PILOTS = ("-xmas02-ifH1", "-xmas02-ifH2")
+R6_STAGING = ("-xmas02-ifsH1",)
+R6_HELD_OUT = (*R6_PILOTS, *R6_STAGING)
 STRATA = {"r2": (R2_AURA, R2_NOAURA, R2_PILOTS), "r3": (R3_AURA, R3_NOAURA, R3_PILOTS),
-          "r4": (R4_AURA, R4_NOAURA, R4_PILOTS), "r5": (R5_AURA_OFF, (), R5_PILOTS)}  # fmt: skip
-STRATA_NAMES = {"r5": ("aura_off", "")}  # the default: ("aura", "no_aura")
+          "r4": (R4_AURA, R4_NOAURA, R4_PILOTS), "r5": (R5_AURA_OFF, (), R5_PILOTS),
+          "r6": (R6_HELD_OUT, (), R6_PILOTS)}  # fmt: skip
+STRATA_NAMES = {"r5": ("aura_off", ""), "r6": ("i1h", "")}  # the default: ("aura", "no_aura")
+# the strata reported APART beside the bar (not bars: their verdicts never count)
+STRATA_APART = {"r6": {"natural": R6_PILOTS, "staging": R6_STAGING}}
 R2_TARGET = 0.95  # Batt 2026-11-10 night: "toward 95 %" -- reported, not a bar
+SCREEN_OF = {"r6": "1080"}  # a round's label files, params and key are of this screen only
 MINS = {
     "i1_recall": 40,
     "i1n_recall": 30,
@@ -98,6 +119,14 @@ MINS = {
     "i4": 40,
     "i5": 200,
 }
+# xmas02-items-1080.md 8a (round 6): "the minimum is what 720 achieved" -- I1h >= 0.90, I1
+# precision >= 0.95; every other bar and every minimum as rounds 2-5
+ROUND_BARS = {"r6": {**BARS, "i1_recall": 0.90, "i1_precision": 0.95}}
+
+
+def bars_of(strata: str | None) -> Mapping[str, float]:
+    """PURE: the round's bar values (BARS unless the round names its own)."""
+    return ROUND_BARS.get(strata or "", BARS)
 
 
 def iou(a: Box, b: Box) -> float:
@@ -159,15 +188,15 @@ def judged(f: Mapping[str, Any]) -> bool:
     return f.get("n_near") is not None
 
 
-def i1_recall(crops: Sequence[Mapping[str, Any]], pred: Mapping[str, Sequence[Box]]
-              ) -> dict[str, Any]:  # fmt: skip
+def i1_recall(crops: Sequence[Mapping[str, Any]], pred: Mapping[str, Sequence[Box]],
+              bars: Mapping[str, float] = BARS) -> dict[str, Any]:  # fmt: skip
     """PURE: the evaluated crops (session, frame_id, box) boxed by a matching prediction."""
     hit = [
         c
         for c in crops
         if any(matches(b, c["box"]) for b in pred[frame_key(c["session"], c["frame_id"])])
     ]
-    return {**ratio_bar(len(hit), len(crops), BARS["i1_recall"], MINS["i1_recall"], True),
+    return {**ratio_bar(len(hit), len(crops), bars["i1_recall"], MINS["i1_recall"], True),
             "missed": [f"{c['session']}:{c['frame_id']}:{c.get('floor_id')}" for c in crops
                        if c not in hit]}  # fmt: skip
 
@@ -181,7 +210,8 @@ def floor_targets(f: Mapping[str, Any]) -> list[tuple[Box | None, Box]]:
 
 
 def i1_precision(docs: Sequence[Mapping[str, Any]], pred: Mapping[str, Sequence[Box]],
-                 anchor: Sequence[float]) -> dict[str, Any]:  # fmt: skip
+                 anchor: Sequence[float],
+                 bars: Mapping[str, float] = BARS) -> dict[str, Any]:  # fmt: skip
     """PURE: every box on every judged frame: TRUE / FALSE / AMBIGUOUS (module docstring)."""
     true = false = amb = 0
     for doc in docs:
@@ -197,7 +227,7 @@ def i1_precision(docs: Sequence[Mapping[str, Any]], pred: Mapping[str, Sequence[
                 else:
                     amb += 1
     return {
-        **ratio_bar(true, true + false, BARS["i1_precision"], MINS["i1_precision"], True),
+        **ratio_bar(true, true + false, bars["i1_precision"], MINS["i1_precision"], True),
         "true": true,
         "false": false,
         "ambiguous": amb,
@@ -231,7 +261,8 @@ def episodes(doc: Mapping[str, Any]) -> tuple[list[dict[str, Any]], dict[str, An
                  "behind_with_a_kept_label": behind_labelled}  # fmt: skip
 
 
-def i2(docs: Sequence[Mapping[str, Any]], pred: Mapping[str, Sequence[Box]]) -> dict[str, Any]:
+def i2(docs: Sequence[Mapping[str, Any]], pred: Mapping[str, Sequence[Box]],
+       bars: Mapping[str, float] = BARS) -> dict[str, Any]:  # fmt: skip
     eps: list[dict[str, Any]] = []
     side = {"drops_of_our_kills": 0, "drops_behind_her": 0, "behind_with_a_kept_label": 0}
     for doc in docs:
@@ -244,13 +275,13 @@ def i2(docs: Sequence[Mapping[str, Any]], pred: Mapping[str, Sequence[Box]]) -> 
         for e in eps
         if any(matches(b, e["box"]) for b in pred[frame_key(e["session"], e["frame_id"])])
     ]
-    return {**ratio_bar(len(hit), len(eps), BARS["i2"], MINS["i2"], True), **side,
+    return {**ratio_bar(len(hit), len(eps), bars["i2"], MINS["i2"], True), **side,
             "missed": [f"{e['session']}:{e['frame_id']}:{e['floor_id']}" for e in eps
                        if e not in hit]}  # fmt: skip
 
 
 def i3(docs: Sequence[Mapping[str, Any]], pred: Mapping[str, Sequence[Box]],
-       anchor: Sequence[float]) -> dict[str, Any]:  # fmt: skip
+       anchor: Sequence[float], bars: Mapping[str, float] = BARS) -> dict[str, Any]:  # fmt: skip
     """PURE: fiT's kept frames with no floor item in any phase."""
     n = any_box = near = 0
     for doc in docs:
@@ -263,13 +294,13 @@ def i3(docs: Sequence[Mapping[str, Any]], pred: Mapping[str, Sequence[Box]],
             near += any(inside(cell_point(b, anchor), f["around_box"]) for b in bs)
     return {
         "frames": n,
-        "any": ratio_bar(any_box, n, BARS["i3_any"], MINS["i3_any"], False),
-        "around_5x5": ratio_bar(near, n, BARS["i3_5x5"], MINS["i3_5x5"], False),
+        "any": ratio_bar(any_box, n, bars["i3_any"], MINS["i3_any"], False),
+        "around_5x5": ratio_bar(near, n, bars["i3_5x5"], MINS["i3_5x5"], False),
     }
 
 
 def i4(docs: Sequence[Mapping[str, Any]], pred: Mapping[str, Sequence[Box]],
-       anchor: Sequence[float]) -> dict[str, Any]:  # fmt: skip
+       anchor: Sequence[float], bars: Mapping[str, float] = BARS) -> dict[str, Any]:  # fmt: skip
     """PURE: our kills WITHOUT a drop, their first frame 2.0-3.0 s after the death."""
     n = boxed = no_frame = 0
     for doc in docs:
@@ -284,7 +315,7 @@ def i4(docs: Sequence[Mapping[str, Any]], pred: Mapping[str, Sequence[Box]],
             bs = pred[frame_key(doc["session"], fr["frame_id"])]
             boxed += any(inside(cell_point(b, anchor), fr["box3"]) for b in bs)
     return {
-        **ratio_bar(boxed, n, BARS["i4"], MINS["i4"], False),
+        **ratio_bar(boxed, n, bars["i4"], MINS["i4"], False),
         "kills_without_drop_no_frame": no_frame,
     }
 
@@ -303,15 +334,16 @@ def cpu_latency_models(doc: Mapping[str, Any]) -> Mapping[str, Mapping[str, Any]
 
 
 def i5(gpu_ms: Sequence[float] | None, cpu: Mapping[str, Mapping[str, Any]] | None,
-       item: str | None, deployed: str | None) -> dict[str, Any]:  # fmt: skip
+       item: str | None, deployed: str | None,
+       bars: Mapping[str, float] = BARS) -> dict[str, Any]:  # fmt: skip
     out: dict[str, Any] = {}
     if gpu_ms is None:
         out["gpu"] = {"verdict": "NO_VERDICT", "why": "no --gpu-timing"}
     else:
         p95 = nearest_rank(gpu_ms, 95) if gpu_ms else None
         v = ("NO_VERDICT" if len(gpu_ms) < MINS["i5"] or p95 is None
-             else "PASS" if p95 <= BARS["i5_gpu_p95_ms"] else "FAIL")  # fmt: skip
-        out["gpu"] = {"n": len(gpu_ms), "p95_ms": p95, "bar_ms": BARS["i5_gpu_p95_ms"],
+             else "PASS" if p95 <= bars["i5_gpu_p95_ms"] else "FAIL")  # fmt: skip
+        out["gpu"] = {"n": len(gpu_ms), "p95_ms": p95, "bar_ms": bars["i5_gpu_p95_ms"],
                       "min_rows": MINS["i5"], "verdict": v}  # fmt: skip
     if cpu is None or item is None or deployed is None:
         out["cpu"] = {
@@ -323,13 +355,13 @@ def i5(gpu_ms: Sequence[float] | None, cpu: Mapping[str, Mapping[str, Any]] | No
         n = min(int(a.get("n", 0)), int(b.get("n", 0)))
         ratio = float(a["p95"]) / float(b["p95"]) if n else None
         v = ("NO_VERDICT" if n < MINS["i5"] or ratio is None
-             else "PASS" if ratio <= BARS["i5_cpu_ratio"] else "FAIL")  # fmt: skip
+             else "PASS" if ratio <= bars["i5_cpu_ratio"] else "FAIL")  # fmt: skip
         out["cpu"] = {
             "n": n,
             "item_p95_ms": a.get("p95"),
             "deployed_p95_ms": b.get("p95"),
             "ratio": None if ratio is None else round(ratio, 4),
-            "bar": BARS["i5_cpu_ratio"],
+            "bar": bars["i5_cpu_ratio"],
             "min_rows": MINS["i5"],
             "verdict": v,
         }
@@ -360,7 +392,7 @@ def on_suffix(sid: str, suffixes: Sequence[str]) -> bool:
 
 
 def i1_strata(crops: Sequence[Mapping[str, Any]], pred: Mapping[str, Sequence[Box]],
-              rnd: str = "r2") -> dict[str, Any]:  # fmt: skip
+              rnd: str = "r2", bars: Mapping[str, float] = BARS) -> dict[str, Any]:  # fmt: skip
     """PURE (O15): I1a (aura) and I1n (no aura) recall, each with its own minimum, the source
     counts and Batt's 95 % target; a crop of neither stratum refuses (fail closed)."""
     other = sorted({c["session"] for c in crops
@@ -374,8 +406,8 @@ def i1_strata(crops: Sequence[Mapping[str, Any]], pred: Mapping[str, Sequence[Bo
         if not sfx:  # O22: a round with one stratum
             continue
         cs = [c for c in crops if on_suffix(c["session"], sfx)]
-        r = i1_recall(cs, pred)
-        r.update(ratio_bar(r["num"], r["den"], BARS["i1_recall"], mins, True))  # its own minimum
+        r = i1_recall(cs, pred, bars)
+        r.update(ratio_bar(r["num"], r["den"], bars["i1_recall"], mins, True))  # its own minimum
         by_src: dict[str, list[int]] = {}
         for c in cs:
             src = next(x for x in sfx if c["session"].endswith(x)).rsplit("-", 1)[-1]
@@ -389,19 +421,35 @@ def i1_strata(crops: Sequence[Mapping[str, Any]], pred: Mapping[str, Sequence[Bo
     return out
 
 
-def i5_server(fi: Mapping[str, Any] | None, gb: Mapping[str, Any] | None) -> dict[str, Any]:
+def i1_apart(crops: Sequence[Mapping[str, Any]], pred: Mapping[str, Sequence[Box]],
+             parts: Mapping[str, Sequence[str]]) -> dict[str, Any]:  # fmt: skip
+    """PURE (round 6): the recall of each part of the pooled stratum (by session NAME), REPORTED
+    beside the bar: no verdict, no minimum; Batt's 95 % beside each."""
+    out: dict[str, Any] = {}
+    for name, sfx in parts.items():
+        cs = [c for c in crops if on_suffix(c["session"], sfx)]
+        r = i1_recall(cs, pred)
+        out[name] = {"num": r["num"], "den": r["den"], "share": r["share"],
+                     "target_095": None if r["share"] is None else r["share"] >= R2_TARGET,
+                     "missed": r["missed"], "reported": "beside the bar, not a bar"}  # fmt: skip
+    return out
+
+
+def i5_server(fi: Mapping[str, Any] | None, gb: Mapping[str, Any] | None,
+              bars: Mapping[str, float] = BARS) -> dict[str, Any]:  # fmt: skip
     """PURE (O15): the detect server's forward p95 of the item model vs the deployed xmas02gb's
-    (fi_gpu_latency.py summaries {n, p95, ...}): <= 1.10 x AND <= 35 ms, >= 200 calls each."""
+    (fi_gpu_latency.py summaries {n, p95, ...}): <= 1.10 x AND <= 35 ms, >= 200 calls each.
+    Round 6: ``gb`` is the comparator's (``--comparator``)."""
     if fi is None or gb is None:
         return {"verdict": "NO_VERDICT", "why": "no --gpu-server"}
     n = min(int(fi.get("n", 0)), int(gb.get("n", 0)))
     ratio = float(fi["p95"]) / float(gb["p95"]) if n and float(gb["p95"]) > 0 else None
-    ok = (ratio is not None and ratio <= BARS["i5_cpu_ratio"]
-          and float(fi["p95"]) <= BARS["i5_gpu_p95_ms"])  # fmt: skip
+    ok = (ratio is not None and ratio <= bars["i5_cpu_ratio"]
+          and float(fi["p95"]) <= bars["i5_gpu_p95_ms"])  # fmt: skip
     v = "NO_VERDICT" if n < MINS["i5"] or ratio is None else "PASS" if ok else "FAIL"
     return {"n": n, "item_p95_ms": fi.get("p95"), "deployed_p95_ms": gb.get("p95"),
-            "ratio": None if ratio is None else round(ratio, 4), "bar_ratio": BARS["i5_cpu_ratio"],
-            "bar_ms": BARS["i5_gpu_p95_ms"], "min_rows": MINS["i5"], "verdict": v}  # fmt: skip
+            "ratio": None if ratio is None else round(ratio, 4), "bar_ratio": bars["i5_cpu_ratio"],
+            "bar_ms": bars["i5_gpu_p95_ms"], "min_rows": MINS["i5"], "verdict": v}  # fmt: skip
 
 
 def evaluate(docs: Sequence[Mapping[str, Any]], preds: Mapping[str, Mapping[str, Any]],
@@ -411,6 +459,7 @@ def evaluate(docs: Sequence[Mapping[str, Any]], preds: Mapping[str, Mapping[str,
     every set passes; any NO_VERDICT and no FAIL: NO_VERDICT). ``strata`` "r2" (O15): I1 by
     stratum, I2-I4 on the pilots only, I5 GPU from the detect server's forward time."""
     need = needed_keys(docs, crops)
+    bars = bars_of(strata)  # round 6: its own I1h / I1 precision values (ROUND_BARS)
     per: dict[str, Any] = {}
     verdicts: list[str] = []
     pilots = (docs if strata not in STRATA
@@ -418,16 +467,20 @@ def evaluate(docs: Sequence[Mapping[str, Any]], preds: Mapping[str, Mapping[str,
     for name, doc in preds.items():
         pr = predictions(doc, need)
         r = {
-            "i1_recall": i1_recall(crops, pr),
-            "i1_precision": i1_precision(docs, pr, anchor),
-            "i2": i2(pilots, pr),
-            "i3": i3(pilots, pr, anchor),
-            "i4": i4(pilots, pr, anchor),
+            "i1_recall": i1_recall(crops, pr, bars),
+            "i1_precision": i1_precision(docs, pr, anchor, bars),
+            "i2": i2(pilots, pr, bars),
+            "i3": i3(pilots, pr, anchor, bars),
+            "i4": i4(pilots, pr, anchor, bars),
         }
         if strata in STRATA:
-            r["i1_strata"] = i1_strata(crops, pr, strata)
-            r["i1_recall"]["note"] = "pooled, reported only (O15: I1a / I1n decide)"
+            r["i1_strata"] = i1_strata(crops, pr, strata, bars)
+            r["i1_recall"]["note"] = ("pooled, reported only (O15: I1a / I1n decide)"
+                                      if strata not in STRATA_APART else
+                                      "pooled, reported only (i1_strata decides)")  # fmt: skip
             i1v = [v["verdict"] for v in r["i1_strata"].values()]  # O22: one or two strata
+            if strata in STRATA_APART:  # round 6: the natural drops and the staging apart
+                r["i1_apart"] = i1_apart(crops, pr, STRATA_APART[strata])
         else:
             i1v = [r["i1_recall"]["verdict"]]
         per[name] = r
@@ -435,10 +488,13 @@ def evaluate(docs: Sequence[Mapping[str, Any]], preds: Mapping[str, Mapping[str,
                            r["i3"]["any"]["verdict"], r["i3"]["around_5x5"]["verdict"],
                            r["i4"]["verdict"]]  # fmt: skip
     lat = i5(latency.get("gpu_ms"), latency.get("cpu"), latency.get("cpu_item"),
-             latency.get("cpu_deployed"))  # fmt: skip
+             latency.get("cpu_deployed"), bars)  # fmt: skip
     if strata in STRATA:
         lat["gpu_call_reported"] = lat["gpu"]
-        lat["gpu"] = i5_server(latency.get("gpu_server_item"), latency.get("gpu_server_deployed"))
+        lat["gpu"] = i5_server(latency.get("gpu_server_item"), latency.get("gpu_server_deployed"),
+                               bars)  # fmt: skip
+    if latency.get("comparator") is not None:  # round 6: I5's comparator, named on the CLI
+        lat["comparator"] = latency["comparator"]
     verdicts += [lat["gpu"]["verdict"], lat["cpu"]["verdict"]]
     v = "FAIL" if "FAIL" in verdicts else "NO_VERDICT" if "NO_VERDICT" in verdicts else "PASS"
     return {"per_predictions": per, "i5": lat, "verdict": v}
@@ -456,6 +512,27 @@ def evaluated_crops(key: Mapping[str, Any], both: Sequence[str]) -> list[dict[st
         out.append({"crop": c, "session": k["session"], "frame_id": k["frame_id"],
                     "floor_id": k["floor_id"], "box": k["box"]})  # fmt: skip
     return out
+
+
+def round_inputs_refusal(strata: str | None, docs: Sequence[Mapping[str, Any]],
+                         params: Mapping[str, Any],
+                         key: Mapping[str, Any]) -> str | None:  # fmt: skip
+    """PURE (round 6): a round of one screen (SCREEN_OF) reads that screen's label files, params
+    and pack key only, and its own held-out's sessions only (fail closed); rounds 2-5: None."""
+    want = SCREEN_OF.get(strata or "")
+    if strata is None or want is None:
+        return None
+    for d in docs:
+        sid = str(d.get("session"))
+        if str(d.get("screen", "720")) != want:
+            return f"{sid}: {d.get('screen', '720')} label files, not {want} ones"
+        if not on_suffix(sid, STRATA[strata][0]):
+            return f"{sid}: not --strata {strata}'s held-out"
+    if str(params.get("screen", "720")) != want:
+        return f"the label files' params are not {want} params"
+    if str(key.get("screen", "720")) != want or key.get("round") != int(strata[1:]):
+        return f"--key: not round {strata[1:]}'s pack (fi_labels.py pack --round {strata[1:]})"
+    return None
 
 
 def main(argv: Sequence[str] | None = None) -> int:
@@ -481,22 +558,41 @@ def main(argv: Sequence[str] | None = None) -> int:
         help="O15: fi_gpu_latency.py outputs, the item model's then xmas02gb's",
     )
     ap.add_argument("--cpu-deployed", default=None)
+    ap.add_argument("--comparator", default=None,
+                    help="round 6 (--strata r6): I5's comparator model (xmas02fi5 this "
+                         "round); the second --gpu-server file is its, --cpu-deployed is "
+                         "it")  # fmt: skip
     ap.add_argument("--out", type=Path, required=True)
     a = ap.parse_args(argv)
+    if (a.comparator is not None) != (a.strata in SCREEN_OF):
+        raise SystemExit("--comparator: round 6's I5 comparator, required with --strata r6 and "
+                         "only there")  # fmt: skip
+    cpu_deployed = a.cpu_deployed
+    if a.comparator is not None:
+        if cpu_deployed is None:
+            cpu_deployed = a.comparator
+        elif cpu_deployed != a.comparator:
+            raise SystemExit(f"--cpu-deployed {cpu_deployed}: round 6 compares with --comparator "
+                             f"{a.comparator}")  # fmt: skip
     docs = [json.loads(p.read_text()) for p in a.labels]
     params = {d["params_sha256"] for d in docs}
     models = {d.get("model", {}).get("sha256") for d in docs}
     if not all(d.get("eval_test") for d in docs) or len(params) != 1 or len(models) != 1:
         raise SystemExit("--labels: fiT --eval-test label files, one params file, one model")
-    anchor = json.loads(Path(docs[0]["params"]).read_text())["anchor_px"]
+    params_doc = json.loads(Path(docs[0]["params"]).read_text())
+    anchor = params_doc["anchor_px"]
     preds = {}
     for spec in a.predictions:
         name, sep, path = spec.partition("=")
         if not sep or name in preds:
             raise SystemExit(f"--predictions {spec!r}: NAME=FILE, each name once")
         preds[name] = json.loads(Path(path).read_text())
-    crops = evaluated_crops(json.loads(a.key.read_text()), json.loads(a.evaluated.read_text()))
-    latency: dict[str, Any] = {"cpu_item": a.cpu_item, "cpu_deployed": a.cpu_deployed}
+    key = json.loads(a.key.read_text())
+    why = round_inputs_refusal(a.strata, docs, params_doc, key)
+    if why is not None:
+        raise SystemExit(why)
+    crops = evaluated_crops(key, json.loads(a.evaluated.read_text()))
+    latency: dict[str, Any] = {"cpu_item": a.cpu_item, "cpu_deployed": cpu_deployed}
     if a.gpu_timing is not None:
         latency["gpu_ms"] = list(
             json.loads(a.gpu_timing.read_text())["timing_ms"]["per_frame"].values()
@@ -506,7 +602,15 @@ def main(argv: Sequence[str] | None = None) -> int:
     if a.gpu_server is not None:
         fi_d, gb_d = (json.loads(p.read_text())["models"] for p in a.gpu_server)
         latency["gpu_server_item"] = next(iter(fi_d.values()))["server"]
-        latency["gpu_server_deployed"] = next(iter(gb_d.values()))["server"]
+        if a.comparator is None:
+            latency["gpu_server_deployed"] = next(iter(gb_d.values()))["server"]
+        else:  # round 6: the second file is the comparator's, the first is not
+            if a.comparator not in gb_d or a.comparator in fi_d:
+                raise SystemExit(f"--gpu-server ITEM COMPARATOR: the second file must hold "
+                                 f"{a.comparator}, the first another model")  # fmt: skip
+            latency["gpu_server_deployed"] = gb_d[a.comparator]["server"]
+    if a.comparator is not None:
+        latency["comparator"] = a.comparator
     res = evaluate(docs, preds, crops, anchor, latency, a.strata)
     res.update(
         {
@@ -516,6 +620,8 @@ def main(argv: Sequence[str] | None = None) -> int:
             "labels": [str(p) for p in a.labels],
         }
     )
+    if a.strata in ROUND_BARS:  # round 6: its own bar values, recorded beside the score
+        res.update({"strata": a.strata, "bars": dict(bars_of(a.strata)), "mins": dict(MINS)})
     a.out.write_text(json.dumps(res, indent=1) + "\n")
     print(json.dumps(res, indent=1)[:6000])
     return 0
