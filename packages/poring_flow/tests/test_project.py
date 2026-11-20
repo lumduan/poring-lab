@@ -817,7 +817,7 @@ def test_the_python_view_s_start_line_names_the_map() -> None:
                         "project.py"]  # fmt: skip
     # live-blocks.md 12: a setting is a plain assignment with its words as a comment
     assert "\nknife_hp_min = 0.5  # or at once under HP (50 %)\n" in by["xmas_dun02/knife.py"]
-    assert "\nknife_swap = True  # Batt's Knife swap (on / off)\n" in by["xmas_dun02/knife.py"]
+    assert "\nknife_swap = True  # the weapon swap (Batt's technique) (on / off)\n" in by["xmas_dun02/knife.py"]
     assert '\nsteal_cue = "popup"  # the steal cue (popup / both)\n' in by["xmas_dun02/knife.py"]
     assert "\nD0_PX = 150  # the distance that halves a monster's worth (px)\n" in by[
         "xmas_dun02/aim.py"]  # fmt: skip

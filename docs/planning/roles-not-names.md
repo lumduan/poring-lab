@@ -95,7 +95,10 @@ heal item) cannot simply be edited.
      Knife").
 3. **Monster roles everywhere.** Every alarm / boss / target setting reads the model's lists
    (alarm, strikes, a new `bosses` list). `garm_baby` stays the fallback of the lab's model only.
-4. **(LATER, not now: Batt)** The ML page:
+4. ➡️ **Inserted by Batt 2026-11-20: waypoints and NPC talks, recorded by demonstration**
+   ([waypoints-npc-recording.md](waypoints-npc-recording.md)), after steps 1-3 and BEFORE the
+   ML page.
+5. **(LATER, not now: Batt)** The ML page:
    - record a video for a set time (record_session's time box);
    - move the boxes (the `/qa` editor's drag);
    - put the labels (classes the user names);

@@ -180,7 +180,7 @@ test("the inspector's tabs: a summary line each, the settings in words with unit
   assert.equal(by.aim.rows.find((r) => r.name === "WALKER_PX")?.text, "feet moving this far = a walking target 10 px");
   assert.equal(by.knife.rows.find((r) => r.name === "knife_hp_min")?.text, "or at once under HP 50 %");
   assert.equal(by.walk.rows.find((r) => r.name === "WALK_PICK_TOL")?.text, "the client's pick within 1 cell");
-  assert.equal(by.knife.rows.find((r) => r.name === "knife_swap")?.text, "Batt's Knife swap on");
+  assert.equal(by.knife.rows.find((r) => r.name === "knife_swap")?.text, "the weapon swap (Batt's technique) on");
   // an ordinary variable keeps its line
   aim.vars.my_count = { kind: "lit", value: 3 };
   assert.equal(tabRows(p, xm).find((t) => t.tab === "aim")!.rows[0].text, "my_count = 3");

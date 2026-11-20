@@ -150,7 +150,7 @@ test("a reference shows ▾, and ⚠ when it is not one of what exists; its valu
 test("the real Blockly builds the rows layout.ts measures: each runner role with its words in ONE end-row input", () => {
   const ws = new B.Workspace();
   const hunt = B.serialization.blocks.append({ type: "pl_dungeon_hunt" }, ws);
-  const words: Record<string, string> = { HEAL: "heal:", FLY: "Fly Wing:", KNIFE_ON: "Knife on:", KNIFE_BACK: "Knife off:", HOME: "home:", RESPAWN: "died:", RESPAWN_OK: "confirm:", EAT: "eat:" };
+  const words: Record<string, string> = { HEAL: "heal:", FLY: "Fly Wing:", KNIFE_ON: "swap on:", KNIFE_BACK: "swap off:", HOME: "home:", RESPAWN: "died:", RESPAWN_OK: "confirm:", EAT: "eat:" };
   for (const [field, w] of Object.entries(words)) {
     const input = hunt.inputList.find((i) => i.fieldRow.some((f) => f.name === field))!;
     assert.ok(input instanceof B.inputs.EndRowInput, field); // the row ends after it (zelos)

@@ -170,8 +170,8 @@ export type KeysResult = { ok: true; keys: RunnerKeys; from: KeySource } | { ok:
 export const RUNNER_ROLE_KEYS = [
   { param: "heal", key: "heal_key", words: "heal" },
   { param: "fly", key: "fly_key", words: "Fly Wing" },
-  { param: "knife_on", key: "knife_key", words: "Knife on" },
-  { param: "knife_back", key: "dagger_key", words: "Knife back" },
+  { param: "knife_on", key: "knife_key", words: "swap on" },
+  { param: "knife_back", key: "dagger_key", words: "swap off" },
 ] as const;
 /** The runner block's OPTIONAL fifth role (the one box): the Butterfly Wing it flies home on. */
 export const HOME_ROLE = "home";

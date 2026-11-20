@@ -137,8 +137,8 @@ export const CREDENTIALS = ["lab_gm", "lab_player"] as const;
 export const RUNNER_ROLES = [
   { param: "heal", field: "HEAL", words: "heal", fn: "heal", optional: false },
   { param: "fly", field: "FLY", words: "Fly Wing", fn: "fly_wing", optional: false },
-  { param: "knife_on", field: "KNIFE_ON", words: "Knife on", fn: "knife_on", optional: false },
-  { param: "knife_back", field: "KNIFE_BACK", words: "Knife back", fn: "knife_back", optional: false },
+  { param: "knife_on", field: "KNIFE_ON", words: "swap on", fn: "knife_on", optional: false },
+  { param: "knife_back", field: "KNIFE_BACK", words: "swap off", fn: "knife_back", optional: false },
   { param: "home", field: "HOME", words: "home (Butterfly Wing)", fn: "butterfly_wing", optional: true },
   { param: "respawn", field: "RESPAWN", words: "respawn", fn: "respawn_button", optional: true },
   { param: "respawn_confirm", field: "RESPAWN_OK", words: "respawn confirm", fn: "respawn_ok", optional: true },
@@ -147,7 +147,7 @@ export const RUNNER_ROLES = [
 
 const endRow = (name: string): ArgDef => ({ type: "input_end_row", name });
 /** Each runner role's words on its row, beside its picker (round 21: a role a row). */
-const ROLE_WORDS: Record<string, string> = { HEAL: "heal:", FLY: "Fly Wing:", KNIFE_ON: "Knife on:", KNIFE_BACK: "Knife off:", HOME: "home:", RESPAWN: "died:", RESPAWN_OK: "confirm:", EAT: "eat:" };
+const ROLE_WORDS: Record<string, string> = { HEAL: "heal:", FLY: "Fly Wing:", KNIFE_ON: "swap on:", KNIFE_BACK: "swap off:", HOME: "home:", RESPAWN: "died:", RESPAWN_OK: "confirm:", EAT: "eat:" };
 /** Each role's field default, as before round 21 (home's: the Butterfly Wing's function). */
 const ROLE_DEFAULT: Record<string, string> = { HEAL: "heal", FLY: "fly_wing", KNIFE_ON: "knife_on", KNIFE_BACK: "knife_back", HOME: "butterfly_wing", RESPAWN: "", RESPAWN_OK: "", EAT: "" };
 /** A runner role's slot: the functions of the node and Global, its usual one first. `value`: the
@@ -1006,7 +1006,7 @@ export function toolbox(
     } else {
       recipes.push(lbl("use_model(...) in the main names the monsters (a trained model)"));
     }
-    recipes.push(lbl("A recipe's steps, in this order (no Knife on a monster: leave out knife_on, wait_steal, knife_back):"));
+    recipes.push(lbl("A recipe's steps, in this order (no weapon swap on a monster: leave out knife_on, wait_steal, knife_back):"));
     recipes.push({ kind: "block", type: "pl_call", fields: { PROC: "knife_on", ARGS: "" } });
     for (const s of RECIPE_STEPS) {
       if (s === "wait_kill") recipes.push({ kind: "block", type: "pl_call", fields: { PROC: "knife_back", ARGS: "" } });

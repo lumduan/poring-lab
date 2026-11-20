@@ -107,7 +107,7 @@ class Field:
 GROUPS: tuple[tuple[str, str, str], ...] = (
     ("keys", "hotbar keys", "each its own row-1 key, as on her hotbar"),
     ("survival", "heal and escape", "when she drinks, when she flies away"),
-    ("knife", "the Knife swap", "Batt's technique: the Knife at idle, the dagger back on"),
+    ("knife", "the weapon swap", "Batt's technique: an idle weapon at rest, the fighting weapon back on"),
     ("exits", "leaving the map", "when the bag sends her home"),
     ("respawn", "the respawn", "after a death: respawn or not, and the waits"),
     ("start", "the start", "what she needs before the first step"),
@@ -126,13 +126,13 @@ FIELDS: tuple[Field, ...] = (
     Field("heal_key", "keys", "key", "heal item", flag="--heal-key"),
     Field("fly_key", "keys", "key", "Fly Wing", flag="--fly-key"),
     Field("home_key", "keys", "key", "Butterfly Wing", flag="--player-home-key"),
-    Field("knife_key", "keys", "key", "Knife", flag="--steal-opener"),
-    Field("dagger_key", "keys", "key", "dagger", flag="--dagger-key"),
+    Field("knife_key", "keys", "key", "the idle weapon (the swap's)", flag="--steal-opener"),
+    Field("dagger_key", "keys", "key", "the fighting weapon", flag="--dagger-key"),
     Field(
         "knife_max_s",
         "knife",
         "number",
-        "dagger back after (or at the steal)",
+        "the fighting weapon back after (or at the steal)",
         0.2,
         20.0,
         0.1,
@@ -462,7 +462,7 @@ FIELDS: tuple[Field, ...] = (
         "GARM_FRESH_S",
         "safety",
         "number",
-        "a Garm Baby alarm at most this old",
+        "an alarm at most this old",
         0.2,
         10,
         _S,
@@ -555,7 +555,7 @@ FIELDS: tuple[Field, ...] = (
 _ON, _OFF = True, False
 SWITCHES: tuple[Field, ...] = (
     # the Knife swap
-    Field("knife_swap", "knife", "switch", "Batt's Knife swap", flag="--bare-steal"),
+    Field("knife_swap", "knife", "switch", "the weapon swap (Batt's technique)", flag="--bare-steal"),
     Field(
         "bare_ready",
         "knife",
@@ -889,15 +889,15 @@ SWITCHES: tuple[Field, ...] = (
         "garm_fly",
         "safety",
         "switch",
-        "a Garm Baby seen: a Fly Wing",
+        "an alarm monster seen (its model's alarm list): a Fly Wing",
         flag="--garm-fly",
-        warn="she stays when a Garm Baby comes (two killed her, 11-09)",
+        warn="she stays when an alarm monster comes (two Garm Babies killed her, 11-09)",
     ),  # fmt: skip
     Field(
         "garm_confirm",
         "safety",
         "int",
-        "Garm Baby alarm: seen in this many detections in a row",
+        "the alarm: a monster seen in this many detections in a row",
         1,
         5,
         1,
@@ -908,17 +908,17 @@ SWITCHES: tuple[Field, ...] = (
         "alarm_fast",
         "safety",
         "switch",
-        "Garm Baby alarm also read on the HUD's boxes and inside a strike or a wait",
+        "the alarm also read on the HUD's boxes and inside a strike or a wait",
         flag="--alarm-fast",
         needs=(("garm_fly", _ON),),
-        warn="the Garm Baby alarm is read only between steps (the knight's party killed her "
+        warn="the alarm is read only between steps (the knight's party killed her "
         "10 times on 11-13/14 with the alarm never read in time)",
     ),  # fmt: skip
     Field(
         "alarm_solo",
         "safety",
         "share",
-        "Garm Baby alarm: one box this sure is enough (0 = off)",
+        "the alarm: one box this sure is enough (0 = off)",
         0.0,
         1.0,
         0.05,
@@ -929,14 +929,14 @@ SWITCHES: tuple[Field, ...] = (
         "fly_first",
         "safety",
         "switch",
-        "a boss seen, at any distance: the Fly Wing first, no Knife swap before it",
+        "a boss seen, at any distance: the Fly Wing first, no weapon swap before it",
         flag="--fly-first",
     ),  # fmt: skip  # dungeon@9.57 (live-blocks.md 18); ON in the ready-made boxes (18.10)
     Field(
         "fly_first_hp",
         "safety",
         "switch",
-        "HP low, no boss in sight: the Fly Wing first too, no Knife swap before it",
+        "HP low, no boss in sight: the Fly Wing first too, no weapon swap before it",
         flag="--fly-first-hp",
         needs=(("fly_first", _ON),),
     ),  # fmt: skip  # dungeon@9.58 (18.10 #2; live-blocks.md 18.11): OFF until s8ab
@@ -1252,7 +1252,7 @@ NOT_SETTINGS: dict[str, str] = {
     "--start-cell": "a GM trial line (refused in player mode)",
     "--stage-at": "a GM trial line (refused in player mode)",
     "--clear-map": "a GM line (refused in player mode)",
-    "--steal": "the Steal skill opening: refused with the Knife swap",
+    "--steal": "the Steal skill opening: refused with the weapon swap",
     "--heal-candy": "needs its own hotbar layout (candies on F6 / F7): not a switch yet",
     "--rest": "P2 never rests",
     "--plant-sweep": "an old White Plant sweep, off since dungeon@5",
@@ -1615,7 +1615,7 @@ def typo_of(var: str) -> Field | None:
 
 def comment(f: Field, v: Any) -> str:
     """The Python view's comment after a setting's assignment: its words and how to read the
-    value ("# or at once under HP (50 %)", "# Batt's Knife swap (on / off)")."""
+    value ("# or at once under HP (50 %)", "# the weapon swap (Batt's technique) (on / off)")."""
     if f.kind == "switch":
         how = "on / off"
     elif f.kind == "choice":

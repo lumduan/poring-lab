@@ -136,7 +136,7 @@ def test_the_setting_blocks_round_trip_through_the_python_view() -> None:
     files = {f.path: f.text for f in V.print_files(p)}
     assert V.parse_files(files) == p
     g = files["global/knife.py"]
-    assert "\nknife_swap = False  # Batt's Knife swap (on / off)\n" in g
+    assert "\nknife_swap = False  # the weapon swap (Batt's technique) (on / off)\n" in g
     assert '\nsteal_cue = "both"  # the steal cue (popup / both)\n' in g
     assert '\nrespawn_confirm_at = "none"  # the OK button that confirms the respawn ("X,Y" in ' \
            'the game picture or "none")' in files["global/respawn.py"]  # fmt: skip
@@ -183,7 +183,7 @@ def test_the_clash_rule_is_an_error_and_unused_settings_are_info() -> None:
     (clash,) = rules(p, "settings_clash")
     assert clash[:2] == ("error", "xmas_dun02") and "faster than the detector" in clash[2]
     info = {w: t for s, w, t in rules(p, "settings_use") if s == "info"}
-    assert "is not in use while Batt's Knife swap (knife_swap) is off" in info[
+    assert "is not in use while the weapon swap (Batt's technique) (knife_swap) is off" in info[
         "xmas_dun02/knife/knife_max_s"]  # fmt: skip
     # the one box as shipped: no clash, no setting error, no safety switch off; the blocks it holds
     # that are not in use say so (their needs are off: by default, or fly_first in this reference

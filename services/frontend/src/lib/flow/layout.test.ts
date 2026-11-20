@@ -33,7 +33,7 @@ test("the positive case: the model gives main's three rows the reviewer re-measu
   const rows: [string, number, number][] = [
     ["the save point is on geffen x 119 y 40", INDENT + rowUnits([textUnits("the save point is"), textUnits("on"), box("geffen"), textUnits("x"), num("119"), textUnits("y"), num("40")]), (404 - 135) / 0.6],
     ['use_model ( model="xmas02" ) ● plays live', INDENT + rowUnits([textUnits("use_model"), textUnits("("), box('model="xmas02"'), textUnits(")"), textUnits("● plays live")]), (402 - 135) / 0.6],
-    ["Fly Wing: call fly_wing Knife on: call knife_on", INDENT + rowUnits([textUnits("Fly Wing: call"), box("fly_wing"), textUnits("Knife on: call"), box("knife_on")]), (413 - 135) / 0.6],
+    ["Fly Wing: call fly_wing swap on: call knife_on", INDENT + rowUnits([textUnits("Fly Wing: call"), box("fly_wing"), textUnits("swap on: call"), box("knife_on")]), (413 - 135) / 0.6],
   ];
   for (const [what, model, measured] of rows) {
     assert.ok(model >= measured && model <= measured * 1.15, `${what}: the model ${Math.round(model)} units, measured ${Math.round(measured)}`);
@@ -70,8 +70,8 @@ test("main's stack at 390: the save point, use_model and the runner on rows; one
     "pl_action: [BADGE]",
     "pl_dungeon_hunt: heal: [HEAL]",
     "pl_dungeon_hunt: Fly Wing: [FLY]",
-    "pl_dungeon_hunt: Knife on: [KNIFE_ON]",
-    "pl_dungeon_hunt: Knife off: [KNIFE_BACK]",
+    "pl_dungeon_hunt: swap on: [KNIFE_ON]",
+    "pl_dungeon_hunt: swap off: [KNIFE_BACK]",
     "pl_dungeon_hunt: home: [HOME]",
     "pl_dungeon_hunt: died: [RESPAWN]",
     "pl_dungeon_hunt: confirm: [RESPAWN_OK]",
