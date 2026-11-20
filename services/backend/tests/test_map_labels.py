@@ -1235,15 +1235,17 @@ X2_MANIFEST = NAS / X2 / "manifest.json"
 @pytest.mark.skipif(not X2_MANIFEST.exists(), reason="the NAS is absent")
 def test_t3_positive_case_x2s_manifest_passes() -> None:
     """T-3's positive case: X2's manifest (recorder v6; ITS MANIFEST ONLY, X2 is TEST) is on the
-    recording path now; the same manifest at v5 and v7 (ADR-0024) passes and at v8 is refused
-    (the rule: a recorder version nobody has read is refused)."""
+    recording path now; the same manifest at v5, v7 (ADR-0024) and v8 (xmas02-1080 T-V1: + the
+    client_view) passes and at v9 is refused (the rule: a recorder version nobody has read is
+    refused)."""
     m = json.loads(X2_MANIFEST.read_text())
     assert m["recorder_version"] == 6 and m["session_id"] == X2
     ml.check_recording(m)
     ml.check_recording({**m, "recorder_version": 5})
     ml.check_recording({**m, "recorder_version": 7})
+    ml.check_recording({**m, "recorder_version": 8})
     with pytest.raises(SystemExit, match="recorder_version"):
-        ml.check_recording({**m, "recorder_version": 8})
+        ml.check_recording({**m, "recorder_version": 9})
 
 
 def test_t2_xmas02_spec() -> None:

@@ -65,18 +65,36 @@ def path_of(manifest: Mapping[str, Any]) -> str | None:
 
 
 def panel_rects(manifest: Mapping[str, Any]) -> tuple[Rect, ...]:
-    """PURE (T-V3): the pasted panels' virtual boxes (x0, y0, x1, y1) of a virtual session, the
-    pointer's patch left out; () for the 720 path. They are UI to the label rule: their pixels are
-    the real client's, unscaled. They hold the layout's 720 windows whole (nested_rects drops
-    those); Basic Info's box and the hotbar's still share a 4 x 40 px strip (226-230, 0-40), which
-    covered_fraction counts twice (it SUMS overlaps): reported, not corrected."""
+    """PURE (T-V3): a virtual session's UI to the label rule, as (x0, y0, x1, y1); () for the 720
+    path. Two kinds per pasted panel (the pointer's patch left out):
+
+    * the panel's virtual box: its pixels are the real client's, unscaled;
+    * its GHOST (clientview.ClientView._ghost): where the world transform puts the panel's REAL box,
+      blanked black in every virtual frame, because the real window hides the world there. At 1080
+      the real windows keep their saved 720 pixels, so the real chat window at (0, 578) blanks the
+      virtual world at about (0, 385)-(400, 480) (Amendment 1).
+
+    The boxes hold the layout's 720 windows whole (nested_rects drops those). Basic Info's box and
+    the hotbar's still share a 4 x 40 px strip (226-230, 0-40), and ghosts may meet a panel:
+    covered_fraction counts such overlaps twice (it SUMS them). Reported, not corrected."""
     if path_of(manifest) != "virtual-1080":
         return ()
+    from poring_env.clientview import ClientView, Panel
+
+    cv = manifest["client_view"]
+    panels = tuple(Panel(str(p["name"]), tuple(int(v) for v in p["virtual"]),  # type: ignore[arg-type]
+                         (int(p["real_xy"][0]), int(p["real_xy"][1])))
+                   for p in cv.get("panels") or [] if p["name"] != "cursor")  # fmt: skip
+    view = ClientView(tuple(int(v) for v in cv["rect"]), cv["mode"],  # type: ignore[arg-type]
+                      float(cv["world_scale"]), tuple(cv["world_centre"]), panels)  # fmt: skip
     out: list[Rect] = []
-    for p in manifest["client_view"].get("panels") or []:
-        name, (x, y, w, h) = p["name"], p["virtual"]
-        if name != "cursor":
-            out.append((int(x), int(y), int(x) + int(w), int(y) + int(h)))
+    for p in panels:
+        x, y, w, h = p.virtual
+        out.append((x, y, x + w, y + h))
+    for p in panels:
+        g = view._ghost(p)
+        if g is not None:
+            out.append(g)
     return tuple(out)
 
 

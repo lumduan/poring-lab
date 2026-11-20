@@ -65,14 +65,35 @@ def test_the_virtual_path_needs_v8_and_its_view() -> None:
     assert rp.path_of(virtual1080(backend="console")) is None
 
 
-def test_panel_rects_are_the_pasted_panels_without_the_pointer() -> None:
-    assert rp.panel_rects(virtual1080()) == (
-        (0, 0, 230, 150),
-        (226, 0, 526, 40),
-        (0, 578, 600, 720),
-        (1130, 10, 1280, 170),
-    )
+def test_panel_rects_are_the_panels_and_their_ghosts_without_the_pointer() -> None:
+    rects = rp.panel_rects(virtual1080())
+    assert rects[:4] == ((0, 0, 230, 150), (226, 0, 526, 40), (0, 578, 600, 720),
+                         (1130, 10, 1280, 170))  # fmt: skip
+    # the chat window's real box (0, 938)-(600, 1080) blanks the virtual world at
+    # x 0..400, y 360 + (938 - 540) / 1.5 = 625.3 .. 720 (the ghosts' own rule)
+    assert (0, 625, 400, 720) in rects
+    assert not any(r[0] >= 600 and r[1] >= 300 and r[2] <= 668 for r in rects)  # no pointer box
     assert rp.panel_rects(virtual1080(recorder_version=7)) == ()  # refused: no rects either
+
+
+def test_the_ghosts_are_black_in_the_virtual_frame() -> None:
+    """A positive case through the frame builder itself: every ghost rect panel_rects names is
+    black in ClientView.virtual_frame's output outside the pasted panels (here the lab's real
+    chat window at its saved 720 pixels, as on 2026-11-20 08:00's client)."""
+    import numpy as np
+
+    panels = [{"name": "chat", "virtual": [0, 578, 600, 142], "real_xy": [0, 578]}]
+    m = virtual1080()
+    m["client_view"] = {**m["client_view"], "panels": panels}
+    rects = rp.panel_rects(m)
+    assert rects == ((0, 578, 600, 720), (0, 385, 400, 480))
+    view = ClientView((0, 0, 1920, 1080), "fullscreen", 1.5, None,
+                      (Panel("chat", (0, 578, 600, 142), (0, 578)),))  # fmt: skip
+    real = np.full((1080, 1920, 3), 200, np.uint8)
+    out = view.virtual_frame(real)
+    x0, y0, x1, y1 = rects[1]
+    assert (out[y0:y1, x0:x1] == 0).all()
+    assert (out[y0 - 2, x0:x1] == 200).all() and (out[y0:y1, x1 + 1] == 200).all()
 
 
 def test_map_labels_gate_follows_the_paths() -> None:
