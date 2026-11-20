@@ -501,7 +501,7 @@ A count under its minimum is NO VERDICT, never a pass.
   - the labellers: AI (started 06:06) and AJ, new blind subagents that see only the pack; scored
     once by `fi_blind_score.py` when both have answered, with section 6's bars.
 
-### Amendment 12 (2026-11-21 06:15 ICT from `date`): T2 PASSES (scored once, 06:14)
+### Amendment 12 (2026-11-21 06:14 ICT from `date`): T2 PASSES (scored once, 06:14)
 
 - The blind labellers AI and AJ (new subagents that saw only the pack) answered all 60 crops
   (answers sha256 `b4ff62c8f2db3166...`, `db052a5bdb1c988b...`). `fi_blind_score.py --key
