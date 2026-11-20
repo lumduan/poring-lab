@@ -110,3 +110,23 @@ heal item) cannot simply be edited.
 
 - No new technique or new class behaviour: the swap's timing is Batt's technique as it is.
 - The map-specific runner data (xmas_dun02's routes, stands) stays per map; that is its own work.
+
+## Amendment 1 (2026-11-20 14:29 ICT from `date`): step 2 needs NO runner edit
+
+- **The item roles are module-level TABLES the runner reads at call time:**
+  - `dungeon_hunt.SLOT_ROLES`: "opener" = (1201,) the Knife, "potion" = (504,) a White Potion,
+    "home", "cane", "candy" (read at line ~1790, `sr = SLOT_ROLES[role]`);
+  - `STOCK_ITEMS` = {"potion": 504, "fly": 601};
+  - `HEAL_ORDER`.
+- **The Run player already patches the runner in-process for a player's Run**
+  (`player_owns_the_start`: the refusals become warnings).
+- **So step 2 is the same kind of patch, in flow_play (not pinned), for the length of one Run:**
+  the picked items replace those table entries (e.g. "opener" = the player's idle weapon's ids,
+  "potion" = the heal item's).
+  - `dungeon_hunt.py` stays byte-identical, so no proof is re-baselined.
+  - The lab's A/B runs (no player's picks) read the tables as they are.
+- **The picks' source:** new settings blocks (an item picker over the hotbar's / the bag's items;
+  for a weapon, only items whose type is a weapon). They are carried to the Run like the other
+  settings.
+- **Tests:** a Run with picks plays the runner's own start check and stock rules on the picked
+  ids; a Run without picks equals today's (the same tables, an identity test).
