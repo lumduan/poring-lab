@@ -48,7 +48,7 @@ import json
 import os
 import sys
 import time
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -414,9 +414,17 @@ def _bottom(lum: np.ndarray, y: int, s: int, e: int,
     return None
 
 
-def find_any(img_rgb: Any) -> dict[str, Any] | None:
+def find_any(img_rgb: Any, avoid: Sequence[tuple[int, int, int, int]] = ()
+             ) -> dict[str, Any] | None:  # fmt: skip
     """A chat window of ANY size and width, anywhere: {"left", "right", "text_top", "bottom",
     "lines", "input"} (find's keys plus "right", its right border's column), or None.
+
+    ➡️ 2026-11-20 (xmas02-1080-detector.md Amendment 2): of every window-shaped candidate, the one
+    with the MOST lines, then the lowest bottom -- not the first from the top -- and none that
+    overlaps an ``avoid`` rectangle (x0, y0, x1, y1: the windows already found). At 1080, over
+    xmas_dun02's pink wall, the HOTBAR's white edge read as a 1-line chat window above the real
+    one; the first-from-the-top rule took it, and the re-check at its place kept it, so every
+    chat check of the watch and the runner failed until the scene changed.
 
     Its white top border (a run of at least TOP_MIN_RUN px, wherever the tabs end); its grey
     right border BORDER_DX px right of the border's last pixel, running down from it (tried from
@@ -431,6 +439,7 @@ def find_any(img_rgb: Any) -> dict[str, Any] | None:
     h, w = lum.shape
     white = lum >= WHITE
     band = (lum >= BORDER_LO) & (lum <= BORDER_HI)  # the right border's colour, everywhere
+    best: list[dict[str, Any]] = []
     for y in np.nonzero(white.sum(axis=1) >= TOP_MIN_RUN)[0]:
         y = int(y)
         if y + 8 > h:
@@ -456,10 +465,21 @@ def find_any(img_rgb: Any) -> dict[str, Any] | None:
                 col = _left_border(lum, y, s, sep_y)
                 if col is None:
                     continue
-                return {"left": col - LEFT_BORDER_DX, "right": right, "text_top": y,
-                        "bottom": bottom, "lines": (bottom - 37 - y) // LINE_PITCH,
-                        "input": state}  # fmt: skip
-    return None
+                got = {"left": col - LEFT_BORDER_DX, "right": right, "text_top": y,
+                       "bottom": bottom, "lines": (bottom - 37 - y) // LINE_PITCH,
+                       "input": state}  # fmt: skip
+                if not any(_overlaps(got, r) for r in avoid):
+                    best.append(got)
+                break  # this run's window is read (its rightmost border): the next run
+    if not best:
+        return None
+    return max(best, key=lambda c: (c["lines"], c["bottom"], -c["text_top"]))
+
+
+def _overlaps(c: Mapping[str, Any], r: Sequence[int]) -> bool:
+    """PURE: the candidate (left..right, text_top..bottom) meets rectangle r (x0, y0, x1, y1)."""
+    return bool(c["left"] < r[2] and r[0] <= c["right"] and c["text_top"] < r[3]
+                and r[1] <= c["bottom"])  # fmt: skip
 
 
 PADLOCK_BOX = (578, -14, 597, -2)  # x0, dy0, x1, dy1: from (left, text_top)

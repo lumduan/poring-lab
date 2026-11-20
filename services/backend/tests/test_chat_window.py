@@ -586,3 +586,19 @@ def test_find_any_agrees_with_find_on_the_lab_standard() -> None:
         img = draw_any(0, 719, 6, input_open=input_open)
         got, std = cw.find_any(img), cw.find(img)
         assert std is not None and got == {**std, "right": 596}
+
+
+def test_find_any_takes_the_fullest_window_not_the_first_from_the_top() -> None:
+    """2026-11-20 08:2x (xmas02-1080 Amendment 2): at 1080, over xmas_dun02's pink wall, the
+    hotbar's edge read as a 1-line window ABOVE the real 6-line chat; the first-from-the-top rule
+    took it. The fullest candidate wins, and a candidate inside ``avoid`` is never taken."""
+    img = draw_any(0, 719, 6, h=1080, w=1920, scene_under=True)
+    hot = draw_any(215, 82, 1, width=311, h=1080, w=1920)  # a 1-line window-shaped strip up top
+    img[:200] = hot[:200]
+    got = cw.find_any(img)
+    assert got is not None and (got["bottom"], got["lines"]) == (719, 6)
+    alone = draw_any(215, 82, 1, width=311, h=1080, w=1920)
+    assert cw.find_any(alone) is not None  # the strip alone still reads (the rule is unchanged)
+    assert cw.find_any(alone, avoid=[(226, 0, 526, 40)]) is None  # ... unless it is a found window
+    both = cw.find_any(img, avoid=[(226, 0, 526, 40)])
+    assert both is not None and both["lines"] == 6

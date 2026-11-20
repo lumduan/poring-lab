@@ -349,8 +349,12 @@ def find_panels(screen: Any = None, real: Any = None) -> dict[str, Any]:
         real = screen.grab_meta(*region)[1]
     bgr = np.ascontiguousarray(np.asarray(real)[..., :3])
     lum = pf.luma(bgr)
-    found = panel_places(pf.find_basic_info(lum), pf.find_hotbar(lum),
-                         cw.find_any(bgr[..., ::-1]))  # fmt: skip
+    basic, hotbar = pf.find_basic_info(lum), pf.find_hotbar(lum)
+    # the chat window is searched OUTSIDE the windows already found (chat_window.find_any's
+    # ``avoid``, 2026-11-20): over a bright scene the hotbar's edge reads as a 1-line chat window
+    avoid = [(x, y, x + bw, y + bh) for f in panel_places(basic, hotbar, None).values()
+             for (x, y), (_, _, bw, bh) in [(f["real_xy"], f["virtual"])]]  # fmt: skip
+    found = panel_places(basic, hotbar, cw.find_any(bgr[..., ::-1], avoid))
     size = (region[2], region[3])
     st = {"v": 1, "region": list(region), "t_wall": time.time(), "found": found,
           "moved": panels_moved(found, size),
