@@ -519,3 +519,37 @@ A count under its minimum is NO VERDICT, never a pass.
     tail out of the box). Near-her (N) is the weak stratum at 1080 (0.80 for both): reported.
 - Next (section 7): the cache (the 720 round 5 linked, --pooled-g2 for the seven pooled pilots),
   then the training from xmas02fi5's last.pt.
+
+### Amendment 13 (2026-11-21 06:23 ICT from `date`, BEFORE the cache is written): the cache and the training, fixed
+
+- `build_frame_cache.py --pooled-g2` merged (c3063039; Amendment 7's pool recomputed from the
+  label files, join `G2_POOLED`; a test). The dry run from main (sha256 `4ee64c4efbda90a2...`):
+  - TRAIN, the 1080 part (13 sessions, none refused): ifT1 / ifT9 / ifT10 G2_PASS; ifT2-ifT8
+    G2_POOLED (the pool n 46, 2.0 / 2.0 px, PASS); ifs1c / ifs2b / ifs3 G2_PASS;
+  - its counts: 1,793 frames = 260 item frames (394 boxes) + 1,533 negatives (150 each from the
+    ten pilots' own play frames, as round 5's session negatives; 1 per 3 item frames from the
+    stagings), ~3.7 GB in 13 shards;
+  - VAL = ifF (VAL_MONITOR, 30 item frames, 10 negatives); the linked round 5's TRAIN by reference;
+  - **combined TRAIN: 49 sessions, 5,457 frames, 1,841 item frames, 4,307 labels, 3,616
+    negatives.**
+- **The cache step** (the dry run's command without --dry-run; the written counts must equal
+  these, else no GPU step):
+
+      python3 scripts/guarded_build.py --threshold 30 --sustain 30 "cache@7200=--labels items \
+        --item-params <the freeze> --item-params-sha256 ad268afd... --fi-labels <ifF + the 13> \
+        --class-list config/detector/classes-xmas02-fi.json --train <the 13> --val <ifF> \
+        --session-negs <the 10 pilots> --link-cache xmas02-fi-r5-20261112 --pooled-g2 \
+        --cache-id xmas02-fi-r6-1080-20261121 --image png"
+
+- **The training** (section 7): epochs = min(12, max(3, floor(5400 / (0.64 x 5,457 + 100)))) =
+  **3**; from xmas02fi5's `last.pt` (round 5, 331b1927...); one guarded step in the worker:
+
+      python3 scripts/guarded_build.py --threshold 30 --sustain 30 "execdev:vision@43200=python -m \
+        poring_vision.train --cache /datasets/.framecache/xmas02-fi-r6-1080-20261121 --epochs 3 \
+        --batch 2 --workers 2 --name xmas02-fi-r6-1080-20261121 --mid-ckpt \
+        --weights /datasets/archive/train/xmas02-fi-r5-20261112/weights/last.pt \
+        --hsv-s 0.2 --close-mosaic 3 --scale 0.1"
+
+  (imgsz 1280 and seed 20261004 are the trainer's defaults). Estimate: round 5's rate (0.52 s a
+  frame-epoch) x 5,457 x 3 = ~2.4 h.
+- After it: the freeze, the ONNX, then 8a / 8b once (sections 8a, 8b), then 8c in play.
