@@ -301,3 +301,14 @@ A count under its minimum is NO VERDICT, never a pass.
   - the 30-fit minimum is met (44);
   - the TRAIN pilots add many more items, but they are labelled under THIS freeze.
 - Next: T1 (ifF's own VAL labels at the frozen params pass G2).
+
+### Amendment 5 (2026-11-20 22:46 ICT from `date`): T1 PASSES
+
+- ifF labelled at the frozen params (`--spec 1080 --split val`, 22:46):
+  - 1,539 frames recorded; 913 candidate frames, 848 kept; 30 item labels; 10 floor items in the
+    packets.
+- **G2: median |dx| 0.5, |dy| 1.0 px on 44 fits (4 floor items), 95.5 % within 3 px: PASS.**
+- Disclosed: ifF's VAL is thin, 30 labels (720's p31 had 233). VAL only monitors the training;
+  the bars are the held-outs'.
+- (`fi_labels.py g2` takes no `--spec`: the label file carries its rule.)
+- TRAIN labels start with the chain's pilots, each admitted by its own G2.
