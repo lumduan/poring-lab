@@ -311,3 +311,35 @@ FIT ran 09:04-09:08 (`run-fit.sh`, CPU, nice 10, a 4 GB scope) on `20261120T0837
     C1 (3c) is the out-of-sample check: each must also be <= 0.050, or that session is not TRAIN.
 - **So the 1080 virtual picture at the DEFAULT zoom is the 720 camera's picture** (11-18's 1.50
   measurement, now on labels). Every number above came from frames whose zoom was checked.
+
+### Amendment 5 (2026-11-20 09:20 ICT from `date`): v1t1 stopped on the padlock; the padlock read; v1t1 fails 3c
+
+- **v1t1 (09:04:31-09:09:27, 300 frames) stopped after about 7 stands.** The chat check read the
+  padlock as undecided: closed 3.1 / open 15.4 (grey margin 12.3 < 15), shapes 0.213 / 0.223.
+  - It was the same on three re-reads; the scene behind (a Myst Case, a bright floor) was static.
+  - The chain's next zoom-check warp was refused by the same check, so the chain stopped and
+    nothing was typed.
+  - Unblocked by one walk click on empty floor. The protocol bans world clicks only inside a watch.
+  - The chain restarted with v1t2 at 09:12:42, and **v1t3** (seed 2611210, 30 min) makes up
+    v1t1's minutes.
+- **The padlock read at 1080, measured on every recorded 1080 frame** (both v1f recordings and
+  v1t1, 2,946 frames; nobody touched the padlock, so every frame is truly LOCKED):
+  - 2,851 read locked, **45 None (1.5 %)**, 0 open, 50 with no window found (the F10 cycle, the
+    desktop);
+  - the decided grey margins are >= 12.3 (median 52.2).
+  - **Fixed in 0a64a832.** Grey also decides at a margin >= 10, or by a wide separation (the winner
+    <= 25, the other >= 2.5x and >= 30 farther), but only when the colour shape does not
+    contradict.
+  - Result on the same frames: 2,895 locked, 0 open, 0 undecided. The archived 11-05 open frames
+    still read open (grey margin >= 39.9). Three boundary asserts moved; all three were truly
+    locked frames.
+- **v1t1's own C1 (3c's join rule): 11 / 74 = 0.149 > 0.050, so v1t1 does NOT join TRAIN.**
+  - The 720 TRAIN sessions on the same lattice scored 0.003 / 0.000 / 0.004.
+  - The low rows cluster at two stands (frames 43-81 and 234-289). In the second, the Rogue
+    stands on a raised block (her sprite about 75 px above her HP bar).
+  - Pictures with the predicted boxes: a Myst Case box on a wall it is hidden behind (frame 60,
+    kept "under terrain"), and a Cruiser box on an empty wall top (frame 287, C1 did not flag it).
+  - Terrain-under rows: v1f 1 bad of 25; v1t1 15 of 36, plus 11 of 58 other rows.
+  - Not decided yet: whether this is a few stands in a 5-min session, or something at 1080 near
+    raised terrain. v1t2's and v1t3's own C1 (about 45 stands each) decide. If either fails too,
+    no cache is built until the cause is found (raised stands and terrain-under labels first).
