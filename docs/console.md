@@ -387,6 +387,15 @@ Amendment B); a not-adopted model is never offered.
   ➡️ 2026-11-19 (Batt, ADR-0020 Amendment T): no time limit unless one is set -- the project's
   run settings `max_runtime_s` and the hunt block's `minutes` take 0 or empty for "no time limit",
   the new default, and the line then shows the elapsed time alone)
+  ➡️ **2026-11-20 (Batt): Before Run and Logs are ONE pane, Run / Log,** on every node. A Run
+  that starts opens it once; it is never forced open, so it closes like every pane.
+  - Top to bottom: the **monitor bar** (one tile each, with a small emoji: the state, what she
+    does, HP with a bar, her cell, kills, items gained (picked up + stolen), potions, Fly Wings,
+    the time, the retries); **Run options**, folded by default with a one-line summary (this
+    browser remembers it); the checklist and Run; then the Run's state line, "what she does" and
+    its log.
+  - No Knife row (a Rogue's technique): a steal counts as an item gained.
+  - The text below is from before 2026-11-20 and names the two old panes.
   ➡️ 2026-11-19 ~15:2x (Batt, ADR-0020 Amendment U): the bottom panes end with **Logs** (after Hunt
   rules): the Run's state and counts, "what she does" newest first (her walks and why, the
   monster's recipe, strikes, kills, loot, presses, retries; the last 80 lines) and the Run's log
