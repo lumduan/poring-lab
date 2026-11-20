@@ -441,3 +441,28 @@ A count under its minimum is NO VERDICT, never a pass.
 - Recorded for the cell search (Amendment 8, made exact): from seed 2612100, 200 twelve-spot near
   plans (2612100-2612299) each shared a cell with the 14 earlier stagings; 129 six-spot plans
   (2612100-2612228) each shared one, and 2612229 is the first that does not.
+
+### Amendment 10 (2026-11-21 04:43 ICT from `date`): a slip -- the chat's Chat tab left in front; ifs1b and ifs2 give no labels; re-staged as ifs1c, ifs2b
+
+- **The slip (mine):** at 03:45, to read the immunity reply, the chat window's Chat tab was
+  brought to the front (the client's own tab control) and NOT switched back to Battle Log.
+  The labeller keeps only frames in the HUNTING layout (1 row, the panel collapsed, the Battle
+  Log tab: map_labels.layout_matches / client_layout TARGET["hunt"]). So every frame recorded
+  after 03:45 failed that gate.
+  - **ifs1b** (04:00-04:26, 12/12 spots, rc 0, shipped `20261121T040020-rdp-xmas02-ifs1b`): 1,080
+    candidate frames, all `ui_layout_mismatch`; 0 labels (256 floor items in the packets). Not
+    admitted. (ifs1's 0 fits, Amendment 9, had the same cause besides its stop.)
+  - **ifs2** (seed 2612705, from 04:28): stopped on purpose at 04:37:42 (SIGTERM inside a still
+    view at spot 3: the bag empty, no line being typed; the SIGINT at 04:31 was ignored, as a
+    background job's is). Its 8-min recording is shipped (`20261121T042949-rdp-xmas02-ifs2`) and
+    gives no labels for the same reason. Not admitted.
+  - The cells are unaffected (the frames are simply not used); no held-out was touched.
+- **Fixed:** the hunting layout restored by `client_layout.py ensure hunt` (step tab:battle,
+  read back: 1 row, collapsed, battle). stage_rec.sh now also STOPS before its recorder unless
+  `client_layout.py read` says the hunting layout.
+- **Re-staged** (the same seeds and cells, new labels so the recordings stay apart), from 04:39:
+  **ifs1c** (2612702), then ifs2b (2612705), ifs3 (2612707), ifsH1 (2612229, n 6), each
+  starting only after the previous one ends with stage rc 0 in the same game session.
+  - Immunity: ON, judged on the 03:45 frame; no login or recover since (ifs2's stop ended only
+    the staging process).
+  - ifs1c's checks at 04:40: the zoom 1.000, the chat standard, the layout "1 collapsed battle".
