@@ -7,13 +7,13 @@ verdict_date: null
 verdict_ticket: null
 supersedes: null
 related: [xmas02-detector.md, screen-size-ab.md, fullscreen-client.md, ../benchmarks/xmas02-eval.md, ../../scripts/map_labels.py, ../../scripts/build_frame_cache.py, ../../scripts/eval_q1.py, ../../scripts/record_session.py, ../../scripts/screen_ab.py]
-next_action: "Pre-registered 2026-11-20 07:5x ICT, before any 1080 recording. Build the tools (section 3), then FIT (section 5)."
+next_action: "Pre-registered 2026-11-20 07:44:50 ICT (the commit time), before any 1080 recording. Build the tools (section 3), then FIT (section 5)."
 title: "xmas02 at 1920x1080: retrain the monster detector on the virtual 1080 picture (pre-registration)"
 date: 2026-11-20
 owner: Batt
 ---
 
-# xmas02 at 1920x1080: the detector, retrained (pre-registered 2026-11-20 07:5x ICT)
+# xmas02 at 1920x1080: the detector, retrained (pre-registered 2026-11-20 07:44:50 ICT, commit 30005e1a)
 
 ## 0. What Batt asked, and what this plan does not decide
 
