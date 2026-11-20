@@ -240,3 +240,38 @@ A count under its minimum is NO VERDICT, never a pass.
     0.24, F8 10), so a chain goes on.
 - So stagings may join TRAIN (section 3, T-I5). The overnight chain records natural-drop pilots
   first.
+
+### Amendment 3 (2026-11-20 22:39 ICT from `date`, BEFORE any fit, label or freeze of 1080 item data): T-I1, T-I2, T-I4 merged; the decisions inside them
+
+- **Merged** (6db430a4; the sub-agent's 3e771391, b0f762fe, 9e12d221, plus the parent's 4d315f35).
+  Tests: test_fi_labels_1080.py (26), test_fi_eval.py (+4); the 720 tests unchanged and green.
+  The play does not import these tools, so the merge did not touch the running pilot chain's
+  code.
+- **The 1080 rule has its own name, `xmas02-fi-1-1080`** (`FI_MAPS["xmas_dun02@1080"]`), so
+  the cache tool tells the two rules apart. Each params file records its monster sha (720
+  d4cc0a5d, 1080 9c73278f).
+- **The bar box at 1080 is the 720 bar's size / 1.5 about its OWN centre (`BAR_ABOUT_1080 =
+  "centre"`), not about her feet** (the brief's first guess):
+  - measured on 60 frames of the 1080 MONSTER FIT v1f (not item data; a smoke of the tool):
+    98.6 % of the bar's pixels inside the centre box, 15.2 % inside the feet box;
+  - the reader on 720 fiT19 found the measured 720 bar (83.4 % inside);
+  - **freeze-1080 refuses unless >= 95 % of the bar is inside it on ifF too.**
+- **T_item** (section 3's 720 rule): the smallest 0.05 step whose absent pass rate is <= 0.5 %.
+  - The rate is VIEW-WEIGHTED: each sprite's rate weighted by its share of the FIT session's
+    clear item views, which is the 720 study's control.
+  - The rate pooled over every sprite is reported, not used.
+  - Then O3's absent rule: an id passing at T_item on > 1 % of the points is excluded.
+- **Absent points: 400** (READY needs >= 200: a 0.5 % rate cannot be told with fewer). The 720
+  freeze-v2 used 60.
+- **The anchor and the scale** (fit_constants):
+  - scales 0.85-1.15 compared on the views clear at every scale; the highest median NCC wins;
+  - the anchor is the median (dx, dy) of the best scale's clear fits, the search edge left out;
+  - READY needs >= 30 common views and >= 30 anchor fits.
+- r_label 10, the margin 30, the self box and the unit box are world-size, so their 720 values
+  carry over.
+- fi_eval r6:
+  - I1h >= 0.90, precision >= 0.95; every other bar as section 8a;
+  - `--comparator xmas02fi5` is required (I5);
+  - r6 reads 1080 label files, params and a round-6 key only.
+- **Next:** fit-1080 on ifF, freeze-1080 (its sha recorded), then T1 (ifF's own labels pass G2),
+  before any TRAIN label.
