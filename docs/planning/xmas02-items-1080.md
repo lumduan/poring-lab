@@ -275,3 +275,29 @@ A count under its minimum is NO VERDICT, never a pass.
   - r6 reads 1080 label files, params and a round-6 key only.
 - **Next:** fit-1080 on ifF, freeze-1080 (its sha recorded), then T1 (ifF's own labels pass G2),
   before any TRAIN label.
+
+### Amendment 4 (2026-11-20 22:45 ICT from `date`, BEFORE any TRAIN label): FIT and THE FREEZE
+
+- **fit-1080 on ifF** (22:2x-22:41, nice 19, 2 workers, a 4 GB cap; the report
+  `b7abfe57...`): **READY**.
+  - 913 candidate frames; 65 item views of which 44 were clear at every scale, on 5 floor items.
+  - The scales' median NCC: 0.85 0.658, 0.90 0.730, **0.95 0.745**, 1.00 0.743, 1.05 0.601,
+    1.10 0.408, 1.15 0.385. Best: 0.95.
+  - Anchor (dx, dy) = (-3.0, 0.0), from 44 fits, none at the search edge. NCC median 0.745,
+    p5 0.412. (720: (-4, +2), scale 1.0.)
+  - The absent controls (400 points, view-weighted):
+    - the rate at T 0.55 is 0.598 % (over 0.5 %), at **T 0.60 it is 0.209 %, so T_item = 0.60**
+      (720: 0.65);
+    - excluded (passing on > 1 % at 0.60): 529, 722, 911, 996, 2251, 7269. At 720 the list was
+      7269, 996, 2251.
+  - The bar check, on the FIT session's item-free frames: 96.4 % inside the centre box (>= 95 %:
+    accepted), 14.0 % inside the feet box.
+- **FROZEN: `/dev/shm/poring-lab-tmp/i1080/items-params-1080.json`, sha256
+  `ad268afd7620fed45297ad5cf8776cddf5d0ac536a213462f270c5b344601233`** (22:45:10). Copied to
+  the NAS with the round's scratch.
+- Disclosed:
+  - the fit stands on few distinct floor items (5): she picks most loot up within seconds, so
+    still frames show few lying items;
+  - the 30-fit minimum is met (44);
+  - the TRAIN pilots add many more items, but they are labelled under THIS freeze.
+- Next: T1 (ifF's own VAL labels at the frozen params pass G2).
