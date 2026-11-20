@@ -213,3 +213,30 @@ A count under its minimum is NO VERDICT, never a pass.
      MINUTES --model xmas02v1080` (stage2_ab's setup, not immune, its own detect server);
   5. the recorder stopped by its own PID, then `dataset_ship.py ship` (its checksums).
 - **The first:** ifF (FIT / VAL), 25 min, started at about 21:38.
+
+### Amendment 2 (2026-11-20 22:21 ICT from `date`): ifF banked; T-I3 merged; T-I5 PASSES (the bag empties at 1080)
+
+- **ifF** (`20261120T214247-rdp-xmas02-ifF`): the zoom check 1.000 (err 10.5), the chat window
+  standard, then the play run: 23.9 min, rc 0, 43 kills, 53 loot steps, 9 pickups.
+  - 3,189,115,531 bytes in 13 files shipped to the NAS and checked; the local copy deleted.
+  - Two first tries stopped at their own checks, before any recording:
+    - the zoom check's warp did not land with the chat input open: it read "1.29", a non-match;
+    - its warp line was refused as the third identical line in a row.
+  - pilot_rec.sh now closes the chat and types `@heal` first.
+- **T-I3** merged (7e0c12f9): `--labels items --link-cache` (the sub-agent's 9d48b90f, 11 tests).
+- **T-I5, the cause of the 1080 drop failure, found and fixed:**
+  - At 1080 the open inventory and the drop's quantity prompt were drawn shrunk inside the
+    scaled world of the bot's picture. So the slot reads looked at the wrong pixels, a drag
+    started off the slot, and the prompt's OK button was never seen.
+  - The fixes: both are panels while found (8b613fa4 the inventory at its home (0, 120); and the
+    prompt's OK button at the 720 box + (320, 150), searched +-40 px).
+  - **The proof, twice** (at prt_fild08 268 107, the series' clear stand):
+    - run 1: the loot after ifF, 12 stacks dropped;
+    - run 2: 6 GM items plus the restock, 8 stacks dropped.
+    - The packets show 13, then 8 floor_item_appear at her feet. The bag census read Etc empty
+      after each.
+  - Each clear-bag still ended rc 1: its own read of the restock came before the client had
+    updated (F8 read 0, then 10). The series' setup judges by its own read after it (weight
+    0.24, F8 10), so a chain goes on.
+- So stagings may join TRAIN (section 3, T-I5). The overnight chain records natural-drop pilots
+  first.
