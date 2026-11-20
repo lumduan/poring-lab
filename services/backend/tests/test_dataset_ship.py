@@ -466,7 +466,7 @@ def test_the_default_format_is_h264_on_console_and_video_on_rdp() -> None:
         rs.resolve_format(args(max_bytes=9 * 10**9))
     with pytest.raises(rs.r.Stop, match="0..60"):
         rs.resolve_format(args(idr_every=90.0))
-    assert rs.RECORDER_VERSION == 7  # v7 (2026-11-09): video on rdp; v6: the IO rule's sink
+    assert rs.RECORDER_VERSION == 8  # v8 (2026-11-20): + client_view; v7: video on rdp
 
 
 def test_a_sidecar_joins_a_shipped_session_and_is_never_replaced(

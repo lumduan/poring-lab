@@ -125,6 +125,7 @@ import lab_env  # noqa: E402
 import orc_camera_check as occ  # noqa: E402
 import orc_labels_fix as olf  # noqa: E402
 import qa_export  # noqa: E402
+import rec_paths  # noqa: E402
 
 from poring_dataset import frames as recorded  # noqa: E402
 from poring_dataset.camera import map_key  # noqa: E402
@@ -363,6 +364,12 @@ XMAS02_SK5A = "-rdp-xmas02-sk5a"
 # a 9-cell lattice's TEST stands >= 4 cells from every 3a stand), refused by NAME like TEST before
 # it records; read only by --eval-test
 XMAS02_SK6A = "-rdp-xmas02-sk6a"
+# xmas02-1080-detector.md T-V4 (2026-11-20): the 1920x1080 round's sessions on the virtual 1280x720
+# picture. FIT by NAME (v1f, later VAL, like xw1); its three held-outs (v1T: 3a's TEST stands;
+# v1Tg: Garm Babies on TEST stands; v1Tk: knights on sk6a's 32 TEST cells) refused by NAME like
+# TEST before they record, read only by --eval-test after the model is frozen
+XMAS02_V1F = "-rdp-xmas02-v1f"
+XMAS02_V1_TEST = ("-rdp-xmas02-v1T", "-rdp-xmas02-v1Tg", "-rdp-xmas02-v1Tk")
 # Amendment S (2026-11-12): sk1a's first stand had a OneDrive toast over the client's bottom-right
 # (game region x >= 980, y >= 470): frames 22-46, the first and last frame showing it (a pixel test
 # against frame 30's panel: mean abs difference 0.00-0.08 on those 25 frames, >= 26.16 on every
@@ -396,7 +403,7 @@ XMAS02 = MapSpec(
     # held out until the model is frozen (refused by labels / pack / the cache like xw5);
     # Amendment S (2026-11-12): + sk3a, the Stormy Knight watch on 3a's TEST stands, the same way
     test_suffixes=("-rdp-xmas02-xw5", "-rdp-xmas02-xp1", XMAS02_X2, XMAS02_GW3, *XMAS02_FIT,
-                   XMAS02_SK3A, XMAS02_SK4A, XMAS02_SK5A, XMAS02_SK6A),
+                   XMAS02_SK3A, XMAS02_SK4A, XMAS02_SK5A, XMAS02_SK6A, *XMAS02_V1_TEST),
     # D3: in T2's tier only with >= 30 kept labels; Amendment M: Garm Baby (1515) IN the tier;
     # Amendment S: Stormy Knight (1251) IN the tier (not conditional); the Goblin unchanged
     conditional=(1607,),
@@ -407,7 +414,7 @@ XMAS02 = MapSpec(
     dying_rule=True,  # D8 (gef10 4g)
     tmp=XD,
     plan="docs/planning/xmas02-detector.md",
-    fit_suffixes=("-rdp-xmas02-xw1",),
+    fit_suffixes=("-rdp-xmas02-xw1", XMAS02_V1F),  # + T-V4: the 1080 round's FIT
     engaged_fixed="E0",  # D11
     c1_rules=("round2",),  # 4h / 5: C1 always drops a label under a pickup notice (T-8)
     eval_flag="eval_test",  # 9 (T-9): the evaluation reads TEST only
@@ -416,7 +423,7 @@ XMAS02 = MapSpec(
     # sk3a, the held-out knight-party watch, the same way (read once, after the Goblin round's
     # last.pt sha256 is recorded)
     eval_suffixes=("-rdp-xmas02-xw5", "-rdp-xmas02-xp1", XMAS02_X2, XMAS02_GW3, XMAS02_SK3A,
-                   XMAS02_SK4A, XMAS02_SK5A, XMAS02_SK6A),
+                   XMAS02_SK4A, XMAS02_SK5A, XMAS02_SK6A, *XMAS02_V1_TEST),
     t2_seed=51,
     eval_seed=53,
     eval_per_species=60,
@@ -963,26 +970,22 @@ def read_png(ref: Any) -> npt.NDArray[np.uint8]:
 
 
 # T-3: v6 changed only the IO-guard rule and guard_rule (e5d892f); v7 (ADR-0024, 2026-11-09) the
-# rdp default format (the GPU video; a --format png session is written as in v6)
-RECORDER_VERSIONS = (5, 6, 7)
+# rdp default format (the GPU video; a --format png session is written as in v6); v8 (2026-11-20,
+# xmas02-1080-detector.md T-V1) adds the manifest's client_view (the virtual 1080 path)
+RECORDER_VERSIONS = rec_paths.LAB_720_VERSIONS
 # ADR-0024: an RDP recording is PNG or the GPU video (the same grab, clock and region; lossy).
 # 3c's frame gates (the layout check, o3h's sprite NCC with T_h) were fitted on PNG: a video
 # recording stays REFUSED here until a pre-registered parity check passes (gpu-recording.md 9.4
 # live check 4; the parent's review, 2026-11-09) -- record label data with --format png
-RECORDING_FORMATS = ("png",)
+RECORDING_FORMATS = rec_paths.PNG_ONLY
 
 
 def check_recording(manifest: dict[str, Any]) -> None:
-    """3c's recording path (fail closed): RDP at 1280 x 720 on the lab server, PNG only (the GPU
-    video refused until its parity check, ADR-0024), recorder v5 to v7 (xmas02-detector.md 3c / T-3;
-    detector_vs_packets.SESSION_VERSIONS)."""
-    want = {"backend": "rdp", "game_region": [80, 77, 1280, 720],
-            "server": "lab-rathena"}  # fmt: skip
-    bad = {k: manifest.get(k) for k, v in want.items() if manifest.get(k) != v}
-    if manifest.get("format") not in RECORDING_FORMATS:
-        bad["format"] = manifest.get("format")
-    if manifest.get("recorder_version") not in RECORDER_VERSIONS:
-        bad["recorder_version"] = manifest.get("recorder_version")
+    """3c's recording path (fail closed), rec_paths' two paths: RDP at 1280 x 720 on the lab
+    server, PNG only (the GPU video refused until its parity check, ADR-0024), recorder v5 to v8
+    (xmas02-detector.md 3c / T-3); or (xmas02-1080-detector.md T-V2) the virtual 1280 x 720
+    picture of the 1920 x 1080 fullscreen client, recorder v8 with its client_view."""
+    bad = rec_paths.problems(manifest)
     if bad:
         raise SystemExit(f"{manifest.get('session_id')}: not the recording path of 3c: {bad}")
 
@@ -1010,7 +1013,8 @@ def use_kb(spec: MapSpec) -> None:
 Rect = tuple[int, int, int, int]
 
 
-def session_ui_rects(sid: str, layout: str = "hunt") -> tuple[Rect, ...]:
+def session_ui_rects(sid: str, layout: str = "hunt",
+                     extra: Sequence[Rect] = ()) -> tuple[Rect, ...]:  # fmt: skip
     """T-1 (xmas02-detector.md 1f): the UI windows (x0, y0, x1, y1) of the RECORDED session
     ``sid`` in ``layout``: client_layout.RECTS with the chat window of the session's date
     (chat_window.for_sid: the 2026-11-05 standard (0, 585, 600, 720) from 20261105T12 on; the
@@ -1021,7 +1025,8 @@ def session_ui_rects(sid: str, layout: str = "hunt") -> tuple[Rect, ...]:
     import detector_vs_packets as dvp
 
     chat_rect, _how = dvp.chat_rect_for(sid, "auto")
-    return dvp.nested_rects(dvp.session_rects(LAYOUT_RECTS[layout], chat_rect))[0]
+    # ``extra`` (xmas02-1080-detector.md T-V3): a virtual session's pasted panels (rec_paths)
+    return dvp.nested_rects([*dvp.session_rects(LAYOUT_RECTS[layout], chat_rect), *extra])[0]
 
 
 def session_labeler(path: Path, spec: MapSpec, layout: str = "hunt") -> qa_export.Labeler:
@@ -1031,7 +1036,8 @@ def session_labeler(path: Path, spec: MapSpec, layout: str = "hunt") -> qa_expor
     character's box from the same camera)."""
     use_kb(spec)
     lab = qa_export.Labeler(path, str(olf.OLD_OFFSET_MS), labels="v1", k=olf.K)
-    rects = session_ui_rects(qa_export.session_id(lab.manifest), layout)
+    rects = session_ui_rects(qa_export.session_id(lab.manifest), layout,
+                             rec_paths.panel_rects(lab.manifest))  # fmt: skip
     lab.ui_rects = tuple((x0, y0, x1 - x0, y1 - y0) for x0, y0, x1, y1 in rects)
     lab.sheets = qa_export.Sheets(directory=spec.sprites)
     tl = lab.timeline

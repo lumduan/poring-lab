@@ -173,7 +173,9 @@ def test_a_session_is_the_x2_recording_path_or_refused() -> None:
     dv.check_session(ok)
     dv.check_session({**ok, "recorder_version": 5})
     dv.check_session({**ok, "recorder_version": 7})  # ADR-0024: v7's PNG
-    for bad in ({"recorder_version": 4}, {"recorder_version": 8}, {"format": "h264"},
+    dv.check_session({**ok, "recorder_version": 8})  # v8: + client_view (xmas02-1080 T-V1)
+    for bad in ({"recorder_version": 4}, {"recorder_version": 9}, {"format": "h264"},
+                {"game_region": [100000, 0, 1280, 720], "recorder_version": 8},  # no client_view
                 {"recorder_version": 7, "format": "vpp-hevc444-10-q20"},  # lossy: refused
                 {"format": None}, {"backend": "console"},
                 {"game_region": [0, 0, 1920, 1080]}):  # fmt: skip
