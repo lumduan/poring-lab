@@ -156,3 +156,39 @@ true one, and does play at 1080 gain from it?
   registry test (130 blocks; run in frontend-dev after the merge), settings.gen.ts regenerated;
   mypy strict clean on settings.py.
 - When its bars pass, the default becomes 60 by its own amendment and Batt's report.
+
+### Amendment 3 (2026-11-21 03:25 ICT from `date`): THE HELD-OUT REPLAY -- PASS (scored once, 03:24)
+
+- Run once at 03:24:25 after the chain's last pilot shipped (03:23:16), with the tool and the
+  parameters of Amendment 1 unchanged (NEAR_PX 60, NEAR_SOLO 0.85):
+
+      alarm_replay.py replay ifT4-play ifT5-play ifH2-play ifT6-play ifT7-play ifT8-play \
+          ifT9-play ifT10-play --json --out replay-heldout.json
+
+  `replay-heldout.json` sha256 `25cfa855a0a3bf51...`. Every held-out pilot shipped: 8 sessions,
+  2.481 h of play (each session's settings: need 2, solo 0.7, the HUD twin fed, alarm classes
+  garm_baby / g_gobline_xmas / knight_of_windstorm).
+
+  | rule | episodes | false | false / h | true | post-vanish | true lost |
+  |---|---|---|---|---|---|---|
+  | today | 64 | 43 (all g_gobline_xmas) | 17.33 | 19 | 2 | - |
+  | **A, near-her** | 28 | 7 (all g_gobline_xmas) | **2.82** | 19 | 2 | **0** |
+  | confirm 3 | 39 | 18 (all g_gobline_xmas) | 7.26 | 19 | 2 | 0 |
+
+- **The bars (section 5):**
+  - false episodes an hour: A 2.82 = 16.3 % of today's 17.33 (bar <= 30 %): **PASS**;
+  - true episodes lost: 0 (0 at >= 2 cells): **PASS**. The 19 true episodes' alarm units were
+    7.96-14.0 cells from her (garm_baby, g_gobline_xmas and knight_of_windstorm all among them).
+  - **VERDICT: PASS.**
+- Reported (section 5): today's false episodes by the nearest unit's job: Myst Case (1249) 30,
+  Christmas Cookie (1246) 8, 1248 4, none on screen 1. 39 of today's 43 lie within 60 px of her
+  body's point; the highest false score 0.85.
+- Descriptive, after the verdict (the same functions, nothing re-scored;
+  `heldout-episodes.json`): rule A's 7 remaining false episodes:
+  - 1 inside 60 px (29 px from her) at a score of exactly 0.85 (the bar is >= 0.85);
+  - 6 outside it, 64-212 px from her, scores 0.28-0.74;
+  - each box 5-41 px from a real monster (Myst Case 4, Cookie 2, 1248 1). So the same cause (a
+    fought or nearby monster read as the goblin) reaches beyond 60 px in a few cases.
+- Next (section 8): the flow_play patch merges now, still OFF by default; the play bar (section 6)
+  runs after the cursor round's play; the default becomes 60 only by its own amendment after
+  the play bar and Batt's report.
