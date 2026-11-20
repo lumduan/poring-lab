@@ -55,20 +55,14 @@ def _empty_slot_frame() -> np.ndarray:
     return np.full((720, 1280), 255.0)  # white: no digit, no icon in any slot
 
 
-def test_an_empty_slot_reads_zero_only_twice_seen(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_in_a_players_run_an_empty_slot_never_reads_zero(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Batt 2026-11-20: a 0 is the player's own to prepare; only a death ends the run."""
     monkeypatch.setenv(hb.CONFIRM_READS_ENV, "1")
-    hb._ZEROS.clear()
-    clock = iter([100.0, 101.0, 200.0, 200.2, 201.0])
-    monkeypatch.setattr(hb.time, "monotonic", lambda: next(clock))
     f = _empty_slot_frame()
-    assert hb.read_count(f, 7, {}) is None  # the first empty read: unreadable this time
-    assert hb.read_count(f, 7, {}) == 0  # 1 s later, still empty: 0
-    assert hb.read_count(f, 7, {}) is None  # a new episode
-    assert hb.read_count(f, 7, {}) is None  # 0.2 s later: too soon to count
-    assert hb.read_count(f, 7, {}) == 0
+    assert hb.read_count(f, 7, {}) is None
+    assert hb.read_count(f, 7, {}) is None  # again and again: never 0
 
 
 def test_without_the_env_an_empty_slot_is_zero_at_once(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.delenv(hb.CONFIRM_READS_ENV, raising=False)
-    hb._ZEROS.clear()
     assert hb.read_count(_empty_slot_frame(), 7, {}) == 0
