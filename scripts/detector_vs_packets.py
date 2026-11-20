@@ -83,6 +83,8 @@ import numpy as np
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "scripts"))
 
+import rec_paths  # noqa: E402
+
 Box = tuple[float, float, float, float]
 MAIN = Path.home() / "docker" / "poring-lab"  # the main checkout (its owner's home)
 # the species scored one by one, per map (everything else is "other"); X2's four common species
@@ -109,10 +111,9 @@ BAR_4A = {"min_labels": 30, "recall": 0.80, "precision": 0.80}
 # region; a --format png session is written as in v6). The X2 rule was pre-registered on LOSSLESS
 # frames: a video session stays REFUSED here until a pre-registered parity check passes
 # (gpu-recording.md 9.4 live check 4; the parent's review, 2026-11-09) -- record with --format png
-SESSION_WANT = {"backend": "rdp", "game_region": [80, 77, 1280, 720],
-                "server": "lab-rathena"}  # fmt: skip
-SESSION_FORMATS = ("png",)
-SESSION_VERSIONS = (5, 6, 7)
+SESSION_WANT = rec_paths.LAB_720  # the 720 path; rec_paths also admits the virtual 1080 one
+SESSION_FORMATS = rec_paths.PNG_ONLY
+SESSION_VERSIONS = rec_paths.LAB_720_VERSIONS  # v8 (2026-11-20): + the manifest's client_view
 DIST_BINS = ((0, 5, "0-5"), (6, 10, "6-10"), (11, 15, "11-15"), (16, 10**6, "16+"))
 SELF_MOVE_NS = 500_000_000  # our character moved in the 500 ms before tw: "moving"
 EPISODE_GAP_NS = 2_000_000_000  # first sight: a unit's in-view captures this close are one episode
@@ -313,13 +314,10 @@ def session_rects(layout: str, chat_rect: Sequence[int]) -> list[tuple[int, int,
 
 
 def check_session(manifest: dict[str, Any]) -> None:
-    """The recording path X2 reads (fail closed): RDP at 1280 x 720 on the lab server, PNG or
-    (ADR-0024) the GPU video, recorder v5 to v7."""
-    bad = {k: manifest.get(k) for k, v in SESSION_WANT.items() if manifest.get(k) != v}
-    if manifest.get("format") not in SESSION_FORMATS:
-        bad["format"] = manifest.get("format")
-    if manifest.get("recorder_version") not in SESSION_VERSIONS:
-        bad["recorder_version"] = manifest.get("recorder_version")
+    """The recording path X2 reads (fail closed): rec_paths' two paths (RDP at 1280 x 720 on the
+    lab server, PNG, recorder v5 to v8; or the virtual 1280 x 720 picture of the 1920 x 1080
+    fullscreen client, v8 with its client_view: xmas02-1080-detector.md T-V2)."""
+    bad = rec_paths.problems(manifest)
     if bad:
         raise SystemExit(f"{manifest.get('session_id')}: not the recording path X2 reads: {bad}")
 
@@ -797,7 +795,7 @@ def cmd_score_session(a: argparse.Namespace) -> dict[str, Any]:
     frames = [(int(r.frame_id), int(r.t_mono_ns)) for r in index]
     inputs = projection_inputs(a.map, a.mapcache_dir, a.sprites, a.sprite_names, a.kb)
     chat_rect, chat_how = chat_rect_for(sid, a.chat)
-    raw = session_rects(a.layout, chat_rect)
+    raw = [*session_rects(a.layout, chat_rect), *rec_paths.panel_rects(manifest)]  # T-V3
     rects, dropped = nested_rects(raw)
     if a.preflight:  # the inputs only: nothing projected, nothing scored
         have = None if a.boxes is None or not a.boxes.exists() else read_boxes(a.boxes)

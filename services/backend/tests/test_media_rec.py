@@ -256,7 +256,7 @@ def test_record_session_resolves_the_video_and_stage_2_formats(mr: ModuleType) -
                           (ns(backend="console"), "h264", None)):  # fmt: skip
         rs.resolve_format(a)
         assert (a.format, a.video) == (fmt, video)
-    assert rs.VIDEO_FORMAT == mr.ARM and rs.RECORDER_VERSION == 7
+    assert rs.VIDEO_FORMAT == mr.ARM and rs.RECORDER_VERSION == 8  # v8: + client_view
     for bad, why in ((ns(format="png", also_png=True), "goes with"),
                      (ns(backend="console", also_png=True), "goes with"),
                      (ns(format=mr.ARM, backend="console"), "rdp only"),
@@ -722,7 +722,7 @@ def test_end_to_end_a_video_only_recording_and_its_reader(
     manifest = json.loads((session / "manifest.json").read_text())
     assert manifest["format"] == mr.ARM and res["format"] == mr.ARM
     assert manifest["shards"] == [] and not list(session.glob("shard-*.tar"))
-    assert manifest["frames"] == manifest["kept"] == 5 and manifest["recorder_version"] == 7
+    assert manifest["frames"] == manifest["kept"] == 5 and manifest["recorder_version"] == 8
     assert manifest["png_level"] is None and manifest["stop_reason"] == "duration"
     v = manifest["video"]
     assert v["status"] == "ok" and v["fed"] == 5 and v["access_units"] == 5

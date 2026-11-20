@@ -99,6 +99,7 @@ import dataset_ship  # noqa: E402
 import lab_env  # noqa: E402
 import lab_servers  # noqa: E402
 import measure_delay  # noqa: E402
+import rec_paths  # noqa: E402
 import ro_agent as r  # noqa: E402
 
 from poring_backend.capture_lock import read_lock  # noqa: E402
@@ -116,19 +117,27 @@ SALT = ROOT / "data" / "dataset-pseudonym.salt"
 # v7 (ADR-0024, 2026-11-09): rdp records the video format by default (frames in video.hevc, no
 # shards; video.idx.csv gains the PNG record's t_wall / bus_frame_id / source); manifest `kept`.
 # A --format png session's frames, shards and packets are written exactly as in v6.
-RECORDER_VERSION = 7
+# v8 (2026-11-20, xmas02-1080-detector.md T-V1): + the manifest's client_view, the view the
+# frames were made by when the virtual client is active (None at 1280 x 720); nothing else.
+RECORDER_VERSION = 8
 H264_MAX_SECONDS = 3570  # the client's time cap is 3600 s; we ask for seconds + 30
 H264_MAX_MB = 8192  # the client's size cap
 CAP_CHECK_S = 5.0  # how often the local caps are re-checked while recording
 GAMESTREAM = lab_env.container("gamestream")
 BACKEND = lab_env.container("backend")
 MEDIA_REC = lab_env.container("media-rec")  # media_rec.CONTAINER
+
 VIDEO_FORMAT = recorded_frames.VIDEO_FORMAT  # media_rec.ARM: the rdp default (ADR-0024)
 H264_ID = re.compile(r"^[0-9]{8}T[0-9]{6}-[a-z0-9][a-z0-9-]{0,47}$")  # s2spike.h264rec.ID_RE
 TOUCH_S = 3.0  # the control file's dead-man touch (the client stops it after 15 s)
 # SIGINT/SIGTERM end a recording CLEANLY (2026-10-05, the M4 re-run stops it when its spawns are
 # done): the loop ends as on its duration, so the shards and the manifest are finalised.
 STOP: dict[str, bool] = {"flag": False}
+
+
+def view_now() -> dict[str, Any] | None:
+    """T-V1: the virtual client's view (rec_paths.view_record) when it is active, else None."""
+    return rec_paths.view_record(r.client_view()) if r.virtual_active() else None
 
 
 def request_stop(*_: object) -> None:
@@ -383,6 +392,7 @@ def record(a: argparse.Namespace) -> dict[str, Any]:
     if a.format == "h264":
         return record_h264(a, lock, config, chash, session_id, out, caps, unshipped)
     gx, gy, gw, gh = r.game_region()
+    view = view_now()  # T-V1: the view the frames are made by, at the start
     png = a.format == "png"  # PNG shards: alone, or with stage 2's video twin
     video = start_video(a, session_id, gw, gh)  # the video side (the frames, or the twin), or None
     if png:
@@ -477,7 +487,7 @@ def record(a: argparse.Namespace) -> dict[str, Any]:
         "session_id": session_id, "recorder_version": RECORDER_VERSION,
         "backend": a.backend, "server": lab_servers.server(), "lock_seq": lock.seq,
         "config": config, "config_hash": chash,
-        "game_region": [gx, gy, gw, gh], "fps_cap": a.fps,
+        "game_region": [gx, gy, gw, gh], "client_view": view, "fps_cap": a.fps,
         "png_level": a.png_level if png else None,
         "shards": writer.shards, "kept": frame_id,
         "frames": frames, "unchanged_skipped": skipped, "bus_repeats": repeats,
@@ -656,6 +666,7 @@ def record_h264(
         raise r.Stop(f"{stale} already exists")
     guard = load_guard(a.out, io_rule(a))
     gx, gy, gw, gh = r.game_region()
+    view = view_now()  # T-V1
     max_mb = a.max_bytes / 1e6
     part = rec / f".{session_id}.h264"
     cpu = CpuMeter()
@@ -724,7 +735,8 @@ def record_h264(
         "session_id": session_id, "recorder_version": RECORDER_VERSION, "format": "h264",
         "backend": a.backend, "server": lab_servers.server(), "lock_seq": lock.seq,
         "config": config, "config_hash": chash,
-        "game_region": [gx, gy, gw, gh], "idr_every_s": a.idr_every, "shards": [],
+        "game_region": [gx, gy, gw, gh], "client_view": view, "idr_every_s": a.idr_every,
+        "shards": [],
         "frames": summary.get("frames"), "bytes": size, "t0_mono_ns": t0, "t1_mono_ns": t1,
         "seconds": round(seconds, 1), "mb_per_min": round(size / 1e6 / max(seconds / 60, 1e-9), 1),
         "stop_reason": stop_reason, "guard": guard.summary(), "guard_rule": guard.describe(),
