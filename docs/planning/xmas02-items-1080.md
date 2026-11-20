@@ -442,7 +442,7 @@ A count under its minimum is NO VERDICT, never a pass.
   plans (2612100-2612299) each shared a cell with the 14 earlier stagings; 129 six-spot plans
   (2612100-2612228) each shared one, and 2612229 is the first that does not.
 
-### Amendment 10 (2026-11-21 04:43 ICT from `date`): a slip -- the chat's Chat tab left in front; ifs1b and ifs2 give no labels; re-staged as ifs1c, ifs2b
+### Amendment 10 (2026-11-21 04:41 ICT from `date`; first committed as "04:43", a typed time, corrected): a slip -- the chat's Chat tab left in front; ifs1b and ifs2 give no labels; re-staged as ifs1c, ifs2b
 
 - **The slip (mine):** at 03:45, to read the immunity reply, the chat window's Chat tab was
   brought to the front (the client's own tab control) and NOT switched back to Battle Log.
