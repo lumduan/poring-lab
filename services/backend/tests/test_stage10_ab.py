@@ -70,6 +70,10 @@ def test_the_arms_differ_in_their_fly_first_land_block_alone() -> None:
     raw = json.loads(ab.PROJECT.read_text())
     assert next(t for t in raw["nodes"][0]["tabs"] if t["name"] == "safety")["vars"][
         "fly_first_land"]["value"] is True  # fmt: skip
+    # 2026-11-20 (xmas02-1080-detector.md Amendment 24): the fixture names the deployed
+    # xmas02v1080; s10ab's arms keep xmas02sk, set explicitly (MODEL) -- B is the fixture but for
+    # the time box and that model
+    s5c.set_box_model(raw, ab.MODEL)
     assert {**raw, "max_runtime_s": b["max_runtime_s"]} == b
     tab_a = next(t for t in a["nodes"][0]["tabs"] if t["name"] == "safety")
     assert tab_a["vars"]["fly_first_land"]["value"] is False
