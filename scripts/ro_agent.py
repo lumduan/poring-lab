@@ -244,9 +244,17 @@ PANELS_ENV = "PORING_PANELS_FILE"  # another file (the tests: each its own)
 # found by bag_count's oval lattice at its home in the REAL frame, at most every INV_CHECK_S, and
 # is a panel only while found (a closed bag's place stays the world).
 INV_HOME = (0, 120)
+VIRTUAL_W_PX, VIRTUAL_H_PX = 1280, 720  # the virtual client (poring_env.clientview's VIRTUAL_W/H)
 INV_SIZE = (280, 255)  # the window from its origin (bag_count's grid + its frame)
 INV_CHECK_S = 0.5  # the drop opens the bag, waits 1.0 s, then reads it
-_INV: dict[str, Any] = {"origin": None, "t": -1e9}
+_INV: dict[str, Any] = {"origin": None, "t": -1e9, "prompt": None}
+# ... and the drop's QUANTITY PROMPT (its OK button, gm_state.PROMPT_OK_BOX at 720), which RO draws
+# native-size near the screen's centre: at 1920x1080 its OK button is at (964, 462), i.e. the 720
+# box + (320, 150) (measured 2026-11-20, template distance 0.0). x is the centring, (w - 1280) / 2;
+# y is not half the height, so it is SEARCHED +- PROMPT_SEARCH px around the expected place, only
+# while the bag is open, and is a panel only while its OK button matches.
+PROMPT_Y_PER_PX = 150 / 360  # the measured y offset per pixel of height over 720
+PROMPT_SEARCH = 40
 PANELS_TTL_S = 120.0  # another process's find is used this long, for the same client region
 PANEL_CHECK_S = 2.0  # a run re-checks each found window at its place this often (< 1 ms)
 PANEL_SEARCH_S = 15.0  # and searches again at most this often when one moved or is missing
@@ -453,11 +461,38 @@ def inventory_tick(screen: Any, now: float | None = None) -> bool:
         _, sub, _, _ = screen.grab_meta(rx + x0, ry + y0, w, h)
         bgr = np.ascontiguousarray(np.asarray(sub)[..., :3])
         open_ = bool(bc.window_at(bgr, (INV_HOME[0] - x0, INV_HOME[1] - y0)))
+        prompt = _prompt_ok_at(screen, (rx, ry, rw, rh)) if open_ else None
     except (Stop, OSError, ValueError):
-        open_ = False
+        open_, prompt = False, None
     with _PANELS_LOCK:
         _INV["origin"] = INV_HOME if open_ else None
+        _INV["prompt"] = prompt
     return open_
+
+
+def _prompt_ok_at(screen: Any, region: tuple[int, int, int, int]) -> tuple[int, int] | None:
+    """T-I5: the quantity prompt's OK button on the REAL client (client px), or None: its template
+    (gm_state's prompt_ok.npy) searched around its expected place for this client size."""
+    import gm_state as gs
+
+    rx, ry, rw, rh = region
+    bx, by, bw, bh = gs.PROMPT_OK_BOX
+    ex = bx + (rw - VIRTUAL_W_PX) // 2
+    ey = by + round((rh - VIRTUAL_H_PX) * PROMPT_Y_PER_PX)
+    x0, y0 = max(0, ex - PROMPT_SEARCH), max(0, ey - PROMPT_SEARCH)
+    w = min(bw + 2 * PROMPT_SEARCH, rw - x0)
+    h = min(bh + 2 * PROMPT_SEARCH, rh - y0)
+    if w < bw or h < bh:
+        return None
+    _, sub, _, _ = screen.grab_meta(rx + x0, ry + y0, w, h)
+    g = gs.to_gray(np.ascontiguousarray(np.asarray(sub)[..., :3]))
+    ref = np.load(gs.LOOT_DIR / "prompt_ok.npy")
+    win = np.lib.stride_tricks.sliding_window_view(g, (bh, bw))
+    d = np.abs(win - ref).mean(axis=(2, 3))
+    iy, ix = np.unravel_index(int(np.argmin(d)), d.shape)
+    if float(d[iy, ix]) > gs.PROMPT_MATCH:
+        return None
+    return x0 + int(ix), y0 + int(iy)
 
 
 def _panels_due() -> bool:
@@ -548,10 +583,14 @@ def client_view() -> Any:
               Panel.anchored(name, box, "tr", (w, h)) if how == "tr" else
               Panel(name, box, (box[0], box[1])) for name, box, how in LAB_PANELS]  # fmt: skip
     with _PANELS_LOCK:
-        inv = _INV["origin"]
+        inv, prompt = _INV["origin"], _INV.get("prompt")
     if inv is not None:  # T-I5: the open inventory, 1:1 at its home in the bot's picture
         panels.append(Panel("inventory", (INV_HOME[0], INV_HOME[1], *INV_SIZE),
                             (int(inv[0]), int(inv[1]))))  # fmt: skip
+    if prompt is not None:  # and the drop's quantity prompt's OK button, 1:1 at its 720 place
+        import gm_state as gs
+
+        panels.append(Panel("prompt", gs.PROMPT_OK_BOX, (int(prompt[0]), int(prompt[1]))))
     base = ClientView((x, y, w, h), mode, h / VIRTUAL_H, None, tuple(panels))
     if _POINTER is not None and base.panel_at(*_POINTER) is None:  # over the world
         vx, vy = _POINTER

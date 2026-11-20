@@ -277,3 +277,31 @@ def test_the_open_inventory_is_a_one_to_one_panel_at_1080(
     assert ro.inventory_tick(scr, now=10.1) is True  # within INV_CHECK_S: the last answer
     assert ro.inventory_tick(scr, now=10.0 + ro.INV_CHECK_S) is False
     assert ro.client_view().panel_at(*gs.slot_centre(0, 0)) is None
+
+
+def test_the_quantity_prompt_is_found_and_mapped_one_to_one_at_1080(
+    ro: ModuleType, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """T-I5: the drop's quantity prompt, native-size near the centre (measured at 1920x1080: its OK
+    button at the 720 box + (320, 150)), is searched only while the bag is open and is then a
+    panel: its OK box reads at its 720 place in the bot's picture."""
+    import gm_state as gs
+
+    monkeypatch.setattr(ro, "desktop", lambda: (1920, 1080))
+    monkeypatch.setattr(ro, "real_game_region", lambda: (0, 0, 1920, 1080))
+    monkeypatch.setattr(ro, "_INV", {"origin": None, "t": -1e9, "prompt": None})
+    f = _bag_frame(True)
+    ref = np.load(gs.LOOT_DIR / "prompt_ok.npy")
+    bx, by, bw, bh = gs.PROMPT_OK_BOX
+    g = np.clip(np.round(ref), 0, 255).astype(np.uint8)
+    f[by + 150 : by + 150 + bh, bx + 320 : bx + 320 + bw, :3] = g[..., None]
+    scr = BagScreen(f)
+    assert ro._prompt_ok_at(scr, (0, 0, 1920, 1080)) == (bx + 320, by + 150)
+    assert ro.inventory_tick(scr, now=5.0) is True
+    view = ro.client_view()
+    assert view.panel_at(bx + 5, by + 5).name == "prompt"
+    assert view.to_real(bx, by) == (bx + 320, by + 150)
+    # no prompt on the screen: none found, no panel
+    scr.frame = _bag_frame(True)
+    assert ro.inventory_tick(scr, now=5.0 + ro.INV_CHECK_S) is True
+    assert ro.client_view().panel_at(bx + 5, by + 5) is None
