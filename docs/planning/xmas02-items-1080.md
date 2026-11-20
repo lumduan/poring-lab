@@ -409,3 +409,35 @@ A count under its minimum is NO VERDICT, never a pass.
     immunity ON, judged on a frame; the zoom and chat checks; the 1 fps recorder; the staging; the
     ship (`stage_rec.sh`). Immunity OFF and read back after the last one.
   - The order: ifs1, ifs2, ifs3, then ifsH1, all before the training starts.
+
+### Amendment 9 (2026-11-21 03:57 ICT from `date`): ifs1 stopped at its first spot; the cause (a tab click before any look, at 1080) fixed and proven; ifs1b re-stages it
+
+- **ifs1** (seed 2612702, 03:45-03:48): immunity ON judged on a frame at 03:45 (the Chat tab's
+  last line "You are now immune to attacks."; the chat's Battle Log tab had been in front, so the
+  Chat tab was shown by the client's own tab control first). The zoom 1.000, the chat standard,
+  the recorder. **Spot 0 stopped (rc 1): "dropped [candy, holy_scroll, red_herb,
+  well_baked_cookie], not [... manacles ..., zargon]"**: Zargon and Manacles stayed in the bag.
+  - Its 1-min recording is shipped (`20261121T034619-rdp-xmas02-ifs1`) and labelled: 4 floor
+    items in the packets, 0 clear fits, own G2 NOT_ENOUGH: **not admitted** (it is a staging; the
+    pooling of Amendment 7 is for the pilots).
+- **The cause:** in the virtual 1080 client the open bag is a 1:1 panel only once a grab has seen
+  it (`ro_agent.inventory_tick`, inside the grab path). `gm_state.clear_loot` (the staging's
+  drop) clicked its first tab right after the inventory chord, before any grab, so that click
+  was mapped as a WORLD click (x1.5 about the centre) and missed. The tab shown stayed the last
+  one used (Use): its four stacks were dropped as if they were the Etc tab's, and the Etc tab
+  (Zargon, Manacles) never showed.
+  - Seen on a diagnostic frame (the same open-then-click order, nothing dropped): the bag showed
+    its Eqp tab (the last one the staging had visited) after the Etc tab's click.
+  - T-I5's proof did not catch it: clear-bag, bag_count and the staging's give frames each read
+    the bag open BEFORE their first click; only clear_loot (and gm_state's storage step) did not.
+- **The fix (9396e931, main):** `gm_state._tab` looks at the bag first in the virtual client
+  (`inventory_tick(force=True)`); a bag that does not read open is never clicked (Stop). At
+  1280x720 nothing changes. Tests: test_gm_state, test_ro_agent_panels; the staging, clear-bag,
+  bag_count and click-census suites pass.
+- **The proof on the lab (03:55):** `clear_loot` with the staged set's icons on the bag holding
+  the two left items: **dropped zargon (etc slot 0) and manacles (etc slot 0)**, nothing else.
+- **ifs1b re-stages ifs1's plan:** the same seed 2612702 and cells (TRAIN; Amendment 8's checks
+  hold), a new label so the two recordings stay apart. Then ifs2, ifs3, ifsH1 as Amendment 8.
+- Recorded for the cell search (Amendment 8, made exact): from seed 2612100, 200 twelve-spot near
+  plans (2612100-2612299) each shared a cell with the 14 earlier stagings; 129 six-spot plans
+  (2612100-2612228) each shared one, and 2612229 is the first that does not.
