@@ -70,7 +70,8 @@ def test_the_functions_box_plays_the_hunt_boxs_runner_exactly() -> None:
         assert fun.keys == a.keys and {k: v for k, v in fb.items() if k != "box_model"} == {
             k: v for k, v in ab.items() if k != "box_model"
         }
-        assert ab["box_model"]["id"] == "xmas02" and fb["box_model"]["id"] == "xmas02sk"
+        # the functions box names the deployed model (xmas02v1080 since 2026-11-20, Amendment 24)
+        assert ab["box_model"]["id"] == "xmas02" and fb["box_model"]["id"] == "xmas02v1080"
         assert fb["box_model"]["alarm"] == ["garm_baby", "g_gobline_xmas", "knight_of_windstorm"]
         assert "alarm" not in ab["box_model"]  # the reference arms' run() argument as before
     assert fun.loop == hunt.loop == "hunt_loop" and fun.tick_left_out == ()

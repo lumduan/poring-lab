@@ -44,7 +44,8 @@ def test_the_plan_alternates_two_copies_differing_in_the_boxs_model_alone(tmp_pa
     ma, mb = (doc["arms"][x]["box"]["box_model"] for x in ("A", "B"))
     assert (ma["id"], mb["id"]) == ("xmas02", "xmas02sk")
     assert ma["file"] == ud.MAP_REFERENCES["xmas_dun02"][0].onnx
-    assert mb["file"] == ud.MAP_MODELS["xmas_dun02"].onnx
+    # s9ab's B was the deployed xmas02sk; since 2026-11-20 (1080 Amendment 24) a reference model
+    assert mb["file"] == ud.GPU_WEIGHTS["xmas02sk"].onnx
     assert "alarm" not in ma and mb["alarm"] == [
         "garm_baby",
         "g_gobline_xmas",

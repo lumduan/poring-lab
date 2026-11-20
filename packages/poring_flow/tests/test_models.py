@@ -50,25 +50,25 @@ def test_the_detectors_match_unit_detector(scripts: object) -> None:
     assert v1.classes == list(ud.NAMES) and not v1.maps and v1.status == "live"
     assert v1.file == ud.GPU_WEIGHTS["v1"].onnx == ud.MODEL.name
     assert v1.sha256 == ud.GPU_WEIGHTS["v1"].onnx_sha256[:12]
-    # live-blocks 18.15 (2026-11-17): the catalogue's `xmas02sk` is the map's DEPLOYED model, and
-    # `xmas02` (xmas02-gb, deployed 2026-11-10, M12) its REFERENCE model, loadable by use_model
+    # live-blocks 18.15 (2026-11-17): `xmas02sk` was the map's DEPLOYED model, `xmas02` (xmas02-gb,
+    # deployed 2026-11-10, M12) its REFERENCE; ➡️ 2026-11-20 xmas02v1080 deployed (1080 Amendment 24)
     mm = ud.MAP_MODELS["xmas_dun02"]
-    # + xmas02v1080 (xmas02-1080-detector.md Amendment 18): a second REFERENCE, for 8c only
-    ref, ref1080 = ud.MAP_REFERENCES["xmas_dun02"]
-    assert mm.gpu == "xmas02sk" and ref.gpu == "xmas02gb" and ref1080.gpu == "xmas02v1080"
-    for spec, m in ((sk, mm), (xmas, ref), (x1080, ref1080)):
+    # ➡️ 2026-11-20 (1080 Amendment 24): xmas02v1080 is the DEPLOYED model; xmas02sk a reference
+    ref, refsk = ud.MAP_REFERENCES["xmas_dun02"]
+    assert mm.gpu == "xmas02v1080" and ref.gpu == "xmas02gb" and refsk.gpu == "xmas02sk"
+    for spec, m in ((x1080, mm), (xmas, ref), (sk, refsk)):
         assert spec.maps == ["xmas_dun02"] and spec.status == "live" and spec.kind == "detector"
         assert spec.file == m.onnx == ud.GPU_WEIGHTS[m.gpu].onnx
         assert spec.sha256 == m.sha256[:12] == ud.GPU_WEIGHTS[m.gpu].onnx_sha256[:12]
         assert spec.strikes == list(m.collapse)  # the species collapse to "monster"
-    assert not sk.reference and xmas.reference and x1080.reference
-    assert [k for k, s in cat.items() if s.reference] == ["xmas02", "xmas02v1080"]
+    assert not x1080.reference and xmas.reference and sk.reference
+    assert [k for k, s in cat.items() if s.reference] == ["xmas02sk", "xmas02"]
     # the models' own class order: the fixed classes by id, the collapsed species, then the alarm
     # classes (never collapsed: the runner never strikes them; dungeon_hunt.alarm_classes)
     sk_alarm = ["garm_baby", "g_gobline_xmas", "knight_of_windstorm"]
     for spec, m, cfg, alarm in ((xmas, ref, "classes-xmas02-gb.json", ["garm_baby"]),
-                                (sk, mm, "classes-xmas02-sk.json", sk_alarm),
-                                (x1080, ref1080, "classes-xmas02-sk.json", sk_alarm)):  # fmt: skip
+                                (sk, refsk, "classes-xmas02-sk.json", sk_alarm),
+                                (x1080, mm, "classes-xmas02-sk.json", sk_alarm)):  # fmt: skip
         classes = json.loads((REPO / "config/detector" / cfg).read_text())
         fixed = sorted(classes["fixed"], key=classes["fixed"].get)
         species = [*m.collapse, *alarm]

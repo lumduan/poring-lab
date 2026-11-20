@@ -280,8 +280,17 @@ export const EXPR_SHOW_UNITS = 232;
  * exists: `known` false), an empty optional one its word ("none"); an optional number its empty
  * word, or ⚠ after a text that is no whole number; any other picker its value as the plain field
  * showed it. `text`: the value as Blockly displays it (truncated, spaces kept). */
+/** 2026-11-20 (the deployed model's id, xmas02v1080, ran use_model's row past the 390 budget): a
+ * single named argument this long closes as its value alone (the picker still shows its name). */
+export const ARGS_SHORT_AT = 18;
+export function shortArgs(text: string): string {
+  if (text.length <= ARGS_SHORT_AT) return text;
+  const m = /^\s*[A-Za-z_][A-Za-z0-9_]*\s*=\s*("[^",]*"|[^\s,"=()]+)\s*$/.exec(text);
+  return m ? m[1] : text;
+}
 export function closedText(spec: PickSpec | undefined, text: string, value: string, known: boolean | null = null): string {
   // round 22: a long condition wraps: the field shows its first line, the block its other lines
+  if (spec?.kind === "expr" && spec.mode === "args") return shortArgs(text);
   if (spec?.kind === "expr") return spec.mode === "expr" && wrapExpr(value).length > 1 ? wrapExpr(value)[0] : text;
   if (spec?.kind === "optnum") return value === "" ? spec.empty : Number.isNaN(optNumOf(value)) ? `${text} ⚠` : text;
   if (spec?.kind !== "ref") return text;

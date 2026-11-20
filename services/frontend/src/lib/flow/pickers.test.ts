@@ -559,3 +559,12 @@ test("roles step 3: the alarm monster picker lists the node model's monsters it 
   // no model for the node's map and none with monsters: nothing to offer
   assert.deepEqual(refChoices(ref("monster"), xmas(MAIN_TAB, { catalogue: { ...CAT, models: { v1: MODELS.v1 } } as PickerData["catalogue"] })), []);
 });
+
+test("a long single named argument closes as its value alone; short or several stay (the 390 budget)", async () => {
+  const { shortArgs, closedText } = await import("./pickers.ts");
+  assert.equal(shortArgs('model="xmas02v1080"'), '"xmas02v1080"');
+  assert.equal(shortArgs('model="xmas02sk"'), 'model="xmas02sk"'); // 16 characters: as written
+  assert.equal(shortArgs("target=t"), "target=t");
+  assert.equal(shortArgs('within=12, npc=npc("n_k1")'), 'within=12, npc=npc("n_k1")'); // several: as written
+  assert.equal(closedText({ kind: "expr", mode: "args", title: "" } as never, 'model="xmas02v1080"', 'model="xmas02v1080"'), '"xmas02v1080"');
+});

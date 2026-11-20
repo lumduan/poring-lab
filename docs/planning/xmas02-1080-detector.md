@@ -864,3 +864,25 @@ detections were on the GPU (22-24 ms).
 - **Deployment stays Batt's decision.** On the evidence, xmas02v1080 beats xmas02sk at 1080 and
   equals or beats it at 720 (8b).
 - Files: `s12-score.json` `73b33fdc...`, `s12-vs-old.json` `5fe599a1...` (screen-ab scratch, archived with the series).
+
+### Amendment 24 (2026-11-20 21:18 ICT from `date`): DEPLOYED by Batt's decision ("ใช่", main and live)
+
+- **xmas02v1080 is xmas_dun02's model** (unit_detector MAP_MODELS). xmas02sk becomes the map's
+  second REFERENCE (MAP_REFERENCES = xmas02gb, xmas02sk): the rollback, and the A/B tools that
+  name it (stage9, screen_ab's default) keep working.
+- models.yaml: xmas02v1080 is no longer a reference; xmas02sk is `reference: true`; both whys
+  say so.
+- The ready-made box (project.ts FUNCTIONS_MODEL and its two generated fixtures) names
+  xmas02v1080. The toolbox's use_model default is the same.
+- The editor: a single named argument over 18 characters closes as its value alone
+  (pickers.shortArgs), so `use_model ( "xmas02v1080" )` stays inside the 390-px budget. The
+  picker still shows its name.
+- Tests: the deployed-model pins moved (unit_detector, models drift, recipes, box recipes, runner
+  blocks, stage5c / stage9 / screen_ab); the editor 580 / 580; ruff, format and mypy clean.
+- **Batt's next order** (2026-11-20, "do these in this order, long"):
+  1. the item model at 1080;
+  2. the cursor at 1080;
+  3. the false goblin alarms.
+  - Also noted: "from the clips, many times the bot still walks past monsters". It is checked
+    with the cursor work, from the Runs' own records.
+- He set the alarm's confirm to 3 on live himself (the garm_confirm block).

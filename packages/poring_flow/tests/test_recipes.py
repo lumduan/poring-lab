@@ -404,8 +404,9 @@ def test_a_runner_node_names_what_the_runner_strikes_and_never_strikes() -> None
         "the runner strikes it", "the runner strikes it", "the runner strikes it", "never struck",
         "the runner strikes it", "never struck"]  # fmt: skip
     # 18.15: no use_model -> the map's own detector, xmas02sk since 2026-11-17 (the same four)
-    assert "(cookie, a class of xmas02sk; no recipe: the runner's own technique)" in plain[4][1]
-    assert "knight_of_windstorm is a class of xmas02sk it never strikes" in plain[3][1]
+    # ➡️ since 2026-11-20 (1080 Amendment 24) the map's own is xmas02v1080 (xmas02sk's classes)
+    assert "(cookie, a class of xmas02v1080; no recipe: the runner's own technique)" in plain[4][1]
+    assert "knight_of_windstorm is a class of xmas02v1080 it never strikes" in plain[3][1]
     # the node's own lists are not the runner's: a warning says so (the simulator reads them)
     listed = json.loads(XMAS.read_text())
     listed["nodes"][0]["targets"] = [{"kind": "mob", "id": 1249}]
@@ -426,10 +427,10 @@ def test_the_hunt_model_is_use_models_else_the_maps_own_detector() -> None:
     assert got is not None and (got[0], got[2]) == ("xmas02", True)
     assert models.map_detector("xmas_dun02") is not None
     # 18.15: the map's own is xmas02sk; xmas02 (a reference) only where a use_model names it
-    assert models.map_detector("xmas_dun02")[0] == "xmas02sk"  # type: ignore[index]
+    assert models.map_detector("xmas_dun02")[0] == "xmas02v1080"  # type: ignore[index]
     assert models.map_detector("prt_fild08") is None  # v1 names no struck classes
     d = box(model=None)
     d["nodes"][0]["tabs"] = [t for t in d["nodes"][0]["tabs"] if t["name"] != rc.MONSTERS_TAB]
     c2 = compiled(d)
     got2 = rc.hunt_model(c2.flow, c2.flow.workflow.blocks[0])
-    assert got2 is not None and (got2[0], got2[2]) == ("xmas02sk", False)
+    assert got2 is not None and (got2[0], got2[2]) == ("xmas02v1080", False)

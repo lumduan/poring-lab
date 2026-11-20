@@ -180,8 +180,11 @@ def test_a_block_names_its_model_xmas02sk_unless_8c_names_the_1080_one(tmp_path:
     it; the default is s11scr's."""
     import unit_detector as ud
 
-    assert sa.MODELS[0] == "xmas02sk" == ud.MAP_MODELS["xmas_dun02"].gpu
-    assert "xmas02v1080" in [m.gpu for m in ud.MAP_REFERENCES["xmas_dun02"]]
+    # s11scr's xmas02sk (a reference since 2026-11-20); xmas02v1080 the map's own (Amendment 24)
+    assert sa.MODELS[0] == "xmas02sk" and "xmas02sk" in [
+        m.gpu for m in ud.MAP_REFERENCES["xmas_dun02"]
+    ]
+    assert ud.MAP_MODELS["xmas_dun02"].gpu == "xmas02v1080"
     before = sa.s10.MODEL
     try:
         sa.use_model("xmas02v1080")

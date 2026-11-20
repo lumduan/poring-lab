@@ -370,7 +370,7 @@ def test_box_model_refused_takes_only_the_model_the_detector_loads_on_the_map() 
         pj.compile_project(pj.from_json(FUNCTIONS.read_text())).flow, "xmas_dun02"
     ).model_doc  # type: ignore[arg-type]
     mm = ud.MAP_MODELS["xmas_dun02"]
-    assert sk is not None and sk["id"] == "xmas02sk"
+    assert sk is not None and sk["id"] == "xmas02v1080"  # the map's own since 2026-11-20
     assert sk["file"] == mm.onnx and mm.sha256.startswith(sk["sha256"])
     assert sk["alarm"] == ["garm_baby", "g_gobline_xmas", "knight_of_windstorm"]
     assert dh.alarm_classes(sk) == ("garm_baby", "g_gobline_xmas", "knight_of_windstorm")
@@ -404,7 +404,9 @@ def test_box_model_refused_takes_only_the_model_the_detector_loads_on_the_map() 
         "strikes": [],
     }
     got_v1 = str(dh.box_model_refused(v1, "xmas_dun02"))
-    assert "xmas02sk-last-736x1280.onnx, xmas02gb-last-736x1280.onnx" in got_v1, got_v1
+    # the map's own first (xmas02v1080 since 2026-11-20), then its references
+    assert ("xmas02v1080-last-736x1280.onnx, xmas02gb-last-736x1280.onnx, "
+            "xmas02sk-last-736x1280.onnx") in got_v1, got_v1  # fmt: skip
     assert dh.box_model_refused(v1, "prt_fild08") is None  # a map without its own: v1 IS it
 
 

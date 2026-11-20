@@ -97,8 +97,9 @@ def test_the_xmas_dun02_fixture_is_one_box_and_says_what_batt_asked() -> None:
     # every one at its default, but the five the box's own events and functions play (matpilot
     # round 20 #4a: project.ts BOX_PLAYS_THEM, test_settings.py)
     gone = {"potion_below", "fly_below", "weight_home", "respawn_at", "respawn_confirm_at"}
-    assert shown == {f.var: (f.group, f.default) for f in st.BLOCKS
-                     if f.name not in gone and not f.optional}  # fmt: skip  (held only when set)
+    assert shown == {
+        f.var: (f.group, f.default) for f in st.BLOCKS if f.name not in gone and not f.optional
+    }  # fmt: skip  (held only when set)
     assert not x.tabs[0].vars and not x.tabs[1].vars  # main and the keys hold no setting
     save, model, hunt, stop = x.main
     # stage 4a (live-blocks.md 3.4): the trained data before the hunt core
@@ -818,7 +819,8 @@ def test_the_python_view_s_start_line_names_the_map() -> None:
                         "project.py"]  # fmt: skip
     # live-blocks.md 12: a setting is a plain assignment with its words as a comment
     assert "\nknife_hp_min = 0.5  # or at once under HP (50 %)\n" in by["xmas_dun02/knife.py"]
-    assert "\nknife_swap = True  # the weapon swap (Batt's technique) (on / off)\n" in by["xmas_dun02/knife.py"]
+    knife = by["xmas_dun02/knife.py"]
+    assert "\nknife_swap = True  # the weapon swap (Batt's technique) (on / off)\n" in knife
     assert '\nsteal_cue = "popup"  # the steal cue (popup / both)\n' in by["xmas_dun02/knife.py"]
     assert "\nD0_PX = 150  # the distance that halves a monster's worth (px)\n" in by[
         "xmas_dun02/aim.py"]  # fmt: skip

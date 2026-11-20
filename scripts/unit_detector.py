@@ -112,19 +112,21 @@ XMAS02SK = MapModel(
     gpu="xmas02sk",
 )
 # xmas02-1080-detector.md Amendment 18 (2026-11-20): the 1080 model (xmas02sk's classes, trained on
-# the 1080 mix) PASSED 8a and 8b. A REFERENCE model only, for the 8c play block (a box loads it by
-# naming it in use_model); NOT deployed -- MAP_MODELS stays xmas02sk until Batt decides.
+# the 1080 mix) PASSED 8a and 8b; 8c (Amendment 23) FAILED "as good as 720" but beat xmas02sk at
+# 1080 (+36 % kills/h, +40 % loot/h) with no loss at 720 (8b).
+# ➡️ DEPLOYED 2026-11-20 by Batt's decision ("ใช่", Amendment 24): xmas_dun02's model (MAP_MODELS).
+# xmas02sk stays loadable as a REFERENCE (the rollback; the A/B tools that name it).
 XMAS02V1080 = MapModel(
     "xmas02v1080-last-736x1280.onnx",
     "04b198988789da0d743d251c88b1b9ab882d2a0e4afd28fcb1c595b34e77794b",
     {s: "monster" for s in XMAS02_SPECIES},
     gpu="xmas02v1080",
 )
-MAP_MODELS: dict[str, MapModel] = {"xmas_dun02": XMAS02SK}
+MAP_MODELS: dict[str, MapModel] = {"xmas_dun02": XMAS02V1080}
 # live-blocks.md 18.15 (dungeon@9.59): a map's OTHER loadable models -- the reference arms', the
 # rollback -- each by its own pinned file. The runner loads one only when the box's use_model names
 # its file (dungeon_hunt.box_model_refused / BoxWatch); with no use_model the map's MAP_MODELS one.
-MAP_REFERENCES: dict[str, tuple[MapModel, ...]] = {"xmas_dun02": (XMAS02GB, XMAS02V1080)}
+MAP_REFERENCES: dict[str, tuple[MapModel, ...]] = {"xmas_dun02": (XMAS02GB, XMAS02SK)}
 
 
 class DetectorUnavailable(RuntimeError):

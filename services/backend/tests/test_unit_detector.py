@@ -205,9 +205,13 @@ def test_the_deployed_xmas02_entry() -> None:
     model is xmas02-sk; its four species collapse to "monster", and the three alarm classes --
     garm_baby, the Christmas Goblin, the Stormy Knight -- stay their own (never a target). xmas02-gb
     (2026-11-10, M11) stays loadable as the map's reference model, the same collapse."""
+    # ➡️ 2026-11-20 (Batt, xmas02-1080-detector.md Amendment 24): the deployed model is the 1080 one,
+    # xmas02v1080 (xmas02sk's classes and collapse); xmas02sk stays loadable as a reference
     spec = ud.MAP_MODELS["xmas_dun02"]
-    assert spec.onnx == "xmas02sk-last-736x1280.onnx" and spec.gpu == "xmas02sk"
-    assert spec.sha256.startswith("76316fb4")  # S4.9's export of S4.8's frozen last.pt
+    assert spec.onnx == "xmas02v1080-last-736x1280.onnx" and spec.gpu == "xmas02v1080"
+    assert spec.sha256.startswith("04b19898")  # Amendment 16's export of Amendment 15's last.pt
+    sk = next(m for m in ud.MAP_REFERENCES["xmas_dun02"] if m.gpu == "xmas02sk")
+    assert sk.sha256.startswith("76316fb4") and sk.collapse == spec.collapse
     assert sorted(spec.collapse) == sorted(XMAS02[3:]) and set(spec.collapse.values()) == {
         "monster"
     }
@@ -580,9 +584,10 @@ def test_for_map_gpu_takes_the_maps_own_weights(
 
 
 def test_the_deployed_gpu_weights_and_the_server_step() -> None:
-    assert ud.MAP_MODELS["xmas_dun02"].gpu == "xmas02sk"  # 18.15 (2026-11-17)
-    # s9ab's A, then the 1080 model (xmas02-1080-detector.md Amendment 18: 8c's arm, not deployed)
-    assert [m.gpu for m in ud.MAP_REFERENCES["xmas_dun02"]] == ["xmas02gb", "xmas02v1080"]
+    # 18.15 (2026-11-17) xmas02sk; ➡️ 2026-11-20 the 1080 model (1080 Amendment 24)
+    assert ud.MAP_MODELS["xmas_dun02"].gpu == "xmas02v1080"
+    # s9ab's A, then the superseded xmas02sk (the rollback; the A/B tools that name it)
+    assert [m.gpu for m in ud.MAP_REFERENCES["xmas_dun02"]] == ["xmas02gb", "xmas02sk"]
     assert ud.GPU_WEIGHTS["v1"].sha256.startswith("03d5397961")
     assert ud.GPU_WEIGHTS["xmas02"].sha256.startswith("5c5bb67a74")  # kept for a rollback
     assert ud.GPU_WEIGHTS["xmas02gb"].sha256.startswith("85fb37a4cb")  # M8's frozen last.pt
@@ -637,7 +642,7 @@ def test_the_openvino_backend_serves_the_deployed_onnx_by_its_pin(
         assert pinned.onnx == "v1png-last-736x1280.onnx" and pinned.onnx_sha256.startswith(
             "32b448a1"
         )
-        assert ud.GPU_WEIGHTS["xmas02sk"].onnx_sha256 == ud.MAP_MODELS["xmas_dun02"].sha256
+        assert ud.GPU_WEIGHTS["xmas02v1080"].onnx_sha256 == ud.MAP_MODELS["xmas_dun02"].sha256
         with gpu_det(model_answering(tmp_path, [1]), sock) as det:
             det.spec = ud.GpuWeights(pinned.path, "b" * 64, pinned.onnx, pinned.sha256)
             det.detect(FRAME)  # the server says the .pt sha; it is the "onnx" pin here: accepted

@@ -621,7 +621,9 @@ export const FLY_FIRST_LAND_VAR = "fly_first_land";
  * Christmas Goblin and the Stormy Knight as well as the Garm Baby). The reference arms -- the one
  * box, the hunt box, the one-box cookie box, the frozen stage-4 fixture -- keep "xmas02" (xmas02-gb,
  * the map's reference model); a box naming no model gets the map's own, xmas02sk. */
-export const FUNCTIONS_MODEL = "xmas02sk";
+// ➡️ 2026-11-20 (Batt, xmas02-1080-detector.md Amendment 24): xmas02v1080, the 1080 model, deployed;
+// xmas02sk stays loadable (the rollback) as the map's second reference model
+export const FUNCTIONS_MODEL = "xmas02v1080";
 
 /** The ready-made box as FUNCTIONS IN TABS (fixtures/project_xmas_dun02_functions.json, 5c's live
  * A/B arm B5c; what /flows and /maps open first): the hunt box (xmasHuntProject) with its runner
@@ -662,7 +664,7 @@ export function xmasFunctionsProject(): Project {
   safety.vars[FLY_FIRST_LAND_VAR] = lit(true); // 18.18: s10ab passed
   const model = main.main!.find((s) => s.kind === "action" && s.block === "use_model");
   if (!model || model.kind !== "action") throw new Error("the ready-made box's main names its model");
-  model.params = { ...model.params, model: lit(FUNCTIONS_MODEL) }; // 18.15: the deployed xmas02sk
+  model.params = { ...model.params, model: lit(FUNCTIONS_MODEL) }; // the deployed model (2026-11-20: xmas02v1080)
   return {
     ...p,
     name: "xmas_dun02",

@@ -298,13 +298,14 @@ test("the ready-made functions boxes hold fly_first_land ON, the reference boxes
 });
 
 // live-blocks 18.15 (Batt 18.14, 2026-11-17: "use it for real"): the ready-made functions boxes
-// name the deployed xmas02sk in use_model; the reference boxes keep xmas02 (xmas02-gb)
-test("the ready-made functions boxes name xmas02sk, the reference boxes xmas02", () => {
+// name the deployed model in use_model (xmas02sk; ➡️ since 2026-11-20 xmas02v1080, 1080 Amendment
+// 24); the reference boxes keep xmas02 (xmas02-gb)
+test("the ready-made functions boxes name the deployed model, the reference boxes xmas02", () => {
   const model = (p: ReturnType<typeof xmasFunctionsProject>) => {
     const s = mainOf(mapNodes(p)[0])!.main!.find((x) => x.kind === "action" && x.block === "use_model");
     return s?.kind === "action" ? s.params.model : null;
   };
-  assert.equal(FUNCTIONS_MODEL, "xmas02sk");
+  assert.equal(FUNCTIONS_MODEL, "xmas02v1080");
   for (const p of [xmasFunctionsProject(), xmasFunctionsCookieNoSwapProject()]) assert.deepEqual(model(p), { kind: "lit", value: FUNCTIONS_MODEL }, p.name);
   for (const p of [xmasProject(), xmasHuntProject(), xmasCookieNoSwapProject()]) assert.deepEqual(model(p), { kind: "lit", value: "xmas02" }, p.name);
   assert.equal(fixture().nodes[0].tabs[0].main[1].params.model.value, FUNCTIONS_MODEL);

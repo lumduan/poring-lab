@@ -52,10 +52,13 @@ models:
     why: "LIVE since 2026-10-13 (Batt decision 10) after the gold-set parity, docs/benchmarks/v1-vs-v0png.md; every map but xmas_dun02"
   # the id `xmas02sk` is xmas_dun02's detector since 2026-11-17 (live-blocks.md 18.14 / 18.15,
   # Batt: "use it for real"; unit_detector MAP_MODELS["xmas_dun02"]): xmas02-gb's classes plus the
-  # Christmas Goblin and the Stormy Knight, which the runner never strikes and its alarm flies on
+  # Christmas Goblin and the Stormy Knight, which the runner never strikes and its alarm flies on.
+  # ➡️ SUPERSEDED 2026-11-20 by xmas02v1080 (Batt, xmas02-1080-detector.md Amendment 24): kept LIVE as
+  # a REFERENCE model (the rollback; the A/B tools that name it), loadable only by naming it
   xmas02sk:
     kind: detector
     status: live
+    reference: true
     file: xmas02sk-last-736x1280.onnx
     sha256: 76316fb4e581
     maps: [xmas_dun02]
@@ -64,7 +67,7 @@ models:
     mobs: {mystcase: [1249], cruiser: [1248], cookie: [1265], cookie_xmas: [1246], garm_baby: [1515], g_gobline_xmas: [1607], knight_of_windstorm: [1251]}
     strikes: [mystcase, cruiser, cookie, cookie_xmas]
     alarm: [garm_baby, g_gobline_xmas, knight_of_windstorm]
-    why: "xmas02-sk: its alarm bar PASSED 2026-11-16 (docs/planning/xmas02-detector.md S7.6: 33 / 33 visits detected, false fires 0 / 98 and 0 / 265) and DEPLOYED on xmas_dun02 2026-11-17 (live-blocks.md 18.15); S4.10's Goblin precision bar failed in the crowd, S5-S7 re-scored the alarm by visits; npc and warp EMPTY fixed classes"
+    why: "xmas02-sk: its alarm bar PASSED 2026-11-16 (docs/planning/xmas02-detector.md S7.6: 33 / 33 visits detected, false fires 0 / 98 and 0 / 265) and DEPLOYED on xmas_dun02 2026-11-17 (live-blocks.md 18.15); S4.10's Goblin precision bar failed in the crowd, S5-S7 re-scored the alarm by visits; npc and warp EMPTY fixed classes; superseded 2026-11-20 by xmas02v1080 (Amendment 24), kept as a REFERENCE"
   # the id `xmas02` is the deployed xmas02-gb of 2026-11-10 to 2026-11-17 (M12), kept LIVE as the
   # map's REFERENCE model (unit_detector MAP_REFERENCES: a box loads it only by naming it, s9ab's
   # A); the 11-07 model stays in GPU_WEIGHTS["xmas02"] only as the rollback
@@ -81,13 +84,11 @@ models:
     strikes: [mystcase, cruiser, cookie, cookie_xmas]
     why: "xmas02-gb: PASSED its held-out score 2026-11-10 (docs/planning/xmas02-detector.md M11), deployed on xmas_dun02 (M12) until xmas02sk (2026-11-17, live-blocks.md 18.15); now the REFERENCE arm's model; garm_baby is its alarm class (the runner never strikes it); npc and warp are EMPTY fixed classes (Amendment H)"
   # the id `xmas02v1080` is the 1080 model (xmas02-1080-detector.md): xmas02sk's classes, trained on
-  # the 1080 mix; it PASSED 8a and 8b (Amendment 18). A REFERENCE model ONLY, registered so the 8c
-  # play block's box can name it (unit_detector MAP_REFERENCES); NOT deployed: the map's detector
-  # stays xmas02sk (MAP_MODELS) until Batt decides
+  # the 1080 mix; it PASSED 8a and 8b (Amendment 18). ➡️ xmas_dun02's DEPLOYED model since 2026-11-20
+  # (Batt, Amendment 24; unit_detector MAP_MODELS): 8c beat xmas02sk at 1080, no loss at 720
   xmas02v1080:
     kind: detector
     status: live
-    reference: true
     file: xmas02v1080-last-736x1280.onnx
     sha256: 04b198988789
     maps: [xmas_dun02]
@@ -96,7 +97,7 @@ models:
     mobs: {mystcase: [1249], cruiser: [1248], cookie: [1265], cookie_xmas: [1246], garm_baby: [1515], g_gobline_xmas: [1607], knight_of_windstorm: [1251]}
     strikes: [mystcase, cruiser, cookie, cookie_xmas]
     alarm: [garm_baby, g_gobline_xmas, knight_of_windstorm]
-    why: "xmas02-1080: 8a and 8b PASSED 2026-11-20 (docs/planning/xmas02-1080-detector.md Amendment 18: A1-A7 at 1080, no loss at 720); registered as a REFERENCE for the 8c play block only (loadable by naming it in use_model); NOT deployed, Batt's decision"
+    why: "xmas02-1080: 8a and 8b PASSED 2026-11-20 (docs/planning/xmas02-1080-detector.md Amendment 18: A1-A7 at 1080, no loss at 720); 8c (Amendment 23) FAILED as good as 720 but beat xmas02sk at 1080 (+36 % kills/h); DEPLOYED on xmas_dun02 by Batt's decision 2026-11-20 (Amendment 24)"
   stormy-v1:
     kind: boss_recognizer
     status: not_adopted
