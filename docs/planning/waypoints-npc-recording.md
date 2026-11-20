@@ -144,3 +144,19 @@ code: `src/lib/mats/path.ts`, `path-edit.ts`, `src/lib/blocks/incoming.ts`,
   like a paste, with Undo and Dismiss).
 - **Its license:** MIT, "Copyright (c) 2026 Sarat Sonsuk" (LICENSE at 4022c87). A port of its code
   is recorded in THIRD_PARTY.md first (rule 4's reuse rule).
+
+## Amendment 2 (2026-11-20 14:28 ICT from `date`): a prerequisite -- the map's NAME on the player's own client
+
+- **Map-to-map walking needs to know which map she is on.** Today the map is told by the
+  minimap's PICTURE against the lab's references (minimap_id).
+- **On Batt's live client it does not read.** The 11-20 13:21 Run: "no map's picture matches the
+  minimap (the best, gl_chyard's, 0.21; a map is named at 0.40)". The Run started on a warning
+  only.
+- **The fix fits this plan's recording:** while a person records a path, the lab learns THIS
+  client's minimap picture of each map it crosses.
+  - The map's name comes from the server-independent `/where` line (an ASCII map id and the
+    cell, typed behind the UI gate) once per map, or from the recording's start map.
+  - The pictures stay in that copy's data/ (client pixels, never committed), as the live HP
+    font does.
+- **The bar:** on the player's client, every map of a recorded path is named on 20 of 20 fresh
+  arrivals, before step 2 (a map change) is tried.
