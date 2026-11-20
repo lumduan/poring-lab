@@ -69,6 +69,22 @@ def dist(a: Bin, b: Bin) -> float:
 
 
 def read(client_bgr: Any, glyphs: Mapping[str, Bin], dy: int = 0) -> int | None:
+    """The percent as an int, or None. The lab's glyphs first (``read_lab``, unchanged); when they
+    read nothing, each of THIS client's own fonts (``client_fonts``: 2026-11-20, the live PC's
+    client prints the percent in a thinner font -- digits 5 px on a 6 px pitch from x 175 -- so the
+    lab's glyphs read None on every frame and the Run played HP-blind)."""
+    got = read_lab(client_bgr, glyphs, dy)
+    if got is not None:
+        return got
+    band = ink(client_bgr, dy)
+    for font in client_fonts().values():
+        got = read_font(band, font)
+        if got is not None:
+            return got
+    return None
+
+
+def read_lab(client_bgr: Any, glyphs: Mapping[str, Bin], dy: int = 0) -> int | None:
     """PURE: the percent as an int, or None (no layout of 1-3 digits + '%' matches; a value > 100;
     a leading zero). ``dy`` = SP_DY reads the SP line with the same glyphs (2026-10-22)."""
     band = ink(client_bgr, dy)
@@ -90,6 +106,101 @@ def read(client_bgr: Any, glyphs: Mapping[str, Bin], dy: int = 0) -> int | None:
             if best is None or worst < best[0]:
                 best = (worst, int(txt))
     return None if best is None else best[1]
+
+
+# --- this client's own fonts (2026-11-20): a variable-pitch reading -------------------------------
+# A font is a set of glyphs cut from THIS client's screen by ``learn-font`` (a line whose text a
+# person or the agent reads, e.g. Basic Info's "Weight : 1328 / 4200" or the percent itself): each
+# glyph is the ink of one character, cropped to its own columns. The reading segments the percent's
+# band into ink runs (columns with ink, split by an empty column) and names each run by the glyph of
+# the SAME width that differs least (<= MAX_DIST); the last run must be '%'.
+FONT_SEARCH = (X0 - 2, X0 + 44)  # the percent's columns in any font (the bar's end is at x 167-169)
+FONT_PREFIX = "hp_pct_glyphs@"  # GLYPHS' folder: hp_pct_glyphs@<name>.npz (client pixels)
+_FONTS: dict[str, tuple[float, dict[str, Bin]]] = {}
+
+
+def runs(band: Bin, x0: int, x1: int) -> list[tuple[int, Bin]]:
+    """PURE: the ink runs of ``band`` between columns x0 and x1: (left column, the run's ink)."""
+    cols = band[:, x0:x1].any(axis=0)
+    out: list[tuple[int, Bin]] = []
+    i = 0
+    while i < len(cols):
+        if not cols[i]:
+            i += 1
+            continue
+        j = i
+        while j < len(cols) and cols[j]:
+            j += 1
+        out.append((x0 + i, band[:, x0 + i : x0 + j]))
+        i = j
+    return out
+
+
+def name_run(run: Bin, font: Mapping[str, Bin]) -> tuple[str, float] | None:
+    """PURE: the font's character whose glyph (the same width) differs least from ``run``, and by
+    how much; None when none is within MAX_DIST."""
+    sc = sorted((dist(run, g), ch) for ch, g in font.items() if g.shape == run.shape)
+    return (sc[0][1], sc[0][0]) if sc and sc[0][0] <= MAX_DIST else None
+
+
+def read_font(band: Bin, font: Mapping[str, Bin]) -> int | None:
+    """PURE: the percent read with a client's own font, or None (an unknown run, no closing '%',
+    a value over 100, a leading zero)."""
+    rs = runs(band, *FONT_SEARCH)
+    if len(rs) < 2:
+        return None
+    named = [name_run(r, font) for _x, r in rs]
+    if any(n is None for n in named):
+        return None
+    txt = "".join(n[0] for n in named if n is not None)
+    if not txt.endswith("%") or not txt[:-1].isdigit() or len(txt) > 4:
+        return None
+    if len(txt) > 2 and txt[0] == "0":
+        return None
+    v = int(txt[:-1])
+    return v if v <= 100 else None
+
+
+def client_fonts(folder: Path | None = None) -> dict[str, dict[str, Bin]]:
+    """This client's fonts from GLYPHS' folder (re-read when a file changes; none -> {})."""
+    folder = folder or GLYPHS.parent
+    out: dict[str, dict[str, Bin]] = {}
+    for p in sorted(folder.glob(f"{FONT_PREFIX}*.npz")):
+        try:
+            mt = p.stat().st_mtime
+            cached = _FONTS.get(str(p))
+            if cached is None or cached[0] != mt:
+                z = np.load(p)
+                cached = (mt, {("%" if k == "pct" else k[1:]): z[k].astype(bool) for k in z.files})
+                _FONTS[str(p)] = cached
+            out[p.stem[len(FONT_PREFIX) :]] = cached[1]
+        except (OSError, ValueError, KeyError):
+            continue  # a broken font file reads nothing (the lab's glyphs still do)
+    return out
+
+
+def learn_font(client_bgr: Any, row: int, x0: int, x1: int, text: str,
+               font: dict[str, Bin]) -> dict[str, Any]:  # fmt: skip
+    """Cut glyphs from one line of KNOWN text: the band at rows ``row`` .. ``row`` + (Y1 - Y0),
+    columns x0..x1. Its ink runs must be exactly the text's characters (spaces are gaps, not runs),
+    or nothing is learned. Only digits and '%' are kept; a character already in ``font`` must match
+    it (<= MAX_DIST), else it is reported and kept as it was."""
+    g = np.asarray(client_bgr)[row : row + (Y1 - Y0), :, :3].astype(np.float32).mean(axis=2)
+    rs = runs(g < INK, x0, x1)
+    chars = [c for c in text if not c.isspace()]
+    if len(rs) != len(chars):
+        return {"learned": [], "error": f"{len(rs)} ink runs for {len(chars)} characters"}
+    learned, clashes = [], []
+    for (_x, r), ch in zip(rs, chars, strict=True):
+        if not (ch.isdigit() or ch == "%"):
+            continue
+        if ch in font:
+            if dist(r, font[ch]) > MAX_DIST:
+                clashes.append(ch)
+            continue
+        font[ch] = r
+        learned.append(ch)
+    return {"learned": learned, "clashes": clashes, "known": sorted(font)}
 
 
 # --- offline: labels from the packets, the glyphs, the proof --------------------------------------
@@ -160,8 +271,15 @@ def fit(rows: Sequence[tuple[int, Path, int]]) -> dict[str, Bin]:
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)  # fmt: skip
-    ap.add_argument("cmd", choices=("fit", "prove"))
-    ap.add_argument("frames", type=Path)
+    ap.add_argument("cmd", choices=("fit", "prove", "learn-font"))
+    ap.add_argument("frames", type=Path, help="fit/prove: the frames folder; learn-font: one frame")
+    ap.add_argument("--font", default=None, help="learn-font: the font's name (this client's)")
+    ap.add_argument(
+        "--row", type=int, default=Y0, help="learn-font: the line's top row (client px)"
+    )
+    ap.add_argument("--x0", type=int, default=FONT_SEARCH[0])
+    ap.add_argument("--x1", type=int, default=FONT_SEARCH[1])
+    ap.add_argument("--text", default=None, help="learn-font: the line's text as the screen shows")
     ap.add_argument("--max-hp", type=int, default=5260)
     ap.add_argument("--glyphs", type=Path, default=GLYPHS)
     ap.add_argument(
@@ -171,6 +289,19 @@ def main() -> int:
         help="label only frames whose last absolute hp packet is this recent",
     )
     a = ap.parse_args()
+    if a.cmd == "learn-font":
+        if not a.font or a.text is None:
+            raise SystemExit("learn-font needs --font NAME and --text")
+        path = GLYPHS.parent / f"{FONT_PREFIX}{a.font}.npz"
+        font = dict(client_fonts(GLYPHS.parent).get(a.font, {}))
+        res = learn_font(bgr(a.frames), a.row, a.x0, a.x1, a.text, font)
+        if res.get("learned"):
+            path.parent.mkdir(parents=True, exist_ok=True)
+            tmp = path.with_name(f".{path.stem}.tmp.npz")
+            np.savez(tmp, **{("pct" if k == "%" else f"d{k}"): v for k, v in font.items()})
+            tmp.replace(path)
+        print(json.dumps({**res, "file": str(path)}))
+        return 0 if not res.get("error") else 2
     rows = labelled(a.frames, a.max_hp, a.fresh_s)
     if a.cmd == "fit":
         g = fit([r for r in rows if r[0] % 2 == 0])
