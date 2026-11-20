@@ -237,13 +237,15 @@ def test_the_colour_shape_decides_only_with_greys_ranking() -> None:
     assert cw.padlock_state(pink) == "locked"
     puzzle = {"open": 12.0, "locked": 5.8, "open_shape": 0.312, "locked_shape": 0.532}
     assert cw.padlock_state(puzzle) == "locked"
-    assert cw.padlock_state({**pink, "locked_shape": 0.38}) is None  # the shape not clear (0.065)
+    # Amendment 5 (2026-11-20): grey margin 14.3 >= 10 decides when the shape does not contradict
+    assert cw.padlock_state({**pink, "locked_shape": 0.38}) == "locked"  # the shape not against
     assert cw.padlock_state({**puzzle, "open": 5.0}) is None  # grey ranks the other first
     assert cw.padlock_state({**pink, "open_shape": 0.6, "locked_shape": 0.3}) is None  # disagrees
     assert cw.padlock_state({**pink, "locked": 21.0, "open": 25.0}) is None  # nothing matches
     flip = {"open": 6.0, "locked": 12.5, "open_shape": 0.58, "locked_shape": 0.30}
     assert cw.padlock_state(flip) == "open"
-    assert cw.padlock_state({"open": 20.1, "locked": 5.8}) is None  # no shape: grey alone
+    assert cw.padlock_state({"open": 20.1, "locked": 5.8}) == "locked"  # near margin, no shape
+    assert cw.padlock_state({"open": 14.0, "locked": 5.8}) is None  # 8.2: under the near margin
 
 
 def test_the_xw3_stand_reads_locked_and_open_frames_stay_open() -> None:
@@ -263,7 +265,10 @@ def test_the_xw3_stand_reads_locked_and_open_frames_stay_open() -> None:
     ]
     for d in opened:
         assert cw.padlock_state(d) == "open"
-    assert cw.padlock_state({**xw3, "locked_shape": 0.32}) is None  # margin 0.091
+    assert (
+        cw.padlock_state({**xw3, "locked_shape": 0.32}) == "locked"
+    )  # grey 14.1, shape not against
+    assert cw.padlock_state({**xw3, "locked_shape": 0.10}) is None  # the shape contradicts (0.129)
 
 
 def test_the_padlock_read_ignores_the_scene_behind_the_icon_row() -> None:
@@ -602,3 +607,23 @@ def test_find_any_takes_the_fullest_window_not_the_first_from_the_top() -> None:
     assert cw.find_any(alone, avoid=[(226, 0, 526, 40)]) is None  # ... unless it is a found window
     both = cw.find_any(img, avoid=[(226, 0, 526, 40)])
     assert both is not None and both["lines"] == 6
+
+
+def test_the_1080_padlock_reads_amendment_5() -> None:
+    """2026-11-20 (xmas02-1080-detector.md Amendment 5): the v1t1 watch's stop at 1080 (closed 3.1 /
+    open 15.4, shapes 0.213 / 0.223) and a winner just over the match cap (closed 20.2 / open 70.6)
+    read locked; a wide separation never overrides a contradicting shape; open frames stay open."""
+    assert cw.padlock_state({"locked": 3.1, "open": 15.4, "locked_shape": 0.213,
+                             "open_shape": 0.223}) == "locked"  # fmt: skip
+    assert cw.padlock_state({"locked": 20.2, "open": 70.6, "locked_shape": 0.347,
+                             "open_shape": 0.239}) == "locked"  # fmt: skip
+    assert (
+        cw.padlock_state({"locked": 20.2, "open": 70.6, "locked_shape": 0.2, "open_shape": 0.5})
+        is None
+    )  # the shape says open: undecided
+    assert cw.padlock_state({"locked": 26.0, "open": 90.0}) is None  # the winner past the cap
+    assert cw.padlock_state({"open": 21.0, "locked": 60.0}) == "open"  # wide, the other way
+    assert (
+        cw.padlock_state({"open": 4.4, "locked": 50.4, "open_shape": 0.602, "locked_shape": 0.302})
+        == "open"
+    )  # an archived open frame (11-05)

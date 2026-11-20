@@ -499,6 +499,18 @@ PADLOCK_CORE = 170.0  # a template's own icon pixels (the blue fill and the whit
 # today's watches): 151 locked, the 2 others that stand; 16 archived OPEN frames: shape margin
 # -0.28 .. -0.30 (the other side), grey margin >= 39.9; at 0.10 every frame reads its truth.
 PADLOCK_SHAPE_MARGIN = 0.10
+# ➡️ 2026-11-20 (xmas02-1080-detector.md Amendment 5): at 1920x1080 the chat window floats mid-left
+# over the world, and 45 of 2,946 recorded frames (all LOCKED: nobody touched the padlock) read
+# None -- the v1t1 watch stopped on one (closed 3.1 / open 15.4, shapes 0.213 / 0.223): a grey
+# margin under 15, or the winner just over PADLOCK_MATCH (closed 20.2 / open 70.6). Grey also
+# decides (a) at a margin of PADLOCK_NEAR_MARGIN, or (b) by a WIDE separation (the winner within
+# PADLOCK_WIDE[0], the other >= PADLOCK_WIDE[1] times as far and >= PADLOCK_WIDE[2] farther) --
+# both only when the colour shape does not CONTRADICT (the other template's shape ahead by
+# PADLOCK_SHAPE_MARGIN). Measured: the 2,946 frames read 2,895 locked, 0 open, 0 None (51 had no
+# window: the F10 cycle, the desktop); the decided margins on locked frames are >= 12.3, and every
+# archived OPEN frame (11-05) reads open by >= 39.9, so 10 keeps a wide gap to any open frame.
+PADLOCK_NEAR_MARGIN = 10.0
+PADLOCK_WIDE = (25.0, 2.5, 30.0)
 
 
 def _padlock_crop(img_rgb: Any, left: int, text_top: int) -> np.ndarray:
@@ -541,6 +553,12 @@ def padlock_state(d: Mapping[str, float]) -> str | None:
         return "open"
     if d["locked"] <= PADLOCK_MATCH and d["open"] - d["locked"] >= PADLOCK_MARGIN:
         return "locked"
+    wmax, wratio, wgap = PADLOCK_WIDE
+    for k, other in (("open", "locked"), ("locked", "open")):
+        near = d[k] <= PADLOCK_MATCH and d[other] - d[k] >= PADLOCK_NEAR_MARGIN
+        wide = d[k] <= wmax and d[other] >= wratio * d[k] and d[other] - d[k] >= wgap
+        if (near or wide) and not _shape_against(d, k):
+            return k
     for k, other in (("open", "locked"), ("locked", "open")):
         sk, so = d.get(f"{k}_shape"), d.get(f"{other}_shape")
         if sk is None or so is None:
@@ -548,6 +566,13 @@ def padlock_state(d: Mapping[str, float]) -> str | None:
         if d[k] <= PADLOCK_MATCH and d[k] < d[other] and sk - so >= PADLOCK_SHAPE_MARGIN:
             return k
     return None
+
+
+def _shape_against(d: Mapping[str, float], k: str) -> bool:
+    """PURE: the colour shape favours the OTHER template by PADLOCK_SHAPE_MARGIN or more."""
+    other = "locked" if k == "open" else "open"
+    sk, so = d.get(f"{k}_shape"), d.get(f"{other}_shape")
+    return sk is not None and so is not None and so - sk >= PADLOCK_SHAPE_MARGIN
 
 
 # The tab strip (measured 2026-11-05 13:3x, both tabs selected in turn): each label's white text in
