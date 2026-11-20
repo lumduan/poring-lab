@@ -655,6 +655,15 @@ def load_loot_refs(d: Path = LOOT_DIR) -> dict[str, tuple[str, Any]]:
 
 
 def _tab(agent: Any, screen: Any, name: str) -> None:
+    """Show the inventory's tab ``name`` (two motions, then the click).
+    ➡️ xmas02-items-1080.md Amendment 9 (2026-11-21, staging ifs1 at 1080): in the virtual client
+    the open bag is a 1:1 panel only once a grab has seen it (ro_agent.inventory_tick, inside the
+    grab path). clear_loot clicked its first tab right after the chord, before any grab: the click
+    was mapped as a WORLD click (x1.5 about the centre) and missed, so the tab shown stayed the
+    last one used (Use), its stacks were dropped as if they were Etc's, and Zargon / Manacles
+    (Etc) were never shown. So the bag is LOOKED AT first; a bag not read open is never clicked."""
+    if r.virtual_active() and not r.inventory_tick(screen, force=True):
+        raise r.Stop(f"gm_state: the inventory does not read open at its home: no {name} tab click")
     x, y = r.at(*INV_TABS[name])
     agent.move(x + 3, y + 3)
     time.sleep(0.15)

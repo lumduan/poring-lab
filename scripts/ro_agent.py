@@ -442,15 +442,17 @@ def _panels_tick(real: Any) -> None:
         _search_again(real)
 
 
-def inventory_tick(screen: Any, now: float | None = None) -> bool:
+def inventory_tick(screen: Any, now: float | None = None, *, force: bool = False) -> bool:
     """T-I5: is the bag open at its home (bag_count.window_at on the REAL pixels around it)? At most
     every INV_CHECK_S; the answer is kept for client_view (the inventory panel). A small real grab
-    (the window and a margin), so the virtual grab path stays cheap."""
+    (the window and a margin), so the virtual grab path stays cheap. ``force``: look now, whatever
+    the last look's age -- before a click into the bag (gm_state._tab; xmas02-items-1080.md
+    Amendment 9: a tab click sent before any grab saw the bag open went to the WORLD)."""
     import bag_count as bc
 
     t = time.monotonic() if now is None else now
     with _PANELS_LOCK:
-        if t - float(_INV["t"]) < INV_CHECK_S:
+        if not force and t - float(_INV["t"]) < INV_CHECK_S:
             return _INV["origin"] is not None
         _INV["t"] = t
     try:

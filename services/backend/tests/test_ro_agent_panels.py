@@ -277,6 +277,12 @@ def test_the_open_inventory_is_a_one_to_one_panel_at_1080(
     assert ro.inventory_tick(scr, now=10.1) is True  # within INV_CHECK_S: the last answer
     assert ro.inventory_tick(scr, now=10.0 + ro.INV_CHECK_S) is False
     assert ro.client_view().panel_at(*gs.slot_centre(0, 0)) is None
+    # Amendment 9: before a click into the bag the look is FORCED, whatever the last one's age
+    scr.frame = _bag_frame(True)
+    t = 10.0 + ro.INV_CHECK_S + 0.1
+    assert ro.inventory_tick(scr, now=t) is False  # within INV_CHECK_S of the closed read
+    assert ro.inventory_tick(scr, now=t, force=True) is True
+    assert ro.client_view().panel_at(*gs.slot_centre(0, 0)).name == "inventory"
 
 
 def test_the_quantity_prompt_is_found_and_mapped_one_to_one_at_1080(

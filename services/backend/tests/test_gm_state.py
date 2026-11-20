@@ -551,3 +551,44 @@ def test_a_level_line_clears_its_notices_before_the_next_typed_line(
         "clear w:@joblevelup -49",
         "type @heal",
     ]
+
+
+class _TabAgent:
+    def __init__(self) -> None:
+        self.sent: list[tuple[str, int, int]] = []
+
+    def move(self, x: int, y: int) -> None:
+        self.sent.append(("move", x, y))
+
+    def click(self, x: int, y: int) -> None:
+        self.sent.append(("click", x, y))
+
+
+def test_a_tab_click_at_1080_looks_at_the_bag_first(gs: Any, monkeypatch: pytest.MonkeyPatch,
+                                                   ) -> None:  # fmt: skip
+    """xmas02-items-1080.md Amendment 9 (staging ifs1): a tab click sent before any grab saw the
+    bag open went to the WORLD. Now the bag is looked at (forced) before the motions; a bag that
+    does not read open is never clicked; at 1280x720 (no virtual client) nothing changes."""
+    r = gs.r
+    calls: list[Any] = []
+    monkeypatch.setattr(gs.time, "sleep", lambda s: None)
+    monkeypatch.setattr(r, "at", lambda x, y: (x, y))
+    monkeypatch.setattr(r, "virtual_active", lambda: True)
+
+    def tick(screen: Any, now: Any = None, *, force: bool = False) -> bool:
+        calls.append(("tick", force, len(agent.sent)))
+        return True
+
+    agent = _TabAgent()
+    monkeypatch.setattr(r, "inventory_tick", tick)
+    gs._tab(agent, object(), "etc")
+    assert calls == [("tick", True, 0)]  # looked at, forced, before any input
+    assert agent.sent[-1] == ("click", *gs.INV_TABS["etc"])
+    agent, calls[:] = _TabAgent(), []
+    monkeypatch.setattr(r, "inventory_tick", lambda screen, now=None, *, force=False: False)
+    with pytest.raises(r.Stop, match="does not read open"):
+        gs._tab(agent, object(), "etc")
+    assert agent.sent == []  # never clicked blind
+    monkeypatch.setattr(r, "virtual_active", lambda: False)  # 1280x720: the real pixels
+    gs._tab(agent, object(), "use")
+    assert agent.sent[-1] == ("click", *gs.INV_TABS["use"])
