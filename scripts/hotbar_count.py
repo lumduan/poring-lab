@@ -45,10 +45,11 @@ Gray = npt.NDArray[np.float64]
 
 
 # 2026-11-20, the live PC's client (its 2-row hotbar): a slot's count FOLLOWS a small "v" mark at
-# the slot's bottom-left, LEFT-aligned, up to 4 digits -- slot k's mark in game-region x [257 + 29 k,
-# 260 + 29 k), rows 31-32; its digits from x 262 + 29 k, rows 27-35 -- in the SAME glyphs as the
-# lab's (the templates match its 588 / 60 / 111 exactly). The lab's right-aligned box above caught
-# only part of them (None on every slot, and the 1-row bar clipped them). The mark picks the layout.
+# the slot's bottom-left, LEFT-aligned, up to 4 digits -- slot k's mark in game-region
+# x [257 + 29 k, 260 + 29 k), rows 31-32; its digits from x 262 + 29 k, rows 27-35 -- in the SAME
+# glyphs as the lab's (the templates match its 588 / 60 / 111 exactly). The lab's right-aligned box
+# above caught only part of them (None on every slot; the 1-row bar clipped them too). The mark
+# picks the layout.
 MARK = (257, 31, 260, 33)  # slot 0's mark (x0, y0, x1, y1), end-exclusive (3 + 2 px of ink)
 MARK_INK = 0.75  # the share of the mark box that is ink when the mark is drawn
 LEFT = (262, 27, 290, 36)  # slot 0's left-aligned count box (4 digits on the 7 px pitch)
