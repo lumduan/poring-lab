@@ -756,22 +756,34 @@ class Sight:
                  clock: Callable[[], float] = time.monotonic) -> None:  # fmt: skip
         self.lock = threading.Lock()
         self.feet: list[tuple[float, float, str]] = []
+        self.boxes: list[tuple[float, float, float, float]] = []  # the same read's monster boxes
         self.t = -1e9
         self.clock = clock
         self._uv_fn, self._uv, self._grid = uv, None, None
 
     def add(self, boxes: Sequence[Any]) -> None:
-        rows = []
+        rows, rects = [], []
         for b in boxes:
             try:
                 if str(getattr(b, "cls", "")) != MONSTER_CLS:
                     continue
                 name = str(getattr(b, "species", None) or MONSTER_CLS)[:32]
                 rows.append(((float(b.x0) + float(b.x1)) / 2, float(b.y1), name))
+                rects.append((float(b.x0), float(b.y0), float(b.x1), float(b.y1)))
             except (AttributeError, TypeError, ValueError):
                 continue
         with self.lock:
-            self.feet, self.t = rows, self.clock()
+            self.feet, self.boxes, self.t = rows, rects, self.clock()
+
+    def box_at(self, u: float, v: float, max_age_s: float = 0.5, margin: float = 2.0) -> bool:
+        """cursor-1080.md Amendment 8: (u, v) (game-region px) lies inside a monster box of the
+        detector's last read, and that read is at most ``max_age_s`` old."""
+        with self.lock:
+            rects, t = list(self.boxes), self.t
+        if self.clock() - t > max_age_s:
+            return False
+        return any(x0 - margin <= u <= x1 + margin and y0 - margin <= v <= y1 + margin
+                   for x0, y0, x1, y1 in rects)  # fmt: skip
 
     def cells(self, here: Any) -> list[list[Any]]:
         """The monsters of the detector's last read as [x, y, name] map cells; [] when that read
@@ -796,6 +808,53 @@ class Sight:
             return out
         except Exception:  # display only: never stops a Run
             return []
+
+
+def items_only(det: Any) -> bool:
+    """PURE: the detector runs the floor-item model alone (its class names are floor_item only):
+    its reads never replace the Sight's monsters (the live map's dots, click on sight's boxes)."""
+    names = set(getattr(det, "names", None) or ())
+    return bool(names) and names <= {"floor_item"}
+
+
+SIGHT_LOOK_S = 0.10  # cursor-1080.md Amendment 8: the look at a fresh monster box's point
+SIGHT_BOX_AGE_S = 0.5  # ... "fresh": the detector's last read at most this old
+
+
+@contextlib.contextmanager
+def click_on_sight(vals: Mapping[str, Any], sight: Sight) -> Iterator[None]:
+    """cursor-1080.md Amendment 8 (Batt 2026-11-21: "see it, click to strike at once"): while
+    the player's ``cursor_click_on_sight`` is on, the runner's sword check (cursor_sword.check,
+    looked up by name at each hover) reads at most SIGHT_LOOK_S at a point inside a FRESH monster
+    box, and an undecided read ("unknown") becomes "sword": the click goes; "clear" (the walk
+    arrow) and "sword" stay as read. Every other hover (the walk gate, the loot hovers, a point in
+    no fresh monster box) is the runner's own check, untouched. The runner's lock-arrow and
+    strike-end watch after the click are unchanged. Off = unchanged."""
+    from poring_flow import settings as st
+
+    if not (vals.get("cursor_click_on_sight") is True and st.in_use("cursor_click_on_sight", vals)):
+        yield
+        return
+    import cursor_sword as csw
+
+    saved = csw.check
+
+    def check(agent: Any, screen: Any, sw: Any, gx0: int, gy0: int, u: float, v: float,
+              *a: Any, wait_s: float, **k: Any) -> Any:  # fmt: skip
+        if not sight.box_at(u, v, SIGHT_BOX_AGE_S):
+            return saved(agent, screen, sw, gx0, gy0, u, v, *a, wait_s=wait_s, **k)
+        res = dict(saved(agent, screen, sw, gx0, gy0, u, v, *a,
+                         wait_s=min(wait_s, SIGHT_LOOK_S), **k))  # fmt: skip
+        res["on_sight"] = True
+        if res.get("verdict") == "unknown":
+            res["verdict"] = "sword"
+        return res
+
+    csw.check = check  # type: ignore[assignment]
+    try:
+        yield
+    finally:
+        csw.check = saved  # type: ignore[assignment]
 
 
 @contextlib.contextmanager
@@ -825,7 +884,7 @@ def seen_boxes(seen: Seen, sight: Sight | None = None) -> Iterator[None]:
             got = f(self, img, *a, **k)
             with contextlib.suppress(Exception):
                 seen.add(got)
-            if sight is not None:
+            if sight is not None and not items_only(self):
                 with contextlib.suppress(Exception):
                     sight.add(got)
             return got
@@ -1048,6 +1107,7 @@ class HuntCore:
                 role_alarm(dh, plan.vals, warn),
                 near_alarm(dh, plan.vals),
                 item_rule(plan.vals),
+                click_on_sight(plan.vals, sight),
                 seen_boxes(seen, sight),
             ):
                 res.rc = run_fn(a, hook=hook, session=(player.io.agent, player.io.screen), **box)

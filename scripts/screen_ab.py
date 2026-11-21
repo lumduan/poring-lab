@@ -118,10 +118,16 @@ def player_sets(items: Sequence[str]) -> dict[str, Any] | str:
                     "runner; a block changes the box, not the runner)")  # fmt: skip
         if f.name in out:
             return f"--player-set {f.name}: given twice"
-        try:
-            v: Any = float(raw) if f.kind in ("number", "share") else raw.strip()
-        except ValueError:
-            return f"--player-set {f.name}: {raw!r} is not a number"
+        if f.kind == "switch":  # cursor-1080.md Amendment 8's arm C: on / off
+            low = raw.strip().lower()
+            if low not in ("on", "true", "1", "off", "false", "0"):
+                return f"--player-set {f.name}: {raw!r} is not on / off"
+            v: Any = low in ("on", "true", "1")
+        else:
+            try:
+                v = float(raw) if f.kind in ("number", "share") else raw.strip()
+            except ValueError:
+                return f"--player-set {f.name}: {raw!r} is not a number"
         why = st.problem_of(f, v)
         if why:
             return f"--player-set {f.name}: {why}"

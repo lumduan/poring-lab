@@ -200,6 +200,10 @@ def test_a_block_names_its_model_xmas02sk_unless_8c_names_the_1080_one(tmp_path:
 def test_player_sets_take_player_settings_only() -> None:
     assert sa.player_sets([]) == {}
     assert sa.player_sets(["alarm_near_px=60"]) == {"alarm_near_px": 60.0}
+    # cursor-1080.md Amendment 8: a switch takes on / off (5b's arm C)
+    assert sa.player_sets(["cursor_click_on_sight=on"]) == {"cursor_click_on_sight": True}
+    assert sa.player_sets(["cursor_click_on_sight=off"]) == {"cursor_click_on_sight": False}
+    assert "on / off" in str(sa.player_sets(["cursor_click_on_sight=maybe"]))
     assert sa.player_sets(["alarm_near_px=60", "alarm_near_score=0.9"]) == {
         "alarm_near_px": 60.0, "alarm_near_score": 0.9}  # fmt: skip
     assert "not a player setting" in sa.player_sets(["garm_confirm=3"])  # a runner's
