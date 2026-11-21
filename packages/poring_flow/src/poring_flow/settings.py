@@ -439,6 +439,34 @@ FIELDS: tuple[Field, ...] = (
     Field("LOOT_TRIM_HOVERS", "loot", "int", "hovers per loot step at most", 1, 40, 1),
     Field("LOOT_MAX_PICKS", "loot", "int", "pickups per loot step at most", 0, 40, 1),
     Field("LOOT_MAX_S", "loot", "number", "a loot step at most", 2, 120, _S, unit="s"),
+    # xmas02-items-1080.md Amendment 22 (round 7, 2026-11-21): the floor-item model's box rule AT
+    # 1080 (the virtual client) -- A: a box under this score is dropped; B: a box on the client's
+    # no-entry cursor ring (this many pure-red px in it) is dropped. The live player applies it to
+    # the item model's boxes (flow_play item_rule), never a runner flag (the runner's
+    # LOOT_ITEMS_CONF is a function default). 0 = off: today's boxes (until 8a7 and 8c pass)
+    Field(
+        "item_floor_1080",
+        "loot",
+        "share",
+        "at 1080: drop item boxes under this score (0 = off)",
+        0.0,
+        0.95,
+        _S,
+        optional=True,
+        player=True,
+    ),  # fmt: skip
+    Field(
+        "item_ring_1080",
+        "loot",
+        "number",
+        "at 1080: drop item boxes on the cursor ring, this many red px (0 = off)",
+        0.0,
+        500.0,
+        1.0,
+        unit="px",
+        optional=True,
+        player=True,
+    ),  # fmt: skip
     Field(
         "EXPLORE_LEG_MAX_S",
         "walk",
@@ -1113,6 +1141,8 @@ DEFAULTS: dict[str, Any] = {
     "alarm_monsters": "",  # the node model's own alarm list (models.yaml `alarm`)
     "alarm_near_px": 0.0,  # goblin-alarm-1080.md rule A: off until its bars pass (then 60)
     "alarm_near_score": 0.85,
+    "item_floor_1080": 0.0,  # xmas02-items-1080.md Amendment 22: off until 8a7 / 8c pass (then 0.5)
+    "item_ring_1080": 0.0,  # ... (then 30)
     # the Run settings (dungeon@9.41-9.43): the heal and escape numbers are --strategy P2's own
     "knife_max_s": 8.0,
     "knife_hp_min": 0.50,
@@ -1292,6 +1322,8 @@ FIND: dict[str, tuple[str, ...]] = {
     "alarm_solo": ("garm", "alarm"),
     "alarm_near_px": ("garm", "alarm", "goblin", "near", "fight"),
     "alarm_near_score": ("garm", "alarm", "goblin", "near"),
+    "item_floor_1080": ("item", "loot", "floor", "score", "1080"),
+    "item_ring_1080": ("item", "loot", "cursor", "ring", "red", "1080"),
     "fly_first": ("boss", "knight", "fly", "wing", "first"),
     "fly_first_hp": ("hp", "fly", "wing", "first"),
     "fly_first_land": ("boss", "fly", "wing", "land", "stale", "teleport"),
