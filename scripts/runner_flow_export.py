@@ -1393,6 +1393,7 @@ def params(cmd: dict[str, Any]) -> list[Param]:
         const("STILL_PX", "the screen moved less than this (px) = still ..."),
         const("STILL_N", "... this many frame pairs in a row"),
         const("STILL_MAX_S", "the wait for a still screen at most (s)"),
+        const("CURSOR_WAIT_S", "a hover waits this long at most for the cursor's answer (s)"),
         const("WALKER_PX", "a target's feet moving this far between detections = walking (px)"),
         const("HOLD_GAP_S", "a held target's detections: one every this long (s)"),
         const("HOLD_MAX_S", "a hold's backstop (s)"),

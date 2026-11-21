@@ -70,6 +70,9 @@ REACH_PX = 220.0  # dungeon_hunt.BOX_TARGET_PX: the box targets the runner takes
 FAR_PX = 120.0  # cursor-1080.md 5a: a FAR hover is >= 120 px from the centre
 RUNNER_WINDOW_S = 0.35  # dungeon_hunt.CURSOR_WAIT_S
 READ_S = 1.0  # the probe's window
+# cursor-1080.md Amendment 5 (5a): the runner ALSO replayed at the chosen window (CURSOR_WAIT_S at
+# 1080); the hover's reads cover it (READ_S >= it)
+FIX_WINDOW_S = 0.75
 READ_GAP_S = 0.005
 HALF, REAL_HALF = 32, 80  # the reader's 64 x 64 crop; the real 160 x 160 box
 APPROACH = (-3, -2)  # cursor_sword.check's first motion
@@ -247,6 +250,10 @@ def summarise(hovers: Iterable[Mapping[str, Any]]) -> dict[str, Any]:
         out[key] = {
             "n": n,
             "runner": dict(runner),
+            "runner_fix": dict(Counter(h.get("runner_fix") for h in hs)),
+            "runner_fix_unknown_share": (
+                round(sum(h.get("runner_fix") == "unknown" for h in hs) / n, 3) if n else None
+            ),  # fmt: skip
             "runner_unknown_share": round(runner["unknown"] / n, 3) if n else None,
             "runner_at_1s": dict(runner_at),
             "classes": dict(classes),
@@ -311,6 +318,7 @@ def analyse_hover(stem: Path, sw: Any, stride: int) -> dict[str, Any]:
     out.update(
         {
             "runner": runner_replay(reads),
+            "runner_fix": runner_replay(reads, FIX_WINDOW_S),
             "runner_at": runner_replay(reads, READ_S),
             "class": classify(reads, prev),
             "first_sword_ms": first_ms(reads, "sword"),
