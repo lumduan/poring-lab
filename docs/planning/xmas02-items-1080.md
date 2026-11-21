@@ -696,3 +696,36 @@ A count under its minimum is NO VERDICT, never a pass.
   spent once scored).
 - The code that picks the item model by the client's screen size is built and tested before 8c.
   It is not built yet.
+
+### Amendment 20 (2026-11-21 15:04 ICT from `date`): 8a FAILS on I3 (scored once, 14:59:41); a round 7 follows (Amendment 19)
+
+- **8a** was scored once on the extended 1080 held-out by `score_8a.sh`. Inputs:
+  - six sessions: ifH1-ifH4 natural, ifsH1-ifsH2 staging;
+  - the seed-73 pack, with two new blind labellers, AK and AL;
+  - `fi_eval --strata r6 --comparator xmas02fi5`; score sha256 `8aed934c6c24ba4b...`.
+- It ran in the quiet window after Batt's dev Run ended (14:53:22): no live Run, the worker
+  idle.
+
+  | bar (section 8a) | xmas02fi6, GPU | ONNX | bar | verdict |
+  |---|---|---|---|---|
+  | I1h recall (both-good, pooled 6) | **1.000 (53 / 53)** | 1.000 | >= 0.90 on >= 40 | PASS |
+  | I1n natural alone (reported) | 1.000 (16 / 16); staging 37 / 37 | same | reported | -- |
+  | I1p precision | 0.963 (1,605 / 1,666) | 0.963 | >= 0.95 | PASS |
+  | I2 drop boxed in its first kept frame | 0.889 (8 / 9) | same | >= 0.80 on >= 20 | NO VERDICT (9 < 20) |
+  | I3 item-free frames with a box | **1.32 % (40 / 3,019)** | same | <= 0.5 % | **FAIL** |
+  | I3 ... inside her 5 x 5 | **0.33 % (10 / 3,019)** | same | <= 0.2 % | **FAIL** |
+  | I4 drop-less kills boxed | 2.8 % (2 / 71) | same | <= 5 % | PASS |
+  | I5 GPU p95 (server forward) | 18.86 ms vs xmas02fi5 18.57 (1.016 x) | -- | <= 35 ms, <= 1.10 x | PASS |
+  | I5 CPU p95 | 170.3 vs 169.0 ms (1.008 x) | -- | <= 1.10 x | PASS |
+
+- **8a: FAIL.** At 1080 the model found every evaluated drop. It also boxed something that is
+  not an item on 1.32 % of item-free frames, 2.6 x the bar, and on 0.33 % inside her 5 x 5.
+  - The I1h set is 53 both-good crops of 38 distinct pictures (Amendment 18's caveat).
+  - xmas02fi5 was not run on this held-out: the comparator enters I5 only.
+- Under Amendment 19:
+  - 8c does not run for xmas02fi6; it is not deployed; live keeps xmas02fi5.
+  - **A round 7 follows ("improve until it passes"):**
+    - its change, aimed at the false boxes, is pre-registered before any of its data;
+    - it is scored once on a NEW 1080 held-out (this round's are now spent).
+  - Its first step: look at the 40 I3 frames (where the boxes are, on what) to choose that
+    change. That reading is diagnosis on a spent held-out; it scores nothing.
