@@ -111,3 +111,22 @@ test("the /maps side panel's scroll box contains what sits in it absolutely; the
   const app = readFileSync(join(import.meta.dirname, "..", "..", "components", "maps", "MapsApp.tsx"), "utf8");
   assert.match(app, /if \(narrow\) requestAnimationFrame\(\(\) => sideRef\.current\?\.scrollIntoView/);
 });
+
+// Batt 2026-11-21 (a PC picture: with Run / Log open the live map was cut off at the top): the
+// map box had a fixed 45vh in a shorter pane, centred with align-items (overflow on the start side
+// cannot be scrolled to). Now, on a PC the live map FILLS its pane and the canvas is centred by
+// auto margins; on a phone it keeps its own height (the page scrolls; Batt: "on the phone it fits").
+test("the live map fills its pane on a PC, never centres by align-items, keeps its height on a phone", () => {
+  const box = ruleWith(studio, ".live-map-box");
+  assert.ok(box, "the live map's box");
+  assert.doesNotMatch(box.body, /align-items:\s*center|justify-content:\s*center/);
+  assert.match(ruleWith(studio, ".live-map-box canvas")?.body ?? "", /margin:\s*auto/);
+  assert.match(ruleWith(studio, ".pane-body.pane-body-fill")?.body ?? "", /flex-direction:\s*column/);
+  const fill = ruleWith(studio, ".paths-live .live-map-box");
+  assert.match(fill?.body ?? "", /flex:\s*1/);
+  assert.match(fill?.body ?? "", /height:\s*auto/);
+  const phone = studio.lastIndexOf("@media (max-width: 48rem)");
+  const mobile = ruleWith(studio, '.studio[data-testid="flows-app"] .paths-live .live-map-box', phone);
+  assert.match(mobile?.body ?? "", /height:\s*clamp\(/);
+  assert.match(mobile?.body ?? "", /flex:\s*none/);
+});

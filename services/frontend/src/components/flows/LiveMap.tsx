@@ -102,7 +102,7 @@ export default function LiveMap({ api, world, server, summary, running }: { api:
       <p className="muted live-map-legend">
         <span className="live-dot" style={{ background: "#22c55e" }} /> her cell (the minimap, once a second) and her last cells ·{" "}
         <span className="live-dot" style={{ background: FALLBACK_COLOURS.monster }} /> the monsters of the detector&apos;s last read, placed from her cell
-        (may be a cell off; faded after {SIGHT_STALE_S} s without a read). Drag the box&apos;s corner to make it taller.
+        (may be a cell off; faded after {SIGHT_STALE_S} s without a read). The map fits its pane: Hide blocks or close a pane for a bigger one, or Close-up.
       </p>
     </div>
   );

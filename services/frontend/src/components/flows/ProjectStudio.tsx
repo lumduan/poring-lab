@@ -620,6 +620,9 @@ export default function ProjectStudio({ backendUrl, initialNode = null }: { back
   const visiblePanes = PANES.filter(([p]) => p !== "hunt" || huntRules);
   const label = new Map(visiblePanes);
   const openPanes = order.filter((p) => label.has(p)).map((p) => [p, label.get(p) ?? p] as [Pane, string]);
+  // Batt 2026-11-21 ("on a PC the map is cut off with Run / Log open"): while the live map shows,
+  // it FILLS the Map pane's height (the whole map always in view); the simulated path folds under it
+  const liveMapOn = liveActive || !!live.st?.live;
   const notReady = (lintStale ? [] : (lintDoc?.findings ?? [])).filter((f) => f.severity === "readiness" && (f.node ?? "") === node.id);
   const tabErrors = (t: string) => errors.some((f) => (f.node || node.id) === node.id && (f.tab || MAIN_TAB) === t);
   const nodeErrors = (id: string) => errors.some((f) => f.node === id);
@@ -1013,7 +1016,7 @@ export default function ProjectStudio({ backendUrl, initialNode = null }: { back
                   <span className="visually-hidden">Close {label}</span>
                 </button>
               </div>
-              <div className="pane-body">
+              <div className={p === "paths" && liveMapOn ? "pane-body pane-body-fill" : "pane-body"}>
                 {p === "inspect" && (
                   <div className="stack" data-testid="inspect-pane">
                     <NodeInspector
@@ -1043,12 +1046,18 @@ export default function ProjectStudio({ backendUrl, initialNode = null }: { back
                     onRun={() => void simulate(simForm)}
                   />
                 )}
-                {p === "paths" && (
-                  <div className="stack">
-                    {(liveActive || live.st?.live) && <LiveMap api={api} world={world} server={project.target.server} summary={live.st?.live} running={liveActive} />}
+                {p === "paths" &&
+                  (liveMapOn ? (
+                    <div className="paths-live">
+                      <LiveMap api={api} world={world} server={project.target.server} summary={live.st?.live} running={liveActive} />
+                      <details className="paths-sim">
+                        <summary>The simulated path (Simulate)</summary>
+                        <PathPanel server={project.target.server} sim={simDoc} stale={simStale} world={world} api={api} />
+                      </details>
+                    </div>
+                  ) : (
                     <PathPanel server={project.target.server} sim={simDoc} stale={simStale} world={world} api={api} />
-                  </div>
-                )}
+                  ))}
                 {p === "hunt" && huntRules && <HuntRulesPanel rules={huntRules} l1={catalogue?.blocks.hunt?.badge ?? "unknown"} />}
                 {/* Batt 2026-11-20: two columns -- the Run on the left, "what she does" (what a player
                     reads most) on the right; one column under 64rem */}
