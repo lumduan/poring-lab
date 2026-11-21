@@ -728,9 +728,80 @@ class Seen:
         return best
 
 
+SIGHT_MAX_AGE_S = 1.5  # the live map's red dots: the detector's last read, when this fresh
+SIGHT_MAX = 24  # == flow_run.SIGHT_MAX_MOBS
+MONSTER_CLS = "monster"  # the runner's class of a monster box (never her own box, an item, an NPC)
+
+
+def flat_grid_uv() -> Any:
+    """The runner's box projection without the altitude (dungeon_hunt.box_spot's flat case): every
+    BOX_GRID cell relative to her, in game-region px. It does not depend on her cell: once a run."""
+    import dungeon_hunt as dh
+    import numpy as np
+
+    from poring_dataset import camera as cam
+
+    cj = json.loads((dh.ROOT / "packages/poring_dataset/src/poring_dataset/camera_rdp.json")
+                    .read_text())  # fmt: skip
+    return cam.camera_from_json(cj["camera"]).project(np.asarray(dh.BOX_GRID, dtype=float))
+
+
+class Sight:
+    """Batt 2026-11-21 (the live map on /flows: "her as a green dot, the monsters she sees as red
+    dots"): the detector's newest MONSTER boxes, kept as their feet (px). The once-a-second hp_read
+    record places them on the map from her cell with the runner's flat box projection (a dot may
+    sit a cell off on a slope). DISPLAY ONLY: no decision reads it; it never raises."""
+
+    def __init__(self, uv: Callable[[], Any] = flat_grid_uv,
+                 clock: Callable[[], float] = time.monotonic) -> None:  # fmt: skip
+        self.lock = threading.Lock()
+        self.feet: list[tuple[float, float, str]] = []
+        self.t = -1e9
+        self.clock = clock
+        self._uv_fn, self._uv, self._grid = uv, None, None
+
+    def add(self, boxes: Sequence[Any]) -> None:
+        rows = []
+        for b in boxes:
+            try:
+                if str(getattr(b, "cls", "")) != MONSTER_CLS:
+                    continue
+                name = str(getattr(b, "species", None) or MONSTER_CLS)[:32]
+                rows.append(((float(b.x0) + float(b.x1)) / 2, float(b.y1), name))
+            except (AttributeError, TypeError, ValueError):
+                continue
+        with self.lock:
+            self.feet, self.t = rows, self.clock()
+
+    def cells(self, here: Any) -> list[list[Any]]:
+        """The monsters of the detector's last read as [x, y, name] map cells; [] when that read
+        is older than SIGHT_MAX_AGE_S, her cell is unknown, or the projection fails."""
+        try:
+            hx, hy = int(here[0]), int(here[1])
+        except (TypeError, ValueError, IndexError):
+            return []
+        with self.lock:
+            feet, t = list(self.feet), self.t
+        if not feet or self.clock() - t > SIGHT_MAX_AGE_S:
+            return []
+        try:
+            import dungeon_hunt as dh
+
+            if self._uv is None:
+                self._uv, self._grid = self._uv_fn(), dh.BOX_GRID
+            out = []
+            for u, v, name in feet[:SIGHT_MAX]:
+                rx, ry = dh.nearest_rel(self._uv, self._grid, (u, v))
+                out.append([hx + int(rx), hy + int(ry), name])
+            return out
+        except Exception:  # display only: never stops a Run
+            return []
+
+
 @contextlib.contextmanager
-def seen_boxes(seen: Seen) -> Iterator[None]:
-    """For one hunt core: the HUD's units and the detector's boxes also go to ``seen``."""
+def seen_boxes(seen: Seen, sight: Sight | None = None) -> Iterator[None]:
+    """For one hunt core: the HUD's units and the detector's boxes also go to ``seen`` (and the
+    detector's boxes to ``sight``, the live map's monsters)."""
     import operator_hud as oh
     import unit_detector as ud
 
@@ -754,6 +825,9 @@ def seen_boxes(seen: Seen) -> Iterator[None]:
             got = f(self, img, *a, **k)
             with contextlib.suppress(Exception):
                 seen.add(got)
+            if sight is not None:
+                with contextlib.suppress(Exception):
+                    sight.add(got)
             return got
 
         return detect
@@ -773,8 +847,10 @@ class HuntHook:
     """The runner's TICK HOOK (dungeon@9.48) and its event mirror: the player's stop, read access
     to the runner's HUD values each tick, the runner's events into the player's own record."""
 
-    def __init__(self, player: LivePlayer, res: HuntResult, seen: Seen | None = None) -> None:
+    def __init__(self, player: LivePlayer, res: HuntResult, seen: Seen | None = None,
+                 sight: Sight | None = None) -> None:  # fmt: skip
         self.player, self.res = player, res
+        self.sight = sight  # the live map's monsters (Batt 2026-11-21), on the hp_read record
         self.last: Any = None
         self._hp_t = -1e9
         self._hp0 = Hp0Watch()
@@ -821,6 +897,8 @@ class HuntHook:
             if t_mono - self._hp_t < HP_EVERY_S:
                 return
             self._hp_t = t_mono
+            if self.sight is not None and rec.get("pos") is not None:
+                extra = {**extra, "mobs": self.sight.cells(rec.get("pos"))}
         elif k not in MIRROR:
             return
         out = {**rec, **extra}
@@ -948,9 +1026,9 @@ class HuntCore:
                            "default_species": list(plan.default_species)}
                           if "box_recipes" in box else {}),
                        **({"loop": plan.loop} if plan.loop else {})})  # fmt: skip
-        seen = Seen()
-        hook = (DriveHook(player, res, seen) if plan.loop
-                else HuntHook(player, res, seen))  # fmt: skip  # 5b-2: its loop
+        seen, sight = Seen(), Sight()
+        hook = (DriveHook(player, res, seen, sight) if plan.loop
+                else HuntHook(player, res, seen, sight))  # fmt: skip  # 5b-2: its loop
 
         def warn(words: str) -> None:
             say(words)
@@ -969,7 +1047,7 @@ class HuntCore:
                 role_items(dh, plan.vals),
                 role_alarm(dh, plan.vals, warn),
                 near_alarm(dh, plan.vals),
-                seen_boxes(seen),
+                seen_boxes(seen, sight),
             ):
                 res.rc = run_fn(a, hook=hook, session=(player.io.agent, player.io.screen), **box)
         except SystemExit as e:  # its preamble's refusal, or ro_agent.Stop inside its session
