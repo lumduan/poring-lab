@@ -414,6 +414,22 @@ Amendment B); a not-adopted model is never offered.
     its log.
   - No Knife row (a Rogue's technique): a steal counts as an item gained.
   - ➡️ 2026-11-20 (Batt): two columns; "what she does" (newest first) on the right.
+  ➡️ **2026-11-21 (Batt): the layout is the person's.**
+  - **Hide blocks / Show blocks** (the footer's first button): the blocks and the Python beside
+    them go out of sight (nothing is lost: the editor stays as it was) and the panes take the
+    page's height, e.g. to read Run / Log in full while a Run plays. A bar says the blocks are
+    hidden; this browser remembers the choice.
+  - **The panes stack in the order opened:** the first at the top, later ones below it; close the
+    top one and the ones below move up; open it again and it goes to the bottom. One pane fills
+    the drawer; several share it (each at least 14rem; the drawer scrolls past that).
+  - **Map** (was "Path map"): while a Run plays, and after it its last state, the LIVE MAP is on
+    top -- the walk grid of the map she is on (as /maps draws it), her cell as a GREEN dot (the
+    minimap, read once a second) with her last cells as a trail, and the monsters of the
+    detector's last read as RED dots (placed from her cell with the runner's flat box
+    projection: on Batt's 11-21 live session the same cell as the runner's own on 56 % of 520
+    fights, within 1 cell on 87.5 %; faded when not read for 3 s; none while no hunt core
+    plays). Whole map or a close-up around her; drag the box's corner to make it taller. The
+    simulated path stays under it.
     - Its lines name the monster as the HUD labels it: the model's class name, the detector's
       confidence and the distance in cells, e.g. "aims at cookie_xmas 87% 3 cells", "a fight
       starts (box): cookie_xmas 87% 3 cells at (79, 242)", "a kill: cookie_xmas (exp_line)".
