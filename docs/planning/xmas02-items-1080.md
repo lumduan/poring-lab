@@ -656,3 +656,24 @@ A count under its minimum is NO VERDICT, never a pass.
   as registered (Amendment 16's extension), and reported: it says whether the model helps AT
   1080. Any use of a model per screen size (xmas02fi6 at 1080 only, xmas02fi5 at 720) would be a
   new decision, Batt's, not this round's.
+
+### Amendment 18 (2026-11-21 11:04 ICT from `date`, BEFORE any answer): the extended held-out and the seed-73 pack
+
+- The extension (Amendment 16) recorded: ifsH2 (09:48-09:58, 4 / 4 spots, rc 0, immune: judged
+  by two toggles 07:32-07:33), ifH3 (21.4 min) and ifH4 (23.2 min), both rc 0, NOT immune
+  (immunity OFF read back at 09:59: "Returned to normal state."); all shipped. Code: the names
+  refused for TRAIN and stratified (98f54533).
+- All six labelled `--eval-test` against the frozen model (4014ae96):
+
+  | held-out | item labels | floor items in the packets | negatives |
+  |---|---|---|---|
+  | ifH1 / ifH2 / ifH3 / ifH4 (natural) | 8 / 9 / 6 / 19 = 42 | 8 / 7 / 10 / 10 = 35 | 723 / 714 / 762 / 837 |
+  | ifsH1 / ifsH2 (staging) | 92 / 17 = 109 | 124 / 85 | 136 / 89 |
+
+- Refs over all six (4,029 frames), the GPU predictions over them (10:59), and **the pack
+  `--round 6 --eval-test --seed 73`** (11:03:30): **80 crops, 60 ITEM crops** (natural 20,
+  staging 40; both slots short of their caps) + 20 E; strata N 22 / F 37 / M 1 / E 20; the
+  answer key sha256 `4908d9a98f278778...` (never shown). The seed-72 pack and key stay unused.
+- Two NEW blind labellers, AK and AL (subagents that see only the pack), then `score_8a.sh`
+  (scratch): the ONNX set, I5's CPU and GPU latency against xmas02fi5 in a quiet window,
+  both-good, and `fi_eval --strata r6 --comparator xmas02fi5`, ONCE. Reported beside 8b's FAIL.
