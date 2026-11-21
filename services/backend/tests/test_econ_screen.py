@@ -95,9 +95,18 @@ def test_weight_reads_count_only_near_the_hunt() -> None:
     assert es.weight_ends(inside, T0, T0 + 10 * S) == [20.0, 25.0]
 
 
-def test_a_session_without_events_time_is_refused() -> None:
-    with pytest.raises(ValueError):
+def test_a_hunt_core_that_never_played_is_empty_not_refused(
+    lab: SimpleNamespace, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """2026-11-21: Batt's Stop at 14:38 left hunt 6 with no timed event; 5 such hunt cores made the
+    live backfill's rc 1 ("refused") although nothing was wrong."""
+    with pytest.raises(es.EmptySession):
         es.judge("x", [{"kind": "kill"}], {})
+    sd = write_screen_session(tmp_path / "demo", "20261121T143853-demo-z-hunt6", [{"kind": "x"}])
+    ok = write_screen_session(tmp_path / "demo", "20261121T060000-demo-y-hunt1", screen_events())
+    assert cli(lab, "update", str(sd), str(ok)) == 0  # rc 0: an empty hunt core is no refusal
+    out = [json.loads(x) for x in capsys.readouterr().out.splitlines() if x.startswith("{")]
+    assert [o.get("result") for o in out[:2]] == ["empty", "added"]
 
 
 def test_the_entry_has_no_items_prices_only_the_one_item_roles() -> None:

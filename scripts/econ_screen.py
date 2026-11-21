@@ -44,6 +44,11 @@ SCREEN_SUMS = ("loot_steps", "loot_picks", "pickup_clicks", "potions", "fly_wing
                "butterfly_wings", "steals")  # fmt: skip
 
 
+class EmptySession(ValueError):
+    """A session with no timed event: a hunt core that never played (e.g. Stop pressed as it
+    started). Nothing to record; econ_db reports it "empty", never a refusal."""
+
+
 def _t(e: Mapping[str, Any]) -> int | None:
     t = e.get("t_ns")
     return t if isinstance(t, int) and not isinstance(t, bool) else None
@@ -65,7 +70,7 @@ def judge(
     ev = list(events)
     ts = [t for e in ev if (t := _t(e)) is not None]
     if not ts:
-        raise ValueError(f"{name}: no event with a time")
+        raise EmptySession(f"{name}: no event with a time (a hunt core that never played)")
     rs = next((e for e in ev if e.get("kind") == "run_start" and _t(e) is not None), None)
     re_ = next((e for e in reversed(ev) if e.get("kind") == "run_end" and _t(e) is not None), None)
     t0 = _t(rs) if rs is not None else None
