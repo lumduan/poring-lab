@@ -392,3 +392,34 @@ Written before any probe of this round.
   far), the runner replayed at 1.0 s, the same bar, scored once. 1.0 s is also the probe's own read
   window, so the replay at 1.0 s needs no new reads. If it fails too, the timing branch is not
   enough and the place branch (a fresh detection and second hover after an unknown) comes next.
+
+### Amendment 7 (2026-11-21 17:08 ICT from `date`): 5a at 1.0 s PASSES (1.2 % <= 5 %, 82 far hovers); 5b next
+
+- **5a block 2, scored once:** `probe_run9.sh`, analysis 17:07, summary sha256
+  `431993c62a1ef28e...`.
+  - A fresh stop-mode block of 104 monster hovers, 82 far, the runner replayed at 1.0 s
+    (Amendment 6).
+  - Recorded in three parts in the same lab setup, each immune, judged on a frame:
+    - 13:28-13:30, 7 hovers;
+    - 13:45-13:51, 17 hovers; a person's mux switch at 13:51 stopped it, as it must;
+    - 16:10-16:33, 80 hovers, after the dev client's crash (an access violation after Batt's
+      dev Run) was recovered at 16:08 and immunity re-judged at 16:09 ("You are now immune to
+      attacks.").
+
+  | far hovers by delay after the still wait | n | unknown at 0.35 s (today) | at 0.75 s | at **1.0 s (the fix)** | first sword, median / p90 |
+  |---|---|---|---|---|---|
+  | 0.00 s | 16 | 11 | 0 | 0 | 392 / 631 ms |
+  | 0.25 s | 18 | 13 | 2 | 1 | 377 / 668 ms |
+  | 0.50 s | 17 | 12 | 1 | 0 | 421 / 711 ms |
+  | 0.75 s | 16 | 7 | 0 | 0 | 287 / 605 ms |
+  | 1.00 s | 15 | 3 | 0 | 0 | 227 / 384 ms |
+  | **pooled** | **82** | **46 (56.1 %)** | 3 (3.7 %) | **1 (1.2 %)** | |
+
+- **The bar (unknown <= 5 % on >= 60 far hovers): 1.2 % -> PASS** for 1.0 s.
+  - The 0.75 s column is reported, not scored: 0.75 s failed its own block (Amendment 6), and
+    this block was registered for 1.0 s.
+- **Next: 5b in play** (Amendment 5's A/B):
+  - `screen_ab` at 1080, A = the box, B = the box with `--box-set CURSOR_WAIT_S=1.0`;
+  - 3 valid runs a side, immunity OFF;
+  - after the round-7 item pilots, which hold the dev lab now (items come first in Batt's
+    order).
