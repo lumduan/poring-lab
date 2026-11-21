@@ -934,3 +934,20 @@ A count under its minimum is NO VERDICT, never a pass.
   - fi_eval `--strata r8`;
   - the mining script.
 
+### Amendment 27 (2026-11-22 03:57 ICT from `date`, BEFORE any round-8 recording): the new held-out's stagings and order
+
+- **The stagings** (`--views near --n 4`, as round 7's):
+  - **ifsH5: seed 2612744**, spots (225,137), (71,216), (192,104), (49,25);
+  - **ifsH6: seed 2612749**, spots (115,159), (181,148), (38,104), (203,236).
+  - Their cells share NONE with the 21 earlier stagings on this map (2,076 distinct cells: round
+    7's 19 + ifsH3 + ifsH4, whose spots were recomputed and match Amendment 23), nor with each
+    other. Seeds 2612700-2612999 gave 5 clean 4-spot plans (2612744, 2612749, 2612849, 2612934,
+    2612948); the first two that share no cell are taken. Scratch: `cells/earlier-r8.json`.
+- **The order**, after the ranged-attacker A/B's chain ends on the dev lab:
+  1. ifsH5, then ifsH6, IMMUNE (`stage_rec.sh`; immunity ON judged on a frame first);
+  2. immunity OFF, its reply read on a frame;
+  3. the pilots ifH11 .. ifH16, NOT immune (`chain.sh` / `pilot_rec.sh`, 25 min each,
+     xmas02v1080, TOPUP_1080).
+- The recordings may run while xmas02fi8 trains on the GPU. They are labelled (--eval-test) only
+  after its freeze (O.9).
+
