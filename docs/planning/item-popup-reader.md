@@ -108,4 +108,26 @@ unknown prices typed in and saved with an Update button.
 
 ## 8. RESULTS and AMENDMENTS (clock-labelled)
 
-(none yet)
+### Amendment 1 (2026-11-21 21:32 ICT from `date`, BEFORE the score): the calibration, the count method
+
+- **The calibration** (fiT1-fiT20, `item_popup_eval.py calibrate`): 1,071 popups of a known item
+  (the first frame with the box <= 3 s after each pickup_result).
+  - The box's left edge: 541 on 1,067, 542 on 4.
+  - The icon square at (12, 4) from (left, POPUP_TOP): the true picture was the nearest of the
+    occurring items' on 1,069 / 1,071.
+  - Its distance p50 7.4 / p95 8.9 (one outlier at 125.7). The nearest WRONG picture of all 2,381
+    is >= 29.0 further at p05 (p50 35.4).
+  - => ICON_MAX 15.0, ICON_MARGIN 10.0.
+- **The count:**
+  - The text's TAIL is the run suffix that popups of different amounts share. A digit differs
+    between amounts, so it never joins the tail; on the lab client the tail is the 9 runs of
+    "obtained.".
+  - The count group is the runs just left of the tail, <= 3 blank columns apart. Each run is named
+    by a digit learned from popups whose amount the packets give.
+  - On fiT1-fiT8 (417 popups: 414 x 1, 3 x 10) only "0" and "1" were seen. Any other digit reads
+    as unread, never guessed; natural drops and Steals give 1.
+  - On the other half of those boxes, 200 / 206 one-piece popups read 1, 6 read unread; the 10
+    read 10.
+  - The font is saved in the lab's data/ (client pixels, never committed).
+- **The scorer** pools the raw counts of every session (not per-session rates). The bars are
+  unchanged.
