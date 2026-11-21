@@ -532,3 +532,21 @@ Written before any probe of this round.
   `@zeny` (Batt's OK at 20:11, the zeny reader's test). The Rogue logged in again at 20:15:36 and
   is back at 0 zeny, her fixed state. Immunity is judged OFF again on this session before the
   first 5b run; the chain then keeps this session.
+
+### Amendment 11 (2026-11-21 21:55 ICT from `date`, before any 5b score): c5b-B1 is VOID, B gets a fourth run
+
+- **What happened (my error, not the arm's):** round 7's item score wrapper
+  (docs/records/scorers/xmas02_items_r7_score.sh) waited for 5b's end with `grep "CHAIN DONE"` on
+  5b's log.
+  - That log's 21:07 line "hold ends: [21:06:49] CHAIN DONE" quotes the item evaluation's own last
+    line, so the wrapper started at 21:37:47, in the gap after A1.
+  - Its CPU latency ran during B1's setup and start (21:37-21:45), and its GPU latency step queried
+    B1's detect server.
+  - At 21:51:37 its cleanup KILLED the dev detect server, which was B1's: from then on B1's
+    detections were the CPU path ("down", ~185 ms).
+- **Ruling:** B1 is void, whatever its numbers. It was stopped by its own STOP file and marked
+  `c5b-B1.yielded`, so the chain gives B a fourth run (c5b-B4) after the twelfth. B is scored on
+  B2, B3, B4 (`--arm B=c5b-B2+c5b-B3+c5b-B4`). A1 (21:12-21:37) ended before the wrapper started:
+  valid.
+- **The fix:** the corrected wrapper (xmas02_items_r7b_score.sh) waits for 5b's OWN last line,
+  exactly (`^\[hh:mm:ss\] CHAIN DONE$`), and for no screen_ab run.
