@@ -1,6 +1,7 @@
-"""scripts/bag_count.py (docs/planning/econ-bag-count.md): the bag found by its oval lattice, the
-items by their icons over this client's own empty slot, the counts by their pure-black digits,
-and the pre-registered bar. Synthetic frames only (no client pixels)."""
+"""scripts/bag_count.py (docs/planning/econ-bag-count.md): the bag found by its oval lattice (its
+rows too: 7 x 6 by default, taller when the player drags it), the items by their icons over this
+client's own empty slot, the counts by their pure-black digits, and the pre-registered bar.
+Synthetic frames only (no client pixels)."""
 
 from __future__ import annotations
 
@@ -52,14 +53,17 @@ def _frame(
     icons: dict[int, np.ndarray],
     font: dict[str, np.ndarray],
     origin: tuple[int, int] = ORIGIN,
+    rows: int = 6,
+    canvas: tuple[int, int] = (1080, 1920),
 ) -> np.ndarray:
-    """A 1920x1080 BGR frame with a bag at ``origin``: ``items`` (id, count) in reading order,
-    then empty slots (white face, the oval)."""
-    f = np.full((1080, 1920, 3), 90, np.uint8)
+    """A BGR frame (``canvas``: h, w) with a 7 x ``rows`` bag at ``origin``: ``items`` (id, count)
+    in reading order, then empty slots (white face, the oval)."""
+    f = np.full((*canvas, 3), 90, np.uint8)
     ox, oy = origin
-    f[oy : oy + 255, ox : ox + 280] = 255
+    ww, wh = bc.window_size(rows)
+    f[oy : oy + wh, ox : ox + ww] = 255
     oval = _oval()
-    for s in range(bc.SLOTS):  # every slot's oval first (drawn behind items too)
+    for s in range(bc.COLS * rows):  # every slot's oval first (drawn behind items too)
         x, y = bc.icon_xy(origin, s)
         dx, dy, w, h = bc.OVAL_BOX
         f[y + dy : y + dy + h, x + dx : x + dx + w][oval] = bc.OVAL[::-1]  # BGR
@@ -87,11 +91,12 @@ def _refs(icons: dict[int, np.ndarray]) -> si.SlotRefs:
 
 
 def _read(f: np.ndarray, refs: si.SlotRefs, font: dict[str, np.ndarray]) -> bc.TabRead:
-    origin = bc.find_window(f)
-    assert origin is not None
-    empty = bc.empty_picture(f, origin)
+    bag = bc.find_bag(f)
+    assert bag is not None
+    empty = bc.empty_picture(f, bag.origin, rows=bag.rows)
     assert empty is not None
-    return bc.TabRead("t", bc.read_tab(f, origin, bc.Pictures.over(refs, empty), empty, font))
+    pics = bc.Pictures.over(refs, empty)
+    return bc.TabRead("t", bc.read_tab(f, bag.origin, pics, empty, font, rows=bag.rows))
 
 
 def test_the_bag_is_found_at_its_exact_place_whatever_fills_it() -> None:
@@ -109,7 +114,7 @@ def test_no_bag_and_a_full_tab_find_nothing() -> None:
     font, icons = _font(), _icons(45)
     assert bc.find_window(np.full((1080, 1920, 3), 90, np.uint8)) is None
     ids = list(icons)
-    full = _frame([(ids[k % 45], 1) for k in range(bc.SLOTS)], icons, font)
+    full = _frame([(ids[k % 45], 1) for k in range(bc.COLS * 6)], icons, font)
     assert bc.find_window(full) is None  # no empty slot: no lattice (never a guessed place)
 
 
@@ -156,9 +161,9 @@ def test_an_item_after_an_empty_slot_is_unread() -> None:
     f[y : y + 24, x : x + 24][~key] = bmp[~key][:, ::-1]
     origin = bc.find_window(f)
     assert origin is None or origin == ORIGIN  # the lattice may refuse (ovals not a tail)
-    empty = bc.empty_picture(_frame([(ids[0], 2)], icons, font), ORIGIN)
+    empty = bc.empty_picture(_frame([(ids[0], 2)], icons, font), ORIGIN, rows=6)
     assert empty is not None
-    slots = bc.read_tab(f, ORIGIN, bc.Pictures.over(refs, empty), empty, font)
+    slots = bc.read_tab(f, ORIGIN, bc.Pictures.over(refs, empty), empty, font, rows=6)
     assert slots[5].kind == "unread" and "after an empty slot" in slots[5].why
 
 
@@ -214,3 +219,126 @@ def test_a_three_digit_count_touching_a_four_digit_neighbour_is_unread() -> None
     tab = _read(_frame([(ids[0], 588), (ids[1], 1234), (ids[2], 5)], icons, font), refs, font)
     assert [b.slot for b in tab.unread()] == [0, 1]
     assert [(b.ids, b.count) for b in tab.items()] == [((ids[2],), 5)]
+
+
+# --- a taller window (Batt's live bag is 7 x 9, 2026-11-21): the rows are read, never assumed -----
+def _counts(n: int) -> list[int]:
+    """n stack counts of 1-3 digits that the measured shapes read: no '1' after the first digit
+    (the test font's '1' is a column narrower; count_of_runs' shapes allow that for a LEADING '1'
+    only, the client's measured place)."""
+    out = [v for v in range(2, 999, 23) if "1" not in str(v)[1:]]
+    return out[:n]
+
+
+def _hider(seed: int = 3) -> np.ndarray:
+    """An item bitmap with NO key colour over the oval's box (dark, opaque): a slot that shows no
+    oval at all, the worst case for the rows rule."""
+    a = np.random.default_rng(seed).integers(20, 150, size=(24, 24, 3)).astype(np.uint8)
+    a[:3] = (255, 0, 255)  # some key colour (a real bitmap's) away from the oval
+    return a
+
+
+@pytest.mark.parametrize("rows", [6, 7, 9, 12])
+def test_a_bag_is_found_with_its_rows_whatever_fills_it(rows: int) -> None:
+    """The title bar above row 0 shows no slot, every row of the window does: the rows are the
+    window's, also when its first rows are full of items (a 7 x 6 placement three rows down would
+    fit the ovals alone: the old rule's silent wrong place)."""
+    font, icons = _font(), _icons(90)
+    ids = list(icons)
+    slots = bc.COLS * rows
+    for n in (0, 1, 6, 7, 20, 21, 35, slots - 2):
+        f = _frame([(ids[k], 1) for k in range(n)], icons, font, rows=rows)
+        assert bc.find_bag(f) == bc.Bag(ORIGIN, rows), (rows, n)
+        assert bc.find_window(f) == ORIGIN and bc.rows_at(f, ORIGIN) == rows
+        assert bc.window_at(f, ORIGIN, rows) and bc.window_at(f, ORIGIN)
+        assert not bc.window_at(f, ORIGIN, rows + 1) and not bc.window_at(f, ORIGIN, rows - 1)
+        assert not bc.window_at(f, (ORIGIN[0] + bc.PITCH, ORIGIN[1]))  # a column off
+        assert not bc.window_at(f, (ORIGIN[0], ORIGIN[1] + bc.PITCH))  # a row off
+        lower = (ORIGIN[0], ORIGIN[1] + bc.PITCH * (rows - 6))  # the 7 x 6 placement at its foot
+        assert rows == 6 or not bc.window_at(f, lower, 6)
+    # one slot left: below LATTICE_MIN ovals, no bag (as at 7 x 6)
+    f = _frame([(ids[k], 1) for k in range(slots - 1)], icons, font, rows=rows)
+    assert bc.find_bag(f) is None and bc.window_at(f, ORIGIN, rows)
+
+
+def test_a_7x9_bag_reads_every_item_and_count() -> None:
+    font, icons = _font(), _icons(40)
+    refs = _refs(icons)
+    ids = list(icons)
+    items = list(zip(ids[:30], _counts(29) + [7], strict=True))  # rows 0-3 full, row 4 two items
+    # (the last one short: a 3-digit count reaches x+33, into the next (empty) square: unread)
+    f = _frame(items, icons, font, rows=9)
+    tab = _read(f, refs, font)
+    assert len(tab.slots) == 63 and not tab.unread() and not tab.full
+    assert [(b.ids, b.count) for b in tab.items()] == [((iid,), n) for iid, n in items]
+    assert [b.slot for b in tab.slots if b.kind == "empty"] == list(range(30, 63))
+    assert bc.grid_signature(f, ORIGIN, rows=9).shape == (63, 3)
+    x, y = bc.icon_xy(ORIGIN, 62)  # the last slot: row 8, column 6
+    assert (x, y) == (
+        ORIGIN[0] + bc.ICON0[0] + 6 * bc.PITCH,
+        ORIGIN[1] + bc.ICON0[1] + 8 * bc.PITCH,
+    )
+
+
+def test_a_bag_taller_than_the_frame_or_rows_max() -> None:
+    """A bag cut by the frame's bottom edge is found with the rows the frame shows, at its TRUE
+    origin: its hidden rows come after an empty slot it shows, so they are empty (items fill a tab
+    in reading order) and the count is exact. Fewer than ROWS_MIN rows shown, or a window taller
+    than ROWS_MAX: no bag (never a guessed part of one)."""
+    font, icons = _font(), _icons(12)
+    refs = _refs(icons)
+    ids = list(icons)
+    items = list(zip(ids, _counts(12), strict=True))
+    oy = 1080 - (bc.ICON0[1] + bc.OVAL_BOX[1] + bc.OVAL_BOX[3] + bc.PITCH * 5)  # row 5's box fits
+    tall = _frame(items, icons, font, origin=(300, oy), rows=9, canvas=(1500, 1920))
+    cut = np.ascontiguousarray(tall[:1080])
+    assert bc.find_bag(cut) == bc.Bag((300, oy), 6)
+    assert bc.find_bag(tall) == bc.Bag((300, oy), 9)
+    tab = _read(cut, refs, font)
+    assert [(b.ids, b.count) for b in tab.items()] == [((iid,), n) for iid, n in items]
+    assert bc.find_bag(np.ascontiguousarray(tall[: 1080 - bc.PITCH])) is None  # 5 rows shown
+    big = _frame(items, icons, font, rows=bc.ROWS_MAX + 1, canvas=(1500, 1920))
+    assert bc.find_bag(big) is None and bc.rows_at(big, ORIGIN) is None
+    assert bc.find_bag(_frame(items, icons, font, rows=bc.ROWS_MAX, canvas=(1500, 1920))) == (
+        bc.Bag(ORIGIN, bc.ROWS_MAX)
+    )
+
+
+def test_a_new_items_glow_shows_its_slot() -> None:
+    """A NEW item draws a pink glow where the oval was: its slot still shows (a row of new
+    items, a Run's loot at its end census, keeps the window's rows)."""
+    font, icons = _font(), _icons(30)
+    ids = list(icons)
+    f = _frame([(ids[k], 1) for k in range(21)], icons, font, rows=9)
+    glow = np.array([247, 150, 255], np.uint8)  # BGR of (255, 150, 247)
+    for s in range(14, 21):  # row 2: seven new items, their ovals turned pink
+        x, y = bc.icon_xy(ORIGIN, s)
+        dx, dy, w, h = bc.OVAL_BOX
+        box = f[y + dy : y + dy + h, x + dx : x + dx + w]
+        oval = np.all(box == np.asarray(bc.OVAL[::-1], np.uint8), axis=2)
+        box[oval] = glow
+    assert bc.find_bag(f) == bc.Bag(ORIGIN, 9)
+
+
+def test_a_row_that_hides_every_oval_cuts_the_window_and_the_census_check_sees_it() -> None:
+    """A row whose seven icons all hide the oval shows no slot, so the window's top is found below
+    it: on a 7 x 6 bag that leaves fewer than ROWS_MIN rows (no bag: a clear failure); on a taller
+    bag this one frame cannot tell it from the title bar (a known limit: ~1e-9 for a row of real
+    icons). The census reads four tabs at the found place and checks each one (window_at with the
+    rows): another tab shows that row's slots, so the found place fails there and find_bag finds
+    the true window -- the census stops ("the bag moved"), never reads a wrong place."""
+    font, icons = _font(), _icons(40)
+    hider = _hider()
+    icons[999] = hider
+    ids = [i for i in icons if i != 999]
+    # 7 x 6: row 2 (slots 14-20) hides every oval
+    items6 = [(ids[k] if not 14 <= k < 21 else 999, 1) for k in range(25)]
+    assert bc.find_bag(_frame(items6, icons, font)) is None
+    # 7 x 9: the same row 2 -> the 6 rows below it look like a whole window
+    items9 = [(ids[k] if not 14 <= k < 21 else 999, 1) for k in range(25)]
+    one_tab = _frame(items9, icons, font, rows=9)
+    wrong = bc.find_bag(one_tab)
+    assert wrong == bc.Bag((ORIGIN[0], ORIGIN[1] + 3 * bc.PITCH), 6)
+    other_tab = _frame([(ids[k], 1) for k in range(5)], icons, font, rows=9)
+    assert not bc.window_at(other_tab, wrong.origin, wrong.rows)
+    assert bc.find_bag(other_tab) == bc.Bag(ORIGIN, 9) != wrong
