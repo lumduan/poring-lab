@@ -286,3 +286,23 @@ Written before any probe of this round.
   tests, then 5a (the hover bar, immune) and 5b (play).
 - Evidence (scratch, RAM): p1c-walk / p1c-stand (hover JSON + crops), the analyses'
   `summary.json`; pictures of the lab's own client only, archived or deleted with this verdict.
+
+### Amendment 4a (2026-11-21 09:06 ICT from `date`, still before any fix): the same split in PLAY, from the runner's own records
+
+- The runner already hovers a box target only after its walk settles (BOX_SETTLE_S 1.2 s) and,
+  with `still_strike` ON (the box's default), after a STILL scene (3 frame pairs scrolling
+  < 2 px, at most 1.5 s). Its `box_target` records (offline, no new run):
+
+  | block | box targets | still wait timed out | after a still scene: sword / unknown / clear | after a NOT-still scene (timed out): sword / unknown / clear |
+  |---|---|---|---|---|
+  | 720 (s11scr-720, 3 runs) | 224 | 57 (25 %) | 118 / **0** / 0 | 16 / **1** / 0 |
+  | 1080 (the 12 item-chain pilots) | 1,127 | 373 (33 %) | 411 / **154 (26 %)** / 24 | 12 / **162 (92 %)** / 2 |
+
+  (the rest of each row: no box picked, or off screen). Still-wait median 547 ms at 720, 842 ms
+  at 1080.
+- So in play, as in P1: at 720 a hover reads the sword whatever the scene did; at 1080 a hover
+  after a scene that never went still fails 92 %, and even after a "still" scene 26 % (P1
+  standing: 0 %). The still check runs on the virtual frames, which at 1080 come slower (a whole
+  virtual frame ~69 ms, ro_agent's measure), so its 3 pairs span more time; why a "still" scene
+  still fails a quarter of the time at 1080 is the next reading (the targets' own motion, the
+  scene's measure on the scaled world), before the fix is chosen.
