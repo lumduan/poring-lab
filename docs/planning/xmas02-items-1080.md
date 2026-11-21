@@ -603,3 +603,33 @@ A count under its minimum is NO VERDICT, never a pass.
   - GPU steps start only while no live Run holds the GPU and the dev worker is idle.
 - Then two NEW blind labellers on the seed-72 pack, `fi_blind_score --both-good`, the latency
   steps (I5 against xmas02fi5), and `fi_eval --strata r6` once (8a), `--strata r5` once (8b).
+
+### Amendment 16 (2026-11-21 09:47 ICT from `date`, BEFORE any answer to the evaluation pack and BEFORE any score): the held-out is SHORT -- one extension, by the earlier rounds' rule
+
+- **The freeze (09:30:26):** `last.pt` sha256 `4014ae968b08ff9f99a377b5d6bfde404776e656d4a2454dca6061a8fbed94ef`
+  (5,529,242 bytes; archived to `archive/train/xmas02-fi-r6-1080-20261121`, the NAS copy's
+  sha256 the same); ONNX `xmas02fi6-last-736x1280.onnx` sha256 `3f05f9bb...` (names
+  `["floor_item"]`); registered as `xmas02fi6` (903f0b3f; not in MAP_MODELS). The training ended
+  ALL STEPS OK after 3 epochs (VAL, monitor only: P 0.931, R 0.897, mAP50 0.901).
+- **The evaluation inputs (Amendment 15's chain, 09:31-09:42):** the held-out labelled
+  `--eval-test` against it: ifH1 8 item labels (8 floor items in the packets), ifH2 9 (7),
+  ifsH1 92 (124). The seed-72 pack: **55 crops, of them 35 ITEM crops** (natural 8, staging 27;
+  both slots short) + 20 E. GPU predictions made for 8a and 8b. NOTHING answered or scored.
+- **So 8a cannot be scored as registered:** I1h needs >= 40 evaluated crops and the pack holds 35
+  item crops; I2 needs >= 20 drop episodes and the natural held-out holds 15 floor items. Under
+  the plan both would be NO VERDICT ("never a pass") whatever the model does.
+- **The extension (the earlier rounds' rule: a short held-out count takes the NEXT held-out
+  session once -- "fiT3 next" -- and a second short count stays NO VERDICT):**
+  - **ifsH2**: a held-out staging, `--views near --n 4 --seed 2612281`, spots (82,49), (192,127),
+    (159,162), (213,93): its cells share NONE with all 18 stagings on this map (the 14 earlier,
+    ifsH1, ifs1c, ifs2b, ifs3: 1,932 cells). No 6-spot plan is clean in seeds 2612230-2612399;
+    4 spots is the largest found;
+  - **ifH3, ifH4**: two natural-drop held-out pilots, the chain's own (pilot_rec.sh, 25 min,
+    xmas02v1080, stage2_ab's setup, NOT immune: immunity OFF read back first);
+  - the three names join the held-out refused by name (fi_labels.IF_HELD_OUT; fi_eval /
+    fi_labels R6_STAGING for ifsH2), a code change with tests before they are labelled;
+  - then ALL six held-out sessions labelled `--eval-test` against the same frozen model, a NEW
+    pack `--round 6 --eval-test --seed 73` over all six (the seed-72 pack and key are set aside,
+    never shown), two NEW blind labellers, and `fi_eval --strata r6` ONCE. A count still short
+    then stays NO VERDICT and is reported so.
+- 8b (the 720 round 5's held-out, its inputs complete) is unchanged and scored once beside it.
