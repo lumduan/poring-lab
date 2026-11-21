@@ -17,6 +17,7 @@ import pytest
 
 ROOT = Path(__file__).resolve().parents[3]
 sys.path.insert(0, str(ROOT / "scripts"))
+sys.path.insert(0, str(Path(__file__).resolve().parent))  # the sibling test's synthetic data
 
 import econ_db as edb  # noqa: E402
 import econ_screen as es  # noqa: E402
