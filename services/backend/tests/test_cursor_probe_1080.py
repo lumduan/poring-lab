@@ -274,3 +274,13 @@ def test_the_analysis_of_stored_hovers(tmp_path: Path, monkeypatch: pytest.Monke
     # the reader's crop against the real pixels at the point: 0 until the 200 read
     assert rows[0]["reads"][0]["vr_diff"] == 0.0 and rows[0]["vr_diff_max"] == 150.0
     assert rows[0]["black_max"] == 0.0
+
+
+def test_stop_mode_cycles_its_delays_and_groups_by_them() -> None:
+    """cursor-1080.md Amendment 4b's question: each delay after the still scene equally often,
+    and the summary keeps them apart."""
+    assert [cp.stop_delay(i) for i in range(6)] == [0.0, 0.25, 0.5, 0.75, 1.0, 0.0]
+    assert cp.group_key({"mode": "walk", "band": "far"}) == "walk/far"
+    assert cp.group_key({"mode": "stop", "band": "far",
+                         "stop": {"still": True, "waited_ms": 700, "delay_s": 0.25}}) == (
+        "stop/far/d0.25")  # fmt: skip
