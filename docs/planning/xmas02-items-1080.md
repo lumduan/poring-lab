@@ -874,3 +874,63 @@ A count under its minimum is NO VERDICT, never a pass.
   on 1080 TRAIN frames (the Cruiser's projectile first), and drops under dying monsters as
   positives.
 
+### Amendment 26 (2026-11-22 03:26 ICT from `date`, BEFORE any round-8 data): ROUND 8 pre-registered -- retrain with the model's own false boxes as hard negatives; the spent 1080 held-outs join TRAIN
+
+- **Why** (Amendment 25): the fi7 rule removed the cursor ring. What is left are the model's own
+  confusions: the Cruiser's projectile (19 of 42), the client's pointer, a snowflake mark, effects.
+  A rule cannot name them all, so the model has to learn them as background. Batt's decision
+  stands (Amendment 19: "improve it until it passes").
+- **TRAIN** = round 6's TRAIN unchanged (Amendment 13: 49 sessions with the linked round-5 cache),
+  plus the 14 SPENT 1080 held-out sessions of rounds 6 and 7: ifH1-ifH10 and ifsH1-ifsH4.
+  - Each is labelled `fi_labels.py label --spec 1080 --split train` with the frozen params
+    (ad268afd...), and judged by G2 as round 6 did (Amendment 7's pool for thin pilots).
+  - They are released for TRAIN by name in code (a `released` list, round 8 on). --eval-test still
+    reads them, so the old scores stay reproducible. ifF stays FIT / VAL only.
+- **Negatives:**
+  - the session negatives as round 6: 150 drawn from each pilot's own item-free kept frames (the
+    10 new pilots too), and 1 per 3 item frames for the stagings;
+  - **every hard negative:** an item-free kept frame (by its TRAIN labels) on which xmas02fi6
+    boxed an item at conf >= 0.25 (fi_eval.CONF), with no rule. They are mined from:
+    - the GPU predictions already made on the 14 spent held-outs. Counted at 03:2x on their
+      eval labels' item-free frames: 42 (round 6) and 114 (round 7); the TRAIN labels decide the
+      final set;
+    - new CPU ONNX predictions of xmas02fi6 (its frozen ONNX) over the item-free kept frames of
+      round 6's 10 TRAIN pilots (ifT1-ifT10).
+  - A listed frame that the TRAIN labels do not keep as item-free is not written; it is counted.
+    Each hard negative is written once (no oversampling).
+- **The model, xmas02fi8:**
+  - trained from xmas02fi6's last.pt (4014ae96...) with round 6's trainer settings (Amendment 13:
+    --batch 2 --hsv-s 0.2 --close-mosaic 3 --scale 0.1, imgsz 1280, seed 20261004);
+  - epochs by section 7's formula on the combined TRAIN (3 at the expected ~7,500 frames);
+  - the fi7 rule unchanged at inference (floor 0.50, ring 30, pad 6). ("fi7" stays the rule's
+    name; the model is fi8.)
+- **The GPU:** the training starts after the ranged-attacker A/B's chain ends on the dev lab,
+  because that A/B's arms share the Arc.
+  - It does not stop for a live Run. Batt, 11-21 20:2x: "dev need not wait for live; live slower
+    is fine".
+  - The live detect server's minute p95 is logged during the training and reported. If Batt says
+    otherwise, Amendment 14's yield comes back.
+- **The new held-out:**
+  - natural pilots ifH11, ifH12, ... (NOT immune, OFF read back before each; 25 min each;
+    xmas02v1080). As many as I2's 20 first-frame episodes need (round 7: 6 pilots gave 24), so 6
+    to start, then Amendment 16's one-extension rule;
+  - stagings ifsH5 and ifsH6, immune. Their seeds and cells come in a later amendment, before any
+    recording, and share no cell with any earlier staging;
+  - every name refused for TRAIN in code before its first recording;
+  - labelled --eval-test against the frozen xmas02fi8; one pack at seed **75**; two NEW blind
+    labellers.
+- **The bars:** section 8a's, unchanged (Amendment 25's table), scored ONCE by a wrapper committed
+  before the score. Reported beside them (no bar): xmas02fi6 + fi7 and xmas02fi5 on the same
+  held-out.
+- **If it passes:** 8c at 1080 (A = xmas02fi5, B = xmas02fi8 + fi7, 3 valid runs a side).
+  - The rule and the per-screen model picker are built into the live player first.
+  - Then it is deployed at 1080 only, on Batt's word.
+- **If it fails:** a round 9, pre-registered from its diagnosis.
+- **Not in round 8:** items under a dying monster as labels. The label rule's `under_unit`
+  exclusion stays; I2 is reported with its misses read.
+- **Code first, with tests, before any round-8 label:**
+  - fi_labels: round 8's held-out names (refused for TRAIN) and the released list;
+  - build_frame_cache `--hard-negs FILE`;
+  - fi_eval `--strata r8`;
+  - the mining script.
+
