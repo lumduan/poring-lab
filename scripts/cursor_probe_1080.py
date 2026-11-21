@@ -104,6 +104,9 @@ def band(d: float, far_px: float = FAR_PX) -> str:
 # ``b.cls == "monster"``); cursor-1080.md Amendment 3 (2026-11-21): the first P1 picked HER OWN
 # "player" box on 116 of 120 hovers (the client then draws the walk arrow), so it was void
 TARGET_CLS = "monster"
+# cursor-1080.md Amendment 4: an immune Rogue's monsters wander (they ignore her), so a hover may
+# wait for one to come into reach: up to MISS_MAX looks in a row, MISS_WAIT_S apart (2 min)
+MISS_MAX, MISS_WAIT_S = 120, 1.0
 
 
 def pick_target(boxes: Sequence[Sequence[Any]], want: str, rng: random.Random,
@@ -481,10 +484,12 @@ def cmd_hovers(a: argparse.Namespace) -> int:
                                                                         rng)  # fmt: skip
             if got is None:
                 misses += 1
-                if misses > 40:
-                    raise r.Stop("cursor_probe_1080: no monster box in reach 40 times")
-                time.sleep(1.0)
+                if misses > MISS_MAX:
+                    raise r.Stop(f"cursor_probe_1080: no monster box in reach {MISS_MAX} times "
+                                 "in a row")  # fmt: skip
+                time.sleep(MISS_WAIT_S)
                 continue
+            misses = 0  # CONSECUTIVE misses only (Amendment 4: 40 in all ended a sparse run)
             k, (u, v) = got
             rec, arrays = probe_hover(agent, screen, r, gx0, gy0, u, v, prev_xy, a.read_s)
             bx = boxes[k]
