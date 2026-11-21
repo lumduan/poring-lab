@@ -1,8 +1,12 @@
 "use client";
 
-import { type ReactNode, useEffect, useMemo, useState } from "react";
+import { type ReactNode, useEffect, useMemo, useRef, useState } from "react";
 
 import {
+  parseSavedPrices,
+  pricesBody,
+  samePrices,
+  type SavedPrices,
   basisText,
   consumableLines,
   type DashExport,
@@ -35,6 +39,7 @@ import {
 import { browserStorage, readText, writeChoice } from "@/lib/flow/prefs";
 import { backendHttpBase } from "@/lib/ws";
 
+const RUNS_OPEN_KEY = "poring-lab.economy.runs-open.v1"; // Batt 2026-11-21: the Runs table shown
 const TH = "px-2 py-1.5 text-left text-xs font-semibold text-neutral-400";
 const THR = "px-2 py-1.5 text-right text-xs font-semibold text-neutral-400";
 const TD = "px-2 py-1 align-top";
@@ -162,12 +167,16 @@ export function RunView({
   runIx,
   edits,
   update,
+  runsOpen = false,
+  setRunsOpen = () => {},
 }: {
   doc: DashExport;
   name: string;
   runIx: number;
   edits: PriceEdits;
   update: (next: PriceEdits) => void;
+  runsOpen?: boolean;
+  setRunsOpen?: (open: boolean) => void;
 }) {
   const current = doc;
   const run: RunEntry = runAt(doc, runIx);
@@ -187,47 +196,6 @@ export function RunView({
   const sc = run.screen;
   return (
     <>
-      <Section
-        title="Runs"
-        formula={
-          screenRun
-            ? "window: the run's start to its end (events run_start..run_end); kills / h = kills / hours; a kill = the runner's own kill read from the screen (the EXP line, or an inferred kill)"
-            : "judged window: the run's start to its end (events run_start..run_end); kills / h = our kills / judged hours; a kill = the monster's death <= 1.5 s after our damaging hit (packets)"
-        }
-      >
-        <table className="w-full min-w-[40rem] text-sm">
-          <thead>
-            <tr className="border-b border-neutral-800">
-              <th scope="col" className={TH}>Run</th>
-              <th scope="col" className={TH}>Flow</th>
-              <th scope="col" className={TH}>Start</th>
-              <th scope="col" className={TH}>End</th>
-              <th scope="col" className={TH}>Map</th>
-              <th scope="col" className={TH}>Character</th>
-              <th scope="col" className={THR}>Judged minutes</th>
-              <th scope="col" className={THR}>Kills</th>
-              <th scope="col" className={THR}>Kills / h</th>
-              <th scope="col" className={THR}>Deaths</th>
-            </tr>
-          </thead>
-          <tbody>
-            {[...current.runs.map((r, i) => [r, i] as const), [current.pooled, -1] as const].map(([r, i]) => (
-              <tr key={`${r.session}-${i}`} className={`border-b border-neutral-900 ${i === runIx ? "bg-neutral-800/60" : ""}`}>
-                <td className={`${TD} font-mono text-xs`}>{i === -1 ? `Pooled (${current.runs.length} runs)` : r.session}</td>
-                <td className={`${TD} text-xs`} title={r.flow ? r.flow.flags.join(", ") : undefined}>{flowText(r.flow)}</td>
-                <td className={`${TD} font-mono text-xs`}>{r.started ?? "-"}</td>
-                <td className={`${TD} font-mono text-xs`}>{r.ended ?? "-"}</td>
-                <td className={TD}>{r.map}</td>
-                <td className={TD}>{r.char}</td>
-                <td className={TDR}>{fmtOne(r.minutes)}</td>
-                <td className={TDR}>{fmtInt(r.kills)}</td>
-                <td className={TDR}>{fmtOne(r.hours > 0 ? r.kills / r.hours : null)}</td>
-                <td className={TDR}>{fmtInt(r.deaths)}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </Section>
 
       {screenRun && (
         <>
@@ -458,6 +426,61 @@ export function RunView({
           </ul>
         </section>
       )}
+      {/* Batt 2026-11-21: "move the Runs table to the bottom, with a button to hide it: it is very big" */}
+      <div className="flex items-center gap-2">
+        <button
+          type="button"
+          className="rounded border border-neutral-700 px-2 py-1 text-xs text-neutral-300 hover:bg-neutral-800"
+          onClick={() => setRunsOpen(!runsOpen)}
+          aria-expanded={runsOpen}
+          data-testid="econ-runs-toggle"
+        >
+          {runsOpen ? "Hide the runs" : `Show the runs (${current.runs.length})`}
+        </button>
+      </div>
+      {runsOpen && (
+        <Section
+          title="Runs"
+          formula={
+            screenRun
+              ? "window: the run's start to its end (events run_start..run_end); kills / h = kills / hours; a kill = the runner's own kill read from the screen (the EXP line, or an inferred kill)"
+              : "judged window: the run's start to its end (events run_start..run_end); kills / h = our kills / judged hours; a kill = the monster's death <= 1.5 s after our damaging hit (packets)"
+          }
+        >
+          <table className="w-full min-w-[40rem] text-sm">
+            <thead>
+              <tr className="border-b border-neutral-800">
+                <th scope="col" className={TH}>Run</th>
+                <th scope="col" className={TH}>Flow</th>
+                <th scope="col" className={TH}>Start</th>
+                <th scope="col" className={TH}>End</th>
+                <th scope="col" className={TH}>Map</th>
+                <th scope="col" className={TH}>Character</th>
+                <th scope="col" className={THR}>Judged minutes</th>
+                <th scope="col" className={THR}>Kills</th>
+                <th scope="col" className={THR}>Kills / h</th>
+                <th scope="col" className={THR}>Deaths</th>
+              </tr>
+            </thead>
+            <tbody>
+              {[...current.runs.map((r, i) => [r, i] as const), [current.pooled, -1] as const].map(([r, i]) => (
+                <tr key={`${r.session}-${i}`} className={`border-b border-neutral-900 ${i === runIx ? "bg-neutral-800/60" : ""}`}>
+                  <td className={`${TD} font-mono text-xs`}>{i === -1 ? `Pooled (${current.runs.length} runs)` : r.session}</td>
+                  <td className={`${TD} text-xs`} title={r.flow ? r.flow.flags.join(", ") : undefined}>{flowText(r.flow)}</td>
+                  <td className={`${TD} font-mono text-xs`}>{r.started ?? "-"}</td>
+                  <td className={`${TD} font-mono text-xs`}>{r.ended ?? "-"}</td>
+                  <td className={TD}>{r.map}</td>
+                  <td className={TD}>{r.char}</td>
+                  <td className={TDR}>{fmtOne(r.minutes)}</td>
+                  <td className={TDR}>{fmtInt(r.kills)}</td>
+                  <td className={TDR}>{fmtOne(r.hours > 0 ? r.kills / r.hours : null)}</td>
+                  <td className={TDR}>{fmtInt(r.deaths)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </Section>
+      )}
       <p className="font-mono text-xs text-neutral-500">
         export {name} · made {current.exported_at ?? DASH} · item table rAthena {shortRef(table.rathena_ref)} ({String(table.mode ?? DASH)}), built{" "}
         {String(table.built_at ?? DASH)}
@@ -475,9 +498,76 @@ export default function EconomyDashboard({ backendUrl }: { backendUrl: string | 
   const [name, setName] = useState<string | null>(null);
   const [loaded, setLoaded] = useState<{ name: string; doc: DashExport } | null>(null);
   const [runIx, setRunIx] = useState(-1); // -1: pooled
+  // Batt 2026-11-21: the Runs table is hidden by default; this browser remembers the choice
+  const [runsOpen, setRunsOpenState] = useState(() => readText(store, RUNS_OPEN_KEY) === "1");
+  const setRunsOpen = (open: boolean) => {
+    setRunsOpenState(open);
+    writeChoice(store, RUNS_OPEN_KEY, open ? "1" : "0");
+  };
   const [edits, setEdits] = useState<PriceEdits>(NO_EDITS);
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState(true);
+  // Batt 2026-11-21: the prices saved on the server (Update), for every device and visit
+  const [server, setServer] = useState<SavedPrices | null>(null);
+  const [upd, setUpd] = useState<string | null>(null);
+  const csrf = useRef<string | null>(null);
+
+  useEffect(() => {
+    let alive = true;
+    const base = backendHttpBase(backendUrl);
+    void (async () => {
+      try {
+        const r = await fetch(`${base}/settings/econ-prices`, { cache: "no-store" });
+        const got = r.ok ? parseSavedPrices(await r.json()) : null;
+        if (!alive || !got) return;
+        setServer(got);
+        // this browser's unsaved edits stay on top; with none, the saved prices are the page's
+        setEdits((cur) => (editCount(cur) === 0 ? got.edits : cur));
+      } catch {
+        /* no saved prices: the item table's, as before */
+      }
+    })();
+    return () => {
+      alive = false;
+    };
+  }, [backendUrl]);
+
+  /** Update: the whole set of prices to the server (the CSRF token; a stale one is fetched again once). */
+  const pushPrices = async () => {
+    const base = backendHttpBase(backendUrl);
+    const once = async (): Promise<Response> => {
+      if (!csrf.current) {
+        const t = await fetch(`${base}/settings/csrf`, { cache: "no-store" });
+        csrf.current = t.ok ? ((await t.json()) as { token: string }).token : "";
+      }
+      return fetch(`${base}/settings/econ-prices`, {
+        method: "PUT",
+        headers: { "content-type": "application/json", "x-csrf-token": csrf.current ?? "" },
+        body: JSON.stringify(pricesBody(server, edits)),
+      });
+    };
+    try {
+      let r = await once();
+      if (r.status === 403) {
+        const peek = await r.clone().json().catch(() => null);
+        if (peek?.detail?.reason === "csrf_invalid") {
+          csrf.current = null;
+          r = await once();
+        }
+      }
+      const body: unknown = await r.json().catch(() => null);
+      const got = r.ok ? parseSavedPrices(body) : null;
+      if (got) {
+        setServer(got);
+        setUpd(`Saved on the server: ${editCount(got.edits)} price(s) (revision ${got.revision}).`);
+      } else {
+        const why = (body as { detail?: { reason?: string } } | null)?.detail?.reason ?? `HTTP ${r.status}`;
+        setUpd(why === "revision_conflict" ? "Not saved: another page saved prices first. Reload the page." : `Not saved: ${why}.`);
+      }
+    } catch (e) {
+      setUpd(`Not saved: ${e instanceof Error ? e.message : String(e)}.`);
+    }
+  };
 
   useEffect(() => {
     let alive = true;
@@ -586,6 +676,16 @@ export default function EconomyDashboard({ backendUrl }: { backendUrl: string | 
           >
             Reset all prices{nEdits ? ` (${nEdits} edited)` : ""}
           </button>
+          <button
+            type="button"
+            onClick={() => void pushPrices()}
+            disabled={server !== null && samePrices(server.edits, edits)}
+            className="rounded-md bg-sky-800 px-3 py-1 text-white hover:bg-sky-700 disabled:opacity-40"
+            data-testid="econ-prices-update"
+            title="Save these prices on the server: every device and every next visit uses them"
+          >
+            Update prices
+          </button>
         </div>
       </header>
 
@@ -596,11 +696,17 @@ export default function EconomyDashboard({ backendUrl }: { backendUrl: string | 
         </p>
       )}
       <p className="text-xs text-neutral-500">
-        Fixed NPC prices only (no player market, no rares). Edited prices stay in this browser{saved ? "" : " (not stored: this browser refuses site storage)"} and are
-        never sent to the server. All rates are counts divided by the judged hours.
+        Fixed NPC prices only (no player market, no rares). An item with no price shows a blank box: type its price. Edited prices stay in this
+        browser{saved ? "" : " (not stored: this browser refuses site storage)"} until you press Update prices, which saves them on the server for
+        every device and every next visit{server ? ` (${editCount(server.edits)} saved now)` : ""}. All rates are counts divided by the judged hours.
       </p>
+      {upd && (
+        <p className="text-xs text-sky-300" data-testid="econ-prices-said">
+          {upd}
+        </p>
+      )}
 
-      {current && name !== null && <RunView doc={current} name={name} runIx={runIx} edits={edits} update={update} />}
+      {current && name !== null && <RunView doc={current} name={name} runIx={runIx} edits={edits} update={update} runsOpen={runsOpen} setRunsOpen={setRunsOpen} />}
     </main>
   );
 }

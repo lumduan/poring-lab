@@ -29,6 +29,7 @@ from poring_backend.routes_packets import router as packets_router
 from poring_backend.routes_public import router as public_router
 from poring_backend.routes_qa import router as qa_router
 from poring_backend.routes_runlog import router as runlog_router
+from poring_backend.routes_econprices import router as econprices_router
 from poring_backend.routes_settings import router as settings_router
 from poring_backend.routes_transfer import router as transfer_router
 from poring_backend.routes_transfer import sweep_partials
@@ -114,6 +115,7 @@ def create_app(
     app.include_router(flowrun_router)  # the Run button (routes_flowrun.py; write_gate)
     app.include_router(identity_router)  # Who may play a Run (routes_identity.py; write_gate)
     app.include_router(runlog_router)  # The Run log (routes_runlog.py; write_gate)
+    app.include_router(econprices_router)  # /economy's saved prices (routes_econprices.py)
     app.include_router(debug_router)
     app.include_router(hardware_router)  # the public listener only (routes_hardware.py)
     app.include_router(economy_router)  # read-only, the public listener only (routes_economy.py)

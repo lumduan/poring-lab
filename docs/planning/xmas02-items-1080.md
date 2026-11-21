@@ -813,3 +813,20 @@ A count under its minimum is NO VERDICT, never a pass.
      xmas02v1080, stage2_ab's setup (now TOPUP_1080: the Fly Wing to 40 when under 30).
 - **The dev client crashed after Batt's dev Run** (access violation, 14:53 .. 15:15). It was
   recovered at 16:08, and the round-7 recordings all come after that.
+
+### Amendment 24 (2026-11-21 21:55 ICT from `date`, before the round-7 score is read): I5 is measured again, in a quiet window
+
+- Round 7's score wrapper ran at 21:37-21:53 DURING 5b's run c5b-B1 (cursor-1080.md Amendment 11:
+  its wait matched a quoted "CHAIN DONE"). So its I5 inputs are void:
+  - the CPU latency ran beside B1's start;
+  - the GPU latency queried B1's detect server (another model, under play).
+- Its fi_eval output (score-r7.json, sha256 ff4f2b481f2dcd7e...) is kept UNREAD in
+  data/train/eval/xmas02fi6-r7/void-r7a/. The report-only fi5 pass failed: round 7's strata need
+  --comparator.
+- **Scored by** xmas02_items_r7b_score.sh (docs/records/scorers), after 5b's chain ends, with no dev
+  detect server and no screen_ab run.
+  - I5 measured again: eval_latency and fi_gpu_latency, each model.
+  - fi_eval again with ONLY the latency files replaced. The labels, the predictions (GPU + ONNX), the
+    key, both blind labellers' answers and both-good.json are those of the first pass, so the item
+    lines I1-I4 are the same by construction.
+  - That run is the round's one score.

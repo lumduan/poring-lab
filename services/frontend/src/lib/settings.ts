@@ -238,6 +238,7 @@ const ACTION_TEXT: Record<string, string> = {
   char_forget: "Forgot a character",
   // The Run log (Batt 2026-11-21)
   run_log: "The Run log",
+  econ_prices: "The economy prices",
 };
 
 /** Changes whose note is the person's own words, quoted (ADR-0023). */

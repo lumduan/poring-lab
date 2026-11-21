@@ -249,7 +249,7 @@ export default function LiveRun({ live, checklist = [], minutes = null, keys = n
               return (
                 <li key={it.id} data-tick={t.mark} data-stale={t.stale ? "true" : "false"} data-testid={`live-check-${it.id}`}>
                   {/* matpilot round 15 #8: a greyed (stale) line shows no verdict: its tick was for other keys */}
-                  <span className="live-tick" aria-label={t.stale ? "changed since the last check" : t.mark === "none" ? "not checked" : t.mark === "ok" ? "passes" : t.mark === "fail" ? "fails" : "not read"}>
+                  <span className="live-tick" aria-label={t.stale ? "changed since the last check" : t.mark === "none" ? "not checked" : t.mark === "ok" ? "passes" : t.mark === "fail" ? "fails" : t.mark === "info" ? "a note" : "not read"}>
                     {t.stale ? "·" : t.sign || "·"}
                   </span>{" "}
                   {it.text}
@@ -304,7 +304,7 @@ export default function LiveRun({ live, checklist = [], minutes = null, keys = n
           <ul className="live-checklist">
             {ownCheck.map((l) => (
               <li key={l.id} data-tick={l.mark} data-stale="false" data-testid={`live-run-own-${l.id}`}>
-                <span className="live-tick" aria-label={l.mark === "ok" ? "passes" : l.mark === "fail" ? "fails" : "not read"}>
+                <span className="live-tick" aria-label={l.mark === "ok" ? "passes" : l.mark === "fail" ? "fails" : l.mark === "info" ? "a note" : "not read"}>
                   {l.sign}
                 </span>{" "}
                 <strong>{l.id}</strong>

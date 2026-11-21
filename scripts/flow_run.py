@@ -393,6 +393,68 @@ def hotbar_warnings(items: list[Any]) -> list[Any]:
     return out
 
 
+# Batt 2026-11-21 ~22:0x ("these need no warning: each class plays differently -- a swordsman may
+# carry another potion; do not require the White Potion, warn only when the heal key was forgotten,
+# else note that its item is what she heals with. F4-F5: no warning, just say the flow swaps weapons
+# there so the user prepares them. Never hardcode F1-F9: the keys the flow's blocks set"): the
+# heals line warns only on an EMPTY heal key; another item there is a NOTE (its count read). The
+# Knife / dagger lines are NOTES on what the flow swaps, on ITS keys (the check's ``used``: the
+# flow's functions). Their ok stays as read: knife_swap_off still plays without the swap when the
+# set-up did not read right (an unknown weapon state could equip anything; Batt 2026-11-19).
+SWAP_LINES = ("knife", "dagger")
+
+
+def _lead_int(value: Any) -> int | None:
+    m = re.match(r"\s*(\d+)", str(value or ""))
+    return int(m.group(1)) if m else None
+
+
+def _key_in(value: Any) -> str | None:
+    m = re.search(r"\bon (\S+)$", str(value or ""))
+    return m.group(1) if m else None
+
+
+def heal_note(it: dict[str, Any], used: Mapping[str, Any]) -> dict[str, Any]:
+    """PURE: the heals line by Batt's rule -- an empty key warns, any item there is a note."""
+    if it.get("ok") is True:
+        return it
+    key = used.get("heal_key") or _key_in(it.get("value")) or "the heal key"
+    n = _lead_int(it.get("value"))
+    if n is not None and n > 0:
+        return {**it, "ok": True, "info": True, "refuses": False,
+                "words": f"{key} holds {n} of the item she drinks or eats to heal: any heal item "
+                         "(the player's choice; each class carries its own)"}  # fmt: skip
+    if n == 0 or "empty" in str(it.get("words")):
+        return {**it, "ok": False, "refuses": False,
+                "words": f"{key} is empty: put the item she heals with there (any heal item), "
+                         "or she plays without healing"}  # fmt: skip
+    return it  # the count did not read: the runner's own words
+
+
+def swap_note(it: dict[str, Any], used: Mapping[str, Any]) -> dict[str, Any]:
+    """PURE: a Knife / dagger line as a note on what the flow swaps, on its own keys."""
+    k = used.get("knife_key") or "its idle-weapon key"
+    d = used.get("dagger_key") or "its weapon key"
+    what = (f"{k}: the idle weapon this flow swaps to" if it.get("id") == "knife"
+            else f"{d}: the fighting weapon it swaps back (worn at the start)")  # fmt: skip
+    words = f"this flow swaps weapons on {k} and {d}; {what}: put them there to use the swap"
+    if it.get("ok") is False:
+        words += " (this Run: they did not read as that set-up, so it plays without the swap)"
+    return {**it, "info": True, "refuses": False, "words": words}
+
+
+def hotbar_notes(items: list[Any], used: Mapping[str, Any]) -> list[Any]:
+    """PURE: hotbar_warnings' lines with Batt's notes (heal_note, swap_note)."""
+    out = []
+    for it in items:
+        if isinstance(it, dict) and it.get("id") == "heals":
+            it = heal_note(it, used)
+        elif isinstance(it, dict) and it.get("id") in SWAP_LINES:
+            it = swap_note(it, used)
+        out.append(it)
+    return out
+
+
 def parse_check_output(text: str, identity: str | None = None) -> dict[str, Any]:
     """PURE (dungeon@9.45): the check's log as its result -- its CHECK line (the items, ok,
     refuses, the values it used), else the runner's refusal (a preamble refusal: no line read).
@@ -407,11 +469,13 @@ def parse_check_output(text: str, identity: str | None = None) -> dict[str, Any]
                 break
             if identity in ("any", "known"):
                 got["items"] = identity_any(got["items"], identity)
-            got["items"] = hotbar_warnings(got["items"])
+            got["items"] = hotbar_notes(hotbar_warnings(got["items"]), got.get("used") or {})
             got["refuses"] = any(isinstance(i, dict) and i.get("ok") is False
                                  and i.get("refuses", True) for i in got["items"])  # fmt: skip
-            fails = [i for i in got["items"] if isinstance(i, dict) and i.get("ok") is False]
-            unread = [i for i in got["items"] if isinstance(i, dict) and i.get("ok") is None]
+            fails = [i for i in got["items"] if isinstance(i, dict) and i.get("ok") is False
+                     and not i.get("info")]  # fmt: skip
+            unread = [i for i in got["items"] if isinstance(i, dict) and i.get("ok") is None
+                      and not i.get("info")]  # fmt: skip
             n = len(got["items"])
             detail = (f"{len(fails)} of {n} lines fail" if fails else
                       f"{len(unread)} of {n} lines not read" if unread else
@@ -835,6 +899,11 @@ class Live:
                     and all(isinstance(x, int) and not isinstance(x, bool) for x in nm)
                     and nm[0] >= 0 and nm[1] > 0):  # fmt: skip
                 self.weight_nm = [nm[0], nm[1]]
+                # Batt 2026-11-21 22:5x ("why does the weight show so late: 2 minutes, still
+                # nothing"): the runner's weight EVENT comes only on a change of >= 0.5 % from its
+                # start read, so a light-loot start showed "not read" for minutes; every read
+                # (N / M, each UI watch) sets the share itself
+                self.weight = nm[0] / nm[1]
             z = e.get("zeny")
             if isinstance(z, int) and not isinstance(z, bool) and z >= 0:
                 self.zeny = z

@@ -59,13 +59,21 @@ export function pauseLine(p: RunPause | null | undefined): string | null {
 }
 
 /** PURE: the Run's own start check, one line per item, the failing ones first. */
-export function runCheckLines(c: LiveCheck | null | undefined): { id: string; mark: "ok" | "fail" | "unread"; sign: string; words: string; value: string | null }[] {
+// Batt 2026-11-21: a NOTE (info) line says what the flow uses (the heal item on its key, the weapon
+// swap's keys): never a warning; "ℹ"
+export type CheckMark = "ok" | "fail" | "unread" | "info";
+export function markOf(it: Pick<CheckItem, "ok" | "info">): CheckMark {
+  return it.info ? "info" : it.ok === true ? "ok" : it.ok === false ? "fail" : "unread";
+}
+export const MARK_SIGN: Record<CheckMark, string> = { ok: "✓", fail: "✗", unread: "?", info: "ℹ" };
+
+export function runCheckLines(c: LiveCheck | null | undefined): { id: string; mark: CheckMark; sign: string; words: string; value: string | null }[] {
   if (!c || !Array.isArray(c.items)) return [];
-  const rank = { fail: 0, unread: 1, ok: 2 } as const;
+  const rank = { fail: 0, unread: 1, info: 2, ok: 3 } as const;
   return c.items
     .map((it) => {
-      const mark: "ok" | "fail" | "unread" = it.ok === true ? "ok" : it.ok === false ? "fail" : "unread";
-      return { id: it.id, mark, sign: mark === "ok" ? "✓" : mark === "fail" ? "✗" : "?", words: it.words, value: it.value ?? null };
+      const mark = markOf(it);
+      return { id: it.id, mark, sign: MARK_SIGN[mark], words: it.words, value: it.value ?? null };
     })
     .sort((a, b) => rank[a.mark] - rank[b.mark]);
 }
@@ -80,7 +88,7 @@ export function busyWhy(st: LiveStatus | null, what: "run" | "check" = "run"): s
 
 /** One line of the live check (scripts/dungeon_hunt.py check_item): ok true / false / null (not
  * read), its words, the value read, and whether the runner's own start refuses on it. */
-export type CheckItem = { id: string; ok: boolean | null; words: string; value: string | null; refuses?: boolean };
+export type CheckItem = { id: string; ok: boolean | null; words: string; value: string | null; refuses?: boolean; info?: boolean };
 /** The last check (the Run helper's status "check"; Batt 2026-11-13 "do it": the start checklist
  * ticked from the game screen, read only). */
 export type LiveCheck = {
@@ -304,15 +312,15 @@ export function checkStale(check: LiveCheck | null | undefined, flow: string, ba
   return Object.entries(basis).some(([k, v]) => (used[k] ?? null) !== (v ?? null));
 }
 
-export type Tick = { mark: "ok" | "fail" | "unread" | "none"; sign: string; words: string | null; value: string | null; stale: boolean; refuses: boolean };
+export type Tick = { mark: "ok" | "fail" | "unread" | "info" | "none"; sign: string; words: string | null; value: string | null; stale: boolean; refuses: boolean };
 
 /** PURE: a checklist line's tick from the last check: ✓ (ok), ✗ (fails: its words), ? (not read),
  * or none (no result for it); ``stale`` when the settings changed since. */
 export function tickFor(check: LiveCheck | null | undefined, flow: string, id: string, basis: Record<string, unknown>): Tick {
   const it = check && check.state === "done" ? check.items.find((x) => x.id === id) : undefined;
   if (!it) return { mark: "none", sign: "", words: null, value: null, stale: false, refuses: false };
-  const mark = it.ok === true ? "ok" : it.ok === false ? "fail" : "unread";
-  return { mark, sign: mark === "ok" ? "✓" : mark === "fail" ? "✗" : "?", words: it.words, value: it.value, stale: checkStale(check, flow, basis), refuses: it.ok === false && it.refuses !== false };
+  const mark = markOf(it);
+  return { mark, sign: MARK_SIGN[mark], words: it.words, value: it.value, stale: checkStale(check, flow, basis), refuses: !it.info && it.ok === false && it.refuses !== false };
 }
 
 /** PURE (matpilot round 16 #2, round 18 #1): what a ✓ line adds after its value -- the words after
