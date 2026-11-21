@@ -369,3 +369,26 @@ Written before any probe of this round.
   box, B = the same box with CURSOR_WAIT_S 0.75 (one setting, checked: the runner's argv differs
   in that --tune alone), 3 valid runs a side: kills/h B - A > +2 SE, box-target unknown B <= 5 %,
   deaths B <= A, no new errors.
+
+### Amendment 6 (2026-11-21 13:28 ICT from `date`): 5a at 0.75 s FAILS (6.3 % > 5 %); the window 1.0 s chosen, a fresh 5a block
+
+- **5a, scored once** (`probe_run5.sh`, 12:21-12:38, immune: judged ON at 11:02, the same session
+  since; a FRESH stop-mode block of 80 monster hovers, 63 far; the runner replayed at today's
+  0.35 s and at the fix window 0.75 s; analysis 13:27):
+
+  | far hovers (63) | unknown at 0.35 s (today) | unknown at **0.75 s (the fix)** | unknown at 1.0 s |
+  |---|---|---|---|
+  | pooled | 42 (66.7 %) | **4 (6.3 %)** | 0 |
+
+  Per delay after the still wait (far): 0.00 s: 12 / 15 unknown at 0.35, 0 at 0.75 (7 of the 15
+  end on the walk arrow: no unit under the point); 0.25 s: 9 / 12 -> 0; 0.50 s: 10 / 12 -> **3**;
+  0.75 s: 6 / 12 -> **1**; 1.00 s: 5 / 12 -> 0. The first sword in this block: median 226-588 ms
+  by delay, p90 up to 803 ms (the stop probe's p90 was 0.6-0.7 s).
+- **The bar (unknown <= 5 % on >= 60 far hovers): 6.3 % -> FAIL** for 0.75 s. The window cuts the
+  unknowns ten-fold, but not to the bar.
+- **The next choice (its own amendment, before its block):** the window **1.0 s** (this block's
+  late swords reach 0.8 s; the check still ends at the first decision, so the extra time is spent
+  only on hovers that would otherwise end unknown). Its 5a is a NEW fresh block (stop mode, >= 60
+  far), the runner replayed at 1.0 s, the same bar, scored once. 1.0 s is also the probe's own read
+  window, so the replay at 1.0 s needs no new reads. If it fails too, the timing branch is not
+  enough and the place branch (a fresh detection and second hover after an unknown) comes next.
