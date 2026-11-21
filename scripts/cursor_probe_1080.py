@@ -75,6 +75,12 @@ HALF, REAL_HALF = 32, 80  # the reader's 64 x 64 crop; the real 160 x 160 box
 APPROACH = (-3, -2)  # cursor_sword.check's first motion
 OFFSET_PX = 6.0  # a cursor found further than this from the point: drawn elsewhere
 WALK_LEAD_S = 0.15  # the hover after a walk click: the camera scrolling
+# cursor-1080.md Amendment 4b's question (``--mode stop``): how long after she STOPS is a hover at
+# 1080 safe? A walk click, the runner's own still rule (dungeon_hunt.still_now on route_preview's
+# scene_shift of the virtual frames, ~60 ms apart, at most dungeon_hunt.STILL_MAX_S), then the
+# hover STOP_DELAYS[i % 5] seconds later (cycled: each delay as often)
+STOP_DELAYS = (0.0, 0.25, 0.5, 0.75, 1.0)
+STILL_POLL_S = 0.06  # dungeon_hunt.wait_still's frame gap
 WALK_RING = (170.0, 260.0)  # walk points: this far from our cell's point
 WALK_CLEAR_PX = 90.0  # ... and this far from every box's hover point
 WALK_TRIES = 6
@@ -209,12 +215,24 @@ def pctl(xs: Sequence[float], q: float) -> float | None:
     return float(s[min(len(s) - 1, max(0, math.ceil(q * len(s)) - 1))])
 
 
+def stop_delay(i: int) -> float:
+    """PURE (--mode stop): hover i's wait after the still scene."""
+    return STOP_DELAYS[i % len(STOP_DELAYS)]
+
+
+def group_key(h: Mapping[str, Any]) -> str:
+    """PURE: a hover's group: mode / band, and for ``stop`` its delay after the still scene."""
+    stop = h.get("stop")
+    tail = f"/d{float(stop['delay_s']):.2f}" if isinstance(stop, Mapping) else ""
+    return f"{h['mode']}/{h['band']}{tail}"
+
+
 def summarise(hovers: Iterable[Mapping[str, Any]]) -> dict[str, Any]:
-    """PURE: per (mode, band): the hovers, the runner's verdicts at 0.35 s and 1.0 s, the classes
-    over 1.0 s, the first SWORD's time (median / p90), the reads' bus counters."""
+    """PURE: per (mode, band[, stop delay]): the hovers, the runner's verdicts at 0.35 s and
+    1.0 s, the classes over 1.0 s, the first SWORD's time (median / p90), the bus counters."""
     groups: dict[str, list[Mapping[str, Any]]] = {}
     for h in hovers:
-        groups.setdefault(f"{h['mode']}/{h['band']}", []).append(h)
+        groups.setdefault(group_key(h), []).append(h)
     out: dict[str, Any] = {}
     for key, hs in sorted(groups.items()):
         runner = Counter(h["runner"] for h in hs)
@@ -288,7 +306,7 @@ def analyse_hover(stem: Path, sw: Any, stride: int) -> dict[str, Any]:
         reads.append(row)
     prev = [real_search(sw, p, stride) for p in ps]
     out = {k_: meta[k_] for k_ in ("i", "mode", "band", "dist", "u", "v", "real_xy", "prev_xy",
-                                   "box", "cls", "score", "det_ms", "walk", "ms")
+                                   "box", "cls", "score", "det_ms", "walk", "ms", "stop")
            if k_ in meta}  # fmt: skip
     out.update(
         {
@@ -444,6 +462,31 @@ def _start(label: str, immune: bool) -> Path:
     return d
 
 
+def wait_still(r: Any, screen: Any, gx0: int, gy0: int) -> tuple[bool, float]:
+    """LIVE (--mode stop): the runner's still rule on the virtual frames (dungeon_hunt.wait_still:
+    a frame every STILL_POLL_S, dungeon_hunt.still_now on route_preview.scene_shift, at most
+    dungeon_hunt.STILL_MAX_S): (still, waited s). Reads only."""
+    import dungeon_hunt as dh
+    import route_preview as rp
+
+    def frame() -> Any:
+        return np.ascontiguousarray(
+            np.asarray(r.grab_after_meta(screen, (gx0, gy0, 1280, 720), r.ns())[1])[..., :3]
+        )
+
+    t_w = time.monotonic()
+    prev = frame()
+    shifts: list[tuple[float, float]] = []
+    while time.monotonic() - t_w < dh.STILL_MAX_S:
+        time.sleep(STILL_POLL_S)
+        cur = frame()
+        shifts.append(rp.scene_shift(prev, cur))
+        prev = cur
+        if dh.still_now(shifts):
+            break
+    return dh.still_now(shifts), time.monotonic() - t_w
+
+
 def cmd_hovers(a: argparse.Namespace) -> int:
     d = _start(a.label, a.immune_confirmed)  # the refusal before any import or input
     import crusader as cr
@@ -469,7 +512,8 @@ def cmd_hovers(a: argparse.Namespace) -> int:
         i = done
         while i < done + a.n:
             walk = None
-            if a.mode == "walk":
+            stop: dict[str, Any] | None = None
+            if a.mode in ("walk", "stop"):
                 boxes, _ = _boxes(det, screen, gx0, gy0)
                 walk = walk_click(agent, screen, sw, gx0, gy0, boxes, rng)
                 if walk["clicked"] is None:
@@ -478,7 +522,13 @@ def cmd_hovers(a: argparse.Namespace) -> int:
                         raise r.Stop("cursor_probe_1080: no walk point read the arrow 20 times")
                     continue
                 prev_xy = _real_point(r, *walk["clicked"])
-                time.sleep(WALK_LEAD_S)
+                if a.mode == "stop":
+                    still, waited = wait_still(r, screen, gx0, gy0)
+                    stop = {"still": still, "waited_ms": round(waited * 1e3),
+                            "delay_s": stop_delay(i)}  # fmt: skip
+                    time.sleep(stop["delay_s"])
+                else:
+                    time.sleep(WALK_LEAD_S)
             boxes, det_ms = _boxes(det, screen, gx0, gy0)
             got = pick_target(boxes, bands[i % 2], rng) or pick_target(boxes, bands[1 - i % 2],
                                                                         rng)  # fmt: skip
@@ -495,7 +545,8 @@ def cmd_hovers(a: argparse.Namespace) -> int:
             bx = boxes[k]
             rec.update(i=i, mode=a.mode, band=band(dist(u, v)), dist=round(dist(u, v), 1),
                        box=[round(float(x), 1) for x in bx[:4]], score=round(float(bx[4]), 3),
-                       cls=bx[5], det_ms=det_ms, walk=walk)  # fmt: skip
+                       cls=bx[5], det_ms=det_ms, walk=walk,
+                       **({"stop": stop} if stop is not None else {}))  # fmt: skip
             np.savez_compressed(d / f"h{i:03d}.npz", **arrays)
             (d / f"h{i:03d}.json").write_text(json.dumps(rec))
             prev_xy = rec["real_xy"]
@@ -554,7 +605,7 @@ def main(argv: list[str] | None = None) -> int:
     f = sub.add_parser("frames")
     for p in (h, f):
         p.add_argument("--label", required=True)
-        p.add_argument("--mode", choices=("stand", "walk"), required=True)
+        p.add_argument("--mode", choices=("stand", "walk", "stop"), required=True)
         p.add_argument("--immune-confirmed", action="store_true")
         p.add_argument("--seed", type=int, default=71)
     h.add_argument("--n", type=int, default=60)
