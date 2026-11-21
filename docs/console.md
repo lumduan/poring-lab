@@ -428,7 +428,8 @@ Amendment B); a not-adopted model is never offered.
     - **🎒 weight**: the bag's %, from the runner's own weight read (its UI check, every 10 s
       outside a fight; a change is shown). The bar turns red at 50 %: there the client stops
       natural HP / SP regen, and at 90 % she cannot attack.
-    - **🪙 zeny**: Basic Info's zeny (the last number on the weight line), read from the same
+    - **💰 zeny** (➡️ 2026-11-21 ~20:2x, Batt: 💰 for the zeny, a hand picking up for the pickups:
+      the items tile is 🫳): Basic Info's zeny (the last number on the weight line), read from the same
       frames by `scripts/zeny_read.py`, with the gain or spend since the Run's first read, e.g.
       "33,287 (+3,287)".
       - It reads the lab's font and a client's own learned font (the live PC's, live-th).

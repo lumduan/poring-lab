@@ -196,7 +196,7 @@ export function doingIcon(doing: string): string {
     [/weapon|knife|dagger|swap/, "🔁"],
     [/a kill/, "💀"],
     [/strik|fight starts|aiming/, "⚔️"],
-    [/loot|picking up/, "💰"],
+    [/loot|picking up/, "🫳"], // Batt 2026-11-21: a hand picking up (💰 is the zeny now)
     [/scanning|looking/, "👀"],
     [/walk|explor|exit/, "🚶"],
     [/fight is over|letting go/, "✅"],
@@ -237,12 +237,12 @@ export function monitorTiles(st: LiveStatus | null | undefined): MonitorTile[] {
   if (l.zeny !== undefined) {
     const z = l.zeny;
     const ch = zenyChange(z, l.zeny_start);
-    out.push({ key: "zeny", icon: "🪙", text: z === null ? "zeny not read" : `${zenyText(z)}${ch ? ` (${ch})` : ""}`, title: `zeny (Basic Info)${typeof l.zeny_start === "number" ? `; ${zenyText(l.zeny_start)} at the Run's first read` : ""}` });
+    out.push({ key: "zeny", icon: "💰", text: z === null ? "zeny not read" : `${zenyText(z)}${ch ? ` (${ch})` : ""}`, title: `zeny (Basic Info)${typeof l.zeny_start === "number" ? `; ${zenyText(l.zeny_start)} at the Run's first read` : ""}` });
   }
   out.push(
     { key: "cell", icon: "📍", text: l.pos ? `${l.pos[0]}, ${l.pos[1]}` : "not read", title: "her cell (the minimap)" },
     { key: "kills", icon: "⚔️", text: String(l.kills), title: "kills" },
-    { key: "items", icon: "💰", text: `${l.pickups}${l.steals ? ` + ${l.steals} stolen` : ""}`, title: `items gained: picked up${l.steals ? " + stolen" : ""} (${l.loot_steps} loot steps)` },
+    { key: "items", icon: "🫳", text: `${l.pickups}${l.steals ? ` + ${l.steals} stolen` : ""}`, title: `items gained: picked up${l.steals ? " + stolen" : ""} (${l.loot_steps} loot steps)` },
     { key: "potions", icon: "🧪", text: String(l.potions), title: "potions drunk" },
     { key: "wings", icon: "🪽", text: String(l.flies), title: "Fly Wings flown" },
     { key: "time", icon: "⏱️", text: time, title: "time played" },

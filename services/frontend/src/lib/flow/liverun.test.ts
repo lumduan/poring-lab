@@ -232,7 +232,7 @@ test("the Run's own start check: one line per item, the failing ones first", () 
 // Batt 2026-11-20: "a small dashboard of the bot, with small emoji so a look tells"
 test("the monitor bar: a tile per fact with its emoji; no Knife tile; steals beside the pickups", async () => {
   const { doingIcon, monitorTiles } = await import("./liverun.ts");
-  for (const [d, icon] of [["walking", "🚶"], ["scanning around her", "👀"], ["striking", "⚔️"], ["picking up", "💰"], ["a Fly Wing", "🪽"], ["the Butterfly Wing home", "🪽"], ["a potion", "🧪"], ["the idle weapon on", "🔁"], ["waiting", "⏳"], ["RETRY 1 of 3: waiting, then checking her", "🛠️"], ["something new", "•"]] as const) {
+  for (const [d, icon] of [["walking", "🚶"], ["scanning around her", "👀"], ["striking", "⚔️"], ["picking up", "🫳"], ["a Fly Wing", "🪽"], ["the Butterfly Wing home", "🪽"], ["a potion", "🧪"], ["the idle weapon on", "🔁"], ["waiting", "⏳"], ["RETRY 1 of 3: waiting, then checking her", "🛠️"], ["something new", "•"]] as const) {
     assert.equal(doingIcon(d), icon, d);
   }
   assert.deepEqual(monitorTiles(null).map((t) => t.key), ["state"]);
@@ -275,6 +275,8 @@ test("the live line and the monitor bar carry SP, the weight % and the zeny", as
   assert.equal(by.weight.text, "38 %");
   assert.equal(by.weight.warn, false);
   assert.equal(by.zeny.text, "33,287 (+3,287)");
+  assert.equal(by.zeny.icon, "💰"); // Batt 2026-11-21: 💰 is the zeny, a hand the pickups
+  assert.equal(by.items.icon, "🫳");
   assert.match(by.zeny.title, /30,000 at the Run's first read/);
   const heavy = Object.fromEntries(monitorTiles({ ...ok, state: "running", live: { ...l, sp: 10, weight: 51, weight_red: true, zeny: null } }).map((t) => [t.key, t]));
   assert.equal(heavy.sp.warn, true); // SP below 20 %
