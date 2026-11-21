@@ -41,6 +41,12 @@ def test_the_setup_lines_never_meet_the_chat_guard_and_top_up_only_under_a_floor
     assert ab.topup_lines({"F9": 0, "F8": 6, "F1": 3}) == ["@item 602 3", "@item 601 4",
                                                            "@item 504 7"]  # fmt: skip
     assert "did not read" in str(ab.topup_lines({**full, "F8": None}))
+    # Batt 2026-11-21: at 1080 the Fly Wing is topped up to 40 when under 30; 720 unchanged
+    assert ab.topup_table(False) is ab.TOPUP and ab.topup_table(True) is ab.TOPUP_1080
+    assert ab.topup_lines({**full, "F8": 12}, ab.topup_table(True)) == ["@item 601 28"]
+    assert ab.topup_lines({**full, "F8": 12}, ab.topup_table(False)) == []
+    assert ab.topup_lines({**full, "F8": 30}, ab.topup_table(True)) == []
+    assert [x for x in ab.TOPUP_1080 if x[0] != 601] == [x for x in ab.TOPUP if x[0] != 601]
     # the worst case: every run's setup tops up the same item -- still never 3 identical lines
     typed: list[str] = []
     for r in ab.series("s", 6):

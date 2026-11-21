@@ -87,6 +87,19 @@ PY = str(ROOT / ".venv" / "bin" / "python")
 CLEAR_AT = 0.40  # the night chain's WEIGHT_CLEAR: at or over it, clear-bag before the run
 # (item, its key, floor, to): a GM @item only when the read count is under the floor
 TOPUP = ((602, "F9", 2, 3), (601, "F8", 7, 10), (504, "F1", 7, 10))
+# Batt 2026-11-21 ("ok" to "more Fly Wings for 1080 Runs: raise the lab setup's restock to 40"): at
+# 1080 the false goblin alarms (~16 an hour) and idle flies ran 8 of 12 pilots OUT of Fly Wings
+# (stock_keep, TOPUP 10). With the client at 1080 (the virtual client) the Fly Wing is topped up to
+# 40 whenever it reads under 30; 720 keeps TOPUP unchanged (its A/Bs stay comparable)
+TOPUP_1080 = ((602, "F9", 2, 3), (601, "F8", 30, 40), (504, "F1", 7, 10))
+
+
+def topup_table(virtual: bool) -> tuple[tuple[int, str, int, int], ...]:
+    """PURE: the top-up table for the client's screen (``virtual``: not 1280x720, ro_agent.
+    virtual_active)."""
+    return TOPUP_1080 if virtual else TOPUP
+
+
 WARP_SETTLE_S, ARRIVE_S = 4.0, 20.0
 # 2026-11-14 01:00: a death respawns her with almost no HP (the lab server's restart HP), and the
 # next run (B) met the player's built-in hp_critical at once (0.1 min): the setup heals her first,
@@ -663,7 +676,7 @@ class Series:
                 raise Stop(f"after {warp!r} the minimap reads {got.get('map')}, not {MAP}")
             time.sleep(1.0)
             got = self.read()
-        lines = topup_lines(got["counts"])
+        lines = topup_lines(got["counts"], topup_table(bool(got.get("virtual"))))
         if isinstance(lines, str):
             raise Stop(lines)
         for ln in lines:
@@ -826,7 +839,8 @@ def read_now() -> dict[str, Any]:
         return {"map": None if refs is None else mi.read_map(img, refs).map,
                 "hp": hpp.read(img, glyphs), "knife": knife,
                 "weight": None if share is None else round(share, 4),
-                "chat_open": bool(r.is_state(screen, "chat_open")), "counts": counts}  # fmt: skip
+                "chat_open": bool(r.is_state(screen, "chat_open")), "counts": counts,
+                "virtual": bool(r.virtual_active())}  # fmt: skip
     finally:
         screen.close()
 
