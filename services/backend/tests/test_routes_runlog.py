@@ -4,15 +4,18 @@ Settings page by a person -- record or not (default not), the folder, the total 
 from __future__ import annotations
 
 import json
+import sys
 from collections.abc import Iterator
 from pathlib import Path
 from typing import Any
 
 import pytest
 from fastapi.testclient import TestClient
-from test_routes_identity import H, make, tok
 
 from poring_env import runlog as rl
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))  # the sibling test's app fixture
+from test_routes_identity import H, make, tok  # noqa: E402
 
 
 @pytest.fixture
