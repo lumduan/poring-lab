@@ -753,6 +753,7 @@ class Live:
     sp_low: int | None = None
     weight: float | None = None  # the share, 0..1
     weight_red: bool = False  # the client draws the line red (>= 50 %: no natural regen)
+    weight_nm: list[int] | None = None  # Batt 2026-11-21: the bag's N / M as the runner read it
     zeny: int | None = None
     zeny_start: int | None = None
 
@@ -829,6 +830,11 @@ class Live:
             if isinstance(sp, int) and not isinstance(sp, bool):
                 self.sp = sp
                 self.sp_low = sp if self.sp_low is None else min(self.sp_low, sp)
+            nm = e.get("weight_nm")
+            if (isinstance(nm, list) and len(nm) == 2
+                    and all(isinstance(x, int) and not isinstance(x, bool) for x in nm)
+                    and nm[0] >= 0 and nm[1] > 0):  # fmt: skip
+                self.weight_nm = [nm[0], nm[1]]
             z = e.get("zeny")
             if isinstance(z, int) and not isinstance(z, bool) and z >= 0:
                 self.zeny = z
@@ -890,7 +896,7 @@ class Live:
                 "mobs": None if self.mobs is None else [list(m) for m in self.mobs],
                 "mobs_age_s": self.mobs_age_s(), "sp": self.sp, "sp_low": self.sp_low,
                 "weight": None if self.weight is None else round(self.weight * 100, 1),
-                "weight_red": self.weight_red, "zeny": self.zeny,
+                "weight_red": self.weight_red, "weight_nm": self.weight_nm, "zeny": self.zeny,
                 "zeny_start": self.zeny_start}  # fmt: skip
 
     def mobs_age_s(self) -> float | None:

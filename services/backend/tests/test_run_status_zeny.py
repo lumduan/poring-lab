@@ -200,3 +200,31 @@ def test_the_helper_keeps_sp_the_weight_and_the_zeny() -> None:
     assert (got["zeny"], got["zeny_start"]) == (32100, 33287)
     lv.feed({"kind": "hp_read", "t_ns": s + 5, "pct": 100, "sp_pct": True, "zeny": -5})
     assert lv.summary()["sp"] == 60 and lv.summary()["zeny"] == 32100  # never a bad value
+
+
+def test_the_weight_reads_n_and_m_too() -> None:
+    """Batt 2026-11-21: "weight 40 % -- show the real weight in brackets, (xxxx/xxxx)": the runner's
+    own read [N, M] (the purse keeps it), on the hp_read record, into the summary."""
+    import gm_state
+
+    recs: list[dict[str, Any]] = []
+    player = types.SimpleNamespace(rec=types.SimpleNamespace(ev=recs.append))
+    p = fp.Purse(read=lambda frames: (None, "no_font"))
+    saved = gm_state._weight
+    gm_state._weight = lambda frames: [1680, 4200]  # type: ignore[assignment]
+    try:
+        with fp.purse_reads(p):
+            gm_state._weight(("a", "b"))
+    finally:
+        gm_state._weight = saved  # type: ignore[assignment]
+    assert p.last_weight() == (1680, 4200)
+    p.keep_weight(None)  # an unread weight keeps the last
+    p.keep_weight([5, 0])  # never a zero maximum
+    assert p.last_weight() == (1680, 4200)
+    hook = fp.HuntHook(player, fp.HuntResult(), purse=p)  # type: ignore[arg-type]
+    hook.event({"kind": "hp_read", "pct": 90}, 1.0)
+    assert recs[-1]["weight_nm"] == [1680, 4200] and "zeny" not in recs[-1]
+    lv = fr.Live()
+    lv.feed({"kind": "hp_read", "t_ns": 1, "pct": 90, "weight_nm": [1680, 4200]})
+    lv.feed({"kind": "hp_read", "t_ns": 2, "pct": 90, "weight_nm": [3, 0]})  # never a bad value
+    assert lv.summary()["weight_nm"] == [1680, 4200]

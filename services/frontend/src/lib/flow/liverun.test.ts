@@ -273,6 +273,10 @@ test("the live line and the monitor bar carry SP, the weight % and the zeny", as
   assert.equal(by.sp.bar, 74);
   assert.equal(by.sp.warn, false);
   assert.equal(by.weight.text, "38 %");
+  // Batt 2026-11-21: "show the real weight in brackets"
+  const nm = { ...l, weight_nm: [1680, 4200] as [number, number] };
+  assert.equal(Object.fromEntries(monitorTiles({ ...ok, state: "running", live: nm }).map((t) => [t.key, t])).weight.text, "38 % (1680/4200)");
+  assert.match(liveLine(nm, null) ?? "", /weight 38 % \(1680\/4200\)/);
   assert.equal(by.weight.warn, false);
   assert.equal(by.zeny.text, "33,287 (+3,287)");
   assert.equal(by.zeny.icon, "💰"); // Batt 2026-11-21: 💰 is the zeny, a hand the pickups

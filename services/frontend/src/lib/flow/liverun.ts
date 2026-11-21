@@ -131,9 +131,16 @@ export type LiveSummary = {
   sp_low?: number | null;
   weight?: number | null;
   weight_red?: boolean;
+  weight_nm?: [number, number] | null; // Batt 2026-11-21: the bag's N / M, "40 % (1680/4200)"
   zeny?: number | null;
   zeny_start?: number | null;
 };
+
+/** PURE: " (1680/4200)" -- the bag's N / M as read, "" when the helper sent none. */
+export function weightNm(l: Pick<LiveSummary, "weight_nm">): string {
+  const nm = l.weight_nm;
+  return Array.isArray(nm) && nm.length === 2 && nm.every((x) => Number.isInteger(x)) ? ` (${nm[0]}/${nm[1]})` : "";
+}
 
 /** PURE: a zeny amount as the client writes it (33,287). */
 export function zenyText(z: number): string {
@@ -166,7 +173,7 @@ export function liveLine(l: LiveSummary | null | undefined, minutes: number | nu
   const parts = [
     l.hp !== null ? `HP ${l.hp} %` : null,
     typeof l.sp === "number" ? `SP ${l.sp} %` : null,
-    typeof l.weight === "number" ? `weight ${Math.round(l.weight)} %` : null,
+    typeof l.weight === "number" ? `weight ${Math.round(l.weight)} %${weightNm(l)}` : null,
     typeof l.zeny === "number" ? `${zenyText(l.zeny)} z` : null,
     l.doing,
     `${l.kills} kill${l.kills === 1 ? "" : "s"}`,
@@ -232,7 +239,7 @@ export function monitorTiles(st: LiveStatus | null | undefined): MonitorTile[] {
   }
   if (l.weight !== undefined) {
     const w = l.weight;
-    out.push({ key: "weight", icon: "🎒", text: w === null ? "weight not read" : `${Math.round(w)} %`, title: "the bag's weight: at 50 % the client stops natural HP / SP regen, at 90 % she cannot attack", ...(w === null ? {} : { bar: clampPct(w), warn: w >= 50 || l.weight_red === true }) });
+    out.push({ key: "weight", icon: "🎒", text: w === null ? "weight not read" : `${Math.round(w)} %${weightNm(l)}`, title: "the bag's weight: at 50 % the client stops natural HP / SP regen, at 90 % she cannot attack", ...(w === null ? {} : { bar: clampPct(w), warn: w >= 50 || l.weight_red === true }) });
   }
   if (l.zeny !== undefined) {
     const z = l.zeny;

@@ -912,6 +912,7 @@ class Purse:
                  clock: Callable[[], float] = time.monotonic) -> None:  # fmt: skip
         self.lock = threading.Lock()
         self.value: int | None = None
+        self.weight: tuple[int, int] | None = None  # Batt 2026-11-21: the bag's N / M as read
         self.why = "not read yet"
         self.t = -1e9
         self.reads = self.fails = 0
@@ -938,6 +939,20 @@ class Purse:
         with self.lock:
             return self.value
 
+    def keep_weight(self, w: Any) -> None:
+        """The runner's own weight read ([N, M], or None: unread keeps the last)."""
+        try:
+            n, m = (int(x) for x in w)
+        except (TypeError, ValueError):
+            return
+        if n >= 0 and m > 0:
+            with self.lock:
+                self.weight = (n, m)
+
+    def last_weight(self) -> tuple[int, int] | None:
+        with self.lock:
+            return self.weight
+
 
 @contextlib.contextmanager
 def purse_reads(purse: Purse) -> Iterator[None]:
@@ -949,6 +964,7 @@ def purse_reads(purse: Purse) -> Iterator[None]:
 
     def weight(frames: Any) -> Any:
         out = saved(frames)
+        purse.keep_weight(out)  # Batt 2026-11-21: "40 % (1680/4200)" on the Run's status
         purse.read(frames)
         return out
 
@@ -1018,6 +1034,8 @@ class HuntHook:
                 extra = {**extra, "mobs": self.sight.cells(rec.get("pos"))}
             if self.purse is not None and (z := self.purse.last()) is not None:
                 extra = {**extra, "zeny": z}
+            if self.purse is not None and (w := self.purse.last_weight()) is not None:
+                extra = {**extra, "weight_nm": list(w)}
         elif k not in MIRROR:
             return
         out = {**rec, **extra}
