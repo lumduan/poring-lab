@@ -41,13 +41,27 @@ def test_its_constants_are_the_runner_s_own() -> None:
 
 
 def test_targets_are_picked_by_band_inside_the_runner_s_reach() -> None:
-    near = (620.0, 320.0, 660.0, 360.0, 0.9, "a")  # centre (640, 340): 22 px
-    far = (780.0, 300.0, 820.0, 340.0, 0.8, "b")  # centre (800, 320): 164 px
-    beyond = (1000.0, 300.0, 1040.0, 340.0, 0.8, "c")  # 380 px: out of reach
+    near = (620.0, 320.0, 660.0, 360.0, 0.9, "monster")  # centre (640, 340): 22 px
+    far = (780.0, 300.0, 820.0, 340.0, 0.8, "monster")  # centre (800, 320): 164 px
+    beyond = (1000.0, 300.0, 1040.0, 340.0, 0.8, "monster")  # 380 px: out of reach
     rng = random.Random(1)
     assert cp.pick_target([near, far, beyond], "far", rng) == (1, (800.0, 320.0))
     assert cp.pick_target([near, far, beyond], "near", rng) == (0, (640.0, 340.0))
     assert cp.pick_target([beyond], "far", rng) is None
+
+
+def test_only_the_runner_s_monster_boxes_are_targets() -> None:
+    """cursor-1080.md Amendment 3: her own "player" box (and an NPC's) is never hovered -- the
+    first P1 picked it on 116 of 120 hovers."""
+    me = (622.5, 287.8, 658.7, 362.1, 0.96, "player")  # her own box, 37 px from her point
+    npc = (780.0, 300.0, 820.0, 340.0, 0.9, "npc")
+    mon = (700.0, 300.0, 740.0, 340.0, 0.7, "monster")
+    rng = random.Random(3)
+    for _ in range(20):
+        assert cp.pick_target([me, npc], "near", rng) is None
+        assert cp.pick_target([me, npc], "far", rng) is None
+        assert cp.pick_target([me, npc, mon], "near", rng) == (2, (720.0, 320.0))
+    assert cp.TARGET_CLS == "monster"
     assert cp.band(cp.dist(800.0, 320.0)) == "far" and cp.band(119.9) == "near"
 
 

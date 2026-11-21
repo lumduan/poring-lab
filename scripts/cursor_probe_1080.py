@@ -100,13 +100,21 @@ def band(d: float, far_px: float = FAR_PX) -> str:
     return "far" if d >= far_px else "near"
 
 
+# the runner's box targets are its detector's MONSTER boxes only (dungeon_hunt's box watcher:
+# ``b.cls == "monster"``); cursor-1080.md Amendment 3 (2026-11-21): the first P1 picked HER OWN
+# "player" box on 116 of 120 hovers (the client then draws the walk arrow), so it was void
+TARGET_CLS = "monster"
+
+
 def pick_target(boxes: Sequence[Sequence[Any]], want: str, rng: random.Random,
                 far_px: float = FAR_PX, reach_px: float = REACH_PX
                 ) -> tuple[int, tuple[float, float]] | None:  # fmt: skip
-    """PURE: a random box of band ``want`` within the runner's reach (its index and hover
-    point); None when the band has none."""
+    """PURE: a random MONSTER box (TARGET_CLS, the runner's) of band ``want`` within the
+    runner's reach (its index and hover point); None when the band has none."""
     got = []
     for i, b in enumerate(boxes):
+        if str(b[5]) != TARGET_CLS:
+            continue
         u, v = hover_point(b)
         d = dist(u, v)
         if d <= reach_px and band(d, far_px) == want:
