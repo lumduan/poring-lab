@@ -591,3 +591,41 @@ Written before any probe of this round.
   - per arm: the runs ended by a stock-out, the damage taken a minute and the heals used
     (packets).
 
+### RESULT 5b (2026-11-22 03:49 ICT from `date`): scored ONCE -- B, C and D are each NOT BETTER than A
+
+`cursor_5b_score.py score --arm A=c5b-A1+c5b-A2+c5b-A3 --arm B=c5b-B2+c5b-B3+c5b-B4
+--arm C=c5b-C2+c5b-C3+c5b-C4+c5b-C5 --arm D=c5b-D1+c5b-D2+c5b-D3` (Amendment 12; the dev checkout
+at 20cdf35a, the scorer unchanged since a623d7ad; `score-5b.json` sha256 f84c6e39...). 3 valid
+runs a side (C3 not valid by the committed rule: 14.4 min, a stock-out).
+
+| arm | kills/h per run | mean (SE) | % of Batt's 228.5 | vs A: diff / 2 SE | verdict |
+|---|---|---|---|---|---|
+| A the box (0.35 s) | 87.5, 94.7, 62.9 | 81.7 (9.6) | 35.8 % | | |
+| B CURSOR_WAIT_S 1.0 | 104.5, 106.6, 94.8 | 102.0 (3.6) | 44.6 % | +20.3 / 20.6 | NOT BETTER |
+| C click on sight | 89.5, 82.4, 97.3 | 89.7 (4.3) | 39.3 % | +8.0 / 21.1 | NOT BETTER |
+| D C + 4 looks a second | 89.9, 77.5, 97.1 | 88.2 (5.7) | 38.6 % | +6.5 / 22.4 | NOT BETTER |
+
+- Deaths 0 and errors 0 in every arm. B's cursor-unknown share on box targets 2.6 % (bar <= 5 %:
+  PASS).
+- B misses its bar by 0.3 kills/h (1.97 SE). A's spread (62.9-94.7) makes the SE wide.
+- **The sensitivity (Amendment 12, decides nothing):** with C3's own rate (112.8 kills/h over
+  14.4 min) in C: 95.5 (6.5), +13.8 against a 2-SE bar of 23.3. Still NOT BETTER.
+- **Reported (decides nothing):**
+
+  | arm | strike clicks | became an attack | became a walk | box -> attack p50 by run (s) | loot/h | Fly Wings/h | alarm flies |
+  |---|---|---|---|---|---|---|---|
+  | A | 116 | 88.8 % | 11.2 % | 1.54, 1.57, 1.49 | 112.4 | 34.8 | 40 |
+  | B | 119 | 81.5 % | 15.1 % | 1.56, 1.56, 1.62 | 131.1 | 26.7 | 33 |
+  | C | 202 | 64.4 % | 32.7 % | 1.42, 1.65, 1.61, 1.40 | 111.6 | 24.2 | 27 |
+  | D | 137 | 76.6 % | 19.7 % | 1.34, 1.19, 1.32 | 103.5 | 38.0 | 44 |
+
+  - World detections a second: A 1.06, B 1.05, C 1.06, D 4.03. The box's age at a strike, p50:
+    A 0.239 s, B 0.243, C 0.265, D 0.104.
+  - **Batt's point holds for the click itself:** clicking on sight on a 1-a-second look (C) turned
+    a third of its clicks into walks (the monster had moved). Looking 4 times a second (D) halved
+    that (19.7 %) and gave the fastest box -> attack. Neither turned into more kills an hour.
+  - D2 (live detect server's minute p95 during each D run, Amendment 10, reported): D1 median
+    29.9 / max 32.4 ms, D2 28.6 / 30.3, D3 28.5 / 30.7; no minute over 35 ms.
+- **Nothing joins the base from 5b.** Each arm stays a player switch, off. B is the nearest; it
+  would need its own new A/B to say more.
+
