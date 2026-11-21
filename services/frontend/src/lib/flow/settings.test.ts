@@ -351,7 +351,8 @@ test("matpilot round 20 #5: the block search finds every knife setting by 'knife
 test("a settings tab's strip line names its group and the name rule", () => {
   const x = xmasProject();
   assert.match(settingTabNote(tabNamed(x, NODE, "timing"), "map") ?? "", /^timing -- how often the bot looks at the screen: 6 settings/);
-  assert.equal(settingTabNote(tabNamed(x, NODE, "aim"), "map"), `choosing and striking -- which monster, how to aim, how fast to click: ${SETTING_BLOCKS.filter((s) => s.group === "aim").length} settings of the runner's hunt core (these replace Global's here; a deleted one falls back to Global's, else the default)`);
+  // the tab's HELD settings: an optional block (CURSOR_WAIT_S, cursor-1080.md Amendment 5) is held only when set
+  assert.equal(settingTabNote(tabNamed(x, NODE, "aim"), "map"), `choosing and striking -- which monster, how to aim, how fast to click: ${SETTING_BLOCKS.filter((s) => s.group === "aim" && !s.optional).length} settings of the runner's hunt core (these replace Global's here; a deleted one falls back to Global's, else the default)`);
   assert.equal(settingTabNote(tabNamed(x, NODE, "keys"), "map"), null);
   assert.equal(settingTabNote(tabNamed(x, NODE, "main"), "map"), null);
   assert.match(settingTabNote(tabNamed(x, NODE, "knife"), "global") ?? "", /every map node takes these unless it sets its own/);
