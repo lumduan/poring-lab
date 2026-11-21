@@ -795,3 +795,21 @@ A count under its minimum is NO VERDICT, never a pass.
   - if 8c passes, deploy at 1080 only, on Batt's word.
 - **If 8a7 fails:** C (training with cursor-ring hard negatives) by a new amendment, and a new
   held-out again.
+
+### Amendment 23 (2026-11-21 16:36 ICT from `date`, BEFORE any round-7 recording): the new held-out's stagings and order
+
+- **The stagings** (`--views near --n 4`, the largest clean size, as ifsH2):
+  - **ifsH3: seed 2612519**, spots (104,170), (170,25), (184,205), (38,126);
+  - **ifsH4: seed 2612675**, spots (49,49), (25,236), (71,94), (96,170).
+  - Their cells share NONE with the 19 earlier stagings on this map (1,980 distinct cells: the
+    14 earlier, ifsH1, ifs1c, ifs2b, ifs3, ifsH2), nor with each other.
+  - No 6-spot plan was clean in seeds 2612400-2612699; the 4-spot hits were 2612519, 2612589
+    and 2612675. Scratch: `cells/earlier-r7.json`.
+- **The order:**
+  1. ifsH3, then ifsH4, IMMUNE. Judged at 16:09 on a frame after the dev client's crash
+     recovery ("You are now immune to attacks."); the same game session since. `stage_rec.sh`.
+  2. Immunity OFF, its reply read on a frame.
+  3. The pilots ifH5 .. ifH10, NOT immune. `chain.sh` / `pilot_rec.sh`, 25 min each,
+     xmas02v1080, stage2_ab's setup (now TOPUP_1080: the Fly Wing to 40 when under 30).
+- **The dev client crashed after Batt's dev Run** (access violation, 14:53 .. 15:15). It was
+  recovered at 16:08, and the round-7 recordings all come after that.
