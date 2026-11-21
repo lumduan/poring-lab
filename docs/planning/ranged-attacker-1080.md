@@ -109,4 +109,21 @@ attacks." On the order (20:2x): after tonight's 5b test.
 
 ## 7. RESULTS and AMENDMENTS (clock-labelled)
 
-(none yet)
+### Amendment 1 (2026-11-22 03:23 ICT from `date`, BEFORE the first run): merged; the chain; when it starts
+
+- **Merged into main** (84d5256c) after origin/main's evening work: the focused tests pass with the
+  branch's packages first (105: test_ranged_defend, the block pins, flow_play / flow_run, the 5b
+  scorer).
+- **The chain** (docs/records/scorers/rng_chain.sh, verbatim) starts after 5b's fifth C run
+  (cursor-1080.md Amendment 12), fast-forwards the dev checkout to origin/main, then plays
+  A' R A' R A' R.
+- **A valid run is the SCORER's rule** (`screen_ab.valid`: >= 80 % of the 25 min, or a home end;
+  rc 0). An arm short of 3 valid runs gets more runs at the end, at most 2 more, and every run of
+  the arm counts. 5b's chain counted only runs 1-3 and judged by played seconds; that is fixed
+  here.
+- **Immunity:** OFF was judged before 5b on this game session, and the session has run on since
+  (no re-login), so the A/B plays NOT immune.
+- **Seen during 5b** (cursor-1080.md Amendment 12): run c5b-C3 ran out of potions at 15 min after a
+  Cruiser's shots (454 damage a minute; the other runs 157-248). This round reports potions an
+  hour (section 3), which shows it.
+
