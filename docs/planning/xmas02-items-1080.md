@@ -584,7 +584,7 @@ A count under its minimum is NO VERDICT, never a pass.
   after. The freeze runs only when results.csv holds all 3 epochs and the last guarded step said
   ALL STEPS OK; every rc is captured before any other expansion.
 
-### Amendment 15 (2026-11-21 08:20 ICT from `date`, BEFORE the freeze and BEFORE any held-out label): the evaluation's inputs, fixed
+### Amendment 15 (2026-11-21 08:17 ICT from `date`, BEFORE the freeze and BEFORE any held-out label): the evaluation's inputs, fixed
 
 - **The training resumed** at 08:13:54 after Batt's live Run ended (07:42, his bag full) and the
   cursor probes' server step ended: "Resuming MID-EPOCH from mid.pt: epoch 2 batch 0/2729, state
