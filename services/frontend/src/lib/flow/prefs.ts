@@ -17,6 +17,11 @@ export const KEYS = {
   runOptions: "poring-lab.flows.run-options.v1", // the Run options section open or folded (Batt 2026-11-20)
   storyClock: "poring-lab.flows.story-clock.v1", // "what she does": the Run's time or the server's clock (Batt 2026-11-20)
   logs: "poring-lab.flows.logs-pane.v1", // the Logs pane (Batt 2026-11-19)
+  // Batt 2026-11-21: the panes in the order opened (lib/flow/panes.ts); the blocks shown or hidden;
+  // the live map's whole map or close-up
+  paneOrder: "poring-lab.flows.pane-order.v1",
+  blocks: "poring-lab.flows.blocks.v1",
+  liveMap: "poring-lab.flows.live-map.v1",
   flow: "poring-lab.flows.flow.v1",
   world: "poring-lab.flows.world.v1", // the static data the last flow is linted and simulated on
   // the last flow's saved name and the GitHub file it came from (file.ts FileMeta); never the world

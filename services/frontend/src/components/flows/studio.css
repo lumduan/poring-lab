@@ -944,34 +944,100 @@
 .py-bracket2 { color: var(--py-bracket2); }
 .py-bracket3 { color: var(--py-bracket3); }
 
-/* --- the output drawer: Inspect, Lint, Simulate, Path map, Hunt rules -------------------------- */
+/* --- the output drawer: Run / Log, Inspect, Lint, Results, Map, Hunt rules ----------------------
+   Batt 2026-11-21: the panes STACK in the order opened (the first at the top; a closed one lets
+   the rest move up; reopened goes last: lib/flow/panes.ts). One pane fills the drawer; several
+   share it, each at least 14rem, and the drawer scrolls past that. The blocks hidden: the drawer
+   takes the page's height */
 .studio-drawer {
-  display: grid;
+  display: flex;
+  flex-direction: column;
   flex: none;
-  grid-template-columns: minmax(0, 1fr);
   height: clamp(12rem, 36vh, 26rem);
+  overflow-y: auto;
   background: var(--surface);
   border-top: 1px solid var(--border);
 }
-.studio-drawer[data-panes="2"] {
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+.studio-drawer:not([data-panes="1"]) {
+  height: clamp(16rem, 52vh, 44rem);
 }
-.studio-drawer[data-panes="3"] {
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-}
-.studio-drawer[data-panes="4"],
-.studio-drawer[data-panes="5"] {
-  grid-template-columns: repeat(auto-fit, minmax(18rem, 1fr));
-  overflow-y: auto;
+.studio-drawer[data-blocks="hidden"] {
+  flex: 1;
+  height: auto;
+  min-height: 0;
+  border-top: 0;
 }
 .pane {
   display: flex;
+  flex: 1 1 0;
   flex-direction: column;
-  min-height: 0;
+  min-height: 14rem;
   min-width: 0;
 }
+.studio-drawer[data-panes="1"] > .pane {
+  min-height: 0;
+}
 .pane + .pane {
-  border-left: 1px solid var(--border);
+  border-top: 1px solid var(--border);
+}
+/* the blocks hidden (Batt 2026-11-21): the editor stays mounted, out of sight */
+.studio-body[data-blocks="hidden"] {
+  display: none;
+}
+.blocks-hidden-bar {
+  flex: none;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.4rem 0.8rem;
+  padding: 0.35rem 0.75rem;
+  background: var(--surface);
+  border-top: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
+  font-size: 0.85rem;
+}
+/* the live map in the Map pane (components/flows/LiveMap.tsx) */
+.live-map {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+.live-map-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.3rem 0.8rem;
+}
+.live-map-views {
+  display: inline-flex;
+  gap: 0.25rem;
+  margin-left: auto;
+}
+.live-map-box {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: clamp(14rem, 45vh, 40rem);
+  min-height: 10rem;
+  overflow: auto;
+  resize: vertical;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+}
+.live-map-box canvas {
+  display: block;
+}
+.live-map-empty {
+  padding: 1rem;
+}
+.live-dot {
+  display: inline-block;
+  width: 0.6rem;
+  height: 0.6rem;
+  margin-right: 0.2rem;
+  border-radius: 50%;
+  vertical-align: middle;
 }
 .pane-body {
   flex: 1;
@@ -1461,14 +1527,7 @@
     height: 45vh;
   }
   .studio-drawer[data-panes] {
-    grid-template-columns: minmax(0, 1fr);
-    grid-template-rows: none;
-    grid-auto-rows: minmax(15rem, auto);
     overflow-y: auto;
-  }
-  .pane + .pane {
-    border-left: 0;
-    border-top: 1px solid var(--border);
   }
   /* one row: the sentence, then Python and More (the panes fold into More) */
   .studio-status {
@@ -1697,6 +1756,10 @@
   .studio[data-testid="flows-app"] .studio-drawer[data-panes] {
     height: auto;
     overflow: visible;
+  }
+  .studio[data-testid="flows-app"] .pane {
+    flex: none;
+    min-height: 0;
   }
   .studio[data-testid="flows-app"] .pane-body {
     flex: none;

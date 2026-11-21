@@ -684,6 +684,24 @@ def server_tz() -> str:
     return f"UTC{'+' if m >= 0 else '-'}{abs(m) // 60:02d}:{abs(m) % 60:02d}"
 
 
+def sight_mobs(v: Any) -> list[list[Any]] | None:
+    """PURE (Batt 2026-11-21, the live map): a record's monster cells as [x, y, name] (at most
+    SIGHT_MAX_MOBS; a malformed one is left out), or None when the record carries none."""
+    if not isinstance(v, list):
+        return None
+    out: list[list[Any]] = []
+    for m in v[:SIGHT_MAX_MOBS]:
+        try:
+            out.append([int(m[0]), int(m[1]), str(m[2])[:32] if len(m) > 2 else "monster"])
+        except (TypeError, ValueError, IndexError):
+            continue
+    return out
+
+
+TRAIL_N = 240  # the live map: her last cells (one a change)
+SIGHT_MAX_MOBS = 24  # the live map: monster cells a record may carry
+
+
 @dataclass
 class Live:
     """PURE: the live summary of one run's session events (fed line by line)."""
@@ -719,6 +737,14 @@ class Live:
     # Batt 2026-11-21 (the Run log, poring_env.runlog): every story line is ALSO given here, with
     # its full clock time (ISO, the server's zone), when the Settings page records the Runs
     sink: Callable[[dict[str, Any]], None] | None = field(default=None, repr=False, compare=False)
+    # Batt 2026-11-21 (the live map on /flows: "her as a green dot, the monsters she sees as red
+    # dots"): the map she is on (the player's read), her last cells, and the monsters of the last
+    # once-a-second record (flow_play.Sight: the detector's boxes placed from her cell); None: no
+    # record carried any (an older player, or no hunt core playing)
+    map: str | None = None
+    trail: list[list[int]] = field(default_factory=list)
+    mobs: list[list[Any]] | None = None
+    mobs_t_ns: int | None = None
 
     def clock_at(self, t: Any) -> str | None:
         """The event's clock time, "HH:MM:SS", in this server's time zone (None: no clock)."""
@@ -775,6 +801,8 @@ class Live:
         if k in ("hunt_start",):
             self.doing, self.block = "the hunt core starts", None
             return
+        if k == "hunt_end":  # no detector plays now: the map shows no monster
+            self.mobs = self.mobs_t_ns = None
         if k == "pause":  # ro_agent.away_gate: the game off the screen (flow_play's PauseNotes)
             self.doing, self.block = "PAUSED: the game is not on the screen", None
             return
@@ -787,8 +815,20 @@ class Live:
             if isinstance(e.get("pct"), int):
                 self.hp = e["pct"]
                 self.hp_low = self.hp if self.hp_low is None else min(self.hp_low, self.hp)
+            if isinstance(e.get("map"), str) and e["map"] and e["map"][:40] != self.map:
+                self.map, self.pos, self.mobs = e["map"][:40], None, None
+                self.trail.clear()  # another map: her cells there are another picture
             if isinstance(e.get("pos"), list):
-                self.pos = [int(x) for x in e["pos"][:2]]
+                with contextlib.suppress(TypeError, ValueError):
+                    self.pos = [int(x) for x in e["pos"][:2]]
+                    if not self.trail or self.trail[-1] != self.pos:
+                        self.trail.append(self.pos)
+                        del self.trail[:-TRAIL_N]
+            if "mobs" in e:
+                self.mobs, self.mobs_t_ns = (
+                    sight_mobs(e.get("mobs")),
+                    t if isinstance(t, int) else None,
+                )
             return  # a look every tick: what she does stays the last action
         elif k == "press":
             w = str(e.get("what"))
@@ -822,7 +862,15 @@ class Live:
                 "node": self.node, "keys": self.keys, "fired": self.fired,
                 "last_event": self.last_event, "end": dict(self.end),
                 "retries": self.retries, "story": list(self.story),
-                "tz": server_tz()}  # fmt: skip
+                "tz": server_tz(), "map": self.map, "trail": [list(c) for c in self.trail],
+                "mobs": None if self.mobs is None else [list(m) for m in self.mobs],
+                "mobs_age_s": self.mobs_age_s()}  # fmt: skip
+
+    def mobs_age_s(self) -> float | None:
+        """How old the monsters' record is (s), by the newest event's time."""
+        if self.mobs_t_ns is None or self.t_ns is None:
+            return None
+        return round(max(0, self.t_ns - self.mobs_t_ns) / 1e9, 1)
 
 
 def session_of(label: str | None, demo: Path) -> Path | None:

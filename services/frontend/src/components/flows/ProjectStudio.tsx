@@ -31,6 +31,7 @@ import type { EditorApi, EditorState } from "@/components/flows/BlockEditor";
 import FlowFileDialogs, { type FileDialog, type Opened, useFileShortcuts } from "@/components/flowfile/FlowFileDialogs";
 import CodeView from "@/components/flows/CodeView";
 import NodeInspector from "@/components/maps/NodeInspector";
+import LiveMap from "@/components/flows/LiveMap";
 import LiveRun, { LiveRunButtons, RunNotReady, useLiveRun } from "@/components/flows/LiveRun";
 import { RunLogBox, RunMonitor, RunOptionsBox, RunStateBox, RunStory } from "@/components/flows/RunPanels";
 import { effectiveLimitS } from "@/lib/flow/runoptions";
@@ -42,7 +43,8 @@ import { type FileMeta, newFileMeta, readFileMeta, writeFileMeta } from "@/lib/f
 import { ACTIVE, busyWhy, liveLabel, liveLine, PROJECT_FLOW } from "@/lib/flow/liverun";
 import { liveReady } from "@/lib/flow/liveready";
 import type { MapsDoc } from "@/lib/flow/pickers";
-import { browserStorage, hasOldFlow, KEYS, pythonDefault, readChoice, readProjectText, writeChoice, writeProjectText } from "@/lib/flow/prefs";
+import { BLOCKS_CHOICES, type BlocksChoice, parsePaneOrder, setPaneOpen } from "@/lib/flow/panes";
+import { browserStorage, hasOldFlow, KEYS, pythonDefault, readChoice, readProjectText, readText, writeChoice, writeProjectText } from "@/lib/flow/prefs";
 import {
   engineKey,
   GLOBAL_ID,
@@ -102,7 +104,9 @@ const PANES: [Pane, string][] = [
   ["inspect", "Inspect"],
   ["lint", "Lint"],
   ["simulate", "Results"],
-  ["paths", "Path map"],
+  // Batt 2026-11-21: "Map" -- while a Run plays, the live map (her green, the monsters red); the
+  // simulated path under it
+  ["paths", "Map"],
   ["hunt", "Hunt rules"],
 ];
 type Notice = { text: string; tone: "ok" | "warn" | "error"; undo: { project: Project; world: WorldSource; file: FileMeta } | null };
@@ -194,15 +198,24 @@ export default function ProjectStudio({ backendUrl, initialNode = null }: { back
     const wide = typeof window !== "undefined" && window.matchMedia ? window.matchMedia("(min-width: 48rem)").matches : true;
     return readChoice(store, KEYS.python, OPEN_CLOSED, pythonDefault(wide));
   });
-  const [panes, setPanes] = useState<Record<Pane, boolean>>(() =>
-    Object.fromEntries(
-      PANES.map(([p]) => [
-        p,
+  // Batt 2026-11-21: the open panes in the order opened (the first at the top; a closed one lets
+  // the rest move up; reopened goes last). A browser with no stored order starts from its older
+  // per-pane choices, in the toggles' order
+  const [order, setOrder] = useState<Pane[]>(
+    () =>
+      parsePaneOrder(
+        readText(store, KEYS.paneOrder),
+        PANES.map(([p]) => p),
+      ) ??
+      PANES.map(([p]) => p).filter(
         // a browser that had the old Logs pane open opens Run / Log (2026-11-20: one pane)
-        readChoice(store, KEYS[p], OPEN_CLOSED, "closed") === "open" || (p === "run" && readChoice(store, KEYS.logs, OPEN_CLOSED, "closed") === "open"),
-      ]),
-    ) as Record<Pane, boolean>,
+        (p) => readChoice(store, KEYS[p], OPEN_CLOSED, "closed") === "open" || (p === "run" && readChoice(store, KEYS.logs, OPEN_CLOSED, "closed") === "open"),
+      ),
   );
+  const panes = useMemo(() => Object.fromEntries(PANES.map(([p]) => [p, order.includes(p)])) as Record<Pane, boolean>, [order]);
+  // Batt 2026-11-21 ("while a Run plays, hide the coding blocks to see the logs in full"): the
+  // editor stays mounted (nothing lost), hidden; the panes take the page's height
+  const [blocks, setBlocksState] = useState<BlocksChoice>(() => readChoice(store, KEYS.blocks, BLOCKS_CHOICES, "shown"));
   const menuRef = useRef<HTMLDivElement | null>(null);
   const codeRef = useRef<HTMLPreElement | null>(null);
   // round 25: the ENGINE's key -- a tab's layout (where a person put the blocks) is no new lint,
@@ -266,11 +279,19 @@ export default function ProjectStudio({ backendUrl, initialNode = null }: { back
   };
   const setPane = useCallback(
     (p: Pane, open: boolean) => {
-      setPanes((old) => ({ ...old, [p]: open }));
-      writeChoice(store, KEYS[p], open ? "open" : "closed");
+      setOrder((old) => {
+        const next = setPaneOpen(old, p, open);
+        writeChoice(store, KEYS.paneOrder, JSON.stringify(next));
+        return next;
+      });
     },
     [store],
   );
+  const setBlocks = (b: BlocksChoice) => {
+    setBlocksState(b);
+    writeChoice(store, KEYS.blocks, b);
+    if (b === "hidden" && order.length === 0) setPane("run", true); // something to see in their place
+  };
   // a Run that starts opens Run / Log ONCE (it stays closable; 2026-11-20)
   const wasActive = useRef(runActive);
   useEffect(() => {
@@ -597,7 +618,8 @@ export default function ProjectStudio({ backendUrl, initialNode = null }: { back
   const pythonOpen = view === "blocks" && pythonPanel === "open";
   const huntRules = catalogue?.hunt_rules ?? null;
   const visiblePanes = PANES.filter(([p]) => p !== "hunt" || huntRules);
-  const openPanes = visiblePanes.filter(([p]) => shown[p]);
+  const label = new Map(visiblePanes);
+  const openPanes = order.filter((p) => label.has(p)).map((p) => [p, label.get(p) ?? p] as [Pane, string]);
   const notReady = (lintStale ? [] : (lintDoc?.findings ?? [])).filter((f) => f.severity === "readiness" && (f.node ?? "") === node.id);
   const tabErrors = (t: string) => errors.some((f) => (f.node || node.id) === node.id && (f.tab || MAIN_TAB) === t);
   const nodeErrors = (id: string) => errors.some((f) => f.node === id);
@@ -862,7 +884,7 @@ export default function ProjectStudio({ backendUrl, initialNode = null }: { back
         </Link>
       </div>
 
-      <div className="studio-body" data-python-panel={pythonOpen ? "open" : "closed"}>
+      <div className="studio-body" data-python-panel={pythonOpen ? "open" : "closed"} data-blocks={blocks} aria-hidden={blocks === "hidden" || undefined}>
         <div className="studio-canvas">
           <div className="block-tabs-bar">
             <div className="block-tabs" role="tablist" aria-label="Tabs">
@@ -972,8 +994,16 @@ export default function ProjectStudio({ backendUrl, initialNode = null }: { back
         )}
       </div>
 
+      {blocks === "hidden" && (
+        <div className="blocks-hidden-bar" data-testid="blocks-hidden">
+          <span>The blocks are hidden{openPanes.length === 0 ? ": open a pane below (Run / Log, Map, ...)" : ""}.</span>
+          <button type="button" className="toggle-button" onClick={() => setBlocks("shown")}>
+            Show blocks
+          </button>
+        </div>
+      )}
       {openPanes.length > 0 && (
-        <div className="studio-drawer" data-panes={openPanes.length}>
+        <div className="studio-drawer" data-panes={openPanes.length} data-blocks={blocks}>
           {openPanes.map(([p, label]) => (
             <section key={p} className="pane" aria-labelledby={`pane-${p}`}>
               <div className="studio-panel-header">
@@ -1013,7 +1043,12 @@ export default function ProjectStudio({ backendUrl, initialNode = null }: { back
                     onRun={() => void simulate(simForm)}
                   />
                 )}
-                {p === "paths" && <PathPanel server={project.target.server} sim={simDoc} stale={simStale} world={world} api={api} />}
+                {p === "paths" && (
+                  <div className="stack">
+                    {(liveActive || live.st?.live) && <LiveMap api={api} world={world} server={project.target.server} summary={live.st?.live} running={liveActive} />}
+                    <PathPanel server={project.target.server} sim={simDoc} stale={simStale} world={world} api={api} />
+                  </div>
+                )}
                 {p === "hunt" && huntRules && <HuntRulesPanel rules={huntRules} l1={catalogue?.blocks.hunt?.badge ?? "unknown"} />}
                 {/* Batt 2026-11-20: two columns -- the Run on the left, "what she does" (what a player
                     reads most) on the right; one column under 64rem */}
@@ -1145,7 +1180,17 @@ export default function ProjectStudio({ backendUrl, initialNode = null }: { back
           {editor.ready ? status : "Loading the block editor…"}
         </p>
         <div className="studio-toggles" role="group" aria-label="Panels">
-          {view === "blocks" && (
+          <button
+            type="button"
+            className="toggle-button"
+            aria-pressed={blocks === "hidden"}
+            onClick={() => setBlocks(blocks === "hidden" ? "shown" : "hidden")}
+            title="Hide the blocks (and the Python beside them) so the panes below take the page; nothing is lost"
+            data-testid="toggle-blocks"
+          >
+            {blocks === "hidden" ? "Show blocks" : "Hide blocks"}
+          </button>
+          {view === "blocks" && blocks === "shown" && (
             <button type="button" className="toggle-button" aria-pressed={pythonOpen} onClick={togglePython} data-testid="toggle-python">
               Python
             </button>

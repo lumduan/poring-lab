@@ -116,6 +116,12 @@ export type LiveSummary = {
   // line's clock time ("at", HH:MM:SS) in the server's zone, which "tz" names (e.g. UTC+07:00)
   story?: StoryLine[];
   tz?: string;
+  // Batt 2026-11-21 (the live map, lib/flow/livemap.ts): the map she is on, her last cells, and
+  // the monsters of the detector's last read placed on the map (null: no hunt core playing)
+  map?: string | null;
+  trail?: number[][];
+  mobs?: [number, number, string][] | null;
+  mobs_age_s?: number | null;
 };
 
 export type StoryLine = { t_s: number | null; words: string; at?: string };
