@@ -160,3 +160,24 @@ code: `src/lib/mats/path.ts`, `path-edit.ts`, `src/lib/blocks/incoming.ts`,
     font does.
 - **The bar:** on the player's client, every map of a recorded path is named on 20 of 20 fresh
   arrivals, before step 2 (a map change) is tried.
+
+## Amendment 3 (2026-11-21 22:28 ICT from `date`): Batt's decisions -- the map by `/where`, build in parallel, matpilot may look
+
+- **The map's name (Amendment 2's prerequisite) is NOT learned from pictures.** Batt: "this is very
+  easy: when the minimap changes, type `/where` and the map is known; no need to teach".
+  - On a minimap CHANGE (its picture differs from the last frames' by a margin), the bot types
+    `/where` behind the UI gate, with `/ex` before it (the client refuses one phrase typed more
+    than three times in a row: where-position-fix).
+  - It reads the reply's ASCII map id and cell from the chat. They are an id and digits, not a
+    word of any language.
+  - The 20-of-20 bar of Amendment 2 is replaced by: every map of a recorded path named by
+    `/where` on 20 of 20 fresh arrivals.
+- **The order:**
+  - The path recorder and the /maps waypoint editor are built OFFLINE now, in parallel (Batt: "if
+    free, do it in parallel").
+  - The dev-lab steps (record / replay a path, an NPC talk) run when the dev queue is free ("when
+    free, just do it, at a good moment").
+  - The standing order for the dev lab (items -> cursor -> goblin) is unchanged.
+- **matpilot may help:** Batt allows asking the matpilot session to look at the web pages or the
+  live screen. Its answers are advice, adopted by a recorded amendment, never by its own edits
+  here.
