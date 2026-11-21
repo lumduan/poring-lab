@@ -99,7 +99,7 @@ def test_a_knife_slot_that_does_not_read_right_plays_without_the_knife_swap() ->
     knife = {"id": "knife", "ok": False, "words": "the F4 slot draws a count None"}
     words = fp.knife_swap_off(prep, {"items": [knife]})  # type: ignore[arg-type]
     assert prep.runners["field"].vals == {"knife_swap": False, "heal_key": "F1"}
-    assert len(words) == 1 and "WITHOUT the Knife swap" in words[0] and "knife" in words[0]
+    assert len(words) == 1 and "WITHOUT the swap" in words[0] and "knife" in words[0]
     assert "--bare-steal" not in fp.fc.argv(prep.runners["field"].vals)
     ok = types.SimpleNamespace(runners={"field": plan(True)})
     assert fp.knife_swap_off(ok, {"items": [{**knife, "ok": True}]}) == []  # type: ignore[arg-type]
@@ -298,3 +298,36 @@ def test_the_log_says_why_the_weight_did_not_read(monkeypatch: pytest.MonkeyPatc
     )
     assert fp.weight_diagnosis(types.SimpleNamespace()) == [  # type: ignore[arg-type]
         "the weight reader did not run (AttributeError)"]  # fmt: skip
+
+
+def test_the_heal_and_swap_lines_are_notes_on_the_flow_s_own_keys() -> None:
+    """Batt 2026-11-21 ~22:0x: warn only on an EMPTY heal key (any item there is the player's
+    choice); the weapon lines say what the flow swaps, on ITS keys -- never F1 / F4 / F5 fixed."""
+    import flow_run as fr
+
+    used = {"heal_key": "F2", "knife_key": "F6", "dagger_key": "F7"}
+    wrong = {"id": "heals", "ok": False, "refuses": False, "value": "570 on F2",
+             "words": "F2 shows a Yellow Potion, not a White Potion"}  # fmt: skip
+    got = fr.heal_note(wrong, used)
+    assert got["ok"] is True and got["info"] is True and got["words"].startswith("F2 holds 570")
+    empty = {"id": "heals", "ok": False, "value": "0 heal items on F2", "words": "under 5"}
+    got = fr.heal_note(empty, used)
+    assert got["ok"] is False and not got.get("info") and got["words"].startswith("F2 is empty")
+    assert fr.heal_note({"id": "heals", "ok": True, "words": "fine"}, used)["words"] == "fine"
+    knife = fr.swap_note({"id": "knife", "ok": False, "words": "F6 draws a count None"}, used)
+    assert knife["info"] is True and knife["ok"] is False  # ok kept: knife_swap_off reads it
+    assert "F6 and F7" in knife["words"] and "plays without the swap" in knife["words"]
+    dagger = fr.swap_note({"id": "dagger", "ok": True, "words": "F7 empty"}, used)
+    assert "F7: the fighting weapon" in dagger["words"] and "without" not in dagger["words"]
+    out = fr.hotbar_notes([wrong, knife, {"id": "wings", "ok": True}], used)
+    assert [i.get("info") for i in out] == [True, True, None]
+
+
+def test_the_log_and_the_summary_call_them_notes() -> None:
+    got = {"items": [{"id": "heals", "ok": True, "info": True, "words": "F1 holds 570"},
+                     {"id": "knife", "ok": False, "info": True, "refuses": False, "words": "swaps"},
+                     {"id": "weight", "ok": False, "words": "heavy"}]}  # fmt: skip
+    lines = fp.check_lines(got)
+    assert lines[0].startswith("check NOTE heals") and lines[1].startswith("check NOTE knife")
+    summary = fp.check_summary(got)
+    assert "0 of 1 lines pass; FAIL: weight" in summary and "notes: heals, knife" in summary

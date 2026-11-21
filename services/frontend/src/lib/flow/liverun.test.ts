@@ -291,3 +291,21 @@ test("the live line and the monitor bar carry SP, the weight % and the zeny", as
   assert.equal(unread.sp.bar, undefined);
   assert.equal(unread.weight.text, "weight not read");
 });
+
+// Batt 2026-11-21: what the flow uses (the heal item on its key, the swap's keys) is a NOTE (ℹ), not ✗
+test("a note line shows ℹ, sorts after the failures and is never a refusal", async () => {
+  const { markOf, runCheckLines, tickFor } = await import("./liverun.ts");
+  assert.equal(markOf({ ok: true, info: true }), "info");
+  assert.equal(markOf({ ok: false, info: true }), "info");
+  assert.equal(markOf({ ok: false }), "fail");
+  const check = { state: "done", at: "", flow: "project", ok: true, items: [
+    { id: "knife", ok: false, info: true, words: "this flow swaps weapons on F4 and F5", value: null, refuses: false },
+    { id: "weight", ok: false, words: "too heavy", value: "48 %" },
+    { id: "heals", ok: true, info: true, words: "F2 holds 570 of the item she drinks or eats to heal", value: "570 on F2", refuses: false },
+  ] };
+  const lines = runCheckLines(check);
+  assert.deepEqual(lines.map((l) => [l.id, l.mark, l.sign]), [["weight", "fail", "✗"], ["knife", "info", "ℹ"], ["heals", "info", "ℹ"]]);
+  const t = tickFor(check, "project", "knife", {});
+  assert.equal(t.mark, "info");
+  assert.equal(t.refuses, false);
+});

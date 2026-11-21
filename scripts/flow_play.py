@@ -2125,9 +2125,9 @@ def knife_swap_off(prep: Prepared, got: Mapping[str, Any]) -> list[str]:
                                    else "") if x]  # fmt: skip
             more = f" (and {' and '.join(dropped)}: the runner strikes plainly)" if dropped else ""
             out.append(
-                f"WARNING: {ids} did not read right: {block} plays WITHOUT the Knife swap "
-                f"this run{more} -- the hotbar is the player's own; set the Knife on its key "
-                "and the dagger worn for it"
+                f"NOTE: {ids} did not read as the weapon swap's set-up: {block} plays WITHOUT "
+                f"the swap this run{more} -- to use it, put the idle weapon on its key and wear "
+                "the fighting one (the hotbar is the player's own)"
             )
     return out
 
@@ -2524,6 +2524,8 @@ def check_lines(got: Mapping[str, Any]) -> list[str]:
         mark = {True: "OK  ", False: "FAIL"}.get(it.get("ok"), "?   ")
         if it.get("ok") is False and it.get("refuses") is False:
             mark = "WARN"  # Batt 2026-11-19: the hotbar is the player's own (it never refuses)
+        if it.get("info"):
+            mark = "NOTE"  # Batt 2026-11-21: what the flow uses, never a warning
         value = it.get("value")
         out.append(f"check {mark} {it.get('id')}: {it.get('words')}"
                    + ("" if value in (None, "") else f" [read: {value}]"))  # fmt: skip
@@ -2532,7 +2534,9 @@ def check_lines(got: Mapping[str, Any]) -> list[str]:
 
 def check_summary(got: Mapping[str, Any]) -> str:
     """PURE: the check in one line: how many lines, which fail or did not read."""
-    items = list(got.get("items") or [])
+    every = list(got.get("items") or [])
+    notes = [str(i.get("id")) for i in every if i.get("info")]
+    items = [i for i in every if not i.get("info")]
     failed = [i for i in items if i.get("ok") is False]
     bad = [str(i.get("id")) for i in failed if i.get("refuses") is not False]
     warn = [str(i.get("id")) for i in failed if i.get("refuses") is False]
@@ -2544,6 +2548,7 @@ def check_summary(got: Mapping[str, Any]) -> str:
         + (f"; FAIL: {', '.join(bad)}" if bad else "")
         + (f"; WARNING (the Run starts anyway): {', '.join(warn)}" if warn else "")
         + (f"; not read: {', '.join(unread)}" if unread else "")
+        + (f"; notes: {', '.join(notes)}" if notes else "")
     )
 
 

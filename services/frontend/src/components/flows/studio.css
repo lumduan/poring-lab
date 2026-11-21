@@ -400,6 +400,10 @@
 .live-checklist li[data-tick="unread"] .live-tick {
   color: var(--warn-text, #744d10);
 }
+/* Batt 2026-11-21: a note says what the flow uses (the heal item, the weapon swap's keys) */
+.live-checklist li[data-tick="info"] .live-tick {
+  color: var(--accent, #1f5f8a);
+}
 .live-checklist li[data-stale="true"] {
   opacity: 0.5;
 }
