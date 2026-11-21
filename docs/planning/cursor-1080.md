@@ -517,3 +517,18 @@ Written before any probe of this round.
   - Its GPU predictions wait for a quiet GPU: no live Run and no dev detect server.
   - Once Batt's live Run ends, the 5b chain holds before its next run until the evaluation's GPU and
     ONNX steps are done.
+
+### Amendment 10 (2026-11-21 20:20 ICT from `date`, BEFORE any 5b data): D2 is reported, not a stop (Batt); a new session before the series
+
+- **Batt's words** (20:2x, on the overnight plan): "No need for dev to stop and wait; run it long.
+  It is fine if live gets slower."
+  - D2 no longer stops a D run or pauses the series.
+  - The live detect server's minute p95 during each D run is still logged and REPORTED
+    (`<label>.d2`).
+  - D1 (the dev server's p95 <= 35 ms) stays a reported guard as before.
+- **The order stays as written** (Batt, same message): the round-7 item evaluation's GPU steps first,
+  then 5b, then the ranged-attacker A/B (ranged-attacker-1080.md, written next).
+- **A new game session before the series:** rAthena was recreated at 20:12-20:14 for group 20's
+  `@zeny` (Batt's OK at 20:11, the zeny reader's test). The Rogue logged in again at 20:15:36 and
+  is back at 0 zeny, her fixed state. Immunity is judged OFF again on this session before the
+  first 5b run; the chain then keeps this session.
