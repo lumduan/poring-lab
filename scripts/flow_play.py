@@ -857,6 +857,115 @@ def click_on_sight(vals: Mapping[str, Any], sight: Sight) -> Iterator[None]:
         csw.check = saved  # type: ignore[assignment]
 
 
+# ranged-attacker-1080.md (Batt 2026-11-21, his clip at 19:26: "it scans around itself, but it is
+# shot from afar, so it never finds it; detect the monsters on the screen, know which one attacks").
+# The 20 round-6/7 pilots (packets): Cruisers (the KB's attack range 7) hit her 6,963 times at a
+# median 6 cells; the defend scans of the cells around her took 8.3 min an hour and found 40 %.
+RANGED_MIN_RANGE = 3  # a species whose KB attack range is at least this shoots from afar
+RANGED_MARGIN = 1  # cells beyond its range a shooter may stand (her cell from the minimap, its
+# box's foot by the flat projection: either may be a cell off)
+KB_MOBS = ROOT / "data" / "kb" / "mobs.json"
+
+
+def ranged_reach(path: Path = KB_MOBS) -> dict[str, int]:
+    """{species (the detector's: the KB's aegis name, lower case): attack range} for every species
+    that shoots (attack range >= RANGED_MIN_RANGE); {} when the KB is not built."""
+    try:
+        rows = json.loads(path.read_text())
+    except (OSError, ValueError):
+        return {}
+    out: dict[str, int] = {}
+    for r in rows.values() if isinstance(rows, dict) else rows:
+        if not isinstance(r, dict) or not r.get("aegis"):
+            continue
+        rng = r.get("attack_range")
+        if isinstance(rng, int) and rng >= RANGED_MIN_RANGE:
+            out[str(r["aegis"]).lower()] = rng
+    return out
+
+
+def ranged_pick(got: Sequence[Any], foot: Sequence[float], reach: Mapping[str, int],
+                uv: Any, grid: Sequence[tuple[int, int]], self_box: Callable[[float, float], bool],
+                skip: Callable[[tuple[float, float]], bool] | None,
+                ) -> tuple[Any, int, float] | None:  # fmt: skip
+    """PURE: (the box, its distance in cells, in px) of the nearest SHOOTER: a box of a species in
+    ``reach`` whose foot projects (the flat grid ``uv`` of ``grid`` offsets, her foot at ``foot``)
+    within its range + RANGED_MARGIN cells; never her own box, never one ``skip`` refuses (the box
+    path's own: out of view, out of reach). None: no shooter on the screen."""
+    import numpy as np
+
+    pts = np.asarray(uv, float)
+    best: tuple[Any, int, float] | None = None
+    for b in got:
+        fx, fy = (float(b.x0) + float(b.x1)) / 2, float(b.y1)
+        if self_box(fx, (float(b.y0) + float(b.y1)) / 2):
+            continue
+        rng = reach.get(str(getattr(b, "species", "") or ""))
+        if rng is None or (skip is not None and skip((fx, fy))):
+            continue
+        rx, ry = grid[int(np.argmin(((pts - (fx, fy)) ** 2).sum(axis=1)))]
+        cells = max(abs(int(rx)), abs(int(ry)))
+        if cells > rng + RANGED_MARGIN:
+            continue
+        px = math.hypot(fx - float(foot[0]), fy - float(foot[1]))
+        if best is None or (cells, px) < (best[1], best[2]):
+            best = (b, cells, px)
+    return best
+
+
+@contextlib.contextmanager
+def ranged_defend(dh: Any, vals: Mapping[str, Any],
+                  log: Callable[[dict[str, Any]], None] | None = None,
+                  uv: Callable[[], Any] = lambda: flat_grid_uv()) -> Iterator[None]:  # fmt: skip
+    """ranged-attacker-1080.md: while the player's ``defend_ranged`` is on, the runner's DEFEND box
+    pick (BoxWatch.near called with DEFEND_BOX_PX: --defend-box, a fight a hit started) takes the
+    nearest SHOOTER on the screen first (ranged_pick), with the box path's own skip test (the last
+    one an engage-screen pick passed: out of view or out of reach from her cell NOW); no shooter:
+    the runner's own pick. Every other call is untouched. Off = unchanged."""
+    from poring_flow import settings as st
+
+    if not (vals.get("defend_ranged") is True and st.in_use("defend_ranged", vals)):
+        yield
+        return
+    reach = ranged_reach()
+    saved = dh.BoxWatch.near
+    state: dict[str, Any] = {"skip": None, "uv": None}
+
+    def near(self: Any, px: Sequence[float], max_px: float, fresh_s: float, skip: Any = None,
+             values: Mapping[str, float] | None = None) -> Any:  # fmt: skip
+        if skip is not None and max_px == dh.BOX_SCREEN_PX:
+            state["skip"] = skip  # the box path's test reads her cell at call time
+        if max_px != dh.DEFEND_BOX_PX or values or not reach:
+            return saved(self, px, max_px, fresh_s, skip, values)
+        try:
+            with self.lock:
+                t, got = self.last
+            if time.monotonic() - t <= fresh_s:
+                if state["uv"] is None:
+                    state["uv"] = uv()
+                hit = ranged_pick(got, px, reach, state["uv"], dh.BOX_GRID, dh.self_box,
+                                  state["skip"])  # fmt: skip
+                if hit is not None:
+                    b, cells, dpx = hit
+                    sp = dh.box_species(b)
+                    self.last_species = sp
+                    self.last_pick = {"species": sp, "d": round(dpx), "nearest_d": None,
+                                      "ranged": cells}  # fmt: skip
+                    if log is not None:
+                        log({"kind": "ranged_defend", "species": sp, "cells": cells,
+                             "d_px": round(dpx)})  # fmt: skip
+                    return (b.x0, b.y0, b.x1, b.y1)
+        except Exception:  # noqa: BLE001 -- a failing pick is the runner's own pick
+            pass
+        return saved(self, px, max_px, fresh_s, skip, values)
+
+    dh.BoxWatch.near = near
+    try:
+        yield
+    finally:
+        dh.BoxWatch.near = saved
+
+
 @contextlib.contextmanager
 def seen_boxes(seen: Seen, sight: Sight | None = None) -> Iterator[None]:
     """For one hunt core: the HUD's units and the detector's boxes also go to ``seen`` (and the
@@ -1186,6 +1295,7 @@ class HuntCore:
                 near_alarm(dh, plan.vals),
                 item_rule(plan.vals),
                 click_on_sight(plan.vals, sight),
+                ranged_defend(dh, plan.vals, player.rec.ev),
                 seen_boxes(seen, sight),
                 purse_reads(purse),
             ):

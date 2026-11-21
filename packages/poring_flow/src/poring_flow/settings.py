@@ -759,6 +759,20 @@ SWITCHES: tuple[Field, ...] = (
         flag="--defend-box",
         needs=(("box_strike", _ON),),
     ),  # fmt: skip
+    # ranged-attacker-1080.md (Batt 2026-11-21, his clip: "it scans around itself, but it is shot
+    # from afar; detect the monsters on the screen, know which one attacks"): with defend_box on,
+    # the box it strikes first is the nearest monster of a species that SHOOTS (the KB's attack
+    # range >= 3, e.g. the Cruiser's 7) within that range + 1 cell of her, reachable as the box
+    # path's own check says; else the runner's own (the nearest within 110 px). The live player
+    # applies it (flow_play ranged_defend), never a runner flag. Off: today's defend box
+    Field(
+        "defend_ranged",
+        "fight",
+        "switch",
+        "a hit from afar strikes the shooter it sees",
+        optional=True,
+        player=True,
+    ),  # fmt: skip
     Field(
         "quick_drop",
         "fight",
@@ -1243,6 +1257,7 @@ DEFAULTS: dict[str, Any] = {
     "kill_gap": True,
     "quiet_scan": True,
     "defend_box": False,
+    "defend_ranged": False,  # ranged-attacker-1080.md: off by default (its A/B tests it)
     "quick_drop": False,
     "quick_drop_scaled": False,
     "value_target": True,
@@ -1309,6 +1324,7 @@ FIND_GROUP: dict[str, tuple[str, ...]] = {
 FIND: dict[str, tuple[str, ...]] = {
     "CURSOR_WAIT_S": ("cursor", "hover", "sword", "1080", "late"),
     "cursor_click_on_sight": ("cursor", "click", "sight", "sword", "strike", "lock", "arrow"),
+    "defend_ranged": ("defend", "ranged", "shoot", "range", "attacker", "far", "hit"),
     "potion_below": ("drink",),
     "knife_hp_min": ("hp",),
     "respawn_at": ("click", "button"),
