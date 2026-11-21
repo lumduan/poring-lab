@@ -831,7 +831,9 @@ SWITCHES: tuple[Field, ...] = (
         "choice",
         "look for items with the item model",
         flag="--loot-items",
-        options=("xmas02fi5", "xmas02fi4", "xmas02fi3", "off"),
+        # xmas02-items-1080.md: xmas02fi6 (the 1080 round) offered for its 8c; the default
+        # stays xmas02fi5 (DEFAULTS) until 8c and Batt's word
+        options=("xmas02fi5", "xmas02fi6", "xmas02fi4", "xmas02fi3", "off"),
         needs=(("loot", "trim"),),
     ),  # fmt: skip
     Field(
