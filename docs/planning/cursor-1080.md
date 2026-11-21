@@ -211,3 +211,35 @@ Written before any probe of this round.
   bus. What the bus cannot say is when the GAME redraws its cursor (the client's own frame
   rate); P1's 1.0 s reads and P3 answer that. P2 still measures standing against walking.
 - The samples are sparse (lf2 runs only on some reads) and none is split by motion.
+
+### Amendment 3 (2026-11-21 07:25 ICT from `date`): P2 recorded; the first P1 is VOID (a bug in the probe), fixed; P1 again after the item training
+
+- **The runs** (06:13-06:20, the lab at 1080, the Rogue immune -- judged on the 03:45 frame, the
+  same game session since -- the GPU detect server beside it as the runner's, after the item
+  stagings; `probe_run.sh`, scratch).
+- **P2, the bus counters** (`frames`, 30 s each):
+
+  | mode | reads | bus fps (the writer's frame ids) | new frames read / s | repeat share | walk clicks |
+  |---|---|---|---|---|---|
+  | stand | 2,654 | **31.8** | 29.1 | 0.706 | 0 |
+  | walk | 1,302 | **29.8** | 16.1 | 0.682 | 13 |
+
+  - The bus writes ~30 frames a second walking as standing (as Amendment 2 found offline). The
+    walking "new frames read / s" counts the reader's dead time inside its 13 walk clicks (the
+    reads pause there), so it is not a slower bus. Candidate 1's "fewer new frames" half is
+    weak at the bus. The client's own redraw of its cursor stays P1's question.
+  - The 720 side of P2: Amendment 2's offline measure stands for it (no screen switch done).
+- **P1 (`hovers`, 60 standing + 60 walking): VOID.** The probe's target picker took ANY box in
+  reach, her own `player` box included: **116 of the 120 hovers went over the Rogue herself**
+  (60 / 60 standing, 56 / 60 walking; 4 monster boxes). Over her own character the client draws
+  the walk arrow, and the analysis says so (standing: 60 / 60 `walk_at_point`, no sword read).
+  So this P1 says nothing about monster hovers. It is not used.
+  - Why it slipped: the picker's test used made-up class names. Few monsters stood near the
+    start cell then (the stagings' @killmonster2 had just cleared the map).
+  - **Fixed (01ea9447):** only `monster` boxes are targets (TARGET_CLS, the runner's own box
+    targets in dungeon_hunt's watcher); a test pins the player and NPC boxes out.
+  - The walking analysis was stopped (the same void data); the standing one's output is kept as
+    the evidence of the slip.
+- **P1 again** after the item training frees the GPU (~08:45): the same tool and settings with
+  the fix, the Rogue still immune (judged again on a frame), after a wait for the map's
+  monsters to stand around the start cell. Then P3 and the cause amendment, before any fix.
