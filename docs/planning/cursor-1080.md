@@ -243,3 +243,46 @@ Written before any probe of this round.
 - **P1 again** after the item training frees the GPU (~08:45): the same tool and settings with
   the fix, the Rogue still immune (judged again on a frame), after a wait for the map's
   monsters to stand around the start cell. Then P3 and the cause amendment, before any fix.
+
+### Amendment 4 (2026-11-21 09:04 ICT from `date`, BEFORE any fix is chosen): P1 and P3 -- THE CAUSE is motion: standing the cursor reads every time; walking it comes late and the point misses
+
+- **The runs** (07:54-08:12, the lab at 1080, the Rogue immune: judged by two toggles on frames at
+  07:32-07:33, "Returned to normal state." then "You are now immune to attacks."; the GPU detect
+  server beside it, detection median 61 ms standing / 86 ms walking). Tool fixes before them,
+  both recorded: 01ea9447 (monster boxes only, Amendment 3) and 90fd1e22 (a hover waits up to
+  120 one-second looks in a row for a monster in reach: an immune Rogue's monsters wander; the
+  07:34 rerun had stopped after 40 misses in all). Walking first, then standing; 60 hovers each,
+  every one over a `monster` box; 1.0 s of reads per hover.
+- **P1 / P3, the analysis** (`cursor_probe_1080.py analyse`, stride 4):
+
+  | hovers | n | the runner's 0.35 s decision (replayed) | at 1.0 s | classes | first sword read (from the first motion) |
+  |---|---|---|---|---|---|
+  | stand, far (>= 120 px) | 51 | sword 51 (**unknown 0 %**) | sword 51 | sword_at_point 51 | median 214 ms, p90 232 ms |
+  | stand, near | 9 | sword 9 | sword 9 | sword_at_point 9 | 225 / 238 ms |
+  | **walk, far** | 54 | sword 24, clear 6, **unknown 24 (44.4 %)** | sword 27, clear 27 | sword_at_point 27, **walk_at_point 27** | **229 / 409 ms** (n 27) |
+  | walk, near | 6 | sword 1, clear 1, unknown 4 | sword 2, clear 4 | sword_at_point 2, walk_at_point 4 | 294 / 514 ms (n 2) |
+
+  - No hover anywhere was `nothing`, `old_place` or `sword_offset`: the cursor is always drawn,
+    at the point, in the shape the references read.
+  - Bus reads: ~29.8 fps median per hover, ~55 % repeats, the first read ~130 ms after the motion,
+    standing and walking alike (P2: the bus ~30 fps both ways).
+- **THE CAUSE (section 2's candidates):**
+  1. **Timing -- yes, in motion only.** Standing, the client draws the sword 214 ms (p90 232) after
+     the motions: inside the runner's 0.35 s, every time. Walking (the camera scrolling), the
+     sword comes later and spread out (p90 409 ms): the runner's 0.35 s window ends before it on
+     many hovers, which then read "unknown" (24 / 54). With 1.0 s of reads no hover stays unknown.
+  2. **Place -- yes, in motion only, and the larger half.** Walking, 27 / 54 far hovers end with
+     the client's WALK arrow at the point: no unit under the pointer. The hover point is the box
+     centre of a frame read before the scroll moved the world under it (and the frames lag the
+     server, memory: ~0.5 s). Standing, 0 / 51.
+  3. **Shape -- no.** 60 / 60 standing hovers read the sword with the lab's references.
+  - The cursor patch's mapping is right (standing 100 % at the point; no cursor elsewhere).
+- So the 1080 gap is a **hover while the camera scrolls**: half of those miss the monster, and a
+  quarter more resolve too late for the 0.35 s window. 720's 0-2.4 % unknown (screen-size-ab.md)
+  is the same rule with targets nearer her (the trace: far targets, 160 px vs 62).
+- **Not yet chosen (section 4, by this cause):** e.g. (a) a hover only once she has stopped (a far
+  box target while walking: stop, then hover), (b) the hover point led by the scroll, (c) a longer
+  read window in motion (helps the timing half only). The fix comes in its own amendment with
+  tests, then 5a (the hover bar, immune) and 5b (play).
+- Evidence (scratch, RAM): p1c-walk / p1c-stand (hover JSON + crops), the analyses'
+  `summary.json`; pictures of the lab's own client only, archived or deleted with this verdict.
