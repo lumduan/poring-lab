@@ -2335,6 +2335,10 @@ def player_owns_the_start(dh: Any, warn: Callable[[str], None]) -> Iterator[None
       _HEALS) and what each role's key shows (player_slots_refused);
     - ~11:5x (asked): an UNREAD weight (player_weight_refused: no share read and the line not red;
       a weight read over the limit or drawn red still refuses);
+    - 2026-11-21 21:4x (Batt's live Run refused at 48 %): the limit is the PLAYER's own start limit
+      (the start tab's WEIGHT_MAX block) for the Etc-tab rule too (etc_hold_refused used the lab
+      Rogue's fixed 0.48); with a limit over 50 %, a weight read as a number is judged by it, not
+      by the red line (which only says >= 50 %);
     - ~11:5x (asked): a minimap picture that cannot tell its map (PLAYER_MAP_UNREAD "warn": the
       runner then checks her cell on the map's open ground; another map read still refuses).
     The runner file is unchanged (byte-pinned; its CLI keeps its rules); its functions and its
@@ -2342,9 +2346,25 @@ def player_owns_the_start(dh: Any, warn: Callable[[str], None]) -> Iterator[None
     only, then restored."""
     saved = (dh.player_stock_refused, dh.player_slots_refused)
     saved_weight, saved_map = dh.player_weight_refused, dh.PLAYER_MAP_UNREAD
+    saved_etc = getattr(dh, "etc_hold_refused", None)
+
+    def limit() -> float:
+        return float(getattr(dh, "WEIGHT_MAX", 0.48))
+
+    def red_says(share: float | None, red: bool) -> bool:
+        # Batt 2026-11-21 21:4x (his live Run refused at 48 %): the red line only says ">= 50 %";
+        # a weight READ as a number is judged by that number against the player's own limit
+        return red and not (share is not None and limit() > 0.5)
+
+    def etc(share: float | None, red: bool, conf: Mapping[str, Any]) -> str | None:
+        # the Etc-tab rule's limit is the PLAYER's start limit (the start tab's WEIGHT_MAX block:
+        # "refuse to start with the bag at"), never the lab character's etc_hold_max (the Rogue's
+        # 0.48 refused Batt's Run at 48 % whatever his block said)
+        assert saved_etc is not None
+        return saved_etc(share, red_says(share, red), {**conf, "etc_hold_max": limit()})
 
     def weight(share: float | None, red: bool) -> str | None:
-        why = saved_weight(share, red)
+        why = saved_weight(share, red_says(share, red))
         if why is not None and share is None and not red:
             warn(f"WARNING (the weight did not read: the Run plays on; its bag-full exit cannot "
                  f"work until it reads): {why}")  # fmt: skip
@@ -2365,10 +2385,14 @@ def player_owns_the_start(dh: Any, warn: Callable[[str], None]) -> Iterator[None
 
     dh.player_stock_refused, dh.player_slots_refused = stock, slots
     dh.player_weight_refused, dh.PLAYER_MAP_UNREAD = weight, "warn"
+    if saved_etc is not None:
+        dh.etc_hold_refused = etc
     try:
         yield
     finally:
         dh.player_stock_refused, dh.player_slots_refused = saved
+        if saved_etc is not None:
+            dh.etc_hold_refused = saved_etc
         dh.player_weight_refused, dh.PLAYER_MAP_UNREAD = saved_weight, saved_map
 
 

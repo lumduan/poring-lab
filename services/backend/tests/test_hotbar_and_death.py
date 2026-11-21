@@ -255,6 +255,27 @@ def test_the_runner_s_own_start_warns_on_an_unread_weight_and_map_only() -> None
     assert dh.player_weight_refused(None, False) is not None  # its CLI keeps its rule
 
 
+def test_the_etc_tab_rule_takes_the_player_s_own_start_limit(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Batt 2026-11-21 21:4x: his live Run was refused at 48 % by the lab Rogue's fixed
+    etc_hold_max (0.48) whatever his start tab's "refuse to start with the bag at" said."""
+    import dungeon_hunt as dh
+
+    rogue = {"etc_hold_max": 0.48}
+    assert dh.etc_hold_refused(0.48, False, rogue) is not None  # its CLI keeps its rule
+    with fp.player_owns_the_start(dh, lambda w: None):  # the default limit: as before
+        assert dh.etc_hold_refused(0.48, False, rogue) is not None
+    monkeypatch.setattr(dh, "WEIGHT_MAX", 0.74)  # his block at 74 %
+    with fp.player_owns_the_start(dh, lambda w: None):
+        assert dh.etc_hold_refused(0.48, False, rogue) is None
+        assert dh.etc_hold_refused(0.60, True, rogue) is None  # read 60 %: the number decides
+        assert dh.player_weight_refused(0.60, True) is None
+        assert dh.etc_hold_refused(0.80, False, rogue) is not None  # over his own limit
+        assert dh.etc_hold_refused(None, True, rogue) is not None  # red and unread: a person
+    assert dh.etc_hold_refused(0.48, False, rogue) is not None  # restored
+
+
 def test_the_log_says_why_the_weight_did_not_read(monkeypatch: pytest.MonkeyPatch) -> None:
     """Batt 2026-11-19 ("digits first"): the weight reader's own reason, in words with the
     symbols it read -- numbers only, no picture -- so another client's line says where it
