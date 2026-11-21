@@ -433,7 +433,8 @@ def test_an_empty_file_becomes_version_1_in_wal_mode(lab: SimpleNamespace) -> No
     assert con.execute("PRAGMA journal_mode").fetchone()[0] == "wal"
     assert con.execute("PRAGMA foreign_keys").fetchone()[0] == 1
     con.close()
-    assert edb.latest() == 1 and _version(lab.db) == 1
+    # 2 migrations since 2026-11-21: the first schema, then the screen records (screen_runs)
+    assert edb.latest() == 2 and _version(lab.db) == 2 and "screen_runs" in _tables(lab.db)
     assert {"runs", "run_items", "run_species", "run_consumables"} <= _tables(lab.db)
     raw = sqlite3.connect(lab.db)  # WAL is the file's own mode, not only this connection's
     assert raw.execute("PRAGMA journal_mode").fetchone()[0] == "wal"
@@ -451,7 +452,7 @@ def test_a_version_0_file_keeps_its_own_rows(lab: SimpleNamespace) -> None:
     con = sqlite3.connect(lab.db)
     assert con.execute("SELECT t FROM notes").fetchall() == [("mine",)]
     con.close()
-    assert _version(lab.db) == 1 and "runs" in _tables(lab.db)
+    assert _version(lab.db) == edb.latest() and "runs" in _tables(lab.db)
 
 
 def test_an_older_file_is_migrated_forward_and_keeps_every_row(
@@ -459,11 +460,11 @@ def test_an_older_file_is_migrated_forward_and_keeps_every_row(
 ) -> None:
     built(lab, lab.s1).close()
     before = dump(lab.db)
-    v2 = (*edb.MIGRATIONS, ("ALTER TABLE runs ADD COLUMN note TEXT",
-                            "CREATE INDEX runs_by_map ON runs (map)"))  # fmt: skip
-    monkeypatch.setattr(edb, "MIGRATIONS", v2)
+    v_next = (*edb.MIGRATIONS, ("ALTER TABLE runs ADD COLUMN note TEXT",
+                                "CREATE INDEX runs_by_map ON runs (map)"))  # fmt: skip
+    monkeypatch.setattr(edb, "MIGRATIONS", v_next)
     con = edb.connect(lab.db)
-    assert con.execute("PRAGMA user_version").fetchone()[0] == 2
+    assert con.execute("PRAGMA user_version").fetchone()[0] == len(v_next)
     assert con.execute("SELECT note FROM runs").fetchall()[0][0] is None
     con.close()
     after = dump(lab.db)
@@ -473,16 +474,31 @@ def test_an_older_file_is_migrated_forward_and_keeps_every_row(
     }
 
 
+def test_a_version_1_file_gains_the_screen_records_and_keeps_every_row(
+    lab: SimpleNamespace, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The live lab's own case (2026-11-21): its file is at version 1 with the first schema."""
+    monkeypatch.setattr(edb, "MIGRATIONS", edb.MIGRATIONS[:1])
+    built(lab, lab.s1).close()
+    before = dump(lab.db)
+    assert _version(lab.db) == 1 and "screen_runs" not in _tables(lab.db)
+    monkeypatch.undo()
+    edb.connect(lab.db).close()
+    assert _version(lab.db) == 2 and "screen_runs" in _tables(lab.db)
+    after = dump(lab.db)
+    assert {k: v for k, v in after.items() if k != "screen_runs"} == before
+
+
 def test_a_failed_migration_rolls_back_whole(
     lab: SimpleNamespace, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     built(lab, lab.s1).close()
-    before = dump(lab.db)
+    before, v = dump(lab.db), edb.latest()
     broken = (*edb.MIGRATIONS, ("CREATE TABLE extra (x INTEGER)", "CREATE TABLE broken ("))
     monkeypatch.setattr(edb, "MIGRATIONS", broken)
     with pytest.raises(sqlite3.OperationalError):
         edb.connect(lab.db)
-    assert _version(lab.db) == 1 and "extra" not in _tables(lab.db)  # the bump rolled back too
+    assert _version(lab.db) == v and "extra" not in _tables(lab.db)  # the bump rolled back too
     assert dump(lab.db) == before
 
 
@@ -499,11 +515,11 @@ def test_migrations_only_add(lab: SimpleNamespace, monkeypatch: pytest.MonkeyPat
                 "REPLACE INTO runs DEFAULT VALUES"):  # fmt: skip
         assert not edb.additive(bad), bad
     built(lab, lab.s1).close()
-    before = dump(lab.db)
+    before, v = dump(lab.db), edb.latest()
     monkeypatch.setattr(edb, "MIGRATIONS", (*edb.MIGRATIONS, ("DROP TABLE run_species",)))
     with pytest.raises(edb.DbError, match="not additive"):
         edb.connect(lab.db)
-    assert dump(lab.db) == before and _version(lab.db) == 1
+    assert dump(lab.db) == before and _version(lab.db) == v
 
 
 def test_a_newer_file_is_refused_and_never_altered(

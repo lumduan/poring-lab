@@ -109,6 +109,24 @@ export interface RunEntry {
   consumables: ConsumableRow[];
   why: Record<string, unknown>;
   runs?: number;
+  // Batt 2026-11-21 (decision 2 = A): a SCREEN record (scripts/econ_screen.py) -- read from the game
+  // screen, no packets: no items, no zeny; its own counts in `screen`
+  source?: string;
+  screen?: ScreenBlock | null;
+}
+
+export interface ScreenBlock {
+  kills_by: Record<string, number>;
+  loot_steps: number;
+  loot_picks: number; // the picks the runner's loot steps counted (screen)
+  pickup_clicks: number; // its clicks on a floor item
+  potions: number;
+  fly_wings: number;
+  butterfly_wings: number;
+  steals: number;
+  weight_start: number | null; // the bag's weight (%) at the start / end
+  weight_end: number | null;
+  end: string | null;
 }
 
 export interface Rule {
@@ -126,6 +144,7 @@ export interface DashExport {
   rules: { overcharge: Rule; discount: Rule };
   runs: RunEntry[];
   pooled: RunEntry;
+  source?: string; // "screen": every run is a screen record (the screen-runs export)
 }
 
 export interface ExportEntry {
@@ -243,7 +262,63 @@ function run(x: unknown, what: string): RunEntry {
     consumables: arr(x.consumables, `${what} consumables`).map(consumable),
     why: isObj(x.why) ? x.why : {},
     runs: typeof x.runs === "number" ? x.runs : undefined,
+    source: strOrNull(x.source) ?? undefined,
+    screen: screenOf(x.screen),
   };
+}
+
+function count(v: unknown): number {
+  return typeof v === "number" && Number.isFinite(v) && v >= 0 ? Math.round(v) : 0;
+}
+
+/** A run's screen block, checked field by field (null: none, or not an object). */
+export function screenOf(x: unknown): ScreenBlock | null {
+  if (!isObj(x)) return null;
+  const pct = (v: unknown) => (typeof v === "number" && Number.isFinite(v) ? v : null);
+  const kb: Record<string, number> = {};
+  if (isObj(x.kills_by)) for (const [k, v] of Object.entries(x.kills_by)) kb[k.slice(0, 32)] = count(v);
+  return {
+    kills_by: kb,
+    loot_steps: count(x.loot_steps),
+    loot_picks: count(x.loot_picks),
+    pickup_clicks: count(x.pickup_clicks),
+    potions: count(x.potions),
+    fly_wings: count(x.fly_wings),
+    butterfly_wings: count(x.butterfly_wings),
+    steals: count(x.steals),
+    weight_start: pct(x.weight_start),
+    weight_end: pct(x.weight_end),
+    end: strOrNull(x.end),
+  };
+}
+
+export interface ScreenLine {
+  what: string;
+  total: number;
+  perHour: number | null;
+  perKill: number | null;
+}
+
+/** PURE: a screen record's counts as lines: the total, per hour, per kill. */
+export function screenLines(run: RunEntry): ScreenLine[] {
+  const s = run.screen;
+  if (!s) return [];
+  const line = (what: string, total: number): ScreenLine => ({
+    what,
+    total,
+    perHour: perHour(total, run.hours),
+    perKill: run.kills > 0 ? Math.round((total / run.kills) * 100) / 100 : null,
+  });
+  return [
+    line("Kills", run.kills),
+    line("Loot steps", s.loot_steps),
+    line("Pickup clicks (clicks on a floor item)", s.pickup_clicks),
+    line("Picks counted by the loot steps", s.loot_picks),
+    line("Fly Wings pressed", s.fly_wings),
+    line("Butterfly Wings pressed", s.butterfly_wings),
+    line("Potions pressed", s.potions),
+    line("Steals (the Knife swap)", s.steals),
+  ];
 }
 
 function rule(x: unknown, level: number, minPrice: number): Rule {
@@ -273,6 +348,7 @@ export function parseExport(x: unknown): DashExport {
     },
     runs: arr(x.runs, "runs").map((r, i) => run(r, `run ${i}`)),
     pooled: run(x.pooled, "pooled"),
+    source: strOrNull(x.source) ?? undefined,
   };
 }
 

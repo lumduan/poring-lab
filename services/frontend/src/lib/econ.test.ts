@@ -29,6 +29,8 @@ import {
   runLabel,
   saveEdits,
   SCHEMA,
+  screenLines,
+  screenOf,
   sellPrice,
   setPrice,
   skillRate,
@@ -269,4 +271,31 @@ test("candies eaten from our own drops say their price basis (dungeon@9.31)", ()
   assert.ok(cane);
   assert.equal(cane.price_basis, "forgone_sale");
   assert.equal(buyPrice(cane, NO_EDITS), 10);
+});
+
+// Batt 2026-11-21 (decision 2 = A): a SCREEN record (scripts/econ_screen.py) -- read from the game
+// screen, no packets: no items, no zeny, its own counts. The numbers are Batt's live Run 11210548.
+test("a screen record parses its own counts and gives them per hour and per kill", () => {
+  const screen = {
+    kills_by: { exp_line: 255 }, loot_steps: 277, loot_picks: 18, pickup_clicks: 27, potions: 0,
+    fly_wings: 79, butterfly_wings: 0, steals: 0, weight_start: 38, weight_end: 50, end: "weight_home",
+  };
+  const run = { ...RUN, items: [], species: [], consumables: [], kills: 255, hours: 1.874, source: "screen", screen };
+  const d = parseExport({ ...DOC, source: "screen", runs: [run], pooled: { ...run, session: "pooled (1 runs)", runs: 1 } });
+  assert.equal(d.source, "screen");
+  const r = runAt(d, 0);
+  assert.equal(r.source, "screen");
+  assert.deepEqual(r.screen?.kills_by, { exp_line: 255 });
+  const lines = screenLines(r);
+  const clicks = lines.find((l) => l.what.startsWith("Pickup clicks"));
+  assert.equal(clicks?.total, 27);
+  assert.equal(clicks?.perKill, 0.11);
+  assert.ok(Math.abs((clicks?.perHour ?? 0) - 27 / 1.874) < 1e-9);
+  assert.equal(lines.find((l) => l.what.startsWith("Fly Wings"))?.total, 79);
+  // a packet record has none; a bad block reads safe
+  assert.equal(runAt(doc(), 0).screen, null);
+  assert.deepEqual(screenLines(runAt(doc(), 0)), []);
+  assert.equal(screenOf("x"), null);
+  assert.equal(screenOf({ pickup_clicks: -3, weight_start: "a" })?.pickup_clicks, 0);
+  assert.equal(screenOf({ weight_start: "a" })?.weight_start, null);
 });

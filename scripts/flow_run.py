@@ -1651,7 +1651,9 @@ class Helper:
 
             sessions = econ_db.hunt_sessions(self.label or "", DEMO)
             log = (self.run_dir or self.dir) / "econ.log"
-            res = econ_db.record_after_run(sessions, log, wait_s=ECON_WAIT_S, py=PY)
+            res = econ_db.record_after_run(
+                sessions, log, wait_s=ECON_WAIT_S, py=PY, export=self.label
+            )  # the /economy page fills itself
         except Exception as e:  # noqa: BLE001 -- never the run's result
             res = {"state": "failed", "why": f"{type(e).__name__}: {e}"}
         self.note(event="econ", label=self.label, **res)

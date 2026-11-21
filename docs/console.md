@@ -64,6 +64,12 @@ Open **http://HOST_LAN_IP:CONSOLE_PORT** (`CONSOLE_PORT` in `.env`, 3000 unless 
   - A run shows only after it is exported: `scripts/econ_dash.py export SESSION_DIR ... --name NAME`
     writes `data/econ/dashboard/NAME.json`; the backend serves it read-only (`GET /economy/list`,
     `GET /economy/data/NAME`, `:8000` only). Formulas and checks: `docs/econ/economics.md` section 10.
+  - ➡️ 2026-11-21 (Batt, decision 2 = A): a Run with no packet capture (the live lab's PC, a
+    learner's) is recorded from the SCREEN: the export **screen-runs**, written by itself after
+    each such Run. The page shows its own counts per hour and per kill: kills, loot steps,
+    pickup clicks, picks, Fly Wings, Butterfly Wings, potions, steals, and the bag at the start
+    and end. An amber note says the items and the zeny are not known; no gross, net or income
+    is shown for it (`docs/econ/economics.md` section 10).
   - The runs' counts can also live in one local SQLite file, `data/econ/lab.sqlite`
     (`scripts/econ_db.py build / update / export / dashboard`, ADR-0025). The page still reads
     the JSON exports.
