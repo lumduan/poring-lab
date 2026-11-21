@@ -456,3 +456,64 @@ Written before any probe of this round.
   - the share of strike clicks that became an attack request;
   - the walk requests that followed a strike click (the cost of a stale box);
   - the time from the box to the first attack request.
+
+### Amendment 9 (2026-11-21 18:42 ICT from `date`, BEFORE any data of it): Batt's "detect fast, on the GPU" as 5b's arm D
+
+- **Batt's words** (2026-11-21, on Amendment 8): "This will work, because a person plays that way:
+  see the monster, click to strike, check the lock by the arrow over its head; then the character
+  attacks by itself. The key point is detecting monsters fast, the faster the better. Otherwise the
+  monster moves, and the click becomes a walk, as with our bot at first. I strongly recommend the GPU
+  for the detection." He also okayed the test ("go ahead").
+- **What the data says** (offline; the 18 round-6/7 item pilots at 1080, 380 min, the hunt cores'
+  `detections.jsonl` and strike events; `/dev/shm/poring-lab-tmp/box_age.py`):
+  - **The GPU is already the detector** in every 1080 run, dev and live. It is the OpenVINO detect
+    server on the Arc: forward p50 23.8 ms / p95 38.0 ms in the pilots. The two servers' own minute
+    stats at 18:3x, both labs playing: dev p50 18-19 / p95 27-29 ms, live p50 19 / p95 27-30 ms.
+    **The GPU is not the bottleneck.**
+  - **The runner LOOKS only once a second.** The box watcher's rhythm is `BOX_EVERY_S` 1.0: 24,453
+    world detections in 380 min, 1.07 a second, gap p50 1.00 s / p90 1.02 s. The HUD twin's frames
+    (~3.5 a second) feed the alarm and the console, not the box path.
+  - **The box's age at a box strike:** p10 0.21 / p50 0.23 / p90 0.57 s (628 strikes). Ends by age:
+    - < 0.25 s: 428, 20 % "bound" (no confirmation);
+    - 0.25-0.5 s: 113, 20 %;
+    - 0.5-1 s: 87, 30 %.
+    This is a small sample with no control, but it points Batt's way: older boxes miss more.
+  - **4 looks a second was tried once, at 720:** 4AD, pilot p22, 2026-11-09, `--box-every 0.25`.
+    It FAILED (kills per monster seen 0.531, 70.7 kills/h vs 108). The extra targets it found were
+    far, 9+ cells, and behind walls: the server ignores such walk clicks
+    (`server-walk-click-limits`). The reach check that skips them (4AE, `--reach-check`) is in
+    today's base: the 1080 run_start carries `reach_check`, and ifH6 logged 48 `reach_skip`.
+    p22's cause is therefore covered, and 4 looks a second has never been tried with it.
+- **Arm D, "click on sight, looking fast":** arm C plus `--box-set BOX_EVERY_S=0.25` (4 looks a
+  second).
+  - The runner's own flag, dungeon@9.11, and a setting; the runner file stays byte-identical.
+  - BOX_FRESH_S, the settle, the reach check and every other value are unchanged.
+- **5b becomes four arms** at 1080: A (the box), B (CURSOR_WAIT_S 1.0), C (click on sight), D (C +
+  BOX_EVERY_S 0.25).
+  - Each arm gets 3 valid runs of 25 min, not immune.
+  - Interleaved A, B, C, D, then again twice; each run is its own one-run series of screen_ab.py.
+  - Scored once, by a scorer committed before the first 5b score.
+- **Judged:** C and D, each against A, as 5b registers it.
+  - kills/h: mean(arm) - mean(A) > +2 SE (Welch);
+  - deaths: no worse than A;
+  - errors: none new.
+  - B is judged the same way (Amendment 8).
+- **Guards for arm D** (the GPU is shared with Batt's live Runs: `yield-gpu-to-live-runs`):
+  - **D1:** the dev detect server's p95 <= 35 ms at 4x the rate (4AD's D1).
+  - **D2:** the live detect server's p95 <= 35 ms in every minute stat during a D run, while a live
+    Run plays.
+  - A D2 breach for 3 minutes in a row ends that D run as invalid ("yielded"), and the series pauses
+    until the live Run ends.
+- **Reported for every arm:**
+  - world detections a second;
+  - the box's age at each strike click, and the strike ends by that age;
+  - the strike clicks that became an attack request, and the walk requests after a strike click
+    (packets);
+  - the time from the box to the first attack request;
+  - escapes and Fly Wings per hour (the alarm reads more frames in D);
+  - z/h (economy, every run).
+- **Order beside the item round:** the round-7 item evaluation (xmas02-items-1080.md A22) comes
+  first, per the standing order.
+  - Its GPU predictions wait for a quiet GPU: no live Run and no dev detect server.
+  - Once Batt's live Run ends, the 5b chain holds before its next run until the evaluation's GPU and
+    ONNX steps are done.
