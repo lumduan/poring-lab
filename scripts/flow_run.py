@@ -568,10 +568,107 @@ def event_words(e: Mapping[str, Any]) -> str | None:
     if k == "resume":
         return "back on the screen: playing on"
     if k == "event":
-        return f"the box's function {e.get('event') or '?'} fires"
+        # Batt 2026-11-21: the reading and the rule the Run plays (a box edited after its Start
+        # keeps the rule it started with: a Run plays its checked project)
+        rd = e.get("reading")
+        said = ", ".join(f"{n} {v}" for n, v in rd.items()) if isinstance(rd, dict) else ""
+        rule = f" (its rule: {str(e['when'])[:120]})" if e.get("when") else ""
+        return (
+            f"the box's function {e.get('event') or '?'} fires{': ' + said if said else ''}{rule}"
+        )
     if k == "run_end":
         return f"the run ends: {e.get('words') or e.get('reason') or '?'}"
     return None
+
+
+class StoryKeeper:
+    """Batt 2026-11-21: a Run's "What she does" kept as history (poring_env.runlog), when the
+    Settings page records the Runs: story.jsonl (to analyse) and story.log (to read) in its own
+    folder under the chosen one; the total size kept under the cap, the OLDEST Run deleted first.
+    A write that fails stops the keeping (said in ``problem``), never the Run."""
+
+    def __init__(self, settings_dir: Path, root: Path, run_id: str, start: dt.datetime) -> None:
+        from poring_env import runlog as rl
+
+        self.rl, self.dir, self.problem, self.lines, self.deleted = rl, None, None, 0, []
+        self._files: list[Any] = []
+        self.store = rl.DEFAULT
+        try:
+            text = (settings_dir / rl.FILE_NAME).read_text(encoding="utf-8")
+        except FileNotFoundError:
+            return  # the default: not recorded
+        except (OSError, UnicodeDecodeError) as e:
+            self.problem = f"{rl.FILE_NAME} cannot be read ({type(e).__name__}): not recorded"
+            return
+        got = rl.parse(text)
+        if isinstance(got, str):
+            self.problem = f"{rl.FILE_NAME}: {got}: not recorded"
+            return
+        self.store = got
+        if not got.record:
+            return
+        base = Path(got.folder) if Path(got.folder).is_absolute() else root / got.folder
+        self.base = base
+        try:
+            d = base / rl.run_dir_name(start, run_id)
+            d.mkdir(parents=True, exist_ok=False)
+            self._files = [
+                open(d / rl.STORY_JSONL, "a", encoding="utf-8"),  # noqa: SIM115
+                open(d / rl.STORY_TEXT, "a", encoding="utf-8"),  # noqa: SIM115
+            ]  # the Run's own files: open while it plays, closed at its end (close())
+            self.dir = d
+        except OSError as e:
+            self.problem = f"the Run log folder {base}: {type(e).__name__}: not recorded"
+            self.close()
+            return
+        self.retain()
+
+    @property
+    def recording(self) -> bool:
+        return self.dir is not None and bool(self._files)
+
+    def write(self, line: dict[str, Any]) -> None:
+        if not self.recording:
+            return
+        try:
+            rec = self.rl.story_record(line, line.get("at_iso"))
+            self._files[0].write(json.dumps(rec, ensure_ascii=False) + "\n")
+            self._files[1].write(self.rl.story_text(line) + "\n")
+            for f in self._files:
+                f.flush()
+            self.lines += 1
+        except OSError as e:
+            self.problem = f"the Run log stopped ({type(e).__name__}) after {self.lines} lines"
+            self.close()
+
+    def retain(self) -> None:
+        """Delete the OLDEST Run folders while the total is over the cap (never this Run's)."""
+        if self.dir is None:
+            return
+        try:
+            entries = []
+            for p in self.base.iterdir():
+                if p.is_dir() and self.rl.RUN_DIR_RE.fullmatch(p.name):
+                    entries.append((p.name, sum(f.stat().st_size for f in p.iterdir()
+                                                if f.is_file())))  # fmt: skip
+            cap = self.store.max_total_mb * 1024 * 1024
+            for name in self.rl.plan_deletes(entries, cap, keep=(self.dir.name,)):
+                shutil.rmtree(self.base / name)
+                self.deleted.append(name)
+        except OSError as e:
+            self.problem = f"the Run log's retention: {type(e).__name__}"
+
+    def close(self) -> None:
+        for f in self._files:
+            with contextlib.suppress(OSError):
+                f.close()
+        self._files = []
+
+    def summary(self) -> dict[str, Any]:
+        return {"recording": self.dir is not None,
+                "dir": None if self.dir is None else str(self.dir), "lines": self.lines,
+                "problem": self.problem, "deleted": list(self.deleted),
+                "max_total_mb": self.store.max_total_mb}  # fmt: skip
 
 
 def wall_minus_mono() -> float:
@@ -619,6 +716,9 @@ class Live:
     # in the server's time zone ("at"), and the summary names the zone ("tz")
     wall_minus_mono_s: float | None = None
     _hp_said: int | None = None
+    # Batt 2026-11-21 (the Run log, poring_env.runlog): every story line is ALSO given here, with
+    # its full clock time (ISO, the server's zone), when the Settings page records the Runs
+    sink: Callable[[dict[str, Any]], None] | None = field(default=None, repr=False, compare=False)
 
     def clock_at(self, t: Any) -> str | None:
         """The event's clock time, "HH:MM:SS", in this server's time zone (None: no clock)."""
@@ -634,6 +734,12 @@ class Live:
             line["at"] = at
         self.story.append(line)
         del self.story[:-STORY_N]
+        if self.sink is not None:
+            iso = None
+            if self.wall_minus_mono_s is not None and isinstance(t, int):
+                iso = dt.datetime.fromtimestamp(t / 1e9 + self.wall_minus_mono_s).astimezone(
+                ).isoformat(timespec="milliseconds")  # fmt: skip
+            self.sink({**line, "at_iso": iso})
 
     def feed(self, e: Mapping[str, Any]) -> None:
         k, t = e.get("kind"), e.get("t_ns")
@@ -1009,6 +1115,7 @@ class Helper:
         self.busy: str | None = None  # another input writer of ours plays (writer_busy), or None
         self.flow: str | None = None
         self.live: Live | None = None  # the run's live summary (its session events)
+        self.keeper: StoryKeeper | None = None  # the Run log (Batt 2026-11-21), when recorded
         self.live_off = 0
         self.end_png: str | None = None  # the session's end picture (GET /flows/run/end.png)
         self.run_log = RunLog()  # the Run's own check and its pauses, from its log
@@ -1050,6 +1157,7 @@ class Helper:
                 "config": self.config, "config_src": self.config_src,
                 "keys_src": self.keys_src, "check": self.check,
                 "live": None if self.live is None else self.live.summary(),
+                "run_log": None if self.keeper is None else self.keeper.summary(),
                 "end_png": self.end_png, "project": self.project,
                 "flows": {**{k: {"title": f.title, "minutes": f.minutes, "map": f.map,
                                  "defaults": dict(f.defaults)}
@@ -1226,6 +1334,10 @@ class Helper:
         else:
             self.config, self.config_src = None, None
         self.live, self.live_off, self.end_png = Live(wall_minus_mono_s=wall_minus_mono()), 0, None
+        self.keeper = StoryKeeper(ROOT / "settings", ROOT, self.label.rsplit("-", 1)[-1],
+                                  dt.datetime.now().astimezone())  # fmt: skip
+        if self.keeper.recording:
+            self.live.sink = self.keeper.write
         self.run_log = RunLog(identity=run_identity())
         self.run_log_off = 0
         pfile = self.run_dir / PROJECT_FILE
@@ -1472,6 +1584,9 @@ class Helper:
             (self.dir / "end.png").unlink(missing_ok=True)  # an older Run's copy
         self.stop_t = None
         self.note(event="end", label=self.label, rc=rc, detail=self.detail)
+        if self.keeper is not None:
+            self.keeper.close()
+            self.keeper.retain()
         self.end_server()
         self.write_status()  # the run's end shows at once; its economy record follows
         self.record()

@@ -161,7 +161,7 @@ Applying a change reconnects the RDP session once, because desktop and backend a
   has no such messages, and a watchdog clears any foreign X clipboard owner. The remaining gap (vision
   can still reach X directly) is [ADR-0005](adr/0005-vision-x-access.md), which blocks Phase 4.
 
-## Settings: who may play a Run, and the game servers the bot may use
+## Settings: who may play a Run, the Run log, and the game servers the bot may use
 
 Open **Settings** in the console's top bar (`http://<host>:<CONSOLE_PORT>/settings`).
 
@@ -185,6 +185,24 @@ with no restart (`.env`'s `RUN_IDENTITY` is no longer read).
   network can change it (never the lab computer or the game PC), with a CSRF token, every change in
   the change history. The store is `./settings/run-identity.json`; a file that does not parse
   fails every Run's check, in words, until a Save replaces it (never back to "any" by itself).
+
+**The Run log** (the second section; Batt 2026-11-21): what the Run panel's *What she does* says,
+kept for every Run, to read or analyse later (log keeping and log analysis, as trade logs feed a
+quant's backtests).
+- **Record every Run's log:** off by default. A Save applies to the next Run.
+- **Folder:** absolute (e.g. a NAS mount) or inside the install; the default `logs/bot`
+  (gitignored). Each Run gets its own folder named by its start time,
+  `<folder>/YYYYMMDD-HHMMSS-<run>/`, with `story.jsonl` (one JSON line each: `at` the clock time in
+  ISO with the server's zone, `t_s` the Run's seconds, `words`) and `story.log` (the same as text).
+- **Keep at most N MB (all Runs together):** after a Run starts and when it ends, while the Runs'
+  folders hold more, the OLDEST Run is deleted first, like a CCTV recorder; only folders named like
+  a Run's, never the Run being written, never any other file.
+- The Run panel's status says whether a Run is recorded, where, and why not (a folder that cannot
+  be written stops the recording, never the Run). The store is `./settings/run-log.json`; the same
+  write rules as the rest of this page.
+- Each box function's line now says its reading and the rule the Run plays, e.g. "the box's
+  function bag_full fires: weight_percent 50 (its rule: weight_percent() >= 50)": a Run plays the
+  project as it was when Start was pressed.
 
 **The game servers:**
 - **Environments** are game services you manage yourself: **Allowed** (the bot may act while the

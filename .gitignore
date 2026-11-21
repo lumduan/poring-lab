@@ -21,6 +21,9 @@
 /data/*
 !/data/README.md
 
+# ---- the Run log's default folder (Batt 2026-11-21: "What she does" kept as history; poring_env/runlog.py)
+/logs/
+
 # ---- model weights / exports ------------------------------------------------------------------------
 *.pt
 *.pth

@@ -1451,7 +1451,19 @@ class LivePlayer(Sim):
         self._readings[e.key] = reading
         self.rec.ev({"kind": "event", "event": e.key, "mode": e.handler.mode,
                      "node": self.c.where(e.label).path or e.label, "reading": reading,
+                     **({"when": w} if (w := self._when_src(e)) else {}),
                      **({"in": "hunt"} if self._port is not None else {})})  # fmt: skip
+
+    @staticmethod
+    def _when_src(e: Any) -> str | None:
+        """Its trigger as the Python view prints it (Batt 2026-11-21: "why did it fly home at
+        50 % when I set 75?" -- the story then says the rule the Run plays, beside the reading)."""
+        try:
+            from poring_flow import pyview
+
+            return pyview.expr_src(e.handler.when)[:200] if e.handler.when is not None else None
+        except Exception:  # noqa: BLE001 -- words only: never in the way of the Run
+            return None
 
     def _reading_of(self, e: Any) -> dict[str, Any]:
         """The values its conditions read when it fired (the record; the press's why); a

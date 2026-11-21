@@ -346,6 +346,9 @@ def test_press_wait_an_insert_event_and_the_item_warp_play_exactly_this(tmp_path
     assert [(e["event"], e["mode"], e["node"]) for e in fired] == [
         ("hp_low", "insert", "global/safety/hp_low")
     ]
+    # Batt 2026-11-21: the rule the Run plays rides with its reading (the story says both)
+    assert fired[0]["when"].startswith("hp_percent()") and "reading" in fired[0]
+    assert "(its rule: hp_percent()" in str(fr.event_words(fired[0]))
     arrive = next(e for e in ev if e["kind"] == "map_node")
     assert arrive == {**arrive, "node": "home", "how": "exit", "map": "geffen"}
     end = ev[-1]

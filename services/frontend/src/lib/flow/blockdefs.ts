@@ -21,6 +21,7 @@ export type FieldKind = "field_input" | "field_number" | "field_dropdown" | "fie
 export const PICK_NUM = "field_pl_num";
 export const PICK_TEXT = "field_pl_text";
 import { groupOf, SETTING_BLOCKS, SETTING_GEOMETRY, SETTING_NOTE_ROWS, SETTING_ROW_BUDGET, type SettingField, settingFields, settingRows, settingTooltip, settingType, SETTINGS, unitOf, varText, wrapUnits } from "./settings.ts";
+import { EXPR_HELP } from "./exprwords.ts";
 import { MAX_RANK } from "./ir.ts";
 import type { PickSpec, RefKind } from "./pickers.ts";
 import { BLOCK_STYLE } from "./theme.ts";
@@ -395,8 +396,9 @@ export const BLOCK_DEFS: BlockDef[] = [
     tooltip: "Not editable as blocks in MW2 (kept exactly): edit it in the JSON view",
   }),
   // round 22: a long one wraps onto rows of its own (blockly-register.ts pl_expr_wrap), whole
-  value({ type: "pl_expr", message0: "%1", args0: [expr("TEXT", "expr", "hp_percent() < 50", "the value")], extensions: ["pl_expr_wrap"],
-    tooltip: "An expression in the Python view's form, e.g. hp_percent() < 50, sees(mob=mob(9109), within=15)" }),
+  // Batt 2026-11-21: the tooltip says what THIS expression means (exprwords.ts, set by pl_expr_tooltip)
+  value({ type: "pl_expr", message0: "%1", args0: [expr("TEXT", "expr", "hp_percent() < 50", "the value")], extensions: ["pl_expr_wrap", "pl_expr_tooltip"],
+    tooltip: EXPR_HELP }),
   value({
     type: "pl_compare",
     message0: "%1 %2 %3",
