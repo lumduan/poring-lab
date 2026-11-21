@@ -93,7 +93,8 @@ def test_the_one_box_with_its_blocks_at_their_defaults_plays_todays_argv() -> No
     d = one_box()
     held = {k for t in d["nodes"][0]["tabs"] for k in t["vars"]}
     # the OPTIONAL blocks (the role items and the alarm monsters, roles-not-names.md steps 2-3;
-    # the near-her alarm rule's two, goblin-alarm-1080.md) are held only when set
+    # the near-her alarm rule's two, goblin-alarm-1080.md; the cursor window, cursor-1080.md
+    # Amendment 5) are held only when set
     assert held == {f.var for f in fc.BLOCKS if f.name not in BOX_PLAYS_THEM and not f.optional}
     assert {f.name for f in fc.BLOCKS if f.optional} == {
         "swap_item",
@@ -101,9 +102,10 @@ def test_the_one_box_with_its_blocks_at_their_defaults_plays_todays_argv() -> No
         "alarm_monsters",
         "alarm_near_px",
         "alarm_near_score",
+        "CURSOR_WAIT_S",
     }
     # 120: + fly_first (18), + fly_first_hp (18.11), + fly_first_land and FF_LAND_S (18.17)
-    assert len(held) == len(fc.BLOCKS) - 5 - 5 == 120
+    assert len(held) == len(fc.BLOCKS) - 5 - 6 == 120
     assert hunt_argv(json.dumps(d)) == TODAY
 
 
@@ -235,3 +237,21 @@ def test_a_layout_changes_neither_the_argv_nor_the_hash(name: str) -> None:
     assert pj.project_hash(pj.from_json(placed)) == pj.project_hash(pj.from_json(raw))
     prep = fp.prepare(placed, NODE, NO_MAX)
     assert not isinstance(prep, str) and prep.project_hash == pj.project_hash(pj.from_json(raw))
+
+
+def test_the_cursor_window_is_a_runner_number_the_pinned_runner_takes() -> None:
+    """cursor-1080.md Amendment 5: CURSOR_WAIT_S is a --tune runner constant (optional; default
+    the runner's own 0.35); the PINNED runner validates and applies it without a code change."""
+    import dungeon_hunt as dh
+
+    f = fc.BY_NAME["CURSOR_WAIT_S"]
+    assert f.tune and f.optional and f.default == dh.CURSOR_WAIT_S == 0.35
+    vals, why = dh.tune_values(["CURSOR_WAIT_S=0.75"])
+    assert why is None and vals == {"CURSOR_WAIT_S": 0.75}
+    prev = dh.tune_apply(vals, {"dh": dh})
+    try:
+        assert dh.CURSOR_WAIT_S == 0.75
+    finally:
+        dh.tune_apply(prev, {"dh": dh})
+    assert dh.CURSOR_WAIT_S == 0.35
+    assert dh.tune_values(["CURSOR_WAIT_S=5"])[1] is not None  # outside its range

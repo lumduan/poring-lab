@@ -379,6 +379,19 @@ FIELDS: tuple[Field, ...] = (
     ),  # fmt: skip
     Field("STILL_N", "aim", "int", "a still screen: this many frame pairs in a row", 1, 10, 1),
     Field("STILL_MAX_S", "aim", "number", "wait for a still screen at most", 0, 10, _S, unit="s"),
+    # cursor-1080.md Amendment 5 (2026-11-21): the hover's read window -- right after a stop the
+    # 1920x1080 client draws its sword 0.35-0.7 s late; 0.75 s there (the default stays 0.35)
+    Field(
+        "CURSOR_WAIT_S",
+        "aim",
+        "number",
+        "wait for the cursor's answer at most",
+        0.2,
+        2.0,
+        _S,
+        unit="s",
+        optional=True,
+    ),  # fmt: skip
     Field(
         "WALKER_PX",
         "aim",
@@ -1138,6 +1151,7 @@ DEFAULTS: dict[str, Any] = {
     "STILL_PX": 2.0,
     "STILL_N": 3,
     "STILL_MAX_S": 1.5,
+    "CURSOR_WAIT_S": 0.35,  # dungeon_hunt.CURSOR_WAIT_S (test_flow_config pins it)
     "WALKER_PX": 10.0,
     "HOLD_GAP_S": 0.25,
     "HOLD_MAX_S": 2.5,
@@ -1250,6 +1264,7 @@ FIND_GROUP: dict[str, tuple[str, ...]] = {
     "timing": ("timing", "speed", "often", "seconds"),
 }
 FIND: dict[str, tuple[str, ...]] = {
+    "CURSOR_WAIT_S": ("cursor", "hover", "sword", "1080", "late"),
     "potion_below": ("drink",),
     "knife_hp_min": ("hp",),
     "respawn_at": ("click", "button"),
