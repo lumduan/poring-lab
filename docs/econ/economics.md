@@ -547,6 +547,35 @@ and its flow (the run's label, the runner's version, strategy and search; its fl
       - a series: a `series.log` line ("<label>: economy record done (...)"), the state in the
         run's row in `done.json` (`econ`), and the output in `<label>.econ.log`.
 
+- ➡️ **A Run with no packets gets a SCREEN record (Batt 2026-11-21, decision 2 = A: "a
+  screen-only economy record for every Run").** The packet judge needs the run's
+  `packets.jsonl.gz`. A Run on a PC the lab's sniffer does not capture has none: the live lab's
+  PC, a learner's. Every such record was refused: the live lab's 21 Runs from 11-20 09:41 to
+  11-21 07:42 left `lab.sqlite` with 0 runs, and its /economy page said "No export yet".
+  - WHICH: `econ_db.py update` finds no packet file beside the session nor in the store
+    (`econ_screen.screen_dir`). It judges the session with `scripts/econ_screen.py` into its OWN
+    table, `screen_runs` (schema version 2, added by an additive migration). A packet record and
+    a screen record never mix.
+  - WHAT, all from the bot's own events in the run's window (run_start .. run_end):
+    - kills (by how each was read: the EXP line, inferred) and deaths;
+    - loot steps, the picks they counted, and the pickup clicks;
+    - the presses: Fly Wings, Butterfly Wings, potions, steals;
+    - the hotbar stock reads (first / last);
+    - the bag's weight at the start and the end (the player's own reads just before and just
+      after the hunt core, within 15 min).
+  - NOT KNOWN: which items were picked up, and the zeny. The page says so, in amber, and shows
+    no gross, net or income for such a Run. The Fly Wing and Butterfly Wing are one item each,
+    so their cost is priced. A potion's item depends on the player's heal key, so potions are
+    counted, not priced.
+  - THE PAGE FILLS ITSELF: after any new screen record, `update` rewrites the export
+    `screen-runs` (every screen record, newest first, at most 200; pooled too). With
+    `--export NAME` (the Run helper passes the Run's label) the Run's PACKET runs are exported
+    as NAME. Both steps are non-fatal: a problem is a line, never the record's result. By hand:
+    `econ_db.py dashboard --screen [--name NAME]`.
+  - Checked on Batt's live Run 11210548 (the hunt core 05:49-07:41): 255 kills, 277 loot steps,
+    27 pickup clicks, 79 Fly Wings (the hotbar read 138 -> 60), the bag 38 % -> 50 %. That is
+    what its Run panel showed (`test_econ_screen.py`).
+
 **What an export holds** (one JSON, per run and pooled): the run's facts (session, map, character,
 judged window and hours, kills, deaths) and COUNTS, never only rates, so the page can recompute every
 rate with edited prices:

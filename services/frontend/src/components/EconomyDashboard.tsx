@@ -27,6 +27,7 @@ import {
   runAt,
   runLabel,
   saveEdits,
+  screenLines,
   setPrice,
   summary,
   flowText,
@@ -180,11 +181,19 @@ export function RunView({
   const ocText = `Overcharge Lv ${oc.level}: NPC sell x ${factorText(oc.rate_pct, true)} per unit, truncated toward zero as the server does, at least ${oc.min_price}`;
   const dcText = `Discount Lv ${dc.level}: NPC buy x ${factorText(dc.rate_pct, false)} per unit, truncated toward zero, at least ${dc.min_price}`;
   const table = (doc.sources.items_table ?? {}) as Record<string, unknown>;
+  // Batt 2026-11-21 (decision 2 = A): a SCREEN record -- read from the game screen, no packets:
+  // its own counts; never a gross / net / income that a screen cannot know
+  const screenRun = !!run.screen || current.source === "screen";
+  const sc = run.screen;
   return (
     <>
       <Section
         title="Runs"
-        formula="judged window: the run's start to its end (events run_start..run_end); kills / h = our kills / judged hours; a kill = the monster's death <= 1.5 s after our damaging hit (packets)"
+        formula={
+          screenRun
+            ? "window: the run's start to its end (events run_start..run_end); kills / h = kills / hours; a kill = the runner's own kill read from the screen (the EXP line, or an inferred kill)"
+            : "judged window: the run's start to its end (events run_start..run_end); kills / h = our kills / judged hours; a kill = the monster's death <= 1.5 s after our damaging hit (packets)"
+        }
       >
         <table className="w-full min-w-[40rem] text-sm">
           <thead>
@@ -220,6 +229,52 @@ export function RunView({
         </table>
       </Section>
 
+      {screenRun && (
+        <>
+          <p className="rounded border border-amber-700 bg-amber-950/60 px-3 py-2 text-sm text-amber-100" data-testid="econ-screen-note">
+            Read from the game screen only: this Run had no packet capture, so which items were picked up and the zeny are not
+            known. The counts below are what the bot itself saw and did; the cost of the Fly Wings and Butterfly Wings is priced.
+          </p>
+          <Section
+            title="What the screen saw"
+            formula="per hour = total / the run's hours (run_start..run_end); per kill = total / kills. A pickup click is a click on a floor item, not an item confirmed in the bag."
+          >
+            <table className="w-full min-w-[32rem] text-sm" data-testid="econ-screen-lines">
+              <thead>
+                <tr className="border-b border-neutral-800">
+                  <th scope="col" className={TH}>What</th>
+                  <th scope="col" className={THR}>Total</th>
+                  <th scope="col" className={THR}>Per hour</th>
+                  <th scope="col" className={THR}>Per kill</th>
+                </tr>
+              </thead>
+              <tbody>
+                {screenLines(run).map((l) => (
+                  <tr key={l.what} className="border-b border-neutral-900">
+                    <td className={TD}>{l.what}</td>
+                    <td className={TDR}>{fmtInt(l.total)}</td>
+                    <td className={TDR}>{fmtOne(l.perHour)}</td>
+                    <td className={TDR}>{l.perKill === null ? DASH : l.perKill.toFixed(2)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            {sc && (
+              <p className="mt-2 text-xs text-neutral-400">
+                The bag: {sc.weight_start === null ? DASH : `${fmtOne(sc.weight_start)} %`} at the start,{" "}
+                {sc.weight_end === null ? DASH : `${fmtOne(sc.weight_end)} %`} at the end
+                {sc.end ? ` · ended: ${sc.end}` : ""}
+                {Object.keys(sc.kills_by).length > 0 &&
+                  ` · kills read by ${Object.entries(sc.kills_by)
+                    .map(([k, v]) => `${k} ${v}`)
+                    .join(", ")}`}
+              </p>
+            )}
+          </Section>
+        </>
+      )}
+      {!screenRun && (
+      <>
       <section aria-label="Profit and loss per hour" className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
         <Tile title="Gross, NPC sell" value={s.grossH} formula="sum (picked + stolen) x NPC sell / hours" />
         <Tile title="Cost, NPC buy" value={s.costH} formula="sum used x NPC buy / hours" />
@@ -346,6 +401,8 @@ export function RunView({
           </table>
         </Section>
       </div>
+      </>
+      )}
 
       <Section
         title="Consumables"

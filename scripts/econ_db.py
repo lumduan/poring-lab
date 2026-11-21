@@ -162,8 +162,43 @@ CREATE TABLE run_consumables (
     PRIMARY KEY (session, item_id)
 )"""
 
+# 2 (Batt 2026-11-21, decision 2 = A: "a screen-only economy record for every Run"): a Run with no
+# packets (a PC the lab's sniffer does not capture) is recorded from its screen events
+# (scripts/econ_screen.py) in its OWN table: a packet record and a screen record never mix
+_SCREEN = """
+CREATE TABLE screen_runs (
+    session         TEXT PRIMARY KEY NOT NULL,  -- the session id (its directory's name)
+    dir             TEXT,              -- the directory it was judged from (local; not shared)
+    map             TEXT,
+    char            TEXT,
+    version         TEXT,
+    window_t0_ns    INTEGER NOT NULL,  -- run_start .. run_end (else first .. last event)
+    window_t1_ns    INTEGER NOT NULL,
+    window_source   TEXT NOT NULL,
+    hours           REAL NOT NULL,     -- every count's divisor
+    kills           INTEGER NOT NULL,
+    deaths          INTEGER NOT NULL,
+    loot_steps      INTEGER NOT NULL,
+    loot_picks      INTEGER NOT NULL,  -- the picks the runner's loot steps counted (screen)
+    pickup_clicks   INTEGER NOT NULL,  -- its clicks on a floor item
+    potions         INTEGER NOT NULL,
+    fly_wings       INTEGER NOT NULL,
+    butterfly_wings INTEGER NOT NULL,
+    steals          INTEGER NOT NULL,
+    weight_start    REAL,              -- the bag's weight (%) at the start / end (player reads)
+    weight_end      REAL,
+    started         TEXT,
+    ended           TEXT,
+    judged          TEXT NOT NULL,     -- JSON: econ_screen.judge's whole record
+    judge_commit    TEXT,
+    built_at        TEXT NOT NULL,
+    CHECK (window_t1_ns >= window_t0_ns),
+    CHECK (kills >= 0 AND deaths >= 0)
+)"""
+
 MIGRATIONS: tuple[tuple[str, ...], ...] = (
     (_RUNS, _ITEMS, _SPECIES, _CONSUMABLES),  # 1 (2026-11-12, ADR-0025 phase 1): the first schema
+    (_SCREEN,),  # 2 (2026-11-21): the screen records
 )
 
 
@@ -398,6 +433,77 @@ def has_run(con: sqlite3.Connection, sid: str) -> bool:
     return con.execute("SELECT 1 FROM runs WHERE session = ?", (sid,)).fetchone() is not None
 
 
+def has_screen(con: sqlite3.Connection, sid: str) -> bool:
+    q = "SELECT 1 FROM screen_runs WHERE session = ?"
+    return con.execute(q, (sid,)).fetchone() is not None
+
+
+SCREEN_COLS = ("session", "dir", "map", "char", "version", "window_t0_ns", "window_t1_ns",
+               "window_source", "hours", "kills", "deaths", "loot_steps", "loot_picks",
+               "pickup_clicks", "potions", "fly_wings", "butterfly_wings", "steals",
+               "weight_start", "weight_end", "started", "ended", "judged", "judge_commit",
+               "built_at")  # fmt: skip
+
+
+def screen_row(j: Mapping[str, Any], where: str | None, commit: str | None, now: str
+               ) -> dict[str, Any]:  # fmt: skip
+    """PURE: a screen record's row (econ_screen.judge's result)."""
+    w = j["window"]
+    row = {k: j.get(k) for k in SCREEN_COLS if k in j}
+    row.update({"dir": where, "window_t0_ns": int(w["t0"]), "window_t1_ns": int(w["t1"]),
+                "window_source": str(w["source"]), "hours": float(j["hours"]),
+                "judged": _dumps(j), "judge_commit": commit, "built_at": now})  # fmt: skip
+    return {k: row.get(k) for k in SCREEN_COLS}
+
+
+def write_screen(con: sqlite3.Connection, row: Mapping[str, Any], replace: bool) -> str:
+    """ONE transaction: the screen record's row. "added", "rebuilt" or "skipped"."""
+    sid = row["session"]
+    con.execute("BEGIN IMMEDIATE")
+    try:
+        had = has_screen(con, sid)
+        if had and not replace:
+            con.execute("ROLLBACK")
+            return "skipped"
+        if had:
+            con.execute("DELETE FROM screen_runs WHERE session = ?", (sid,))
+        _insert(con, "screen_runs", SCREEN_COLS, [row])
+        con.execute("COMMIT")
+    except BaseException:
+        if con.in_transaction:
+            con.execute("ROLLBACK")
+        raise
+    return "rebuilt" if had else "added"
+
+
+def screen_ids(con: sqlite3.Connection) -> list[str]:
+    """The screen records, newest first (by the window's start on the wall clock, then id)."""
+    q = "SELECT session FROM screen_runs ORDER BY COALESCE(started, '') DESC, session DESC"
+    return [str(r[0]) for r in con.execute(q)]
+
+
+def dashboard_screen(con: sqlite3.Connection, name: str = "", data: Path = DATA,
+                     limit: int = 0) -> dict[str, Any] | None:  # fmt: skip
+    """The /economy export of the screen records (newest first, at most ``limit`` or
+    econ_screen.EXPORT_MAX_RUNS): each entry rebuilt from its stored record by econ_screen.entry
+    with the item table of today, pooled by econ_screen.pool. None: no screen record yet."""
+    import econ_dash as ed
+    import econ_screen as es
+
+    sids = screen_ids(con)[: limit or es.EXPORT_MAX_RUNS]
+    if not sids:
+        return None
+    tpath, tdoc, names, mobs = ed.sources(data)
+    q = "SELECT judged FROM screen_runs WHERE session = ?"
+    runs = [es.entry(json.loads(con.execute(q, (s,)).fetchone()[0]), tdoc["items"], names)
+            for s in sids]  # fmt: skip
+    doc = ed.document(runs, name or es.EXPORT_NAME, tpath, tdoc, names, mobs)
+    doc["source"] = es.SOURCE
+    doc["sources"]["judges"] = "econ_screen.judge: the game screen only (no packets)"
+    doc["pooled"] = es.pool(runs)
+    return doc
+
+
 def write_record(con: sqlite3.Connection, rec: Mapping[str, Any], replace: bool) -> str:
     """ONE transaction per run: its run row and every item / species / consumable row, or none of
     them (a failure rolls back, and a run being replaced keeps its old rows). Returns "added",
@@ -463,10 +569,25 @@ def ingest(
     sha = ed.table_sha(tpath)
     commit = judge_commit()
     out: list[dict[str, Any]] = []
+    import dungeon_judge as dj
+    import econ_screen as es
+
     for s in sessions:
         sid = sid_of(s)
-        if not replace and has_run(con, sid):
+        if not replace and (has_run(con, sid) or has_screen(con, sid)):
             out.append({"session": sid, "result": "skipped", "why": "already in the file"})
+            continue
+        sd = es.screen_dir(s, dj.DEMO, dj.NAS)
+        if sd is not None:  # no packets: the SCREEN record (Batt 2026-11-21, decision 2 = A)
+            try:
+                j = es.load_session(sd)
+            except (OSError, ValueError) as e:
+                out.append({"session": sid, "result": "refused", "why": f"{type(e).__name__}: {e}"})
+                continue
+            got = write_screen(con, screen_row(j, str(sd), commit, _now()), replace)
+            out.append({"session": sid, "result": got, "source": es.SOURCE,
+                        "hours": j["hours"], "kills": j["kills"],
+                        "pickup_clicks": j["pickup_clicks"]})  # fmt: skip
             continue
         try:
             j = ed.judge_session(s, table, map_name, data / "econ" / "maps.json")
@@ -514,11 +635,15 @@ def hunt_sessions(label: str, demo: Path) -> list[Path]:
 
 def after_run_command(sessions: Sequence[str | Path], db: Path | None = None,
                       data: Path | None = None, cap_s: int = AFTER_RUN_CAP_S,
-                      py: str = sys.executable) -> list[str]:  # fmt: skip
+                      py: str = sys.executable,
+                      export: str | None = None) -> list[str]:  # fmt: skip
     """PURE: the record's argv -- `update` (a run already in the file is left as it is), niced
-    and under its own hard cap."""
+    and under its own hard cap; with ``export`` (the Run's label) the /economy page's exports are
+    written after it (Batt 2026-11-21: the page fills itself)."""
     argv = ["nice", "-n", "10", "timeout", str(int(cap_s)), py, str(Path(__file__).resolve()),
             "update", *(str(s) for s in sessions)]  # fmt: skip
+    if export:
+        argv += ["--export", export]
     if db is not None:
         argv += ["--db", str(db)]
     if data is not None:
@@ -529,7 +654,8 @@ def after_run_command(sessions: Sequence[str | Path], db: Path | None = None,
 def record_after_run(sessions: Sequence[str | Path], log_path: Path, *,
                      wait_s: float = AFTER_RUN_WAIT_S, cap_s: int = AFTER_RUN_CAP_S,
                      db: Path | None = None, data: Path | None = None,
-                     py: str = sys.executable) -> dict[str, Any]:  # fmt: skip
+                     py: str = sys.executable,
+                     export: str | None = None) -> dict[str, Any]:  # fmt: skip
     """A finished run's hunt sessions into the file, NON-FATAL and BOUNDED: `update` runs niced
     under its own cap (its lines appended to ``log_path``); the caller waits at most ``wait_s``,
     then the record goes on in the BACKGROUND (and says so). Never raises: a failure is returned
@@ -551,7 +677,8 @@ def record_after_run(sessions: Sequence[str | Path], log_path: Path, *,
             fh.write(f"[{time.strftime('%Y-%m-%d %H:%M:%S')}] econ_db update {' '.join(names)}\n"
                      .encode())  # fmt: skip
             fh.flush()
-            proc = subprocess.Popen(after_run_command(sessions, db, data, cap_s, py), cwd=ROOT,
+            argv = after_run_command(sessions, db, data, cap_s, py, export)
+            proc = subprocess.Popen(argv, cwd=ROOT,
                                     stdout=fh, stderr=subprocess.STDOUT,
                                     stdin=subprocess.DEVNULL, start_new_session=True)  # fmt: skip
     except OSError as e:
@@ -667,6 +794,33 @@ def listing(con: sqlite3.Connection) -> list[dict[str, Any]]:
     keys = ("session", "map", "char", "minutes", "kills", "deaths", "income_units", "built_at",
             "judge_commit")  # fmt: skip
     return [dict(zip(keys, tuple(r), strict=True)) for r in rows]
+
+
+def write_exports(con: sqlite3.Connection, res: Sequence[Mapping[str, Any]], name: str | None,
+                  data: Path = DATA) -> list[dict[str, Any]]:  # fmt: skip
+    """After a Run's record (Batt 2026-11-21: "the economy page fills itself"): its PACKET runs as
+    the export ``name``, and every screen record as screen-runs. NON-FATAL: a problem is a line,
+    never the record's result."""
+    import econ_dash as ed
+
+    out_dir = data / "econ" / "dashboard"
+    lines: list[dict[str, Any]] = []
+    packet = [str(r["session"]) for r in res
+              if r.get("source") != "screen" and r["result"] != "refused"
+              and has_run(con, str(r["session"]))]  # fmt: skip
+    screen = any(r.get("source") == "screen" and r["result"] in ("added", "rebuilt") for r in res)
+    try:
+        if packet and name:
+            p = ed.write(dashboard(con, packet, name, data), out_dir)
+            lines.append({"export": str(p), "runs": len(packet), "source": "packets"})
+        if screen:
+            sdoc = dashboard_screen(con, "", data)
+            if sdoc is not None:
+                p = ed.write(sdoc, out_dir)
+                lines.append({"export": str(p), "runs": len(sdoc["runs"]), "source": "screen"})
+    except (DbError, OSError, ValueError, RuntimeError) as e:
+        lines.append({"export": None, "error": f"{type(e).__name__}: {str(e)[:300]}"})
+    return lines
 
 
 class CrossCheckFailed(DbError):
@@ -873,6 +1027,9 @@ def main(argv: Sequence[str] | None = None) -> int:
         p = sub.add_parser(cmd)
         p.add_argument("sessions", nargs="+", help="session directories or ids")
         p.add_argument("--map", default=None, help="the runs' map (default: run_start's)")
+        p.add_argument("--export", default=None, metavar="NAME",
+                       help="then write the /economy page's exports: these packet runs as NAME, "
+                            "and every screen record as screen-runs")  # fmt: skip
         common(p)
     common(sub.add_parser("list"))
     x = sub.add_parser("export")
@@ -882,8 +1039,9 @@ def main(argv: Sequence[str] | None = None) -> int:
     x.add_argument("--with-names", action="store_true", help="names from YOUR data/, not shared")
     common(x)
     d = sub.add_parser("dashboard")
-    d.add_argument("--runs", nargs="+", required=True, help="session ids")
-    d.add_argument("--name", required=True)
+    d.add_argument("--runs", nargs="+", default=None, help="session ids (packet runs)")
+    d.add_argument("--screen", action="store_true", help="every screen record (screen-runs)")
+    d.add_argument("--name", default=None)
     d.add_argument("--out-dir", type=Path, default=None, help="default: <data>/econ/dashboard")
     common(d)
     a = ap.parse_args(argv)
@@ -901,8 +1059,12 @@ def main(argv: Sequence[str] | None = None) -> int:
 def _run(a: argparse.Namespace, db: Path) -> int:
     import econ_dash as ed
 
-    if a.cmd == "dashboard" and not ed.valid_name(a.name):
+    if a.cmd == "dashboard" and not a.screen and not (a.runs and a.name):
+        raise DbError("dashboard: --runs SID ... --name NAME, or --screen [--name NAME]")
+    if a.cmd == "dashboard" and a.name is not None and not ed.valid_name(a.name):
         raise DbError(f"--name {a.name!r}: [A-Za-z0-9][A-Za-z0-9_.-]{{0,63}}")
+    if a.cmd in ("build", "update") and a.export is not None and not ed.valid_name(a.export):
+        raise DbError(f"--export {a.export!r}: [A-Za-z0-9][A-Za-z0-9_.-]{{0,63}}")
     if a.cmd in ("build", "update"):
         ed.sources(a.data)  # the item table first: a missing one creates no file
     con = connect(db, create=a.cmd in ("build", "update"))
@@ -911,7 +1073,13 @@ def _run(a: argparse.Namespace, db: Path) -> int:
             res = ingest(con, a.sessions, a.data, a.map, replace=a.cmd == "build")
             for r in res:
                 print(json.dumps(r, ensure_ascii=False))
-            print(json.dumps({"db": str(db), "runs": len(run_ids(con))}))
+            print(json.dumps({"db": str(db), "runs": len(run_ids(con)),
+                              "screen_runs": len(screen_ids(con))}))  # fmt: skip
+            # the screen records' export is rewritten after ANY new screen record (no flag needed:
+            # an older Run helper's `update` fills the page too); the packet runs' with --export
+            if a.export or any(r.get("source") == "screen" for r in res):
+                for line in write_exports(con, res, a.export, a.data):
+                    print(json.dumps(line, ensure_ascii=False))
             return 1 if any(r["result"] == "refused" for r in res) else 0
         if a.cmd == "list":
             print(
@@ -919,6 +1087,11 @@ def _run(a: argparse.Namespace, db: Path) -> int:
             )
             for row in listing(con):
                 print(json.dumps(row, ensure_ascii=False))
+            for sid in reversed(screen_ids(con)):
+                r = con.execute("SELECT session, map, char, hours, kills, deaths, pickup_clicks, "
+                                "fly_wings, built_at FROM screen_runs WHERE session = ?",
+                                (sid,)).fetchone()  # fmt: skip
+                print(json.dumps({"source": "screen", **dict(r)}, ensure_ascii=False))
             return 0
         if a.cmd == "export":
             names = local_names(a.data) if a.with_names else None
@@ -931,6 +1104,13 @@ def _run(a: argparse.Namespace, db: Path) -> int:
                     "keep this export local, never commit or publish it",
                     file=sys.stderr,
                 )
+            return 0
+        if a.screen:
+            sdoc = dashboard_screen(con, a.name or "", a.data)
+            if sdoc is None:
+                raise DbError("no screen record yet")
+            path = ed.write(sdoc, a.out_dir or a.data / "econ" / "dashboard")
+            print(json.dumps({"out": str(path), "runs": len(sdoc["runs"]), "source": "screen"}))
             return 0
         doc = dashboard(con, a.runs, a.name, a.data)
         path = ed.write(doc, a.out_dir or a.data / "econ" / "dashboard")
