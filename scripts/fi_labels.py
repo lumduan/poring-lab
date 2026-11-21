@@ -24,6 +24,7 @@ picture of the fullscreen client, rec_paths' ``virtual-1080`` path):
     fi_labels.py pack LABELS.json... --spec 1080 --params PARAMS --seed 71 --out JSON
                                           section 6: T2 on the 1080 TRAIN labels
     fi_labels.py pack LABELS.json... --spec 1080 --round 6 --eval-test --params PARAMS --seed N
+    fi_labels.py pack LABELS.json... --spec 1080 --round 7 --eval-test --params PARAMS --seed 74
                       --out JSON          T-I4: round 6's evaluation pack
 ``--spec 1080`` is XMAS02_FI_1080: rule xmas02-fi-1's text under its own name xmas02-fi-1-1080
 (RULE_1080), the 1080 monster params (9c73278f), FIT / VAL = ifF, the held-out ifH1 / ifH2 /
@@ -166,6 +167,14 @@ R5_STAGING = ("-rdp-xmas02-fsH1",)  # the second slot (fi_eval.R5_AURA_OFF's sta
 # slot the natural drops (ifH1 + ifH2, <= 70), the second the staging (ifsH1, <= 50); its seed from
 # the CLI (the plan names none; the parent's amendment records it before the pack is drawn)
 R6_STAGING = ("-xmas02-ifsH1", "-xmas02-ifsH2")  # fi_eval.R6_STAGING (a test pins them equal)
+# xmas02-items-1080.md Amendment 22 (round 7, pre-registered 2026-11-21 16:11): a NEW 1080 held-out
+# (fi_eval.R7_*; a test pins them equal) packed as round 6 (the first slot the natural drops, the
+# second the stagings), at the plan's own seed 74
+R7_PILOTS = ("-xmas02-ifH5", "-xmas02-ifH6", "-xmas02-ifH7", "-xmas02-ifH8", "-xmas02-ifH9",
+             "-xmas02-ifH10")  # fmt: skip
+R7_STAGING = ("-xmas02-ifsH3", "-xmas02-ifsH4")
+R7_HELD_OUT = (*R7_PILOTS, *R7_STAGING)
+R7_EVAL_SEED = 74
 PER_FLOOR_ITEM = 3  # O.5 / O.9: at most 3 crops per floor item
 HARD_POOL = 200  # absent points fitted to find the hard ones (one per TRAIN frame, seeded)
 NEG_DX, NEG_DY = 7, 5  # O.1e (fi_study.py): an absent point within +-7 x +-5 cells of ours ...
@@ -185,7 +194,8 @@ X1080_MONSTER_SHA256 = "9c73278f8c1aca1fb315673e3ee350db904407349b7655b14dee4d47
 # the recorder names a session <stamp>-<backend>-xmas02-<label> (20261120T214246-rdp-xmas02-ifF);
 # no backend in the suffixes, so a name is refused whatever path recorded it
 IF_FIT = ("-xmas02-ifF",)  # section 4: FIT / VAL, the absent controls; never TRAIN
-# section 4 + Amendment 16 (the one extension: ifH3, ifH4, ifsH2): refused by NAME
+# section 4 + Amendment 16 (the one extension: ifH3, ifH4, ifsH2) + Amendment 22 (round 7's new
+# held-out): refused for TRAIN by NAME
 IF_HELD_OUT = (
     "-xmas02-ifH1",
     "-xmas02-ifH2",
@@ -193,6 +203,7 @@ IF_HELD_OUT = (
     "-xmas02-ifH3",
     "-xmas02-ifH4",
     "-xmas02-ifsH2",
+    *R7_HELD_OUT,
 )
 FIT_SCALES_1080 = tuple(round(0.85 + 0.05 * k, 2) for k in range(7))  # 0.85 .. 1.15 (T-I2)
 FIT_R_1080 = gi.R_MEASURE  # the anchor's search around the UNANCHORED prediction (gef10 8's +-10)
@@ -313,7 +324,10 @@ XMAS02_FI_1080 = FiSpec(
     screen="1080",
     world_scale=1.5,  # rec_paths.VIEW_1080's (a test pins the two equal)
     work=FI_1080,
-    heldout_note="ifH1 / ifH2 / ifsH1 (+ ifH3 / ifH4 / ifsH2: Amendment 16), xmas02-items-1080.md",
+    heldout_note=(
+        "ifH1 / ifH2 / ifsH1 (+ ifH3 / ifH4 / ifsH2: Amendment 16; round 7's ifH5-ifH10, "
+        "ifsH3, ifsH4: Amendment 22), xmas02-items-1080.md"
+    ),
     fit_note="ifF",
     refused_note="",
 )
@@ -632,14 +646,31 @@ def pack_short(picks: Sequence[Mapping[str, Any]], by: Mapping[str, int], eval_t
 
 
 def round_refusal(spec: FiSpec, rnd: int, eval_test: bool) -> str | None:
-    """PURE (T-I4): rounds 1-5 are the 720 spec's (as they were); round 6 is the 1080 round's
-    evaluation; the 1080 spec packs T2 (round 1's strata, its seed 71) or round 6."""
+    """PURE (T-I4): rounds 1-5 are the 720 spec's (as they were); rounds 6 and 7 are the 1080
+    rounds' evaluations; the 1080 spec packs T2 (round 1's strata, its seed 71), round 6 or 7."""
     if spec.screen == "720":
-        return "--round 6 is the 1080 round: --spec 1080" if rnd == 6 else None
+        return f"--round {rnd} is a 1080 round: --spec 1080" if rnd in (6, 7) else None
     if rnd in (2, 3, 4, 5):
         return f"--round {rnd} is a 720 round: not under the {spec.screen} spec"
     if rnd == 1 and eval_test:
-        return f"the {spec.screen} spec's evaluation pack is --round 6"
+        return f"the {spec.screen} spec's evaluation pack is --round 6 or --round 7"
+    return None
+
+
+def seed_source(rnd: int, r2: bool, eval_test: bool) -> str:
+    """PURE: where a pack's pre-registered seed is written."""
+    return "Amendment 22" if rnd == 7 else "O15" if r2 else "O.9" if eval_test else "O.5"
+
+
+def round_docs_refusal(rnd: int, docs: Sequence[Mapping[str, Any]]) -> str | None:
+    """PURE (Amendment 22): round 7's pack reads round 7's own held-out only (by NAME; fail
+    closed); other rounds: None."""
+    if rnd != 7:
+        return None
+    for d in docs:
+        sid = str(d.get("session"))
+        if not any(sid.endswith(x) for x in R7_HELD_OUT):
+            return f"{sid}: not round 7's held-out ({', '.join(R7_HELD_OUT)})"
     return None
 
 
@@ -2025,20 +2056,22 @@ def cmd_pack(a: argparse.Namespace) -> dict[str, Any]:
     why = round_refusal(spec, rnd, bool(a.eval_test))
     if why is not None:
         raise SystemExit(why)
-    # rounds 3-6 (O17 / O20 / O26 / items-1080 T-I4) pack as round 2, own seed + slots
-    r2 = rnd in (2, 3, 4, 5, 6)
-    if rnd in (3, 4, 5, 6):
+    # rounds 3-7 (O17 / O20 / O26 / items-1080 T-I4 / Amendment 22) pack as round 2, own seed +
+    # slots
+    r2 = rnd in (2, 3, 4, 5, 6, 7)
+    if rnd in (3, 4, 5, 6, 7):
         if not a.eval_test:
             raise SystemExit(f"--round {rnd}: the evaluation's pack only (--eval-test)")
-        # round 6: the seed from the CLI (T-I4), recorded in the key
-        want = {3: R3_EVAL_SEED, 4: R4_EVAL_SEED, 5: R5_EVAL_SEED, 6: a.seed}[rnd]
+        # round 6: the seed from the CLI (T-I4), recorded in the key; round 7: the plan's 74
+        want = {3: R3_EVAL_SEED, 4: R4_EVAL_SEED, 5: R5_EVAL_SEED, 6: a.seed,
+                7: R7_EVAL_SEED}[rnd]  # fmt: skip
     elif r2:
         want = R2_EVAL_SEED if a.eval_test else R2_PACK_SEED
     else:
         want = spec.eval_seed if a.eval_test else spec.pack_seed
     if a.seed != want:
         raise SystemExit(f"--seed {a.seed}: the pre-registered seed is {want} "
-                         f"({'O15' if r2 else 'O.9' if a.eval_test else 'O.5'})")  # fmt: skip
+                         f"({seed_source(rnd, r2, bool(a.eval_test))})")  # fmt: skip
     raw = INSTRUCTIONS.read_bytes()
     if sha256_bytes(raw) != INSTRUCTIONS_SHA256:
         raise SystemExit(f"{INSTRUCTIONS}: not the pinned instructions ({INSTRUCTIONS_SHA256[:8]})")
@@ -2046,10 +2079,14 @@ def cmd_pack(a: argparse.Namespace) -> dict[str, Any]:
     prm = load_params(a.params, spec)
     docs = [json.loads(p.read_text()) for p in a.labels]
     check_pack_docs(spec, docs, a.eval_test, sha256_bytes(params_raw))
+    why_docs = round_docs_refusal(rnd, docs)
+    if why_docs is not None:
+        raise SystemExit(why_docs)
     sheets = frozen_sheets(prm)
     cands = pool_labels(docs)
     if r2:
-        second = {3: R3_NOAURA, 4: R4_NOAURA, 5: R5_STAGING, 6: R6_STAGING}.get(rnd, R2_NOAURA)
+        second = {3: R3_NOAURA, 4: R4_NOAURA, 5: R5_STAGING, 6: R6_STAGING,
+                  7: R7_STAGING}.get(rnd, R2_NOAURA)  # fmt: skip
         picks = r2_picks(cands, a.eval_test, a.seed, spec.salt, second)
     elif a.eval_test:
         picks = draw_strata([{**c, "stratum": "X"} for c in cands], {"X": EVAL_ITEMS}, a.seed,
@@ -2217,9 +2254,10 @@ def main(argv: Sequence[str] | None = None) -> int:
     p.add_argument("--spec", choices=SCREENS, default="720", help="T-I1: the screen's spec")
     p.add_argument("--params", type=Path, required=True)
     p.add_argument("--seed", type=int, required=True)
-    p.add_argument("--round", type=int, choices=(1, 2, 3, 4, 5, 6), default=1,
+    p.add_argument("--round", type=int, choices=(1, 2, 3, 4, 5, 6, 7), default=1,
                    help="O15: round 2's seeds (65 T2-r2, 66 the evaluation) and sizes; "
-                        "6: the 1080 round's evaluation (T-I4, --spec 1080)")  # fmt: skip
+                        "6: the 1080 round's evaluation (T-I4, --spec 1080); 7: Amendment 22's "
+                        "(seed 74)")  # fmt: skip
     p.add_argument("--eval-test", action="store_true")
     p.add_argument("--pack-dir", type=Path, default=None)
     p.add_argument("--key-dir", type=Path, default=None)

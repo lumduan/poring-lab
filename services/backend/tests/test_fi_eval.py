@@ -501,3 +501,117 @@ def test_r6_main_reads_1080_inputs_only_and_needs_the_comparator(tmp_path: Path)
         with pytest.raises(SystemExit, match=match):
             fe.main([*_r6_files(tmp_path, **change), "--comparator", "xmas02fi5"])
     assert fe.round_inputs_refusal("r5", [{"session": "x"}], {}, {}) is None  # r2-r5: unchanged
+
+
+# --- round 7 (xmas02-items-1080.md Amendment 22: xmas02fi6 + the fi7 rule; a NEW held-out) --------
+
+R7_H5 = "20261122T010000-rdp-xmas02-ifH5"
+R7_H10 = "20261122T020000-rdp-xmas02-ifH10"
+
+
+def test_r7_names_strata_and_bars() -> None:
+    assert tuple(f"-xmas02-ifH{i}" for i in range(5, 11)) == fe.R7_PILOTS
+    assert fe.R7_STAGING == ("-xmas02-ifsH3", "-xmas02-ifsH4")
+    assert (*fe.R7_PILOTS, *fe.R7_STAGING) == fe.R7_HELD_OUT
+    assert fe.STRATA["r7"] == (fe.R7_HELD_OUT, (), fe.R7_PILOTS)
+    assert fe.STRATA_NAMES["r7"] == ("i1h", "") and fe.SCREEN_OF["r7"] == "1080"
+    assert fe.STRATA_APART["r7"] == {"natural": fe.R7_PILOTS, "staging": fe.R7_STAGING}
+    assert dict(fe.bars_of("r7")) == dict(fe.bars_of("r6"))  # section 8a's bars, unchanged
+    assert not set(fe.R7_HELD_OUT) & set(fe.R6_HELD_OUT)  # a NEW held-out
+    assert fe.on_suffix(R7_H10, fe.R7_HELD_OUT) and not fe.on_suffix(R7_H10, fe.R6_HELD_OUT)
+
+
+def test_rule_args_refusal() -> None:
+    assert fe.rule_args_refusal(None, None, None, None) is None
+    assert fe.rule_args_refusal(0.5, 30, None, Path("refs.json")) is None
+    assert fe.rule_args_refusal(0.5, None, None, None) is None  # the floor alone needs no frame
+    assert "--refs" in str(fe.rule_args_refusal(0.5, 30, None, None))
+    assert "(0, 1]" in str(fe.rule_args_refusal(1.5, None, None, None))
+    assert "at least 1" in str(fe.rule_args_refusal(None, 0, None, Path("refs.json")))
+    assert "--ring-pad goes with" in str(fe.rule_args_refusal(0.5, None, 6, None))
+
+
+def _round_files(tmp_path: Path, sid: str, strata: str, rnd: int) -> list[str]:
+    """fi_eval's inputs for a 1080 round on disk (_r6_files' shape, any session / round)."""
+    st = staged_as(sid)
+    params = tmp_path / "items-params-1080.json"
+    params.write_text(json.dumps({"anchor_px": list(ANCHOR), "screen": "1080"}))
+    doc = {**st.doc(), "session": sid, "params": str(params), "screen": "1080"}
+    lab = tmp_path / "l.json"
+    lab.write_text(json.dumps(doc))
+    pred = tmp_path / "pred.json"
+    pred.write_text(json.dumps({"frames": st.pred}))
+    key = {"eval_test": True, "screen": "1080", "round": rnd,
+           "crops": {c["crop"]: {"truth": "item", **c} for c in st.crops}}  # fmt: skip
+    kp = tmp_path / "key.json"
+    kp.write_text(json.dumps(key))
+    both = tmp_path / "both.json"
+    both.write_text(json.dumps([c["crop"] for c in st.crops]))
+    item, comp = tmp_path / "gpu-new.json", tmp_path / "gpu-fi5.json"
+    item.write_text(json.dumps({"models": {"xmas02fi6": {"server": {"n": 300, "p95": 17.0}}}}))
+    comp.write_text(json.dumps({"models": {"xmas02fi5": {"server": {"n": 300, "p95": 16.67}}}}))
+    lat = tmp_path / "lat.json"
+    lat.write_text(json.dumps({"ms": {"xmas02fi6": {"n": 300, "p95": 650.0},
+                                      "xmas02fi5": {"n": 300, "p95": 651.2}}}))  # fmt: skip
+    return ["--labels", str(lab), "--predictions", f"gpu={pred}", "--key", str(kp),
+            "--evaluated", str(both), "--strata", strata, "--gpu-server", str(item), str(comp),
+            "--cpu-latency", str(lat), "--cpu-item", "xmas02fi6", "--comparator", "xmas02fi5",
+            "--out", str(tmp_path / "out.json")]  # fmt: skip
+
+
+def test_r7_the_rule_drops_the_ring_box_and_the_faint_one_before_the_bars(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The staged list as ifH5: its I3 frames 41 (a box inside her 5 x 5) and 42 (elsewhere).
+    Frame 41's recorded picture shows the no-entry cursor ring around that box: with the rule
+    (--item-floor 0.50 --ring-red 30) I3 goes 2 -> 1 frames with a box and 1 -> 0 in her 5 x 5;
+    the 0.2 box on frame 4 falls under the floor; I1's 36 / 40 is unchanged. Without the
+    options the result is round 6's code path, unchanged."""
+    import fi7_rule as f7
+    import numpy as np
+
+    args = _round_files(tmp_path, R7_H5, "r7", 7)
+    assert fe.main(args) == 0
+    plain = json.loads((tmp_path / "out.json").read_text())["per_predictions"]["gpu"]
+    assert (plain["i3"]["any"]["num"], plain["i3"]["around_5x5"]["num"]) == (2, 1)
+    assert "rule" not in plain
+
+    ring_key = fe.frame_key(R7_H5, 41)
+    cx, cy = 640.0 + ANCHOR[0], 380.0 + ANCHOR[1]  # the staged box's centre
+    loaded: list[str] = []
+
+    def fake_load(refs: Any, key: str) -> Any:
+        loaded.append(key)
+        img = np.zeros((720, 1280, 3), dtype=np.uint8)
+        if key == ring_key:
+            yy, xx = np.ogrid[:720, :1280]
+            d = np.hypot(xx - cx, yy - cy)
+            img[(d >= 7) & (d <= 9)] = (220, 10, 12)  # the ring, pure red
+        return img
+
+    monkeypatch.setattr(f7, "load_frame", fake_load)
+    refs = tmp_path / "refs.json"
+    refs.write_text("{}")
+    assert fe.main([*args, "--item-floor", "0.5", "--ring-red", "30", "--refs", str(refs)]) == 0
+    out = json.loads((tmp_path / "out.json").read_text())
+    g = out["per_predictions"]["gpu"]
+    assert (g["i3"]["any"]["num"], g["i3"]["around_5x5"]["num"]) == (1, 0)
+    assert g["i3"]["frames"] == plain["i3"]["frames"] == 600
+    assert g["i1_strata"]["i1h"]["num"] == plain["i1_strata"]["i1h"]["num"] == 36
+    assert g["rule"]["dropped"] == {"floor": 1, "ring": 1}
+    assert (g["rule"]["floor"], g["rule"]["ring_red"], g["rule"]["pad"]) == (0.5, 30, 6)
+    assert ring_key in loaded and g["rule"]["frames_loaded"] == len(loaded)
+    assert out["strata"] == "r7" and out["bars"]["i1_recall"] == 0.9
+    with pytest.raises(SystemExit, match="--refs"):
+        fe.main([*args, "--ring-red", "30"])
+
+
+def test_r7_reads_its_own_new_held_out_and_pack_only(tmp_path: Path) -> None:
+    with pytest.raises(SystemExit, match="not --strata r7's held-out"):  # round 6's ifH1
+        fe.main(_round_files(tmp_path, R6_H1, "r7", 7))
+    with pytest.raises(SystemExit, match="not round 7's pack"):
+        fe.main(_round_files(tmp_path, R7_H5, "r7", 6))
+    full = _round_files(tmp_path, R7_H5, "r7", 7)
+    no_comp = [x for x in full if x not in ("--comparator", "xmas02fi5")]
+    with pytest.raises(SystemExit, match="--comparator"):  # r7 needs it, as r6
+        fe.main(no_comp)

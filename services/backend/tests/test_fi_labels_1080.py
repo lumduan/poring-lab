@@ -37,6 +37,9 @@ HELD = ("20261121T050000-rdp-xmas02-ifH1", "20261121T060000-rdp-xmas02-ifH2",
         # Amendment 16's one extension
         "20261121T100000-rdp-xmas02-ifsH2", "20261121T101000-rdp-xmas02-ifH3",
         "20261121T103000-rdp-xmas02-ifH4")  # fmt: skip
+# Amendment 22: round 7's NEW held-out (refused for TRAIN by name like round 6's)
+HELD7 = ("20261122T010000-rdp-xmas02-ifH5", "20261122T020000-rdp-xmas02-ifH10",
+         "20261122T030000-rdp-xmas02-ifsH3", "20261122T040000-rdp-xmas02-ifsH4")  # fmt: skip
 LAB_720 = {"backend": "rdp", "game_region": [80, 77, 1280, 720], "server": "lab-rathena",
            "format": "png", "recorder_version": 8}  # fmt: skip
 VIRTUAL = {"backend": "rdp", "game_region": [rec_paths.VIRTUAL_X0, 0, 1280, 720],
@@ -63,7 +66,8 @@ def test_the_1080_spec_reads_every_pixel_constant_from_its_params() -> None:
         "-xmas02-ifH3",
         "-xmas02-ifH4",
         "-xmas02-ifsH2",
-    )  # Amendment 16
+        *fl.R7_HELD_OUT,
+    )  # Amendment 16; + round 7's new held-out (Amendment 22)
     assert (SPEC.screen, SPEC.world_scale) == ("1080", rec_paths.VIEW_1080["world_scale"]) == \
         ("1080", 1.5)  # fmt: skip
     assert SPEC.rule == fl.RULE_1080 == "xmas02-fi-1-1080" and fl.RULE == "xmas02-fi-1"
@@ -102,7 +106,7 @@ def test_the_cache_tells_the_two_rules_apart_and_refuses_both_rules_held_out() -
     assert fl.role_refusal(fl.XMAS02_FI, FIT, "val", False) is not None
 
 
-@pytest.mark.parametrize("sid", [*HELD, "20261106T162044-rdp-xmas02-xw5",
+@pytest.mark.parametrize("sid", [*HELD, *HELD7, "20261106T162044-rdp-xmas02-xw5",
                                  "20261120T090000-rdp-xmas02-v1T",
                                  "20261112T090000-rdp-hunt-xmas02-fiH1"])  # fmt: skip
 def test_1080_held_out_test_and_the_720_held_out_are_refused_for_train_and_val(sid: str) -> None:
@@ -646,8 +650,9 @@ def test_pack_round6_takes_its_seed_from_the_cli(
 def test_round6_pack_draws_natural_first_slot_and_staging_second() -> None:
     import fi_eval as fe
 
-    assert fl.R6_STAGING == fe.R6_STAGING and set(fl.IF_HELD_OUT) == set(fe.R6_HELD_OUT)
-    assert set(fe.R6_PILOTS) | set(fl.R6_STAGING) == set(SPEC.eval_suffixes)
+    assert fl.R6_STAGING == fe.R6_STAGING  # + round 7's new held-out (Amendment 22)
+    assert set(fl.IF_HELD_OUT) == set(fe.R6_HELD_OUT) | set(fe.R7_HELD_OUT)
+    assert set(fe.R6_PILOTS) | set(fl.R6_STAGING) | set(fl.R7_HELD_OUT) == set(SPEC.eval_suffixes)
     c = {"frame_id": 1, "floor_id": 1, "stratum": "N", "rel": [1.0, 0.0], "under": None}
     nat = [{**c, "session": HELD[i % 2], "frame_id": i, "floor_id": i} for i in range(90)]
     stg = [{**c, "session": HELD[2], "frame_id": i, "floor_id": 1000 + i} for i in range(80)]
@@ -671,3 +676,63 @@ def test_check_pack_docs_keeps_the_screens_apart() -> None:
         fl.check_pack_docs(fl.XMAS02_FI, [train], False, "p")
     with pytest.raises(SystemExit, match="1080 labels, not the 720"):  # then the screen
         fl.check_pack_docs(fl.XMAS02_FI, [{**train, "rule": fl.RULE}], False, "p")
+
+
+# --- Amendment 22: round 7's pack (xmas02fi6 + the fi7 rule, scored on a NEW held-out) ----------
+
+
+def test_round7_names_pinned_to_fi_eval_and_refused_for_train() -> None:
+    import fi_eval as fe
+
+    assert fl.R7_PILOTS == fe.R7_PILOTS and fl.R7_STAGING == fe.R7_STAGING
+    assert fl.R7_HELD_OUT == fe.R7_HELD_OUT and fl.R7_EVAL_SEED == 74
+    assert set(fl.R7_HELD_OUT) <= set(SPEC.eval_suffixes)
+    for sid in HELD7:
+        assert "held-out" in str(fl.role_refusal(SPEC, sid, "train", False))
+        assert fl.role_refusal(SPEC, sid, None, True) is None  # --eval-test reads it
+        assert fl.foreign_refusal(fl.XMAS02_FI, sid) is not None  # never under the 720 spec
+
+
+def test_round_refusal_puts_round_7_on_1080_only() -> None:
+    assert "--spec 1080" in str(fl.round_refusal(fl.XMAS02_FI, 7, True))
+    assert fl.round_refusal(SPEC, 7, True) is None
+    assert "--round 7" in str(fl.round_refusal(SPEC, 1, True))
+
+
+def test_round7_pack_reads_its_own_held_out_only() -> None:
+    assert fl.round_docs_refusal(7, [{"session": s} for s in HELD7]) is None
+    assert "not round 7's held-out" in str(fl.round_docs_refusal(7, [{"session": HELD[0]}]))
+    assert fl.round_docs_refusal(6, [{"session": HELD[0]}]) is None  # round 6: unchanged
+    assert (
+        fl.seed_source(7, True, True) == "Amendment 22" and fl.seed_source(6, True, True) == "O15"
+    )
+
+
+def test_pack_round7_takes_the_plans_seed_74(
+        tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:  # fmt: skip
+    def pack(*extra: str) -> None:
+        fl.main(["pack", "x.json", "--params", "p.json", "--out", str(tmp_path / "o.json"),
+                 *extra])  # fmt: skip
+
+    with pytest.raises(SystemExit, match="--spec 1080"):
+        pack("--seed", "74", "--round", "7", "--eval-test")
+    with pytest.raises(SystemExit, match="evaluation's pack only"):
+        pack("--spec", "1080", "--seed", "74", "--round", "7")
+    with pytest.raises(SystemExit, match="pre-registered seed is 74"):
+        pack("--spec", "1080", "--seed", "73", "--round", "7", "--eval-test")
+    fake = tmp_path / "instructions.txt"
+    fake.write_text("other instructions")
+    monkeypatch.setattr(fl, "INSTRUCTIONS", fake)
+    with pytest.raises(SystemExit, match="pinned instructions"):  # past the seed check
+        pack("--spec", "1080", "--seed", "74", "--round", "7", "--eval-test")
+
+
+def test_round7_pack_draws_natural_first_slot_and_staging_second() -> None:
+    c = {"frame_id": 1, "floor_id": 1, "stratum": "N", "rel": [1.0, 0.0], "under": None}
+    nat = [{**c, "session": HELD7[i % 2], "frame_id": i, "floor_id": i} for i in range(90)]
+    stg = [{**c, "session": HELD7[2 + i % 2], "frame_id": i, "floor_id": 1000 + i}
+           for i in range(80)]  # fmt: skip
+    got = fl.r2_picks(nat + stg, True, fl.R7_EVAL_SEED, SPEC.salt, fl.R7_STAGING)
+    assert sum(g["aura"] for g in got) == 70  # the natural slot capped at 70
+    assert sum(not g["aura"] for g in got) == 50  # the stagings capped at 50
+    assert {g["session"] for g in got if not g["aura"]} == set(HELD7[2:])
