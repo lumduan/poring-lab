@@ -127,3 +127,19 @@ attacks." On the order (20:2x): after tonight's 5b test.
   Cruiser's shots (454 damage a minute; the other runs 157-248). This round reports potions an
   hour (section 3), which shows it.
 
+### Amendment 2 (2026-11-22 04:21 ICT from `date`, BEFORE any R run): R1 refused by the harness; screen_ab fixed between runs; the order of the rest
+
+- **rng-A1 played** (03:47-04:13). **rng-R1 was refused at 04:15:39 before any input:** "the
+  settings changed the runner's argv beyond ['--defend-box']'s value".
+  - screen_ab's pre-check lets a `--box-set` change only a runner flag's VALUE. `defend_box` is a
+    SWITCH, a flag with no value: on adds `--defend-box`, so the argv grew by one and was refused.
+  - No R run has played. The A' runs never use this check (no box setting), so A1 and A2 stand.
+- **The fix** (scripts/screen_ab.py, tested): a switch box setting may add or leave out its OWN
+  flag; every other argument must still match. Tests cover that, the old refusals, and the plan of
+  arm R itself (`--box-set defend_box=true --player-set defend_ranged=on`).
+- **The chain was stopped by its STOP file at 04:20**, so it ends after rng-A2 (04:16-04:42).
+  The fix reaches the dev checkout only after that, between runs. A follow-on chain
+  (docs/records/scorers/rng_chain2.sh, verbatim) then plays the rest: **R1, A3, R2, R3**, with the
+  same preamble, flags, validity rule and up to 2 make-up runs per arm.
+- The scorer and the bars are unchanged.
+

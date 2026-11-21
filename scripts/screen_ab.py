@@ -212,10 +212,14 @@ def without_tunes(argv: Sequence[str], names: Sequence[str]) -> list[str]:
 
 
 def argv_differs_in(a: Sequence[str], b: Sequence[str], flags: Sequence[str],
-                    tunes: Sequence[str] = ()) -> bool:  # fmt: skip
-    """PURE: argv ``b`` is ``a`` but for the VALUES right after ``flags`` and the ``--tune`` pairs
-    of ``tunes`` (same length otherwise, the same arguments everywhere else)."""
+                    tunes: Sequence[str] = (), switches: Sequence[str] = ()) -> bool:  # fmt: skip
+    """PURE: argv ``b`` is ``a`` but for the VALUES right after ``flags``, the ``--tune`` pairs
+    of ``tunes``, and the presence of the on / off ``switches`` (a switch box setting is a flag
+    with no value: on adds it, off leaves it out; ranged-attacker-1080.md Amendment 2). Same
+    length otherwise, the same arguments everywhere else."""
     a, b = without_tunes(a, tunes), without_tunes(b, tunes)
+    a = [x for x in a if x not in switches]
+    b = [x for x in b if x not in switches]
     if len(a) != len(b):
         return False
     for i, (x, y) in enumerate(zip(a, b, strict=True)):
@@ -226,7 +230,8 @@ def argv_differs_in(a: Sequence[str], b: Sequence[str], flags: Sequence[str],
 
 def player_set_arm(text: str, sets: Mapping[str, Any], secs: int,
                    flags: Sequence[str] = (),
-                   tunes: Sequence[str] = ()) -> dict[str, Any] | str:  # fmt: skip
+                   tunes: Sequence[str] = (),
+                   switches: Sequence[str] = ()) -> dict[str, Any] | str:  # fmt: skip
     """PURE but for flow_play.prepare: the block's box with its player settings -- its text, its
     settings and its project hash -- or a refusal: the settings must differ from the box's in the
     named ones alone, and the runner must get the same argv, box, keys and loop. ``flags``: runner
@@ -252,9 +257,10 @@ def player_set_arm(text: str, sets: Mapping[str, Any], secs: int,
             return f"refused before any input: {prep}"
         preps.append((h, prep.runners[s10.NODE]))
     (_, a), (h, b) = preps
-    if not argv_differs_in(a.argv("L", None, None), b.argv("L", None, None), flags, tunes):
+    if not argv_differs_in(a.argv("L", None, None), b.argv("L", None, None), flags, tunes,
+                           switches):  # fmt: skip
         return ("refused before any input: the settings changed the runner's argv beyond "
-                f"{list(flags) + list(tunes) or 'nothing'}'s value")  # fmt: skip
+                f"{list(flags) + list(tunes) + list(switches) or 'nothing'}'s value")  # fmt: skip
     for k in ("box_kwargs", "keys", "loop", "tick_left_out"):
         va, vb = getattr(a, k), getattr(b, k)
         if (va() if callable(va) else va) != (vb() if callable(vb) else vb):
@@ -280,12 +286,15 @@ def plan_doc(label: str, n: int, minutes: float, screen: str, folder: Path,
         from poring_flow import settings as st
 
         by = {f.name: f for f in st.FIELDS}
-        flags = tuple(by[k].flag for k in (box_set or {}) if by[k].flag)
+        flags = tuple(by[k].flag for k in (box_set or {})
+                      if by[k].flag and by[k].kind != "switch")  # fmt: skip
+        switches = tuple(by[k].flag for k in (box_set or {})
+                         if by[k].flag and by[k].kind == "switch")  # fmt: skip
         tunes = tuple(k for k in (box_set or {}) if by[k].tune)
         ps = player_set_arm(base_text if base_text is not None
                             else s10.arm_text(BOX_ARM, minutes),
                             {**(sets or {}), **(box_set or {})}, secs, flags,
-                            tunes)  # fmt: skip
+                            tunes, switches)  # fmt: skip
         if isinstance(ps, str):
             return ps
         arm, vals = {**arm, "project_hash": ps["project_hash"]}, ps["vals"]

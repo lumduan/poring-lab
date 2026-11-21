@@ -344,3 +344,29 @@ def test_plan_doc_takes_a_tune_box_set(tmp_path: Path) -> None:
     assert isinstance(doc, dict), doc
     assert doc["box_set"] == {"CURSOR_WAIT_S": 0.75}
     assert doc["vals"]["B"]["CURSOR_WAIT_S"] == 0.75
+
+
+# --- ranged-attacker-1080.md Amendment 2: a SWITCH box setting (a flag with no value) -----------
+def test_a_switch_box_set_may_add_its_own_flag_alone() -> None:
+    a = ["play", "--loot", "trim"]
+    b = ["play", "--loot", "trim", "--defend-box"]
+    assert sa.argv_differs_in(a, b, (), (), ("--defend-box",))
+    assert sa.argv_differs_in(b, a, (), (), ("--defend-box",))  # off: left out
+    assert not sa.argv_differs_in(a, b, ())  # not named: refused, as before
+    assert not sa.argv_differs_in(a, [*b, "--still-target"], (), (), ("--defend-box",))
+    assert not sa.argv_differs_in(a, ["play", "--loot", "v1", "--defend-box"], (), (),
+                                  ("--defend-box",))  # fmt: skip
+
+
+def test_the_ranged_arm_plans_with_its_switch_and_its_player_setting(tmp_path: Path) -> None:
+    """Arm R of ranged-attacker-1080.md: --box-set defend_box=true --player-set defend_ranged=on."""
+    import stage10_ab as s10
+
+    text = s10.arm_text("B", 20)
+    box = sa.box_sets(["defend_box=true"])
+    assert box == {"defend_box": True}
+    doc = sa.plan_doc("rng-r", 1, 20, "1080", tmp_path, base=_base(),
+                      sets={"defend_ranged": True}, box_set=box, base_text=text)  # fmt: skip
+    assert isinstance(doc, dict), doc
+    assert doc["vals"]["B"]["defend_box"] is True and doc["vals"]["B"]["defend_ranged"] is True
+    assert doc["box_set"] == {"defend_box": True} and doc["player_set"] == {"defend_ranged": True}
