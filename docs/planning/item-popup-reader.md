@@ -233,3 +233,18 @@ set r2; `score-r2.json` sha256 5e2322a7...; pooled counts:
   set r2 (now spent); any fix is scored on a NEW held-out (the 1080 runs' real-frame grabs on dev,
   section 4's run-time check, or new 720 recordings).
 
+### Amendment 3 (2026-11-22 06:12 ICT from `date`): round 2's unread items read (diagnosis on the spent set r2; scores nothing)
+
+- Two stagings (fs1, fsH1; `diag/diag_unread.py`, scratch): 16 unread events.
+  - **12 are one item, 12001 "Level 3 Heal" (a magic scroll), read AMBIGUOUS.** Its own picture
+    matches at 1.6-5.9, but every magic scroll has the same shape in another tint: the Cold Bolt
+    scrolls' picture is 3.3 away, the Soul Strike scrolls' 4.3. The margin (10.0, calibrated on
+    xmas_dun02's items) refuses that.
+  - 4 are FAR (539, 529, 998, 530: their own pictures 34-84 away), not read further.
+  - Of all 2,381 pictures, 39 pairs are closer than 3.0.
+- Natural play (thief-*, rogue-*) read 97.5-98.0 % right. The FAIL comes from the stagings' staged
+  items, scrolls above all.
+- Round 3's candidates (not pre-registered yet): a colour-aware compare for pictures of one shape
+  (the scrolls), or a group for pictures closer than the true-read spread; each scored on a NEW
+  held-out.
+
