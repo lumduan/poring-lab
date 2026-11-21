@@ -330,3 +330,42 @@ Written before any probe of this round.
   second fresh detection and hover after an unknown, measured by 5a (a walk-then-stop probe
   block) and decided by 5b (play). The pinned runner stays untouched (a Run-time patch, as
   flow_play's others, and a setting with today's values as the default).
+
+### Amendment 5 (2026-11-21 12:07 ICT from `date`): the STOP probe; THE FIX CHOSEN (the cursor read window, a setting)
+
+- **The stop probe** (c5935558's `--mode stop`, 11:04-11:27, immune: "You are now immune to
+  attacks." read at 11:02 after the pilots' OFF; 60 monster hovers, 48 far): a walk click (5-8
+  cells), the runner's own still rule on the virtual frames, then the hover 0 / 0.25 / 0.5 / 0.75 /
+  1.0 s later (12 each). The still rule TIMED OUT (1.5 s) on 49 of the 60 walks: she was still
+  scrolling. The CPU beside it carried the item round's ONNX predictions (nice 10); the reads'
+  first-read times (~130 ms) match P1's.
+
+  | far hovers, delay after the still wait | n | runner unknown at 0.35 s | first sword median / p90 | at 1.0 s |
+  |---|---|---|---|---|
+  | 0.00 s | 10 | 60 % | 464 / 603 ms | sword 10 |
+  | 0.25 s | 10 | 80 % | 552 / 701 ms | sword 6, walk arrow 4 |
+  | 0.50 s | 11 | 64 % | 364 / 686 ms | sword 8, clear 2, nothing 1 |
+  | 0.75 s | 7 | 43 % | 327 / 616 ms | sword 7 |
+  | 1.00 s | 10 | 10 % | 227 / 259 ms | sword 9 |
+
+  (near hovers: 12, too few to split.) So right after she stops the 1080 client draws its sword
+  LATE (median ~0.35-0.55 s, p90 ~0.6-0.7 s), and about 1 s after the stop it is back to the
+  standing time (P1 stand: 214 / 232 ms). The cursor does come, at the point; the runner's 0.35 s
+  window gives up first.
+- **THE FIX (section 4's "timing" branch):** the runner's cursor read window `CURSOR_WAIT_S`
+  becomes a SETTING (a runner constant set with --tune, like STILL_N; default 0.35 s = today's,
+  so 720 and every box that does not set it are unchanged), and a 1080 box sets **0.75 s**.
+  - Why the window, not a wait after the stop: cursor_sword.check ends at the FIRST decision
+    (a sword or a clear read), so a longer window costs time only on hovers that would otherwise
+    end "unknown" (a lost engagement); a fixed 1 s wait would cost every engagement.
+  - 0.75 s: above the p90 of the first sword after a stop (0.6-0.7 s), still under P1-walk's
+    late tail only partly (p90 409 ms in motion, but half those points had no unit under them:
+    the window cannot fix a point that misses).
+  - The pinned runner stays byte-identical: --tune reads the registry's names (poring_flow
+    .settings), and hover() reads CURSOR_WAIT_S at call time.
+- **The bars, as registered (section 5), on NEW data:** 5a = a fresh probe block (stop mode,
+  >= 60 far hovers, immune) with the runner replayed at 0.75 s: unknown <= 5 %; sword recall /
+  false sword as registered where the block measures them. 5b = screen_ab at 1080, A = today's
+  box, B = the same box with CURSOR_WAIT_S 0.75 (one setting, checked: the runner's argv differs
+  in that --tune alone), 3 valid runs a side: kills/h B - A > +2 SE, box-target unknown B <= 5 %,
+  deaths B <= A, no new errors.
