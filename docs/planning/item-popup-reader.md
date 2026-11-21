@@ -131,3 +131,31 @@ unknown prices typed in and saved with an Update button.
   - The font is saved in the lab's data/ (client pixels, never committed).
 - **The scorer** pools the raw counts of every session (not per-session rates). The bars are
   unchanged.
+
+### RESULT (2026-11-21 23:03 ICT from `date`): the one score -- I1 and R PASS, I2 and P FAIL: the reader is NOT used yet
+
+`item_popup_eval.py score` on every fiT session outside fiT1-fiT20 (45 sessions, ca92dbf7, the
+count font of Amendment 1), pooled counts:
+
+| line | got | bar | |
+|---|---|---|---|
+| I1 the right item | 2,510 / 2,552 = **98.4 %** (39 unread) | >= 97 % | PASS |
+| I2 the right amount | 2,446 / 2,552 = **95.8 %** (96 unread) | >= 97 % | **FAIL** |
+| P false events | 202 / 2,754 = **7.3 %** | <= 2 % | **FAIL** |
+| R recall (spaced truths) | 2,515 / 2,581 = **97.4 %** | >= 85 % | PASS |
+
+- 2,620 truths (pickup_result). The worst sessions for P: fiT56 18.5 %, fiT55 15.1 %, fiT49 14.5 %.
+- **The cause of P (read after the score, fiT56):** of its extra events, 5 were the SAME item
+  <= 6 s after the previous event and 2 came 3-8 s after a pickup. They are the same popup counted
+  again: is_new's coarse ink test fires on a change over a box that never left the screen (a
+  cursor or a damage number over it).
+- **Not used:** no item list reaches live from this round.
+- **Round 2 (pre-registered here, before any change):**
+  - A NEW popup needs the box to have LEFT the screen since the last event, or a different item or
+    width. An item gained twice in a row while the box stays up is then one event, so the
+    recall of such repeats is reported apart.
+  - The amount: the 96 unread are diagnosed (unseen digits, the tail cut by a long name, a cover)
+    on the calibration sessions only. Any new digit glyphs come from those sessions too.
+  - **A NEW held-out**, since every fiT session is used: the other 720 recordings with packets on
+    the NAS (rdp-xmas02-xw*, -fs*, -fsTn*, rdp-rogue-*, rdp-thief-*), scored once, with the same
+    four bars.
