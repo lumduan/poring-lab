@@ -2,15 +2,15 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import { FALLBACK_COLOURS } from "../maps/draw.ts";
-import { cellPx, drawLive, HER_COLOUR, NEAR_R, sightLine, sightOf, viewWindow } from "./livemap.ts";
+import { cellPx, drawLive, HER_COLOUR, NEAR_R, sightLine, sightOf, TRAIL_COLOUR, viewWindow } from "./livemap.ts";
 import type { LiveSummary } from "./liverun.ts";
 
 /** A recording 2D context: each call with the fill colour at that moment. */
 function recorder() {
-  const calls: { op: string; args: unknown[]; fill: unknown; alpha: number }[] = [];
+  const calls: { op: string; args: unknown[]; fill: unknown; stroke: unknown; width: number; alpha: number }[] = [];
   const ctx: Record<string, unknown> = { fillStyle: "", strokeStyle: "", lineWidth: 1, lineJoin: "miter", lineCap: "butt", globalAlpha: 1, font: "" };
   for (const op of ["fillRect", "clearRect", "beginPath", "arc", "fill", "stroke", "moveTo", "lineTo", "closePath", "setLineDash", "fillText", "strokeText", "roundRect"]) {
-    ctx[op] = (...args: unknown[]) => calls.push({ op, args, fill: ctx.fillStyle, alpha: ctx.globalAlpha as number });
+    ctx[op] = (...args: unknown[]) => calls.push({ op, args, fill: ctx.fillStyle, stroke: ctx.strokeStyle, width: ctx.lineWidth as number, alpha: ctx.globalAlpha as number });
   }
   ctx.measureText = () => ({ width: 10 });
   return { ctx: ctx as never, calls };
@@ -64,4 +64,17 @@ test("she is drawn green OVER the red monsters; the walk grid as /maps; stale do
   // outside the window: not drawn
   const out = recorder();
   assert.deepEqual(drawLive(out.ctx, { rows, win: { x0: 6, y0: 0, w: 2, h: 4 }, scale: 10, sight: sightOf(SUMMARY), colours: FALLBACK_COLOURS }), { her: false, mobs: 1, trail: 0 });
+});
+
+test("her path is a WHITE line on a dark casing (Batt 2026-11-21: the green line was hard to see)", () => {
+  const { ctx, calls } = recorder();
+  const sight = { ...sightOf(SUMMARY), mobs: [] }; // no monster: their edges are strokes too
+  drawLive(ctx, { rows: ["........", "........", "........", "........"], win: { x0: 0, y0: 0, w: 8, h: 4 }, scale: 10, sight, colours: FALLBACK_COLOURS });
+  const strokes = calls.filter((c) => c.op === "stroke");
+  assert.equal(strokes.length, 3); // the casing, the white line, then her dot's edge
+  assert.equal(strokes[0].stroke, FALLBACK_COLOURS.wall);
+  assert.equal(strokes[1].stroke, TRAIL_COLOUR);
+  assert.equal(TRAIL_COLOUR, "#ffffff");
+  assert.ok(strokes[0].width > strokes[1].width); // the casing shows on both sides
+  assert.notEqual(strokes[1].stroke, HER_COLOUR); // her dot stays green, the path is white
 });
