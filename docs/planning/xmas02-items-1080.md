@@ -553,3 +553,33 @@ A count under its minimum is NO VERDICT, never a pass.
   (imgsz 1280 and seed 20261004 are the trainer's defaults). Estimate: round 5's rate (0.52 s a
   frame-epoch) x 5,457 x 3 = ~2.4 h.
 - After it: the freeze, the ONNX, then 8a / 8b once (sections 8a, 8b), then 8c in play.
+
+### Amendment 14 (2026-11-21 07:31 ICT from `date`): the training YIELDS the GPU to Batt's live Run; a false freeze, stopped and cleaned
+
+- **Batt's live Run** (`flowplay-poring-lab-live-11210548`, his PC, started 05:48) shares the Arc
+  with the dev worker. Its own detection records (detections.jsonl, the live detect server):
+
+  | window | calls | GPU path | median | p95 |
+  |---|---|---|---|---|
+  | live alone (before 06:13) | 1,589 | 100 % | 23.0 ms | 35.9 ms |
+  | beside the dev probes' serve step (06:14-06:43) | 1,910 | 100 % | 22.9 ms | 36.2 ms |
+  | **beside this round's training (06:44-07:28)** | 2,799 | 100 % | **35.3 ms** | **166.2 ms** |
+  | after the training stopped (07:29-07:31) | 164 | 100 % | 22.4 ms | 32.4 ms |
+
+  So the training slowed his bot's box reads (no CPU fallback, but 4.6 x at p95). His live tests
+  come first: **the training was stopped at 07:28:51** (SIGINT to the trainer by its host pid, the
+  guard's own first stop step; the guard: `FAILED rc=130`, the worker idle, nothing of ours on the
+  GPU). Epoch 1 had ended (VAL, monitor only: P 0.931, R 0.899, mAP50 0.914); the mid-epoch
+  checkpoint of 07:26 holds the rest (`--resume` continues at that batch).
+- **A slip (mine), caught and cleaned:** the training's wrapper logged "train ended rc=0" (it
+  read `$?` after a `$(date)` in the same line), which started the queued freeze on the
+  interrupted model. It exported an ONNX (07:29) and began the archive copy; I killed it at the
+  copy, before the local delete. Cleaned: the partial NAS copy (args, results, stream, the
+  epoch-1 best/last, byte-identical to the local files) removed; the half-trained
+  `xmas02fi6-last-736x1280.onnx` (sha256 e018503f...) removed from the detector folder (no server
+  had listed it); the local run untouched. Its log is kept as `freeze-r6-ABORTED-0729.log`. The
+  "FROZEN 4338e030..." line in it is NOT this round's freeze.
+- **From now on** (`train_sup.sh`, scratch): the training resumes only while no live Run holds
+  the GPU (live's detect socket absent), stops again by the same SIGINT if one starts, and resumes
+  after. The freeze runs only when results.csv holds all 3 epochs and the last guarded step said
+  ALL STEPS OK; every rc is captured before any other expansion.
