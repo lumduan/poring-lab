@@ -306,3 +306,27 @@ Written before any probe of this round.
   virtual frame ~69 ms, ro_agent's measure), so its 3 pairs span more time; why a "still" scene
   still fails a quarter of the time at 1080 is the next reading (the targets' own motion, the
   scene's measure on the scaled world), before the fix is chosen.
+
+### Amendment 4b (2026-11-21 09:07 ICT from `date`, still before any fix): the unknowns follow how long she was MOVING
+
+- The same records, the box targets with a cursor verdict, binned by the still wait (how long the
+  scene took to read still: long = she or the camera moved for most of it):
+
+  | still wait | 720 unknown | 1080 unknown |
+  |---|---|---|
+  | 300-600 ms | 0 / 75 | 8 / 208 (4 %) |
+  | 600-900 ms | 0 / 14 | 19 / 204 (9 %) |
+  | 900-1200 ms | 0 / 9 | **59 / 78 (76 %)** |
+  | 1200-1450 ms | 0 / 6 | **47 / 69 (68 %)** |
+  | timed out (1.5 s) | 1 / 31 (3 %) | **183 / 206 (89 %)** |
+
+  - Among the 1080 "still" hovers, the unknown ones had waited a median 1,169 ms, the sword ones
+    602 ms; their distance (143 vs 171 px) and their detection's age (70 vs 66 ms after the
+    still) hardly differ.
+- So at 1080 a hover fails when it follows a long motion, even once the 3-pair check says still;
+  at 720 it never mattered. P1 says what the failures are in motion: half no unit under the
+  point, the rest a late sword. **The fix's direction (chosen in its own amendment, with tests):**
+  the hover waits on HOW LONG the scene has been still at 1080 (not only the 3 pairs), and/or a
+  second fresh detection and hover after an unknown, measured by 5a (a walk-then-stop probe
+  block) and decided by 5b (play). The pinned runner stays untouched (a Run-time patch, as
+  flow_play's others, and a setting with today's values as the default).
