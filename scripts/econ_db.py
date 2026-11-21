@@ -581,6 +581,10 @@ def ingest(
         if sd is not None:  # no packets: the SCREEN record (Batt 2026-11-21, decision 2 = A)
             try:
                 j = es.load_session(sd)
+            except es.EmptySession as e:  # a hunt core that never played (Stop at its start):
+                out.append({"session": sid, "result": "empty", "source": es.SOURCE,
+                            "why": str(e)})  # fmt: skip  # nothing to record, not a refusal
+                continue
             except (OSError, ValueError) as e:
                 out.append({"session": sid, "result": "refused", "why": f"{type(e).__name__}: {e}"})
                 continue
