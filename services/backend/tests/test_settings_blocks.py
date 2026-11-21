@@ -103,9 +103,12 @@ def test_the_one_box_with_its_blocks_at_their_defaults_plays_todays_argv() -> No
         "alarm_near_px",
         "alarm_near_score",
         "CURSOR_WAIT_S",
+        "item_floor_1080",
+        "item_ring_1080",
     }
     # 120: + fly_first (18), + fly_first_hp (18.11), + fly_first_land and FF_LAND_S (18.17)
-    assert len(held) == len(fc.BLOCKS) - 5 - 6 == 120
+    # 8 optional since 2026-11-21: + item_floor_1080, item_ring_1080 (xmas02-items-1080.md A22)
+    assert len(held) == len(fc.BLOCKS) - 5 - 8 == 120
     assert hunt_argv(json.dumps(d)) == TODAY
 
 

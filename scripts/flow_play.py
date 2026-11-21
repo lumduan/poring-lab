@@ -1047,6 +1047,7 @@ class HuntCore:
                 role_items(dh, plan.vals),
                 role_alarm(dh, plan.vals, warn),
                 near_alarm(dh, plan.vals),
+                item_rule(plan.vals),
                 seen_boxes(seen, sight),
             ):
                 res.rc = run_fn(a, hook=hook, session=(player.io.agent, player.io.screen), **box)
@@ -2119,6 +2120,71 @@ def near_alarm(dh: Any, vals: Mapping[str, Any]) -> Iterator[None]:
         yield
     finally:
         dh.alarm_seen = saved
+
+
+def item_boxes_kept(boxes: Sequence[Any], img_bgr: Any, floor: float, ring: int,
+                    pad: int = 6) -> list[Any]:  # fmt: skip
+    """PURE (xmas02-items-1080.md Amendment 22, the fi7 rule at run time): the detector's boxes
+    without the FLOOR-ITEM boxes under ``floor`` (A) or on the no-entry cursor ring, ``ring`` or
+    more pure-red px in the box plus ``pad`` (B). ``img_bgr``: the runner's frame (BGR, from BGRA;
+    fi7_rule counts in RGB, so the channels are swapped). Every other class passes untouched; 0
+    turns a half off."""
+    import fi7_rule as f7
+
+    out = []
+    rgb = None
+    for b in boxes:
+        if getattr(b, "cls", None) != f7.ITEM_CLASS:
+            out.append(b)
+            continue
+        if floor > 0 and float(getattr(b, "score", 0.0)) < floor:
+            continue
+        if ring > 0 and img_bgr is not None:
+            if rgb is None:
+                rgb = img_bgr[..., 2::-1]
+            if f7.ring_red_px(rgb, (b.x0, b.y0, b.x1, b.y1), pad) >= ring:
+                continue
+        out.append(b)
+    return out
+
+
+@contextlib.contextmanager
+def item_rule(vals: Mapping[str, Any]) -> Iterator[None]:
+    """xmas02-items-1080.md Amendment 22 (round 7): at 1080 only (ro_agent.virtual_active), the
+    item model's boxes pass item_boxes_kept before the runner sees them -- the detector's own
+    ``detect`` (both classes, as seen_boxes) is wrapped for this hunt core; the runner file stays
+    byte-identical. Off (both 0, not in use, or 720) = unchanged. A failing filter gives the
+    detector's own boxes (the old behaviour), never a stop."""
+    from poring_flow import settings as st
+
+    floor = float(vals.get("item_floor_1080") or 0.0) if st.in_use("item_floor_1080", vals) else 0.0
+    ring = int(vals.get("item_ring_1080") or 0) if st.in_use("item_ring_1080", vals) else 0
+    import ro_agent as r
+
+    if (floor <= 0 and ring <= 0) or not r.virtual_active():
+        yield
+        return
+    import unit_detector as ud
+
+    dets = [(c, c.detect) for c in (ud.UnitDetector, ud.GpuDetector)]
+
+    def wrap(f: Callable[..., Any]) -> Callable[..., Any]:
+        def detect(self: Any, img: Any, *a: Any, **k: Any) -> Any:
+            got = f(self, img, *a, **k)
+            try:
+                return item_boxes_kept(got, img, floor, ring)
+            except Exception:  # never a stop: the detector's own boxes
+                return got
+
+        return detect
+
+    for c, f in dets:
+        c.detect = wrap(f)  # type: ignore[method-assign]
+    try:
+        yield
+    finally:
+        for c, f in dets:
+            c.detect = f  # type: ignore[method-assign]
 
 
 @contextlib.contextmanager
