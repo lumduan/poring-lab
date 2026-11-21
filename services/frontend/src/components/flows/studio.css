@@ -1015,8 +1015,6 @@
 }
 .live-map-box {
   display: flex;
-  align-items: center;
-  justify-content: center;
   height: clamp(14rem, 45vh, 40rem);
   min-height: 10rem;
   overflow: auto;
@@ -1025,8 +1023,38 @@
   border: 1px solid var(--border);
   border-radius: 6px;
 }
+/* centred by auto margins, never align-items: a larger canvas then scrolls from its top-left
+   instead of being cut at the top (the 11-21 PC picture) */
 .live-map-box canvas {
   display: block;
+  margin: auto;
+}
+/* Batt 2026-11-21: while the live map shows, it FILLS the Map pane (the pane's height, however
+   the panes are stacked): the whole map in view; the simulated path folds under it */
+.pane-body.pane-body-fill {
+  display: flex;
+  flex-direction: column;
+}
+.paths-live {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 0.4rem;
+  min-height: 0;
+}
+.paths-live > .live-map {
+  flex: 1;
+  min-height: 12rem;
+}
+.paths-live .live-map-box {
+  flex: 1;
+  height: auto;
+  min-height: 8rem;
+  resize: none;
+}
+.paths-sim > summary {
+  cursor: pointer;
+  color: var(--muted);
 }
 .live-map-empty {
   padding: 1rem;
@@ -1760,6 +1788,12 @@
   .studio[data-testid="flows-app"] .pane {
     flex: none;
     min-height: 0;
+  }
+  /* on a phone the page scrolls: the live map keeps its own height (Batt: "on the phone it fits") */
+  .studio[data-testid="flows-app"] .paths-live .live-map-box {
+    flex: none;
+    height: clamp(14rem, 45vh, 40rem);
+    resize: vertical;
   }
   .studio[data-testid="flows-app"] .pane-body {
     flex: none;
