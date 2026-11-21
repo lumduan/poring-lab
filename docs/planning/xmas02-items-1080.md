@@ -729,3 +729,28 @@ A count under its minimum is NO VERDICT, never a pass.
     - it is scored once on a NEW 1080 held-out (this round's are now spent).
   - Its first step: look at the 40 I3 frames (where the boxes are, on what) to choose that
     change. That reading is diagnosis on a spent held-out; it scores nothing.
+
+### Amendment 21 (2026-11-21 15:07 ICT from `date`): the 8a false boxes read (diagnosis on the spent held-out; scores nothing)
+
+- **What I3 counted.** Script: `diag_i3.py`, scratch, which replays `fi_eval.i3`.
+  - 45 boxes on 42 item-free frames; 10 of the boxes are inside her 5 x 5.
+  - The four natural held-outs give the scored 40 frames: ifH1 9, ifH2 12, ifH3 8, ifH4 11.
+    The stagings ifsH1 and ifsH2 have 1 frame each.
+- **Confidence separates most of them.**
+  - The 45 false boxes: 20 score 0.26-0.33, 10 score 0.37-0.47, and 15 score 0.57-0.77.
+  - The 53 drops the model found: their best box scores 0.54-0.90.
+  - A floor of 0.5 keeps all 53 drops and leaves 15 false frames: 13 of the natural 40, about
+    0.43 % of 3,019.
+  - Without the floor, the 0.5 % bar needs 15 frames or fewer.
+- **The confident ones** (a contact sheet of the 15, scratch only):
+  - 7 sit on the client's red NO-ENTRY cursor ring: ifH2 frames 497-502, all inside her 5 x 5,
+    and ifH3 f152. At 1080 the client draws its cursor at native size (section 1), so it is
+    item-sized in the virtual picture.
+  - The other 8 are small round sprites on the floor, not identified from the crops.
+- **Round 7's candidates** (not pre-registered yet; this amendment fixes no number):
+  1. A 1080-only confidence floor near 0.5, the loot's own detector setting.
+  2. "The bot's own cursor is never an item": an item box at the pointer's place is dropped.
+     The runner always knows where it put the pointer.
+  3. 1080 frames with the cursor rings as hard negatives in training.
+- Any of them is scored on a NEW 1080 held-out (Amendment 19). The numbers above choose the
+  candidates; they never pass them.
