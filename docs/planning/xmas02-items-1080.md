@@ -583,3 +583,23 @@ A count under its minimum is NO VERDICT, never a pass.
   the GPU (live's detect socket absent), stops again by the same SIGINT if one starts, and resumes
   after. The freeze runs only when results.csv holds all 3 epochs and the last guarded step said
   ALL STEPS OK; every rc is captured before any other expansion.
+
+### Amendment 15 (2026-11-21 08:20 ICT from `date`, BEFORE the freeze and BEFORE any held-out label): the evaluation's inputs, fixed
+
+- **The training resumed** at 08:13:54 after Batt's live Run ended (07:42, his bag full) and the
+  cursor probes' server step ended: "Resuming MID-EPOCH from mid.pt: epoch 2 batch 0/2729, state
+  restored bitwise" (the epoch-end checkpoint; ~2 min of epoch 2 before the 07:28 stop redone).
+- **After the freeze** (`train_sup.sh` -> `freeze_r6.sh`: the sha256, the ONNX, the guarded
+  archive with absolute paths), one chain (`eval_chain_r6.sh`, scratch):
+  - **8a:** ifH1, ifH2, ifsH1 labelled `--spec 1080 --eval-test --model <the archived frozen
+    weights> --model-sha256 <the freeze's>` (the chain refuses unless the archive's sha256 is the
+    freeze's); their refs; the new model's GPU predictions (predict_dir in the worker);
+  - **the evaluation pack: `fi_labels.py pack --spec 1080 --round 6 --eval-test --seed 72`**
+    (the seed fixed HERE; rounds 1-5 and T2 used 61, 63, 65-69, 71);
+  - **8b:** the 720 round 5's held-out (fsH1, fiH1, fiH2): their own eval label files as
+    archived on 11-12 (`scratch-archive/2026-11-12/.../xmas-fi/labels-eval-r5`, copied unchanged,
+    sha256 listed), their refs, the new model's GPU predictions; the seed-69 key and the answers
+    of U and V reused (section 8b: only the predictions are new);
+  - GPU steps start only while no live Run holds the GPU and the dev worker is idle.
+- Then two NEW blind labellers on the seed-72 pack, `fi_blind_score --both-good`, the latency
+  steps (I5 against xmas02fi5), and `fi_eval --strata r6` once (8a), `--strata r5` once (8b).
