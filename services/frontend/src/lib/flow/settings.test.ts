@@ -57,8 +57,9 @@ test("the registry is the engine's: 133 setting blocks in 11 tabs, the keys none
   // + fly_first (live-blocks 18), + fly_first_hp (18.11), + fly_first_land and FF_LAND_S (18.17);
   // + swap_item and heal_item (roles-not-names.md step 2, 2026-11-20: OPTIONAL blocks)
   // + alarm_monsters (roles-not-names.md step 3); + alarm_near_px and alarm_near_score (goblin-alarm-1080.md rule A); + CURSOR_WAIT_S (cursor-1080.md Amendment 5)
+  // + item_floor_1080 and item_ring_1080 (xmas02-items-1080.md Amendment 22: the fi7 rule at 1080, off by default)
   assert.equal(SETTING_BLOCKS.length, 133);
-  assert.deepEqual(SETTING_BLOCKS.filter((s) => s.optional).map((s) => [s.name, s.kind, s.default]), [["swap_item", "item", 1201], ["heal_item", "item", 504], ["alarm_monsters", "monsters", ""], ["CURSOR_WAIT_S", "number", 0.35], ["alarm_near_px", "number", 0], ["alarm_near_score", "share", 0.85]]);
+  assert.deepEqual(SETTING_BLOCKS.filter((s) => s.optional).map((s) => [s.name, s.kind, s.default]), [["swap_item", "item", 1201], ["heal_item", "item", 504], ["alarm_monsters", "monsters", ""], ["CURSOR_WAIT_S", "number", 0.35], ["item_floor_1080", "share", 0], ["item_ring_1080", "number", 0], ["alarm_near_px", "number", 0], ["alarm_near_score", "share", 0.85]]);
   // matpilot round 20 #5: in the box's tab order (survival before knife); "loop" is "timing"
   assert.deepEqual([...SETTING_TABS], ["survival", "knife", "exits", "respawn", "start", "fight", "aim", "loot", "walk", "safety", "timing"]);
   assert.deepEqual(SETTINGS.fields.filter((x) => !x.block).map((x) => x.name), ["heal_key", "fly_key", "home_key", "knife_key", "dagger_key"]);
