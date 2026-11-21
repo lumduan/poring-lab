@@ -202,3 +202,34 @@ count font of Amendment 1), pooled counts:
 - The round-1 held-out (fiT21+) is not used to tune. It is run again AFTER the r2 score, reported
   only.
 
+### RESULT round 2 (2026-11-22 05:59 ICT from `date`): the one score -- I2, P and R PASS; I1 FAILS (94.2 %): the reader is NOT used yet
+
+`item_popup_eval.py score --set r2` at 935c777e (Amendment 2), 04:19-05:58, the 77 sessions of
+set r2; `score-r2.json` sha256 5e2322a7...; pooled counts:
+
+| line | got | bar | |
+|---|---|---|---|
+| I1 the right item | 1,503 / 1,595 = **94.2 %** (88 unread, 4 wrong) | >= 97 % | **FAIL** |
+| I2 the right amount | 1,560 / 1,595 = 97.8 % (14 unread) | >= 97 % | PASS |
+| P false events | 3 / 1,598 = 0.19 % | <= 2 % | PASS |
+| R recall (spaced truths) | 1,546 / 1,629 = 94.9 % | >= 85 % | PASS |
+
+- 1,692 truths. Repeats (the same item <= 6 s after the last): 70, found 12, as the one-event
+  rule predicts.
+- **Round 2 fixed what it aimed at:** false events 7.3 % -> 0.19 %, amounts 95.8 % -> 97.8 %.
+- **Where I1 fails (read after the score):**
+
+  | family | matched | right item | unread |
+  |---|---|---|---|
+  | thief-* (natural play) | 201 | 98.0 % | 0.5 % |
+  | rogue-* (natural play) | 559 | 97.5 % | 2.3 % |
+  | xmas02 fs* (item stagings) | 835 | 91.1 % | 8.9 % (74 of the 88) |
+  | xmas02 xw* | 0 pickups | | |
+
+  The unread items sit in the STAGINGS (staged piles picked up in quick runs). Their cause is not
+  read yet (which ids, far or ambiguous, covered or not).
+- **Not used:** no item list reaches live from this round. Set r2 is spent.
+- **Next (round 3, pre-registered before any change):** diagnose the stagings' unread items on
+  set r2 (now spent); any fix is scored on a NEW held-out (the 1080 runs' real-frame grabs on dev,
+  section 4's run-time check, or new 720 recordings).
+
