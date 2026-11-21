@@ -98,8 +98,10 @@ R5_PILOTS = ("-rdp-hunt-xmas02-fiH1", "-rdp-hunt-xmas02-fiH2")
 R5_AURA_OFF = (*R5_PILOTS, "-rdp-xmas02-fsH1")
 # xmas02-items-1080.md 4 (round 6, the 1080 round): its held-out by NAME (fi_labels.IF_HELD_OUT;
 # a test pins them equal), ONE pooled stratum I1h; the natural drops and the staging apart
-R6_PILOTS = ("-xmas02-ifH1", "-xmas02-ifH2")
-R6_STAGING = ("-xmas02-ifsH1",)
+# + Amendment 16 (2026-11-21, before any answer): the held-out was short, so ONE extension: ifH3,
+# ifH4 (natural) and ifsH2 (a 4-spot staging on cells no staging shares)
+R6_PILOTS = ("-xmas02-ifH1", "-xmas02-ifH2", "-xmas02-ifH3", "-xmas02-ifH4")
+R6_STAGING = ("-xmas02-ifsH1", "-xmas02-ifsH2")
 R6_HELD_OUT = (*R6_PILOTS, *R6_STAGING)
 STRATA = {"r2": (R2_AURA, R2_NOAURA, R2_PILOTS), "r3": (R3_AURA, R3_NOAURA, R3_PILOTS),
           "r4": (R4_AURA, R4_NOAURA, R4_PILOTS), "r5": (R5_AURA_OFF, (), R5_PILOTS),

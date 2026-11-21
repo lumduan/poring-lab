@@ -350,7 +350,14 @@ def r6_latency() -> dict[str, Any]:
 
 
 def test_r6_names_and_its_own_bar_values() -> None:
-    assert fe.R6_HELD_OUT == ("-xmas02-ifH1", "-xmas02-ifH2", "-xmas02-ifsH1")
+    assert fe.R6_HELD_OUT == (
+        "-xmas02-ifH1",
+        "-xmas02-ifH2",
+        "-xmas02-ifH3",
+        "-xmas02-ifH4",
+        "-xmas02-ifsH1",
+        "-xmas02-ifsH2",
+    )  # + Amendment 16
     assert fe.STRATA["r6"] == (fe.R6_HELD_OUT, (), fe.R6_PILOTS)
     b = fe.bars_of("r6")
     assert (b["i1_recall"], b["i1_precision"]) == (0.90, 0.95)

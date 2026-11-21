@@ -165,7 +165,7 @@ R5_STAGING = ("-rdp-xmas02-fsH1",)  # the second slot (fi_eval.R5_AURA_OFF's sta
 # xmas02-items-1080.md (round 6, the 1080 item round; T-I4): round 5's evaluation pack, the first
 # slot the natural drops (ifH1 + ifH2, <= 70), the second the staging (ifsH1, <= 50); its seed from
 # the CLI (the plan names none; the parent's amendment records it before the pack is drawn)
-R6_STAGING = ("-xmas02-ifsH1",)  # fi_eval.R6_STAGING (a test pins the two equal)
+R6_STAGING = ("-xmas02-ifsH1", "-xmas02-ifsH2")  # fi_eval.R6_STAGING (a test pins them equal)
 PER_FLOOR_ITEM = 3  # O.5 / O.9: at most 3 crops per floor item
 HARD_POOL = 200  # absent points fitted to find the hard ones (one per TRAIN frame, seeded)
 NEG_DX, NEG_DY = 7, 5  # O.1e (fi_study.py): an absent point within +-7 x +-5 cells of ours ...
@@ -185,7 +185,15 @@ X1080_MONSTER_SHA256 = "9c73278f8c1aca1fb315673e3ee350db904407349b7655b14dee4d47
 # the recorder names a session <stamp>-<backend>-xmas02-<label> (20261120T214246-rdp-xmas02-ifF);
 # no backend in the suffixes, so a name is refused whatever path recorded it
 IF_FIT = ("-xmas02-ifF",)  # section 4: FIT / VAL, the absent controls; never TRAIN
-IF_HELD_OUT = ("-xmas02-ifH1", "-xmas02-ifH2", "-xmas02-ifsH1")  # section 4: refused by NAME
+# section 4 + Amendment 16 (the one extension: ifH3, ifH4, ifsH2): refused by NAME
+IF_HELD_OUT = (
+    "-xmas02-ifH1",
+    "-xmas02-ifH2",
+    "-xmas02-ifsH1",
+    "-xmas02-ifH3",
+    "-xmas02-ifH4",
+    "-xmas02-ifsH2",
+)
 FIT_SCALES_1080 = tuple(round(0.85 + 0.05 * k, 2) for k in range(7))  # 0.85 .. 1.15 (T-I2)
 FIT_R_1080 = gi.R_MEASURE  # the anchor's search around the UNANCHORED prediction (gef10 8's +-10)
 T_GRID = tuple(round(0.05 * k, 2) for k in range(1, 21))  # 0.05 .. 1.00 (O.3 (c)'s 0.05 grid)
@@ -305,7 +313,7 @@ XMAS02_FI_1080 = FiSpec(
     screen="1080",
     world_scale=1.5,  # rec_paths.VIEW_1080's (a test pins the two equal)
     work=FI_1080,
-    heldout_note="ifH1 / ifH2 / ifsH1, xmas02-items-1080.md 4",
+    heldout_note="ifH1 / ifH2 / ifsH1 (+ ifH3 / ifH4 / ifsH2: Amendment 16), xmas02-items-1080.md",
     fit_note="ifF",
     refused_note="",
 )

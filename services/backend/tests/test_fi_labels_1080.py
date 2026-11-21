@@ -33,7 +33,10 @@ FIT = "20261120T214246-rdp-xmas02-ifF"
 TRAIN = "20261121T010000-rdp-xmas02-ifT1"
 STAGING = "20261121T030000-rdp-xmas02-ifs1"
 HELD = ("20261121T050000-rdp-xmas02-ifH1", "20261121T060000-rdp-xmas02-ifH2",
-        "20261121T070000-rdp-xmas02-ifsH1")  # fmt: skip
+        "20261121T070000-rdp-xmas02-ifsH1",
+        # Amendment 16's one extension
+        "20261121T100000-rdp-xmas02-ifsH2", "20261121T101000-rdp-xmas02-ifH3",
+        "20261121T103000-rdp-xmas02-ifH4")  # fmt: skip
 LAB_720 = {"backend": "rdp", "game_region": [80, 77, 1280, 720], "server": "lab-rathena",
            "format": "png", "recorder_version": 8}  # fmt: skip
 VIRTUAL = {"backend": "rdp", "game_region": [rec_paths.VIRTUAL_X0, 0, 1280, 720],
@@ -53,7 +56,14 @@ def test_the_1080_spec_reads_every_pixel_constant_from_its_params() -> None:
     assert SPEC.monster_params_sha256.startswith("9c73278f8c1aca1f")
     assert SPEC.params == Path("/dev/shm/poring-lab-tmp/i1080/items-params-1080.json")
     assert SPEC.val_suffixes == ("-xmas02-ifF",) == SPEC.absent_suffixes
-    assert SPEC.eval_suffixes == ("-xmas02-ifH1", "-xmas02-ifH2", "-xmas02-ifsH1")
+    assert SPEC.eval_suffixes == (
+        "-xmas02-ifH1",
+        "-xmas02-ifH2",
+        "-xmas02-ifsH1",
+        "-xmas02-ifH3",
+        "-xmas02-ifH4",
+        "-xmas02-ifsH2",
+    )  # Amendment 16
     assert (SPEC.screen, SPEC.world_scale) == ("1080", rec_paths.VIEW_1080["world_scale"]) == \
         ("1080", 1.5)  # fmt: skip
     assert SPEC.rule == fl.RULE_1080 == "xmas02-fi-1-1080" and fl.RULE == "xmas02-fi-1"
