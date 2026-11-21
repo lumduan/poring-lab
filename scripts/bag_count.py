@@ -11,21 +11,29 @@ What the screen offers (measured 2026-11-20 on the lab's 1920x1080 client; the p
 RO draws the inventory 1:1 on the REAL client (not a pasted panel of the virtual view, which
 would shrink it with the world), so everything here reads the real client frame (client pixels).
 
-- 7 x 6 slots on a 32 px pitch; slot (0, 0)'s icon is the 24 x 24 square at the window's origin +
-  ICON0. An EMPTY slot shows an oval (OVAL's colour; its box OVAL_BOX in the square). The oval is
-  drawn behind an item too, so the pictures are composited over THIS client's own empty slot, cut
-  at run time from an empty slot of the open bag (any skin, no stored client pixels).
+- 7 columns x ROWS slots on a 32 px pitch: 6 rows on the client's default window, more when the
+  player drags it taller (Batt's live bag: 7 x 9, 2026-11-21), so the rows are READ from the
+  pixels (ROWS_MIN .. ROWS_MAX), never assumed. Slot (0, 0)'s icon is the 24 x 24 square at the
+  window's origin + ICON0. An EMPTY slot shows an oval (OVAL's colour; its box OVAL_BOX in the
+  square). The oval is drawn behind an item too, so the pictures are composited over THIS
+  client's own empty slot, cut at run time from an empty slot of the open bag (any skin, no stored
+  client pixels).
 - The count: PURE BLACK digits (max channel <= COUNT_INK; an icon's darkest outline is 8),
   left-aligned from the icon's x + 14, rows +18 .. +26, in the hotbar's glyphs (hotbar_count).
 - Four tabs on the left (TABS, from the window's origin): Use, Eqp, Etc, Fav.
 
 The window is FOUND by the lattice of empty-slot ovals (a rule: no template, no text, any
-language): the 7 x 6 placement with the most ovals, and NO oval one pitch outside it on any side
-(a placement shifted by a column would see the real last column's ovals there).
+language): the 7 x ROWS placement with the most ovals, and NO oval one pitch outside it on any side
+(a placement shifted by a column would see the real last column's ovals there). The ovals fix the
+window's columns and its LAST row; its TOP is the first row, going up, that shows no slot at all.
+A row shows a slot when one of its cells shows the slot's oval -- whole (empty), or around an
+item's icon, or as a NEW item's pink glow -- in at least SLOT_ROWS rows of the oval's box (the
+title bar above row 0 shows at most 2: one line of a blue gradient). Without that cue a tab whose
+first rows are full of items would fit a window of any height whose rows are all below its title.
 
 Never guessed: a slot is "item" (its ids -- a shared icon is a group -- and its count), "empty", or
 "unread" with the reason. Items fill a tab in reading order, so an item after an empty slot is an
-anomaly (a pointer, a tooltip): unread. A tab whose 42 slots are all items may hold more ("full").
+anomaly (a pointer, a tooltip): unread. A tab whose slots are all items may hold more ("full").
 """
 
 from __future__ import annotations
@@ -47,9 +55,14 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 ROOT = Path(__file__).resolve().parents[1]
 SIZE = 24  # the item bitmap's side, drawn 1:1
 PITCH = 32
-COLS, ROWS = 7, 6
-SLOTS = COLS * ROWS
+COLS = 7
+# the window's rows: the client's default is 6 (the lab's); a player drags it taller (Batt's live
+# bag, 2026-11-21: 9). Read from the pixels (find_bag / rows_at), searched within these bounds.
+ROWS_MIN, ROWS_MAX = 6, 12
 ICON0 = (44, 21)  # slot (0, 0)'s icon square, from the window's origin (its title bar's top-left)
+# the window's size from its origin at ROWS_MIN rows (measured 2026-11-20, ro_agent's 1:1 panel);
+# a taller window adds one PITCH per row (its footer stays below its last row)
+WINDOW_W, WINDOW_H_MIN = 280, 255
 OVAL = (206, 214, 231)  # an empty slot's oval (RGB)
 OVAL_TOL = 30  # a pixel within this (sum of |RGB - OVAL|) is oval-coloured
 # the oval's BOUNDING BOX in the icon square (dx, dy, w, h): its OVAL_TOL pixels span rows 11-20
@@ -58,6 +71,13 @@ OVAL_TOL = 30  # a pixel within this (sum of |RGB - OVAL|) is oval-coloured
 OVAL_BOX = (1, 11, 22, 10)
 OVAL_SHARE = 0.6  # an empty cell's box is at least this oval-coloured (an ellipse fills ~0.78)
 LATTICE_MIN = 2  # the bag is found by at least this many empty-slot ovals
+# a cell SHOWS A SLOT when at least this many rows of its oval box hold oval-coloured (or NEW-glow
+# pink) pixels. Measured 2026-11-22 on the lab's 1080 bag: an empty cell 10, an item row 6-10, the
+# title bar above row 0 1-2 per cell (one line of its gradient; the close buttons). Over the 2,381
+# icons of slot_items' archive drawn on that bag's empty slot, 3.8 % show fewer than 4 rows (4.5 %
+# of weapons and armour), so a row of 7 items that hides every oval is ~1e-9.
+SLOT_ROWS = 4
+GLOW_RB_MIN, GLOW_G_MAX = 220, 215  # a NEW item's pink glow (255, 131-165, 247): R, B >= / G <=
 TABS: dict[str, tuple[int, int]] = {"use": (10, 45), "eqp": (10, 100), "etc": (10, 154),
                                     "fav": (10, 205)}  # fmt: skip
 COUNT_DY, COUNT_ROWS = 18, 9  # the digits' rows from the icon's top
@@ -101,19 +121,37 @@ def rgb_of(frame_bgr: Any) -> np.ndarray:
     return np.ascontiguousarray(np.asarray(frame_bgr)[..., 2::-1]).astype(np.int16)
 
 
-def oval_mask(frame_bgr: Any) -> np.ndarray:
-    """PURE: the frame's oval-coloured pixels."""
-    rgb = rgb_of(frame_bgr)
-    return np.asarray(np.abs(rgb - np.asarray(OVAL, np.int16)).sum(axis=2) <= OVAL_TOL)
+def glow_mask(rgb: np.ndarray) -> np.ndarray:
+    """PURE: a NEW item's pink glow (RGB, any shape (..., 3))."""
+    return np.asarray((rgb[..., 0] >= GLOW_RB_MIN) & (rgb[..., 2] >= GLOW_RB_MIN)
+                      & (rgb[..., 1] <= GLOW_G_MAX))  # fmt: skip
 
 
-def oval_cells(frame_bgr: Any) -> tuple[np.ndarray, np.ndarray]:
-    """PURE: for an oval box (OVAL_BOX's size) with its top-left at (y, x): (empty, tight).
+def cell_maps(frame_bgr: Any) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    """PURE: for an oval box (OVAL_BOX's size) with its top-left at (y, x): (empty, tight, slot).
     ``empty``: at least OVAL_SHARE of it is oval-coloured. ``tight``: the oval touches all four
     of the box's edges -- only at the oval's exact place (the box is the oval's bounding box), so
-    the share, which holds over +-2 px, does not pick the place alone."""
-    m = oval_mask(frame_bgr).astype(np.int32)
+    the share, which holds over +-2 px, does not pick the place alone. ``slot``: at least SLOT_ROWS
+    of its rows hold an oval-coloured or glow-pink pixel (a slot, empty or not)."""
+    rgb = rgb_of(frame_bgr)
+    oval = np.abs(rgb - np.asarray(OVAL, np.int16)).sum(axis=2) <= OVAL_TOL
     w, h = OVAL_BOX[2], OVAL_BOX[3]
+    if oval.shape[0] < h or oval.shape[1] < w:  # smaller than one box: no cell at all
+        none = np.zeros((0, 0), bool)
+        return none, none, none
+    ev = (oval | glow_mask(rgb)).astype(np.int32)
+    es = np.zeros((ev.shape[0], ev.shape[1] + 1), np.int32)  # running sums along each row
+    es[:, 1:] = ev.cumsum(1)
+    lit = (es[:, w:] - es[:, :-w] > 0).astype(np.int32)  # (rows, cols - w + 1): row y lit from x
+    ls = np.zeros((lit.shape[0] + 1, lit.shape[1]), np.int32)
+    ls[1:] = lit.cumsum(0)
+    slot = np.asarray(ls[h:] - ls[:-h] >= SLOT_ROWS)
+    empty, tight = _oval_boxes(oval.astype(np.int32), w, h)
+    return empty, tight, slot
+
+
+def _oval_boxes(m: np.ndarray, w: int, h: int) -> tuple[np.ndarray, np.ndarray]:
+    """PURE: cell_maps' (empty, tight) from the oval-coloured mask."""
     ii = np.zeros((m.shape[0] + 1, m.shape[1] + 1), np.int32)
     ii[1:, 1:] = m.cumsum(0).cumsum(1)
     area = ii[h:, w:] - ii[:-h, w:] - ii[h:, :-w] + ii[:-h, :-w]
@@ -129,80 +167,123 @@ def oval_cells(frame_bgr: Any) -> tuple[np.ndarray, np.ndarray]:
     return np.asarray(area >= OVAL_SHARE * h * w), np.asarray(left & right & top & bottom)
 
 
-def find_window(frame_bgr: Any, min_ovals: int = LATTICE_MIN) -> tuple[int, int] | None:
-    """PURE: the bag's window origin on a real-client frame, by its oval lattice, or None.
+@dataclass(frozen=True)
+class Bag:
+    """A found bag window: its origin (the title bar's top-left, frame px) and its rows."""
 
-    A 7 x 6 placement is a bag when its EMPTY cells are the TAIL of its cells in reading order
-    (items fill a tab from its first slot: a placement a row or a column off sees non-oval cells
-    after its ovals, or ovals in the ring one pitch outside it), at least ``min_ovals`` of them,
-    and the ring is clear. Among those: the most empty cells, then the most TIGHT ones (the exact
-    pixel). Another as good more than half a pitch away = two bags alike: None."""
-    empty, tight = oval_cells(frame_bgr)
-    dx0, dy0 = ICON0[0] + OVAL_BOX[0], ICON0[1] + OVAL_BOX[1]  # a cell's oval box from the origin
-    H, W = empty.shape
-    # a ring cell beyond the frame shows no oval (a bag pushed to a screen edge): pad with False
-    P = PITCH * 2
-    empty = np.pad(empty, P)
-    tight = np.pad(tight, P)
-    # the tail rule makes the LAST cell empty: only origins whose last cell sits on an oval box
-    # are candidates (a few hundred, not every pixel)
-    ly, lx = dy0 + PITCH * (ROWS - 1), dx0 + PITCH * (COLS - 1)
-    ys, xs = np.nonzero(empty[P : P + H, P : P + W])
-    oy, ox = ys - ly, xs - lx
-    keep = (ox + dx0 >= 0) & (oy + dy0 >= 0)  # the lattice's own cells inside the frame
-    oy, ox = oy[keep] + P, ox[keep] + P  # in the padded arrays
-    if len(oy) == 0:
+    origin: tuple[int, int]
+    rows: int
+
+
+DX0, DY0 = ICON0[0] + OVAL_BOX[0], ICON0[1] + OVAL_BOX[1]  # a cell's oval box from the origin
+CHUNK = 4096  # candidates judged at once (bounds the gathers' memory on an oval-rich frame)
+
+
+def _gather(m: np.ndarray, y: np.ndarray, x: np.ndarray) -> np.ndarray:
+    """PURE: m[y, x], False where (y, x) is no box of m: a cell beyond the frame shows nothing (a
+    bag pushed to a screen edge: its ring there is clear, its rows there show no slot)."""
+    if m.size == 0:
+        return np.zeros(np.broadcast_shapes(y.shape, x.shape), bool)
+    inside = (y >= 0) & (y < m.shape[0]) & (x >= 0) & (x < m.shape[1])
+    got = m[np.clip(y, 0, m.shape[0] - 1), np.clip(x, 0, m.shape[1] - 1)]
+    return np.asarray(inside & got)
+
+
+def _judge(maps: tuple[np.ndarray, np.ndarray, np.ndarray], ox: np.ndarray, oyb: np.ndarray,
+           min_ovals: int) -> tuple[np.ndarray, np.ndarray, np.ndarray]:  # fmt: skip
+    """PURE: each candidate's (rows, empty cells, tight empty cells); rows 0 = no bag. A
+    candidate is given by its BOTTOM row: (ox, oyb) is where the window's origin would be if that
+    row were its row 0. Its rows: the run of rows, from the bottom up, that show a slot
+    (cell_maps), within ROWS_MIN .. ROWS_MAX -- the row above that run (the title bar) shows none.
+    Then the 7 x rows placement is a bag when its empty cells are the TAIL of its cells in reading
+    order, at least ``min_ovals`` of them, and no empty cell shows in the ring one pitch outside
+    it."""
+    empty, tight, slot = maps
+    k = np.arange(ROWS_MAX + 2)  # grid rows: k = ROWS_MAX is the bottom row, ROWS_MAX + 1 below it
+    c = np.arange(COLS + 2)  # grid columns: 0 and COLS + 1 are the ring's sides
+    y = (oyb + DY0)[:, None, None] + PITCH * (k - ROWS_MAX)[None, :, None]
+    x = (ox + DX0)[:, None, None] + PITCH * (c - 1)[None, None, :]
+    e, t, s = (_gather(m, y, x) for m in (empty, tight, slot))  # (N, ROWS_MAX + 2, COLS + 2)
+    cells = slice(1, COLS + 1)
+    shows = s[:, : ROWS_MAX + 1, cells].any(axis=2)  # a row with a slot in any of its cells
+    rows = np.cumprod(shows[:, ::-1], axis=1).sum(axis=1)  # the run from the bottom row up
+    rows = np.where((rows >= ROWS_MIN) & (rows <= ROWS_MAX), rows, 0)
+    top = (ROWS_MAX + 1 - rows)[:, None, None]  # the top row's k (ROWS_MAX + 1: no bag)
+    kk, cc = k[None, :, None], c[None, None, :]
+    inside = (kk >= top) & (kk <= ROWS_MAX) & (cc >= 1) & (cc <= COLS)
+    ring = (kk >= top - 1) & ~inside
+    outside = (e & ring).any(axis=(1, 2))
+    count = (e & inside).sum(axis=(1, 2))
+    order = e[:, : ROWS_MAX + 1, cells].reshape(len(ox), -1)  # reading order, the bottom row last
+    trail = np.cumprod(order[:, ::-1], axis=1).sum(axis=1)  # the trailing run of empty cells
+    ok = (rows > 0) & (count >= min_ovals) & (trail == count) & ~outside
+    return np.where(ok, rows, 0), count, (e & t & inside).sum(axis=(1, 2))
+
+
+def find_bag(frame_bgr: Any, min_ovals: int = LATTICE_MIN) -> Bag | None:
+    """PURE: the bag's window (origin and rows) on a real-client frame by its oval lattice, or
+    None.
+
+    _judge's rule (the window's columns and last row by the ovals and their clear ring, its top by
+    the first row above that shows no slot). Among the bags: the most empty cells, then the most
+    TIGHT ones (the exact pixel). Another as good more than half a pitch away = two bags alike:
+    None. The tail rule makes the LAST cell empty, so only candidates whose bottom-right cell sits
+    on an oval box are judged (a few hundred, not every pixel)."""
+    maps = cell_maps(frame_bgr)
+    ys, xs = np.nonzero(maps[0])
+    ox, oyb = xs - DX0 - PITCH * (COLS - 1), ys - DY0
+    keep = ox + DX0 >= 0  # the lattice's first column inside the frame
+    ox, oyb = ox[keep], oyb[keep]
+    if len(ox) == 0:
         return None
-    cells = [(c, r) for r in range(ROWS) for c in range(COLS)]
-    ring = [(c, r) for r in range(-1, ROWS + 1) for c in range(-1, COLS + 1)
-            if not (0 <= r < ROWS and 0 <= c < COLS)]  # fmt: skip
-    cy = np.array([dy0 + PITCH * r for _c, r in cells])
-    cx = np.array([dx0 + PITCH * c for c, _r in cells])
-    e = empty[oy[:, None] + cy[None], ox[:, None] + cx[None]]  # (N, 42) in reading order
-    t = tight[oy[:, None] + cy[None], ox[:, None] + cx[None]]
-    ry = np.array([dy0 + PITCH * r for _c, r in ring])
-    rx = np.array([dx0 + PITCH * c for c, _r in ring])
-    outside = empty[oy[:, None] + ry[None], ox[:, None] + rx[None]].any(axis=1)
-    count = e.sum(axis=1)
-    trail = np.cumprod(e[:, ::-1], axis=1).sum(axis=1)  # the trailing run of empty cells
-    ok = (count >= min_ovals) & (trail == count) & ~outside
+    parts = [_judge(maps, ox[i : i + CHUNK], oyb[i : i + CHUNK], min_ovals)
+             for i in range(0, len(ox), CHUNK)]  # fmt: skip
+    rows, count, tight = (np.concatenate(p) for p in zip(*parts, strict=True))
+    ok = rows > 0
     if not ok.any():
         return None
+    oy = oyb - PITCH * (rows - 1)
     best = int(count[ok].max())
-    snug = np.where(ok & (count == best), (e & t).sum(axis=1), -1)
+    snug = np.where(ok & (count == best), tight, -1)
     k = int(np.argmax(snug))
     same = snug == snug[k]
     if np.any((np.abs(oy[same] - oy[k]) > PITCH // 2) | (np.abs(ox[same] - ox[k]) > PITCH // 2)):
         return None
-    return int(ox[k]) - P, int(oy[k]) - P
+    return Bag((int(ox[k]), int(oy[k])), int(rows[k]))
 
 
-def window_at(frame_bgr: Any, origin: tuple[int, int]) -> bool:
-    """PURE: the bag is still at ``origin`` (cheap: its own cells only): at least one empty cell,
-    the empty cells a tail of its cells, the ring clear -- the same rule as find_window."""
-    sh = np.asarray(frame_bgr).shape
-    flags = []
-    for r in range(-1, ROWS + 1):
-        for c in range(-1, COLS + 1):
-            x = origin[0] + ICON0[0] + OVAL_BOX[0] + PITCH * c
-            y = origin[1] + ICON0[1] + OVAL_BOX[1] + PITCH * r
-            w, h = OVAL_BOX[2], OVAL_BOX[3]
-            if x < 0 or y < 0 or y + h > sh[0] or x + w > sh[1]:
-                e = False
-            else:
-                box = rgb_of(np.asarray(frame_bgr)[y : y + h, x : x + w])
-                d = np.abs(box - np.asarray(OVAL, np.int16)).sum(axis=2)
-                e = bool((d <= OVAL_TOL).mean() >= OVAL_SHARE)
-            flags.append(((c, r), e))
-    inside = [e for (c, r), e in flags if 0 <= r < ROWS and 0 <= c < COLS]
-    ring = [e for (c, r), e in flags if not (0 <= r < ROWS and 0 <= c < COLS)]
-    n = sum(inside)
-    tail = 0
-    for e in reversed(inside):
-        if not e:
-            break
-        tail += 1
-    return n >= 1 and tail == n and not any(ring)
+def find_window(frame_bgr: Any, min_ovals: int = LATTICE_MIN) -> tuple[int, int] | None:
+    """PURE: find_bag's origin only (is a bag open, and where), or None."""
+    bag = find_bag(frame_bgr, min_ovals)
+    return None if bag is None else bag.origin
+
+
+def rows_at(frame_bgr: Any, origin: tuple[int, int]) -> int | None:
+    """PURE: the rows of the bag at ``origin`` (cheap: the window's own cells and ring only), or
+    None: the same rule as find_bag (_judge) with at least one empty cell, its top row the one at
+    ``origin``. At most one row count can pass: its last cell is empty and the row below is not."""
+    img = np.asarray(frame_bgr)
+    x0 = max(0, origin[0] + DX0 - PITCH)  # the cells -1 .. COLS, rows -1 .. ROWS_MAX: no further
+    y0 = max(0, origin[1] + DY0 - PITCH)
+    x1 = max(x0, origin[0] + DX0 + PITCH * COLS + OVAL_BOX[2])
+    y1 = max(y0, origin[1] + DY0 + PITCH * ROWS_MAX + OVAL_BOX[3])
+    maps = cell_maps(img[y0:y1, x0:x1])
+    want = np.arange(ROWS_MIN, ROWS_MAX + 1)
+    ox = np.full(len(want), origin[0] - x0)
+    rows, _count, _tight = _judge(maps, ox, origin[1] - y0 + PITCH * (want - 1), 1)
+    hit = want[rows == want]
+    return int(hit[0]) if len(hit) else None
+
+
+def window_at(frame_bgr: Any, origin: tuple[int, int], rows: int | None = None) -> bool:
+    """PURE: the bag is (still) at ``origin`` -- with ``rows`` rows, or any rows when None."""
+    got = rows_at(frame_bgr, origin)
+    return got is not None and (rows is None or got == rows)
+
+
+def window_size(rows: int) -> tuple[int, int]:
+    """PURE: the window's (w, h) from its origin, at ``rows`` rows."""
+    return WINDOW_W, WINDOW_H_MIN + PITCH * (rows - ROWS_MIN)
 
 
 def icon_xy(origin: tuple[int, int], slot: int) -> tuple[int, int]:
@@ -225,10 +306,10 @@ def oval_share(sq: np.ndarray) -> float:
     return float((np.abs(box - np.asarray(OVAL, np.float32)).sum(axis=2) <= OVAL_TOL).mean())
 
 
-def empty_picture(frame_bgr: Any, origin: tuple[int, int]) -> np.ndarray | None:
+def empty_picture(frame_bgr: Any, origin: tuple[int, int], *, rows: int) -> np.ndarray | None:
     """PURE: THIS client's empty slot (RGB float32), from the tab's last cell when it shows the
     oval (items fill a tab in reading order, so the last cell is the likeliest empty one)."""
-    for slot in range(SLOTS - 1, -1, -1):
+    for slot in range(COLS * rows - 1, -1, -1):
         sq = square(frame_bgr, origin, slot)
         if sq is not None and oval_share(sq) >= OVAL_SHARE:
             return sq
@@ -272,7 +353,7 @@ class Pictures:
         o = np.asarray(sq, np.float32)[COMPARE, :]
         e = np.asarray(empty, np.float32)[COMPARE, :]
         bg = ((np.abs(o - e).sum(axis=1) <= BG_TOL)
-              | ((o[:, 0] >= 220) & (o[:, 2] >= 220) & (o[:, 1] <= 215))
+              | glow_mask(o)
               | (o.min(axis=1) >= 235))  # fmt: skip
         out = ~self.mask[p]
         return float((out & ~bg).sum() / max(1, int(out.sum())))
@@ -396,11 +477,12 @@ def read_slot(frame_bgr: Any, origin: tuple[int, int], slot: int, pics: Pictures
 
 
 def read_tab(frame_bgr: Any, origin: tuple[int, int], pics: Pictures, empty: np.ndarray,
-             templates: Mapping[str, Any]) -> list[BagSlot]:  # fmt: skip
-    """PURE: every slot of the open tab; after the first empty slot every later slot must be
-    empty (items fill a tab in reading order), else that slot is unread."""
+             templates: Mapping[str, Any], *, rows: int) -> list[BagSlot]:  # fmt: skip
+    """PURE: every slot of the open tab (7 x ``rows``, the found window's); after the first empty
+    slot every later slot must be empty (items fill a tab in reading order), else that slot is
+    unread."""
     out, seen_empty = [], False
-    for s in range(SLOTS):
+    for s in range(COLS * rows):
         b = read_slot(frame_bgr, origin, s, pics, empty, templates)
         if b.kind == "empty":
             seen_empty = True
@@ -470,19 +552,21 @@ def _grab(r: Any, screen: Any, box: tuple[int, int, int, int] | None = None) -> 
 AROUND = 2 * PITCH  # the margin grabbed around the bag (its ring check reaches one pitch out)
 
 
-def bag_box(origin: tuple[int, int]) -> tuple[int, int, int, int]:
-    """PURE: the client box grabbed once the bag's place is known: the window and AROUND."""
+def bag_box(origin: tuple[int, int], rows: int) -> tuple[int, int, int, int]:
+    """PURE: the client box grabbed once the bag's place is known: the window (7 x ``rows``; a
+    look for a bag of unknown rows passes ROWS_MAX) and AROUND."""
     w = ICON0[0] + PITCH * COLS + 2 * AROUND
-    h = ICON0[1] + PITCH * ROWS + 2 * AROUND
+    h = ICON0[1] + PITCH * rows + 2 * AROUND
     return origin[0] - AROUND, origin[1] - AROUND, w, h
 
 
-def _save_box(frame_bgr: Any, origin: tuple[int, int], path: Path) -> None:
+def _save_box(frame_bgr: Any, origin: tuple[int, int], rows: int, path: Path) -> None:
     """The bag's window only (a lab trial's evidence: our own character; never in a Run)."""
     from PIL import Image
 
     x, y = origin
-    box = np.asarray(frame_bgr)[max(0, y) : y + 260, max(0, x) : x + 290, 2::-1]
+    w, h = window_size(rows)
+    box = np.asarray(frame_bgr)[max(0, y) : y + h + 5, max(0, x) : x + w + 10, 2::-1]
     path.parent.mkdir(parents=True, exist_ok=True)
     Image.fromarray(np.ascontiguousarray(box)).save(path)
 
@@ -498,10 +582,11 @@ def _click(agent: Any, r: Any, cx: int, cy: int) -> None:
     agent.click(x, y)
 
 
-def grid_signature(frame_bgr: Any, origin: tuple[int, int]) -> np.ndarray:
-    """PURE: each slot square's mean colour (42 x 3): what changes when another tab shows."""
-    out = np.zeros((SLOTS, 3), np.float32)
-    for s in range(SLOTS):
+def grid_signature(frame_bgr: Any, origin: tuple[int, int], *, rows: int) -> np.ndarray:
+    """PURE: each slot square's mean colour (7 x ``rows``, 3): what changes when another tab
+    shows."""
+    out = np.zeros((COLS * rows, 3), np.float32)
+    for s in range(COLS * rows):
         sq = square(frame_bgr, origin, s)
         if sq is not None:
             out[s] = sq.reshape(-1, 3).mean(axis=0)
@@ -548,24 +633,27 @@ def census(agent: Any, screen: Any, *, refs: Any | None = None,
     keys = ui_gate.window_keys("inventory")
     r.activate_client(agent, screen)
     _park(agent, r)
-    was_open = find_window(_grab(r, screen)) is not None  # left as it was found (B3)
+    was_open = find_bag(_grab(r, screen)) is not None  # left as it was found (B3)
     if not was_open:
         agent.chord(*keys)
         time.sleep(1.2)
-    out: dict[str, Any] = {"tabs": [], "origin": None, "was_open": was_open}
+    out: dict[str, Any] = {"tabs": [], "origin": None, "rows": None, "was_open": was_open}
     opened = not was_open
     try:
         f = _grab(r, screen)
-        origin = find_window(f)
-        if origin is None:
-            raise r.Stop("bag_count: Alt+E showed no bag (no oval lattice found)")
-        out["origin"] = list(origin)
-        box = bag_box(origin)
+        found = find_bag(f)
+        if found is None:
+            raise r.Stop(f"bag_count: Alt+E showed no bag (no oval lattice of {COLS} x "
+                         f"{ROWS_MIN}..{ROWS_MAX} found)")  # fmt: skip
+        origin, rows = found.origin, found.rows  # the window's rows: every tab has the same
+        out["origin"], out["rows"] = list(origin), rows
+        box = bag_box(origin, rows)
         local = (AROUND, AROUND)  # the origin inside the box
-        empty = empty_picture(f, origin)
+        here = Bag(local, rows)
+        empty = empty_picture(f, origin, rows=rows)
         pics = None if empty is None else Pictures.over(refs, empty)
         tabs: list[TabRead] = []
-        before = grid_signature(f, origin)
+        before = grid_signature(f, origin, rows=rows)
 
         def read_one(name: str, tx: int, ty: int, before: np.ndarray) -> tuple[TabRead, Any]:
             nonlocal empty, pics
@@ -574,29 +662,30 @@ def census(agent: Any, screen: Any, *, refs: Any | None = None,
             t_end = time.monotonic() + TAB_WAIT_S  # until its slots change, or the old wait
             while time.monotonic() < t_end:
                 g = _grab(r, screen, box)
-                if np.abs(grid_signature(g, local) - before).max() > 2.0:
+                if np.abs(grid_signature(g, local, rows=rows) - before).max() > 2.0:
                     break
                 time.sleep(0.1)
             reads = []
             for _ in range(2):
                 f = _grab(r, screen, box)  # the bag's box only (its place is known)
-                # its own cells; a full tab shows no oval: then no lattice ELSEWHERE in the box
-                if not window_at(f, local) and find_window(f) not in (local, None):
+                # its own cells (and rows); a full tab shows no oval: then no lattice ELSEWHERE
+                # in the box. Another tab showing other rows is another window: the bag moved
+                if not window_at(f, local, rows) and find_bag(f) not in (here, None):
                     raise r.Stop("bag_count: the bag moved while it was read")
                 if empty is None:  # no empty slot seen yet: this tab may show one
-                    empty = empty_picture(f, local)
+                    empty = empty_picture(f, local, rows=rows)
                     pics = None if empty is None else Pictures.over(refs, empty)
                 if frames_dir is not None:  # the lab's trials only: the bag's own box, per read
-                    _save_box(f, local, frames_dir / f"{name}-{len(reads)}.png")
+                    _save_box(f, local, rows, frames_dir / f"{name}-{len(reads)}.png")
                 if pics is None or empty is None:
                     reads.append(None)
                 else:
-                    reads.append(read_tab(f, local, pics, empty, templates))
+                    reads.append(read_tab(f, local, pics, empty, templates, rows=rows))
                 time.sleep(0.2)
             tab = TabRead(name)
             if reads[0] is None or reads[1] is None:
                 tab.slots = [BagSlot(s, "unread", why="no empty slot seen to compare with")
-                             for s in range(SLOTS)]  # fmt: skip
+                             for s in range(COLS * rows)]  # fmt: skip
             else:
                 for a, b in zip(reads[0], reads[1], strict=True):
                     same = (a.kind, a.ids, a.count) == (b.kind, b.ids, b.count)
@@ -619,7 +708,7 @@ def census(agent: Any, screen: Any, *, refs: Any | None = None,
                         for b in tab.slots
                     ]
             tabs.append(tab)
-            before = grid_signature(last, local)
+            before = grid_signature(last, local, rows=rows)
         out["tabs"] = [t.record() for t in tabs]
         out["totals"] = bag_totals(tabs)
         out["unread"] = sum(len(t.unread()) for t in tabs)
@@ -629,7 +718,7 @@ def census(agent: Any, screen: Any, *, refs: Any | None = None,
             agent.chord(*keys)
             time.sleep(1.0)
             _park(agent, r)
-        out["closed"] = find_window(_grab(r, screen)) is None
+        out["closed"] = find_bag(_grab(r, screen)) is None
     out["seconds"] = round(time.monotonic() - t0, 1)
     out["as_found"] = out["closed"] != was_open
     if not out["as_found"]:
@@ -726,17 +815,19 @@ def main(argv: list[str] | None = None) -> int:
         if a.image is None:
             raise SystemExit("read needs IMAGE")
         f = _load_frame(a.image)
-        origin = find_window(f)
-        if origin is None:
+        found = find_bag(f)
+        if found is None:
             print(json.dumps({"origin": None, "why": "no bag lattice"}))
             return 2
-        empty = empty_picture(f, origin)
+        origin, rows = found.origin, found.rows
+        empty = empty_picture(f, origin, rows=rows)
         if empty is None:
-            print(json.dumps({"origin": list(origin), "why": "no empty slot to compare with"}))
+            print(json.dumps({"origin": list(origin), "rows": rows,
+                              "why": "no empty slot to compare with"}))  # fmt: skip
             return 2
         pics = Pictures.over(refs or si.SlotRefs.load(), empty)
-        tab = TabRead("shown", read_tab(f, origin, pics, empty, hb.load()))
-        print(json.dumps({"origin": list(origin), **tab.record(),
+        tab = TabRead("shown", read_tab(f, origin, pics, empty, hb.load(), rows=rows))
+        print(json.dumps({"origin": list(origin), "rows": rows, **tab.record(),
                           "totals": bag_totals([tab])}))  # fmt: skip
         return 0
     import ro_agent as r

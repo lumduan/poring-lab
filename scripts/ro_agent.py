@@ -242,12 +242,13 @@ PANELS_ENV = "PORING_PANELS_FILE"  # another file (the tests: each its own)
 # size (the lab's home (0, 120), gm_state.INV_SLOT1's window); in the virtual picture it was part of
 # the scaled world, so its slots read the wrong pixels and a drag from one started elsewhere. It is
 # found by bag_count's oval lattice at its home in the REAL frame, at most every INV_CHECK_S, and
-# is a panel only while found (a closed bag's place stays the world).
+# is a panel only while found (a closed bag's place stays the world). Its size is the found
+# window's: 7 columns x its rows, read from the pixels (bag_count.rows_at; a player drags it taller,
+# Batt's live bag 7 x 9, 2026-11-21).
 INV_HOME = (0, 120)
 VIRTUAL_W_PX, VIRTUAL_H_PX = 1280, 720  # the virtual client (poring_env.clientview's VIRTUAL_W/H)
-INV_SIZE = (280, 255)  # the window from its origin (bag_count's grid + its frame)
 INV_CHECK_S = 0.5  # the drop opens the bag, waits 1.0 s, then reads it
-_INV: dict[str, Any] = {"origin": None, "t": -1e9, "prompt": None}
+_INV: dict[str, Any] = {"origin": None, "size": None, "t": -1e9, "prompt": None}
 # ... and the drop's QUANTITY PROMPT (its OK button, gm_state.PROMPT_OK_BOX at 720), which RO draws
 # native-size near the screen's centre: at 1920x1080 its OK button is at (964, 462), i.e. the 720
 # box + (320, 150) (measured 2026-11-20, template distance 0.0). x is the centring, (w - 1280) / 2;
@@ -443,9 +444,10 @@ def _panels_tick(real: Any) -> None:
 
 
 def inventory_tick(screen: Any, now: float | None = None, *, force: bool = False) -> bool:
-    """T-I5: is the bag open at its home (bag_count.window_at on the REAL pixels around it)? At most
-    every INV_CHECK_S; the answer is kept for client_view (the inventory panel). A small real grab
-    (the window and a margin), so the virtual grab path stays cheap. ``force``: look now, whatever
+    """T-I5: is the bag open at its home (bag_count.rows_at on the REAL pixels around it)? At most
+    every INV_CHECK_S; the answer (and the window's size, by its rows) is kept for client_view (the
+    inventory panel). A small real grab (the tallest window and a margin), so the virtual grab path
+    stays cheap. ``force``: look now, whatever
     the last look's age -- before a click into the bag (gm_state._tab; xmas02-items-1080.md
     Amendment 9: a tab click sent before any grab saw the bag open went to the WORLD)."""
     import bag_count as bc
@@ -457,17 +459,20 @@ def inventory_tick(screen: Any, now: float | None = None, *, force: bool = False
         _INV["t"] = t
     try:
         rx, ry, rw, rh = real_game_region()
-        bx, by, bw, bh = bc.bag_box(INV_HOME)
+        bx, by, bw, bh = bc.bag_box(INV_HOME, bc.ROWS_MAX)  # its rows are read, not assumed
         x0, y0 = max(0, bx), max(0, by)
         w, h = min(bw - (x0 - bx), rw - x0), min(bh - (y0 - by), rh - y0)
         _, sub, _, _ = screen.grab_meta(rx + x0, ry + y0, w, h)
         bgr = np.ascontiguousarray(np.asarray(sub)[..., :3])
-        open_ = bool(bc.window_at(bgr, (INV_HOME[0] - x0, INV_HOME[1] - y0)))
+        rows = bc.rows_at(bgr, (INV_HOME[0] - x0, INV_HOME[1] - y0))
+        open_ = rows is not None
+        size = bc.window_size(rows) if rows is not None else None
         prompt = _prompt_ok_at(screen, (rx, ry, rw, rh)) if open_ else None
     except (Stop, OSError, ValueError):
-        open_, prompt = False, None
+        open_, size, prompt = False, None, None
     with _PANELS_LOCK:
         _INV["origin"] = INV_HOME if open_ else None
+        _INV["size"] = size
         _INV["prompt"] = prompt
     return open_
 
@@ -585,9 +590,9 @@ def client_view() -> Any:
               Panel.anchored(name, box, "tr", (w, h)) if how == "tr" else
               Panel(name, box, (box[0], box[1])) for name, box, how in LAB_PANELS]  # fmt: skip
     with _PANELS_LOCK:
-        inv, prompt = _INV["origin"], _INV.get("prompt")
-    if inv is not None:  # T-I5: the open inventory, 1:1 at its home in the bot's picture
-        panels.append(Panel("inventory", (INV_HOME[0], INV_HOME[1], *INV_SIZE),
+        inv, size, prompt = _INV["origin"], _INV.get("size"), _INV.get("prompt")
+    if inv is not None and size is not None:  # T-I5: the open inventory, 1:1 at its home
+        panels.append(Panel("inventory", (INV_HOME[0], INV_HOME[1], *size),
                             (int(inv[0]), int(inv[1]))))  # fmt: skip
     if prompt is not None:  # and the drop's quantity prompt's OK button, 1:1 at its 720 place
         import gm_state as gs

@@ -226,19 +226,20 @@ def test_a_search_after_the_first_never_runs_inside_the_grab(
 
 
 # --- xmas02-items-1080.md T-I5 (2026-11-20): the open inventory is a panel at 1080 ---------------
-def _bag_frame(open_: bool) -> np.ndarray:
-    """A 1920x1080 BGRA real frame; with ``open_`` an EMPTY bag at the inventory's home (its 42
-    ovals, bag_count's rule)."""
+def _bag_frame(open_: bool, rows: int = 6) -> np.ndarray:
+    """A 1920x1080 BGRA real frame; with ``open_`` an EMPTY 7 x ``rows`` bag at the inventory's
+    home (its ovals, bag_count's rule)."""
     import bag_count as bc
 
     f = np.full((1080, 1920, 4), 90, np.uint8)
     if open_:
         ox, oy = (0, 120)
-        f[oy : oy + 255, ox : ox + 280, :3] = 255
+        ww, wh = bc.window_size(rows)
+        f[oy : oy + wh, ox : ox + ww, :3] = 255
         w, h = bc.OVAL_BOX[2], bc.OVAL_BOX[3]
         yy, xx = np.mgrid[0:h, 0:w]
         oval = ((xx + 0.5 - w / 2) / (w / 2)) ** 2 + ((yy + 0.5 - h / 2) / (h / 2)) ** 2 <= 1.0
-        for s in range(bc.SLOTS):
+        for s in range(bc.COLS * rows):
             x, y = bc.icon_xy((ox, oy), s)
             dx, dy = bc.OVAL_BOX[0], bc.OVAL_BOX[1]
             f[y + dy : y + dy + h, x + dx : x + dx + w, :3][oval] = bc.OVAL[::-1]
@@ -283,6 +284,28 @@ def test_the_open_inventory_is_a_one_to_one_panel_at_1080(
     assert ro.inventory_tick(scr, now=t) is False  # within INV_CHECK_S of the closed read
     assert ro.inventory_tick(scr, now=t, force=True) is True
     assert ro.client_view().panel_at(*gs.slot_centre(0, 0)).name == "inventory"
+
+
+def test_a_taller_inventory_is_a_taller_panel(
+    ro: ModuleType, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The panel is the found window's size: 7 x its rows, read from the pixels (Batt's live bag is
+    7 x 9, 2026-11-21); a 7 x 6 bag's panel ends below its sixth row."""
+    monkeypatch.setattr(ro, "desktop", lambda: (1920, 1080))
+    monkeypatch.setattr(ro, "real_game_region", lambda: (0, 0, 1920, 1080))
+    monkeypatch.setattr(ro, "_INV", {"origin": None, "t": -1e9})
+    import gm_state as gs
+
+    scr = BagScreen(_bag_frame(True, rows=9))
+    assert ro.inventory_tick(scr, now=10.0) is True
+    assert scr.grabs[0][2] * scr.grabs[0][3] < 200_000  # the tallest window's box, still small
+    sx, sy = gs.slot_centre(3, 8)  # the ninth row
+    assert ro.client_view().panel_at(sx, sy).name == "inventory"
+    assert ro.client_view().to_real(sx, sy) == (sx, sy)
+    scr.frame = _bag_frame(True, rows=6)
+    assert ro.inventory_tick(scr, now=11.0) is True
+    assert ro.client_view().panel_at(sx, sy) is None  # below a 7 x 6 bag: the world
+    assert ro.client_view().panel_at(*gs.slot_centre(3, 5)).name == "inventory"
 
 
 def test_the_quantity_prompt_is_found_and_mapped_one_to_one_at_1080(
