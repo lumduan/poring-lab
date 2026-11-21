@@ -754,3 +754,44 @@ A count under its minimum is NO VERDICT, never a pass.
   3. 1080 frames with the cursor rings as hard negatives in training.
 - Any of them is scored on a NEW 1080 held-out (Amendment 19). The numbers above choose the
   candidates; they never pass them.
+
+### Amendment 22 (2026-11-21 16:11 ICT from `date`, BEFORE any round-7 data): ROUND 7 pre-registered -- round 6's model plus a 1080 box rule (Batt: "use the recommended way", A + B)
+
+- **Two facts read on the spent held-out, both diagnosis.** They choose the rule; they score
+  nothing.
+  - **The pointer is the wrong signal.** Measured from the input log's pointer at each frame's
+    time: 2 of the 53 found drops lie within 20 px of the bot's pointer, 3 within 30 px. After a
+    kill the pointer still rests where the drop falls. A pointer-distance rule would throw real
+    drops away, so B is NOT "near the pointer".
+  - **The ring's own pixels are the signal.** Pure red = R >= 150, G <= 30, B <= 30, counted in
+    the box plus 6 px. The 8 false boxes on the no-entry cursor ring (the 7 confident ones and
+    one at 0.27) hold 81-115 pure-red px each. All 53 found drops hold 0, and so do all 37
+    other false boxes.
+- **The model:** xmas02fi6 unchanged, frozen (pt 4014ae96..., ONNX 3f05f9bb...). No training
+  in round 7 unless the rule fails (then C, Amendment 21, by a new amendment).
+- **The rule** ("fi7"), applied to the item model's boxes at 1080 only (the virtual client),
+  before any use:
+  - A. Confidence floor **0.50**: a box under it is dropped.
+  - B. The cursor ring: a box whose rectangle plus **6** px holds **>= 30** pure-red px
+    (R >= 150, G <= 30, B <= 30) in the virtual frame is dropped.
+- **The evaluation ("8a7"):** fi_eval applies the rule to the predictions (new options,
+  `--item-floor`, `--ring-red`, built with tests before the held-out is labelled).
+  - The bars are section 8a's, unchanged, each scored ONCE on a NEW 1080 held-out.
+  - xmas02fi5 (the deployed model, no rule) is scored on the same held-out and reported beside
+    it. That says what the change does at 1080; it is not a bar.
+- **The new held-out:**
+  - natural pilots NOT immune (immunity OFF read back before each), named ifH5, ifH6, ...;
+    enough of them for I2's 20 first-frame episodes, which 8a's 4 pilots did not reach (9);
+  - stagings immune (ifsH3, ...) for I1h's >= 40 evaluated crops;
+  - every name refused for TRAIN and stratified, as Amendment 16 did.
+  - Labelled `--eval-test` against the frozen model. One pack, seed **74**, recorded before any
+    answer. Two NEW blind labellers.
+- **If 8a7 passes:**
+  - 8c runs at 1080 as section 8c registers it: A = xmas02fi5, B = xmas02fi6 + fi7, 3 valid runs
+    a side;
+  - the rule is built into the live player first: a setting, the Run-time filter of the item
+    boxes (the runner's own LOOT_ITEMS_CONF is a function default, so a runner constant cannot
+    move it);
+  - if 8c passes, deploy at 1080 only, on Batt's word.
+- **If 8a7 fails:** C (training with cursor-ring hard negatives) by a new amendment, and a new
+  held-out again.
