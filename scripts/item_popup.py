@@ -13,7 +13,11 @@ Read by shape, colour and digits only (Batt 10-26 / 11-11: no word is read):
   (slot_items.SlotRefs, the bag count's), composited over the box's white -- the nearest picture's
   ids (a shared icon is a group) under ICON_MAX, ahead of the next other picture by ICON_MARGIN;
 - how many: the LAST group of digit runs in the text (glyphs learned from popups whose amounts the
-  packets give; hp_percent's run method).
+  packets give; hp_percent's run method), on the box's OWN columns (text_box: its right border is
+  the crop's last columns, which text_runs drops);
+- ROUND 2 (item-popup-reader.md, Amendment 2): one event per popup SHOWN (Tracker). A new event
+  needs the box to have left the screen, or another item, or another width read with its text's
+  tail; while the same box stays, an unread item or amount is read again (the first read wins).
 
 PURE (numpy only) but for the pictures' loader; no input, no grabs.
 """
@@ -78,6 +82,13 @@ def is_new(prev: Popup | None, cur: Popup | None, change: float = 0.08) -> bool:
     b = np.unpackbits(np.frombuffer(cur.sig, np.uint8))
     n = min(len(a), len(b))
     return bool(n and float((a[:n] != b[:n]).mean()) > change)
+
+
+def text_box(frame_rgb: np.ndarray, p: Popup) -> np.ndarray:
+    """The box's crop for the count: rows POPUP_TOP - 2 .. POPUP_BOTTOM + 1, the box's OWN columns
+    (left .. right), so its right border is the crop's last columns (round 2: a 260-px white pad
+    put the border inside the text, and a long name past 260 px lost its tail)."""
+    return np.asarray(frame_rgb[bs.POPUP_TOP - 2 : bs.POPUP_BOTTOM + 2, p.left : p.right + 1, :3])
 
 
 def icon_square(frame_rgb: np.ndarray, p: Popup, off: tuple[int, int] = ICON_OFF) -> np.ndarray:
@@ -333,3 +344,89 @@ def load_count(path: Path) -> CountFont:
         ]
         digits = {k[6:]: np.asarray(z[k], bool) for k in z.files if k.startswith("digit_")}
     return CountFont(tail, digits)
+
+
+# --- round 2: one event per popup shown -----------------------------------------------------------
+@dataclass
+class Event:
+    t: int  # the first frame's t_mono_ns
+    ids: tuple[int, ...] | None
+    why: str
+    dist: float | None
+    amount: int | None
+    width: int
+    t_last: int = 0  # the last frame that showed it
+    frames: int = 1
+    filled: list[str] = field(default_factory=list)  # "item" / "amount": read on a later frame
+
+    def doc(self) -> dict[str, Any]:
+        return {"t": self.t, "ids": list(self.ids) if self.ids else None, "why": self.why,
+                "dist": self.dist, "amount": self.amount, "width": self.width,
+                "t_last": self.t_last, "frames": self.frames,
+                "filled": list(self.filled)}  # fmt: skip
+
+
+@dataclass(frozen=True, slots=True)
+class FrameRead:
+    item: ItemRead
+    amount: int | None
+    width: int
+
+
+def same_popup(ev: Event, rd: FrameRead, width_tol: int = bs.POPUP_WIDTH_TOL) -> bool:
+    """PURE (round 2): is this frame's box the popup of the open event?
+    - another item: both reads name pictures and they share no id -> no;
+    - another width: only when BOTH widths are true ones (each read its text's tail, so no cover cut
+      the box's top or bottom edge short) -> no;
+    - anything else (a cover over the icon, the text or an edge) -> the same popup."""
+    if ev.ids and rd.item.ids and not set(ev.ids) & set(rd.item.ids):
+        return False
+    return not (
+        ev.amount is not None and rd.amount is not None and abs(rd.width - ev.width) > width_tol
+    )
+
+
+class Tracker:
+    """Round 2: the reader over a frame stream, one Event per popup shown. ``feed`` returns the
+    events this frame CLOSED (the box left, or another popup replaced it); ``flush`` the open
+    one."""
+
+    def __init__(self, icons: Icons, count: CountFont) -> None:
+        self.icons, self.count = icons, count
+        self.open: Event | None = None
+
+    def read(self, frame_rgb: np.ndarray, p: Popup) -> FrameRead:
+        item = self.icons.read(icon_square(frame_rgb, p))
+        return FrameRead(item, read_count(text_box(frame_rgb, p), self.count), p.right - p.left)
+
+    def _start(self, t: int, rd: FrameRead) -> None:
+        it = rd.item
+        self.open = Event(t, it.ids, it.why, it.dist, rd.amount, rd.width, t_last=t)
+
+    def feed(self, t: int, frame_rgb: np.ndarray) -> list[Event]:
+        p = box_of(frame_rgb)
+        if p is None:
+            return self.flush()  # the box left the screen
+        rd = self.read(frame_rgb, p)
+        ev = self.open
+        if ev is None:
+            self._start(t, rd)
+            return []
+        if not same_popup(ev, rd):
+            out = self.flush()
+            self._start(t, rd)
+            return out
+        ev.frames += 1
+        ev.t_last = t
+        if ev.ids is None and rd.item.ids:
+            ev.ids, ev.why, ev.dist = rd.item.ids, rd.item.why, rd.item.dist
+            ev.filled.append("item")
+        if ev.amount is None and rd.amount is not None:
+            ev.amount, ev.width = rd.amount, rd.width
+            ev.filled.append("amount")
+        return []
+
+    def flush(self) -> list[Event]:
+        out = [self.open] if self.open is not None else []
+        self.open = None
+        return out

@@ -3,8 +3,13 @@
 the 720 recordings (popups 1:1). Every item that lands in the bag is a pickup_result packet (ok,
 item_id, amount, t_mono_ns); the frames' t_mono_ns is the same clock.
 
-    item_popup_eval.py calibrate [--sessions fiT1..fiT20] [--out JSON]   the icon offset and bars
-    item_popup_eval.py score     --params JSON [--json]                   ONCE, every other fiT
+    item_popup_eval.py calibrate [--out JSON]                        the icon offset and bars
+    item_popup_eval.py learn-count --out NPZ [--set calib]           the count font (round 2)
+    item_popup_eval.py score --set old|r2 --count NPZ [--out JSON]    ONCE per held-out set
+
+Sets: calib = fiT1-fiT20; old = every other fiT (round 1's one score, used since); r2 = round 2's
+held-out (Amendment 2): every other 720 recording with packets, R2_FAMILY. Round 2 reads one event
+per popup shown (item_popup.Tracker).
 
 The recordings are read in place, read-only (the NAS); no frame is written.
 """
@@ -34,6 +39,10 @@ NAS = Path("/mnt/poring-lab-datasets")
 FAMILY = re.compile(r"-rdp-hunt-xmas02-fiT(\d+)$")
 WINDOW_S = 3.0
 CALIB = range(1, 21)  # fiT1 .. fiT20 (section 4)
+# round 2's held-out (item-popup-reader.md RESULT + Amendment 2): the other 720 recordings with
+# packets -- xmas02 xw* and fs* (fsTa / fsTn / fsH too), rogue-*, thief-*
+R2_FAMILY = re.compile(r"-rdp-(xmas02-(xw|fs)[\w-]*|rogue-[\w-]+|thief-[\w-]+)$")
+REPEAT_S = 6.0  # a truth whose previous truth is the same item <= this before: a "repeat"
 OFFSETS = [(dx, dy) for dx in range(6, 17) for dy in range(0, 9)]
 
 
@@ -44,6 +53,19 @@ def sessions(numbers: Sequence[int] | None = None, exclude: Sequence[int] = ()) 
         if m and (numbers is None or int(m.group(1)) in numbers) and int(m.group(1)) not in exclude:
             out.append(d)
     return sorted(out, key=lambda p: int(FAMILY.search(p.name).group(1)))  # type: ignore[union-attr]
+
+
+def session_set(name: str) -> list[Path]:
+    """The sessions of a named set, in order; only those with packets and a frame shard."""
+    if name == "calib":
+        return sessions(list(CALIB))
+    if name == "old":
+        return sessions(None, exclude=list(CALIB))
+    if name != "r2":
+        raise ValueError(f"unknown set {name!r}")
+    out = [d for d in NAS.iterdir() if R2_FAMILY.search(d.name)
+           and (d / "packets.jsonl.gz").is_file() and any(d.glob("shard-*.tar"))]  # fmt: skip
+    return sorted(out, key=lambda p: p.name)
 
 
 def truths(session: Path) -> list[dict[str, Any]]:
@@ -159,22 +181,35 @@ def calibrate(paths: Sequence[Path], refs: str | None = None) -> dict[str, Any]:
 
 
 def events_of(session: Path, icons: ip.Icons, count: ip.CountFont) -> list[dict[str, Any]]:
-    """The reader over every frame of a session: one event per NEW popup (time, ids, amount)."""
+    """Round 2: the reader over every frame of a session, one event per popup SHOWN (Tracker)."""
+    tr = ip.Tracker(icons, count)
     out: list[dict[str, Any]] = []
-    prev: ip.Popup | None = None
     for t, f in frames(session):
-        cur = ip.box_of(f)
-        if ip.is_new(prev, cur) and cur is not None:
-            it = icons.read(ip.icon_square(f, cur))
-            box = np.full((34, 260, 3), 255, np.uint8)
-            sub = f[
-                ip.bs.POPUP_TOP - 2 : ip.bs.POPUP_BOTTOM + 2,
-                cur.left : min(cur.right + 1, cur.left + 260),
-            ]
-            box[: sub.shape[0], : sub.shape[1]] = sub
-            out.append({"t": t, "ids": list(it.ids) if it.ids else None, "why": it.why,
-                        "dist": it.dist, "amount": ip.read_count(box, count)})  # fmt: skip
-        prev = cur
+        out += [e.doc() for e in tr.feed(t, f)]
+    return out + [e.doc() for e in tr.flush()]
+
+
+def popups_with_truth(paths: Sequence[Path]) -> list[tuple[np.ndarray, int, int]]:
+    """(text_box crop, truth id, truth amount) of the first frame with a box <= WINDOW_S after
+    each pickup_result (calibrate's pairing)."""
+    out = []
+    for s in paths:
+        tr = truths(s)
+        ts = [r["t"] for r in tr]
+
+        def near(t: int, ts: list[int] = ts) -> bool:
+            i = bisect.bisect_right(ts, t) - 1
+            return i >= 0 and t - ts[i] <= WINDOW_S * 1e9
+
+        seen: set[int] = set()
+        for t, f in frames(s, near):
+            i = bisect.bisect_right(ts, t) - 1
+            p = ip.box_of(f)
+            if i in seen or p is None:
+                continue
+            seen.add(i)
+            out.append((ip.text_box(f, p).copy(), tr[i]["id"], tr[i]["amount"]))
+        print(s.name, len(out), flush=True)
     return out
 
 
@@ -184,17 +219,20 @@ def match(events: Sequence[dict[str, Any]], truth: Sequence[dict[str, Any]],
     used: set[int] = set()
     rows = []
     prev_t: int | None = None
+    prev_id: int | None = None
     for tr in truth:
         hit = next((k for k, e in enumerate(events) if k not in used
                     and tr["t"] <= e["t"] <= tr["t"] + window_s * 1e9), None)  # fmt: skip
         gap = None if prev_t is None else (tr["t"] - prev_t) / 1e9
-        prev_t = tr["t"]
+        repeat = gap is not None and gap <= REPEAT_S and tr["id"] == prev_id
+        prev_t, prev_id = tr["t"], tr["id"]
         if hit is None:
-            rows.append({"found": False, "gap": gap})
+            rows.append({"found": False, "gap": gap, "repeat": repeat})
             continue
         used.add(hit)
         e = events[hit]
-        rows.append({"found": True, "gap": gap, "id_ok": bool(e["ids"]) and tr["id"] in e["ids"],
+        rows.append({"found": True, "gap": gap, "repeat": repeat,
+                     "id_ok": bool(e["ids"]) and tr["id"] in e["ids"],
                      "id_unread": not e["ids"], "amount_ok": e["amount"] == tr["amount"],
                      "amount_unread": e["amount"] is None})  # fmt: skip
     found = [r for r in rows if r["found"]]
@@ -205,6 +243,8 @@ def match(events: Sequence[dict[str, Any]], truth: Sequence[dict[str, Any]],
         "amount_ok": sum(r["amount_ok"] for r in found),
         "amount_unread": sum(r["amount_unread"] for r in found),
         "spaced": len(spaced), "spaced_found": sum(r["found"] for r in spaced),
+        "repeats": sum(r["repeat"] for r in rows),
+        "repeats_found": sum(r["found"] for r in rows if r["repeat"]),
     })  # fmt: skip
 
 
@@ -239,30 +279,42 @@ def main(argv: Sequence[str] | None = None) -> int:
     c = sub.add_parser("calibrate")
     c.add_argument("--out", type=Path)
     c.add_argument("--refs", help="slot_items' pictures (default: this checkout's data/)")
+    lc = sub.add_parser("learn-count", help="the count font from a set's popups (calib only)")
+    lc.add_argument("--set", default="calib", choices=["calib"])
+    lc.add_argument("--out", type=Path, required=True, help="the font (.npz, under data/)")
     sc = sub.add_parser("score")
+    sc.add_argument("--set", required=True, choices=["calib", "old", "r2"])
     sc.add_argument("--refs")
     sc.add_argument("--count", type=Path, required=True, help="the learned count font (.npz)")
     sc.add_argument("--out", type=Path)
     a = ap.parse_args(argv)
     if a.cmd == "score":
         icons, count = ip.Icons.load(a.refs), ip.load_count(a.count)
-        events: list[dict[str, Any]] = []
-        truth: list[dict[str, Any]] = []
         per = {}
-        for s_ in sessions(None, exclude=list(CALIB)):
+        for s_ in session_set(a.set):
             ev, tr = events_of(s_, icons, count), truths(s_)
             per[s_.name] = match(ev, tr)
-            events += ev
-            truth += tr
             print(s_.name, json.dumps(per[s_.name]), flush=True)
         keys = ("truths", "events", "matched", "id_ok", "id_unread", "amount_ok",
-                "amount_unread", "spaced", "spaced_found")  # fmt: skip
+                "amount_unread", "spaced", "spaced_found", "repeats", "repeats_found")  # fmt: skip
         lines = counts_lines({k: sum(int(v[k]) for v in per.values()) for k in keys})
-        got = {"lines": lines, "verdict": verdict(lines), "sessions": per}
+        got = {"set": a.set, "lines": lines, "verdict": verdict(lines), "sessions": per}
         text = json.dumps(got, indent=1, default=str)
         if a.out:
             a.out.write_text(text)
         print(text)
+        return 0
+    if a.cmd == "learn-count":
+        got = popups_with_truth(session_set(a.set))
+        font = ip.learn_count([b for b, _, _ in got], [m for _, _, m in got])
+        ip.save_count(font, a.out)
+        reads = Counter(
+            "ok" if ip.read_count(b, font) == m else (
+                "unread" if ip.read_count(b, font) is None else "wrong")
+            for b, _, m in got)  # fmt: skip
+        print(json.dumps({"popups": len(got), "amounts": Counter(m for _, _, m in got),
+                          "tail": len(font.tail), "digits": sorted(font.digits),
+                          "self_read": reads}, default=str))  # fmt: skip
         return 0
     if a.cmd == "calibrate":
         got = calibrate(sessions(list(CALIB)), a.refs)

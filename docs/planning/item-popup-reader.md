@@ -159,3 +159,46 @@ count font of Amendment 1), pooled counts:
   - **A NEW held-out**, since every fiT session is used: the other 720 recordings with packets on
     the NAS (rdp-xmas02-xw*, -fs*, -fsTn*, rdp-rogue-*, rdp-thief-*), scored once, with the same
     four bars.
+
+### Amendment 2 (2026-11-22 04:19 ICT from `date`, BEFORE the round-2 held-out is read): round 2's reader, its font, its held-out
+
+- **The unread amounts, diagnosed on the calibration sessions only** (fiT1-fiT8's 417 boxes, round
+  1's font: 13 unread, every one "- 1 obtained."):
+  - **12: the box's own right border.** Over a dark scene the border is dark enough to read as a
+    last "letter", so the text did not end with the tail. The code already drops the crop's last 4
+    columns as the border (`text_runs`), but round 1 padded every crop to 260 px of white, so that
+    cut hit the pad, not the border. The same pad also cut any name longer than 260 px.
+  - **1: a cover over the box's top or bottom edge** made the box narrower than its text, so the
+    final "." fell in the border cut.
+- **The changes** (scripts/item_popup.py, item_popup_eval.py; tests in test_item_popup.py):
+  - `text_box`: the count reads the box's OWN columns (left .. right), no pad. With it, 416 of
+    those 417 read; the 13th needs a later frame (next rule).
+  - **One event per popup SHOWN** (`Tracker`, `same_popup`), the round-2 rule of the RESULT:
+    - an event opens when a box appears after none, and closes when the box leaves (a frame with
+      no box) or another popup replaces it;
+    - another popup = both frames' icons read and share no id, OR another width where BOTH widths
+      are true ones (each frame read its text's tail, so a cover's short width never counts);
+    - while the same popup stays, an unread item or amount is read again on its later frames; the
+      first read wins (`filled` says which);
+    - the event's time is its first frame's.
+  - **Repeats are reported apart:** a truth whose previous truth is the same item <= 6.0 s before
+    (`REPEAT_S`). While the box stays up, such a pickup is the same event, so it is missed.
+- **The count font, learned again** on all 20 calibration sessions (`learn-count`, fiT1-fiT20,
+  text_box crops): 1,071 popups (amounts 1 x 1,063, 10 x 6, 2 x 2), tail 9 runs, digits 0, 1, 2.
+  It reads its own 1,071 right. Saved as data/ui_anchors/item_popup_count_r2.npz (sha256
+  ade6a384...; client pixels, never committed).
+- **The calibration sessions under round 2's reader** (a development check, not a score):
+  1,075 truths, 1,056 events: I1 99.05 %, I2 100 %, P 0.19 % (2 events), R 98.1 %; repeats 24,
+  found 8.
+- **The held-out (set `r2`), fixed now:** every NAS session matching
+  `-rdp-(xmas02-(xw|fs)[\w-]*|rogue-[\w-]+|thief-[\w-]+)$` with a packets file and at least one
+  frame shard, 77 sessions: rogue 44, xmas02 fs* 17 (fsTa / fsTn / fsH and the ABORTED ones
+  included), thief 10, xmas02 xw* 6. The list is `r2-sessions.txt` (scratch, sha256 35f0935f...).
+- **Scored ONCE**, the same four bars, at this commit:
+
+      item_popup_eval.py score --set r2 --refs data/slot_items/refs.npz \
+          --count data/ui_anchors/item_popup_count_r2.npz --out <scratch>/score-r2.json
+
+- The round-1 held-out (fiT21+) is not used to tune. It is run again AFTER the r2 score, reported
+  only.
+

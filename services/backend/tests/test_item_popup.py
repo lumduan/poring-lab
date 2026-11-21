@@ -80,3 +80,55 @@ def test_the_match_rule_and_the_bars() -> None:
         "P_false": "PASS",
         "R_spaced": "INCONCLUSIVE",
     }
+
+
+# --- round 2 (item-popup-reader.md Amendment 2): one event per popup shown ----------------------
+class _Scripted(ip.Tracker):
+    """The Tracker's rules on scripted reads: a frame is None (no box) or (ids, amount, width)."""
+
+    def read(self, frame_rgb, p):  # type: ignore[no-untyped-def]
+        ids, amount, width = frame_rgb
+        item = ip.ItemRead(ids, 5.0 if ids else None, None, "ok" if ids else "far")
+        return ip.FrameRead(item, amount, width)
+
+
+def _run(seq, monkeypatch):  # type: ignore[no-untyped-def]
+    monkeypatch.setattr(ip, "box_of", lambda f: None if f is None else ip.Popup(541, 700, b""))
+    tr, out = _Scripted(None, None), []  # type: ignore[arg-type]
+    for t, f in enumerate(seq):
+        out += tr.feed(t, f)
+    return out + tr.flush()
+
+
+def test_round2_one_event_per_popup_shown(monkeypatch) -> None:  # type: ignore[no-untyped-def]
+    seq = [None, ((912,), 1, 180), ((912,), 1, 180),
+           ((912,), None, 150),  # a cover cut its top edge: no tail, the same popup
+           ((912,), 1, 180), None,  # it left the screen
+           ((912,), 1, 180),  # the same item again after it left: a new event
+           (None, None, 180),  # a cover over the icon: the same popup
+           ((501,), 1, 200),  # another item: new
+           ((501,), 3, 220)]  # another TRUE width (both read their tail): new  # fmt: skip
+    got = _run(seq, monkeypatch)
+    assert [(e.t, e.ids, e.amount, e.frames) for e in got] == [
+        (1, (912,), 1, 4), (6, (912,), 1, 2), (8, (501,), 1, 1), (9, (501,), 3, 1)]  # fmt: skip
+
+
+def test_round2_a_later_frame_fills_an_unread_first_read(monkeypatch) -> None:  # type: ignore[no-untyped-def]
+    got = _run([(None, None, 150), ((912,), 1, 180), ((913,), 1, 180)], monkeypatch)
+    # the first read wins once made: 913 on the third frame is another item, a new event
+    assert [(e.ids, e.amount, e.width, e.filled) for e in got] == [
+        ((912,), 1, 180, ["item", "amount"]), ((913,), 1, 180, [])]  # fmt: skip
+
+
+def test_text_box_is_the_boxs_own_columns() -> None:
+    f = np.zeros((200, 1280, 3), np.uint8)
+    b = ip.text_box(f, ip.Popup(541, 700, b""))
+    assert b.shape == (ip.bs.POPUP_BOTTOM + 2 - (ip.bs.POPUP_TOP - 2), 160, 3)
+
+
+def test_repeats_are_counted_apart() -> None:
+    s = 10**9
+    truth = [{"t": 10 * s, "id": 912, "amount": 1}, {"t": 13 * s, "id": 912, "amount": 1},
+             {"t": 30 * s, "id": 912, "amount": 1}]  # fmt: skip
+    got = ev.match([{"t": int(10.4 * s), "ids": [912], "amount": 1}], truth)
+    assert (got["repeats"], got["repeats_found"], got["matched"]) == (1, 0, 1)
