@@ -130,3 +130,16 @@ test("the live map fills its pane on a PC, never centres by align-items, keeps i
   assert.match(mobile?.body ?? "", /height:\s*clamp\(/);
   assert.match(mobile?.body ?? "", /flex:\s*none/);
 });
+
+// Batt 2026-11-21 (iPhone 16): with the blocks hidden the drawer was flex: 1 / min-height: 0 on a
+// phone too, so it shrank to the space left, its panes overflowed it and the status row sat
+// mid-screen over the map. On a phone it stays as tall as its panes.
+test("on a phone the drawer with the blocks hidden is as tall as its panes (never squeezed under the status row)", () => {
+  const phone = studio.lastIndexOf("@media (max-width: 48rem)");
+  const hidden = ruleWith(studio, '.studio[data-testid="flows-app"] .studio-drawer[data-blocks="hidden"]', phone);
+  assert.ok(hidden, "the phone rule for the drawer with the blocks hidden");
+  assert.match(hidden.body, /flex:\s*none/);
+  assert.match(hidden.body, /min-height:\s*auto/);
+  // the PC rule it overrides is still there (the drawer fills the page on a PC)
+  assert.match(ruleWith(studio, '.studio-drawer[data-blocks="hidden"]')?.body ?? "", /flex:\s*1/);
+});
