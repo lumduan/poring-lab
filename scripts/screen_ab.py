@@ -129,6 +129,47 @@ def player_sets(items: Sequence[str]) -> dict[str, Any] | str:
     return out
 
 
+# xmas02-items-1080.md 8c (2026-11-21): a block may set ONE kind of runner setting too -- a BOX
+# setting with its own runner flag (e.g. loot_items, the item model): the runner's argv must then
+# differ from the box's in that flag's VALUE alone (box_set_arm checks it)
+def box_sets(items: Sequence[str]) -> dict[str, Any] | str:
+    """PURE: ``--box-set NAME=VALUE`` items as {name: value}, or why not: NAME a setting with its
+    own runner flag (not a player setting, not a --tune constant), each once, VALUE one it can
+    take (a choice's option, a switch's true / false, a number)."""
+    from poring_flow import settings as st
+
+    by = {f.name: f for f in st.FIELDS}
+    out: dict[str, Any] = {}
+    for it in items:
+        name, sep, raw = it.partition("=")
+        f = by.get(name.strip())
+        if not sep or f is None:
+            return f"--box-set {it!r}: NAME=VALUE, NAME a setting's name"
+        if f.player or not f.flag:
+            return (f"--box-set {f.name}: not a box setting with its own runner flag "
+                    "(--player-set takes the player's)")  # fmt: skip
+        if f.name in out:
+            return f"--box-set {f.name}: given twice"
+        raw = raw.strip()
+        v: Any
+        if f.kind == "switch":
+            if raw.lower() not in ("true", "false", "on", "off"):
+                return f"--box-set {f.name}: {raw!r} is not true / false"
+            v = raw.lower() in ("true", "on")
+        elif f.kind in ("number", "share"):
+            try:
+                v = float(raw)
+            except ValueError:
+                return f"--box-set {f.name}: {raw!r} is not a number"
+        else:
+            v = raw
+        why = st.problem_of(f, v)
+        if why:
+            return f"--box-set {f.name}: {why}"
+        out[f.name] = v
+    return out
+
+
 def with_player_sets(text: str, sets: Mapping[str, Any]) -> str:
     """PURE: the box text with each player setting in its group's tab of the map node (the tab
     rule of settings.with_setting_tabs: an existing tab of that name, else a new one)."""
@@ -150,10 +191,23 @@ def with_player_sets(text: str, sets: Mapping[str, Any]) -> str:
     return pj.to_json(pj.validate(d))
 
 
-def player_set_arm(text: str, sets: Mapping[str, Any], secs: int) -> dict[str, Any] | str:
+def argv_differs_in(a: Sequence[str], b: Sequence[str], flags: Sequence[str]) -> bool:
+    """PURE: argv ``b`` is ``a`` but for the VALUES right after ``flags`` (same length, the same
+    arguments everywhere else; each such flag present in both)."""
+    if len(a) != len(b):
+        return False
+    for i, (x, y) in enumerate(zip(a, b, strict=True)):
+        if x != y and not (i > 0 and a[i - 1] == b[i - 1] and a[i - 1] in flags):
+            return False
+    return True
+
+
+def player_set_arm(text: str, sets: Mapping[str, Any], secs: int,
+                   flags: Sequence[str] = ()) -> dict[str, Any] | str:  # fmt: skip
     """PURE but for flow_play.prepare: the block's box with its player settings -- its text, its
     settings and its project hash -- or a refusal: the settings must differ from the box's in the
-    named ones alone, and the runner must get the same argv, box, keys and loop."""
+    named ones alone, and the runner must get the same argv, box, keys and loop. ``flags``: runner
+    flags whose VALUE may differ (box settings, box_sets): only the argument right after one."""
     import flow_play as fp
 
     from poring_flow import project as pj
@@ -175,8 +229,9 @@ def player_set_arm(text: str, sets: Mapping[str, Any], secs: int) -> dict[str, A
             return f"refused before any input: {prep}"
         preps.append((h, prep.runners[s10.NODE]))
     (_, a), (h, b) = preps
-    if a.argv("L", None, None) != b.argv("L", None, None):
-        return "refused before any input: a player setting changed the runner's argv"
+    if not argv_differs_in(a.argv("L", None, None), b.argv("L", None, None), flags):
+        return ("refused before any input: the settings changed the runner's argv beyond "
+                f"{list(flags) or 'nothing'}'s value")  # fmt: skip
     for k in ("box_kwargs", "keys", "loop", "tick_left_out"):
         va, vb = getattr(a, k), getattr(b, k)
         if (va() if callable(va) else va) != (vb() if callable(vb) else vb):
@@ -186,7 +241,8 @@ def player_set_arm(text: str, sets: Mapping[str, Any], secs: int) -> dict[str, A
 
 def plan_doc(label: str, n: int, minutes: float, screen: str, folder: Path,
              base: Mapping[str, Any] | None = None, sets: Mapping[str, Any] | None = None,
-             base_text: str | None = None) -> dict[str, Any] | str:  # fmt: skip
+             base_text: str | None = None,
+             box_set: Mapping[str, Any] | None = None) -> dict[str, Any] | str:  # fmt: skip
     """PURE but for stage10's reads: the block's series document, or a refusal. ``base``: a
     stage10 plan document (tests); else stage10's own plan (its proofs, the box's argv).
     ``sets``: the block's player settings (player_sets); ``base_text``: the box text they go
@@ -197,9 +253,14 @@ def plan_doc(label: str, n: int, minutes: float, screen: str, folder: Path,
     arm = got["arms"][BOX_ARM]
     vals = got["vals"][BOX_ARM]
     secs = int(round(minutes * 60))
-    if sets:
+    if sets or box_set:
+        from poring_flow import settings as st
+
+        by = {f.name: f for f in st.FIELDS}
+        flags = tuple(by[k].flag for k in (box_set or {}))
         ps = player_set_arm(base_text if base_text is not None
-                            else s10.arm_text(BOX_ARM, minutes), sets, secs)  # fmt: skip
+                            else s10.arm_text(BOX_ARM, minutes),
+                            {**(sets or {}), **(box_set or {})}, secs, flags)  # fmt: skip
         if isinstance(ps, str):
             return ps
         arm, vals = {**arm, "project_hash": ps["project_hash"]}, ps["vals"]
@@ -209,6 +270,7 @@ def plan_doc(label: str, n: int, minutes: float, screen: str, folder: Path,
         "screen_want": {k: SCREENS[screen][k] for k in ("session", "region")},
         "runs_n": n, "minutes": minutes, "box_arm": BOX_ARM, "arm": arm,
         "player_set": dict(sets or {}),
+        "box_set": dict(box_set or {}),
         "vals": {BOX_ARM: vals}, "bar": {**s10.BAR, "screen": BAR},
         "runner_sha256": got["runner_sha256"], "drive_base": got["drive_base"],
         "serve_s": int(n * (minutes * 60 + s2.START_GRACE_S + 120) + s2.SERVE_EXTRA_S),
@@ -464,6 +526,14 @@ def main(argv: Sequence[str] | None = None) -> int:
             help="the box's use_model (8c: the 1080 model; default s11scr's)",
         )
         p.add_argument(
+            "--box-set",
+            action="append",
+            default=[],
+            metavar="NAME=VALUE",
+            help="a BOX setting with its own runner flag for this block (xmas02-items-1080.md 8c: "
+            "loot_items=MODEL); the runner's argv may differ in that flag's value alone",
+        )
+        p.add_argument(
             "--player-set",
             action="append",
             default=[],
@@ -502,12 +572,14 @@ def main(argv: Sequence[str] | None = None) -> int:
             runs = [run for _, rs in parts for run in rs]
             use_model(str(doc.get("model") or MODELS[0]))  # a block before 8c named xmas02sk
             sets_of = [d.get("player_set") or {} for d, _ in parts]
-            if any(s != sets_of[0] for s in sets_of):
-                raise SystemExit(f"{labels}: the series set different player settings")
+            boxes_of = [d.get("box_set") or {} for d, _ in parts]
+            if any(s != sets_of[0] for s in sets_of) or any(b != boxes_of[0] for b in boxes_of):
+                raise SystemExit(f"{labels}: the series set different player / box settings")
             models[side] = {
                 "model": s10.MODEL,
                 "series": names,
                 "player_set": sets_of[0],
+                "box_set": boxes_of[0],
                 **s10.model_report(
                     [s10.score_run(r, SCRATCH / x, bar=d["bar"])
                      for x, (d, _) in zip(names, parts, strict=True) for r in d["runs"]]
@@ -532,7 +604,11 @@ def main(argv: Sequence[str] | None = None) -> int:
     if isinstance(sets, str):
         print(f"refused before any input: {sets}", flush=True)
         return 2
-    got = plan_doc(a.label, a.runs, a.minutes, a.screen, folder, sets=sets)
+    bsets = box_sets(a.box_set)
+    if isinstance(bsets, str):
+        print(f"refused before any input: {bsets}", flush=True)
+        return 2
+    got = plan_doc(a.label, a.runs, a.minutes, a.screen, folder, sets=sets, box_set=bsets)
     if isinstance(got, str):
         print(got, flush=True)
         return 2
@@ -549,7 +625,7 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     (folder / "runner-5b1.py").write_text(hc.git_show(hc.DRIVE_BASE, hc.TARGET))
     s4.project_file(BOX_ARM, folder).write_text(
-        with_player_sets(s10.arm_text(BOX_ARM, a.minutes), sets))  # fmt: skip
+        with_player_sets(s10.arm_text(BOX_ARM, a.minutes), {**sets, **bsets}))  # fmt: skip
     (folder / f"runner-config-{BOX_ARM}.json").write_text(
         json.dumps({s10.NODE: got["vals"][BOX_ARM]}) + "\n")  # fmt: skip
     return SeriesScr(got, folder).run()

@@ -264,3 +264,50 @@ def test_the_false_boss_line() -> None:
     assert sa.false_boss_line(a, b[:1], 20)["verdict"] == "INCONCLUSIVE"  # 1 valid run
     short = [_boss_run(5, 0), _boss_run(5, 0)]  # under 80 % of the time box: not valid
     assert sa.false_boss_line(a, short, 20)["verdict"] == "INCONCLUSIVE"
+
+
+# --- xmas02-items-1080.md 8c: a block's BOX setting (the item model) ------------------------------
+def test_box_sets_take_box_settings_with_a_runner_flag_only() -> None:
+    assert sa.box_sets(["loot_items=xmas02fi4"]) == {"loot_items": "xmas02fi4"}
+    assert "not a box setting" in sa.box_sets(["alarm_near_px=60"])  # a player setting
+    assert "a setting's name" in sa.box_sets(["nope=1"])
+    assert "given twice" in sa.box_sets(["loot_items=xmas02fi4", "loot_items=xmas02fi5"])
+    assert isinstance(sa.box_sets(["loot_items=xmas02fi9"]), str)  # not one of its options
+    assert isinstance(sa.box_sets(["loot_items=xmas02fi6"]), str)  # 8b FAILED: not offered
+
+
+def test_argv_may_differ_in_the_named_flags_values_only() -> None:
+    a = ["play", "--loot-items", "xmas02fi5", "--loot", "trim"]
+    assert sa.argv_differs_in(a, ["play", "--loot-items", "xmas02fi6", "--loot", "trim"],
+                              ("--loot-items",))  # fmt: skip
+    assert not sa.argv_differs_in(a, ["play", "--loot-items", "xmas02fi6", "--loot", "v1"],
+                                  ("--loot-items",))  # fmt: skip
+    assert not sa.argv_differs_in(a, ["play", "--loot-items", "xmas02fi6", "--loot", "trim"], ())
+    assert not sa.argv_differs_in(a, a[:-1], ("--loot-items",))  # another length
+    assert sa.argv_differs_in(a, a, ())
+
+
+def test_a_box_set_block_changes_the_item_model_alone() -> None:
+    import stage10_ab as s10
+
+    text = s10.arm_text("B", 20)
+    base = sa.s5c.vals_of(text)
+    assert isinstance(base, dict) and base["loot_items"] == "xmas02fi5"
+    got = sa.player_set_arm(text, {"loot_items": "xmas02fi4"}, 1200, ("--loot-items",))
+    assert isinstance(got, dict), got
+    assert {k for k in got["vals"] if got["vals"][k] != base.get(k)} == {"loot_items"}
+    # without the flag allowed to differ, the same change is refused (a player set may not)
+    refused = sa.player_set_arm(text, {"loot_items": "xmas02fi4"}, 1200)
+    assert isinstance(refused, str) and "argv" in refused
+
+
+def test_plan_doc_records_the_block_s_box_set(tmp_path: Path) -> None:
+    import stage10_ab as s10
+
+    text = s10.arm_text("B", 20)
+    doc = sa.plan_doc("fi-b", 3, 20, "1080", tmp_path, base=_base(),
+                      box_set={"loot_items": "xmas02fi4"}, base_text=text)  # fmt: skip
+    assert isinstance(doc, dict), doc
+    assert doc["box_set"] == {"loot_items": "xmas02fi4"} and doc["player_set"] == {}
+    assert doc["vals"]["B"]["loot_items"] == "xmas02fi4"
+    assert doc["arm"]["project_hash"] != "h" * 64
