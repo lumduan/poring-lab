@@ -423,3 +423,36 @@ Written before any probe of this round.
   - 3 valid runs a side, immunity OFF;
   - after the round-7 item pilots, which hold the dev lab now (items come first in Batt's
     order).
+
+### Amendment 8 (2026-11-21 17:15 ICT from `date`, BEFORE any code or data of it): Batt's idea, "click on sight", as 5b's arm C
+
+- **Batt's words** (2026-11-21, after Amendment 7): "Try it without waiting for the sword? See it,
+  click to strike at once; an arrow over the monster's head means the target is locked."
+- **What the data already says:**
+  - The late sword is the client's cursor being slow to REDRAW after a stop.
+    - In Amendment 7's block the point was over the monster nearly every time: 1 of 82 far hovers
+      never showed a sword within 1.0 s.
+    - A click at once would usually attack, without the 0.29-0.42 s median / 0.6-0.7 s p90 wait.
+  - The idea was tried at 720 in hunt_flow v12 (burst strike: "he clicks until the client draws
+    the ARROW"). Its arrow reader then measured, after a click: P(arrow | the attack registered)
+    0.71, P(arrow | not) 0.08, first seen at a median 0.44 s.
+  - The runner already watches its lock arrow and the strike's end after every strike: that
+    confirmation stays as it is.
+- **Arm C, "click on sight":** a player setting, off by default; the live player wraps
+  `cursor_sword.check`, and the runner file stays byte-identical.
+  - The hover point lies inside a FRESH monster box: the detector's last read, <= 0.5 s old,
+    from the Sight holder.
+  - At such a point the sword check reads for at most **0.10 s**.
+  - Its verdict is used when it decided: "sword" strikes; "clear" (the walk arrow) does not.
+  - An undecided "unknown" counts as "sword": the click goes.
+  - Every other hover is untouched (the walk gate, the loot hovers, a point outside any monster
+    box). They keep the full check.
+- **5b becomes three arms** at 1080, each 3 valid runs, not immune, interleaved, scored once:
+  - A = the box (CURSOR_WAIT_S 0.35);
+  - B = CURSOR_WAIT_S 1.0 (5a passed);
+  - C = click on sight.
+- **Judged against A, as 5b registers it** (kills/h > +2 SE; deaths and errors none worse).
+  Reported for each arm from the lab's packets:
+  - the share of strike clicks that became an attack request;
+  - the walk requests that followed a strike click (the cost of a stale box);
+  - the time from the box to the first attack request.
