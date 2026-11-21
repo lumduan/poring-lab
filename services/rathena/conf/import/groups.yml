@@ -71,9 +71,13 @@
 #                  docs/planning/econ-bag-count.md remove exactly what they add. rAthena atcommand.cpp
 #                  ACMD_FUNC(delitem) -> pc_delitem on the character's own inventory. Through the
 #                  name + job check like every group-20 line.
+#   zeny           lab only (Batt, 2026-11-21: "conjure money for testing"): the Run status's
+#                  zeny reader (scripts/zeny_read.py) is tested on the lab Rogue with KNOWN
+#                  amounts (7 digits, commas; a long amount near the window's border).
+#                  atcommand.cpp ACMD_FUNC(zeny) changes the character's own zeny only.
 # LogCommands: every command lands in atcommandlog (offline audit). Inherits Player for the basics.
-# No permissions beyond Player's otherwise: no zeny commands, no any_warp, no hide_session (the stat
-# commands: only the six above, since 2026-11-05).
+# No permissions beyond Player's otherwise: no zeny command on others, no any_warp, no hide_session
+# (the stat commands: only the six above, since 2026-11-05).
 Header:
   Type: PLAYER_GROUP_DB
   Version: 1
@@ -115,3 +119,4 @@ Body:
       die: true
       save: true
       delitem: true
+      zeny: true
