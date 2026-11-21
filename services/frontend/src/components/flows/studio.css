@@ -1785,6 +1785,14 @@
     height: auto;
     overflow: visible;
   }
+  /* Batt 2026-11-21 (iPhone 16, the blocks hidden, Map on top): the PC rule "the drawer fills the
+     page" (flex: 1, min-height: 0) shrank the drawer to the space left on a phone; its panes
+     overflowed it and the sticky status row sat mid-screen over the map. On a phone the drawer
+     stays as tall as its panes, blocks hidden or not: the page is the one scroller */
+  .studio[data-testid="flows-app"] .studio-drawer[data-blocks="hidden"] {
+    flex: none;
+    min-height: auto;
+  }
   .studio[data-testid="flows-app"] .pane {
     flex: none;
     min-height: 0;
