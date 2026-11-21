@@ -392,6 +392,18 @@ FIELDS: tuple[Field, ...] = (
         unit="s",
         optional=True,
     ),  # fmt: skip
+    # cursor-1080.md Amendment 8 (Batt 2026-11-21: "see it, click to strike at once; the arrow over
+    # its head means it is locked"): at a FRESH monster box's point the sword check reads 0.10 s at
+    # most and an undecided read strikes; every other hover is untouched. The live player applies it
+    # (flow_play click_on_sight), never a runner flag. Off: today's check (5b arm C tests it)
+    Field(
+        "cursor_click_on_sight",
+        "aim",
+        "switch",
+        "click a monster on sight (no sword wait)",
+        optional=True,
+        player=True,
+    ),  # fmt: skip
     Field(
         "WALKER_PX",
         "aim",
@@ -1182,6 +1194,7 @@ DEFAULTS: dict[str, Any] = {
     "STILL_N": 3,
     "STILL_MAX_S": 1.5,
     "CURSOR_WAIT_S": 0.35,  # dungeon_hunt.CURSOR_WAIT_S (test_flow_config pins it)
+    "cursor_click_on_sight": False,  # cursor-1080.md Amendment 8: 5b's arm C, off by default
     "WALKER_PX": 10.0,
     "HOLD_GAP_S": 0.25,
     "HOLD_MAX_S": 2.5,
@@ -1295,6 +1308,7 @@ FIND_GROUP: dict[str, tuple[str, ...]] = {
 }
 FIND: dict[str, tuple[str, ...]] = {
     "CURSOR_WAIT_S": ("cursor", "hover", "sword", "1080", "late"),
+    "cursor_click_on_sight": ("cursor", "click", "sight", "sword", "strike", "lock", "arrow"),
     "potion_below": ("drink",),
     "knife_hp_min": ("hp",),
     "respawn_at": ("click", "button"),
