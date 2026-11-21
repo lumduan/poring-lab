@@ -45,6 +45,8 @@ class AuditRecord(BaseModel):
         "env_windows_host", "server_add", "server_remove", "declare", "withdraw",
         # the Settings page's "Who may play a Run" (routes_identity.py, ADR-0020 Amendment R)
         "run_identity_mode", "char_remember", "char_rename", "char_forget",
+        # the Settings page's "The Run log" (routes_runlog.py, Batt 2026-11-21)
+        "run_log",
     ]  # fmt: skip
     kind: Literal["easy", "normal", "hard", "declare"] | None = None  # the rule that applied
     env_id: str | None

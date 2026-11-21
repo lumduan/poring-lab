@@ -6,6 +6,7 @@ import type * as BlocklyT from "blockly/core";
 
 import { registerPickers, wrapLineField } from "./blockly-pickers.ts";
 import { ABOUT_FIELDS, BLOCK_DEFS, defAbout, defTooltip, LABEL_ROWS, WHY_FIELDS, whyRows } from "../../lib/flow/blockdefs.ts";
+import { exprTooltip } from "../../lib/flow/exprwords.ts";
 import { huntDef, type HuntRules } from "../../lib/flow/hunt.ts";
 import { wrapExpr } from "../../lib/flow/pickers.ts";
 import { noteLines, SETTING_NOTE_ROWS, settingOfType, unitOf } from "../../lib/flow/settings.ts";
@@ -104,6 +105,10 @@ export function register(B: typeof BlocklyT): void {
     this.setOnChange(function (this: BlocklyT.Block, e: BlocklyT.Events.Abstract) {
       if (e.type === B.Events.BLOCK_CHANGE && (e as BlocklyT.Events.BlockChange).blockId === this.id) syncExprWrap(B, this);
     });
+  });
+  // Batt 2026-11-21 ("the weight field's tooltip shows HP"): the expression's own meaning
+  B.Extensions.register("pl_expr_tooltip", function (this: BlocklyT.Block) {
+    this.setTooltip(() => exprTooltip(String(this.getFieldValue("TEXT") ?? "")));
   });
   // round 21: a badge row and a run-line row show only while they say something
   B.Extensions.register("pl_label_rows", function (this: BlocklyT.Block) {
