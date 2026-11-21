@@ -143,3 +143,23 @@ attacks." On the order (20:2x): after tonight's 5b test.
   same preamble, flags, validity rule and up to 2 make-up runs per arm.
 - The scorer and the bars are unchanged.
 
+### Amendment 3 (2026-11-22 06:16 ICT from `date`, BEFORE the score): A3 and R2 never played; the make-up runs; the arms scored
+
+- **rng-A3 (05:15) and rng-R2 (05:17) were stopped by screen_ab's setup before any input:** "after
+  @heal her HP reads 0, not 95 % or more (a person first)". Both reads before and after the typed
+  @heal said 0 %. The chain was stopped by its STOP2 file at 05:19, as rng-R3 began; that marker
+  was retired by hand (renamed) once R3's setup read 7 % -> 100 % after @heal and R3 played (05:22).
+  - No arm code ran in either (the setup is the same for both arms). They are VOID, as 5b's C1
+    was. The cause is not established: the Rogue is not immune between runs, and the preamble's
+    warp-in spot (114, 23) is where she waits ~1 min. The sniffer capture is not read (it sits in
+    a Docker volume).
+- **Valid so far:** A1, A2, A4 (the make-up run, 05:48-06:16); R1, R3. R4 (the make-up) plays
+  06:17-06:43.
+- **Scored once, after R4:**
+
+      ranged_ab_score.py score --arm A=rng-A1+rng-A2+rng-A4 --arm R=rng-R1+rng-R3+rng-R4
+
+  If R4 is not valid, R has 2 valid runs and the scorer judges on them (said in the result).
+- **The shooter pick fires:** R1's player record (the `-play-` session, which the scorer reads)
+  holds 4 picks, all Cruisers, at 6, 4, 1 and 8 cells.
+
