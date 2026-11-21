@@ -181,7 +181,7 @@ ROLE_PRESS = {"heal_key": "potion", "fly_key": "fly", "home_key": "home", "knife
               "dagger_key": "equip"}  # flow_run.PRESS_BLOCK's words (the live line)  # fmt: skip
 MIRROR = frozenset({*fr.EVENT_BLOCK, "press", "death", "player_home", "player_end",
                     "player_respawn", "stock", "stop_file", "hook_stop", "run_start",
-                    "run_end", "escape", "box_refused"})  # fmt: skip
+                    "run_end", "escape", "box_refused", "weight"})  # fmt: skip
 CHECK_LABEL = "flowplay-check"
 
 
@@ -843,14 +843,72 @@ def seen_boxes(seen: Seen, sight: Sight | None = None) -> Iterator[None]:
             c.detect = f  # type: ignore[method-assign]
 
 
+class Purse:
+    """Batt 2026-11-21 ("add SP, the weight as a %, and the zeny: a mage, a merchant whose skill
+    strikes with money"): the zeny read on the runner's OWN weight frames (gm_state._weight, its UI
+    watch: every 10 s outside a fight), scripts/zeny_read.py; the once-a-second hp_read record
+    carries the last value. DISPLAY ONLY: no decision reads it; it never raises."""
+
+    def __init__(self, read: Callable[[Sequence[Any]], tuple[int | None, str]] | None = None,
+                 clock: Callable[[], float] = time.monotonic) -> None:  # fmt: skip
+        self.lock = threading.Lock()
+        self.value: int | None = None
+        self.why = "not read yet"
+        self.t = -1e9
+        self.reads = self.fails = 0
+        self._read, self.clock = read, clock
+
+    def read(self, frames: Sequence[Any]) -> None:
+        try:
+            if self._read is None:
+                import zeny_read
+
+                self._read = zeny_read.read_zeny
+            v, why = self._read(frames)
+        except Exception as e:  # display only: never the run's
+            v, why = None, f"{type(e).__name__}"
+        with self.lock:
+            self.reads += 1
+            self.why = why
+            if v is None:
+                self.fails += 1
+            else:
+                self.value, self.t = v, self.clock()
+
+    def last(self) -> int | None:
+        with self.lock:
+            return self.value
+
+
+@contextlib.contextmanager
+def purse_reads(purse: Purse) -> Iterator[None]:
+    """For one hunt core: after each of the runner's weight reads, the zeny on the same two frames
+    (no grab of its own, no input)."""
+    import gm_state
+
+    saved = gm_state._weight
+
+    def weight(frames: Any) -> Any:
+        out = saved(frames)
+        purse.read(frames)
+        return out
+
+    gm_state._weight = weight
+    try:
+        yield
+    finally:
+        gm_state._weight = saved
+
+
 class HuntHook:
     """The runner's TICK HOOK (dungeon@9.48) and its event mirror: the player's stop, read access
     to the runner's HUD values each tick, the runner's events into the player's own record."""
 
     def __init__(self, player: LivePlayer, res: HuntResult, seen: Seen | None = None,
-                 sight: Sight | None = None) -> None:  # fmt: skip
+                 sight: Sight | None = None, purse: Purse | None = None) -> None:  # fmt: skip
         self.player, self.res = player, res
         self.sight = sight  # the live map's monsters (Batt 2026-11-21), on the hp_read record
+        self.purse = purse  # the zeny (Batt 2026-11-21), on the hp_read record too
         self.last: Any = None
         self._hp_t = -1e9
         self._hp0 = Hp0Watch()
@@ -899,6 +957,8 @@ class HuntHook:
             self._hp_t = t_mono
             if self.sight is not None and rec.get("pos") is not None:
                 extra = {**extra, "mobs": self.sight.cells(rec.get("pos"))}
+            if self.purse is not None and (z := self.purse.last()) is not None:
+                extra = {**extra, "zeny": z}
         elif k not in MIRROR:
             return
         out = {**rec, **extra}
@@ -1026,9 +1086,9 @@ class HuntCore:
                            "default_species": list(plan.default_species)}
                           if "box_recipes" in box else {}),
                        **({"loop": plan.loop} if plan.loop else {})})  # fmt: skip
-        seen, sight = Seen(), Sight()
-        hook = (DriveHook(player, res, seen, sight) if plan.loop
-                else HuntHook(player, res, seen, sight))  # fmt: skip  # 5b-2: its loop
+        seen, sight, purse = Seen(), Sight(), Purse()
+        hook = (DriveHook(player, res, seen, sight, purse) if plan.loop
+                else HuntHook(player, res, seen, sight, purse))  # fmt: skip  # 5b-2: its loop
 
         def warn(words: str) -> None:
             say(words)
@@ -1049,6 +1109,7 @@ class HuntCore:
                 near_alarm(dh, plan.vals),
                 item_rule(plan.vals),
                 seen_boxes(seen, sight),
+                purse_reads(purse),
             ):
                 res.rc = run_fn(a, hook=hook, session=(player.io.agent, player.io.screen), **box)
         except SystemExit as e:  # its preamble's refusal, or ro_agent.Stop inside its session

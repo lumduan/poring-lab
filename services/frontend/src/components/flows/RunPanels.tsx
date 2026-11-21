@@ -226,7 +226,7 @@ export function RunMonitor({ live }: { live: Live }) {
           <span className="run-tile-text">{t.text}</span>
           {t.bar !== undefined && (
             <span className="run-tile-bar" aria-hidden="true">
-              <span style={{ width: `${t.bar}%` }} data-low={t.bar < 50 ? "true" : "false"} />
+              <span style={{ width: `${t.bar}%` }} data-low={(t.warn ?? t.bar < 50) ? "true" : "false"} />
             </span>
           )}
         </span>

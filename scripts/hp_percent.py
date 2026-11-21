@@ -188,6 +188,13 @@ def is_slash(run: Bin) -> bool:
 def read_weight_font(band: Bin, font: Mapping[str, Bin]) -> tuple[int, int] | None:
     """PURE: (N, M) from the weight line's band in a client's own font, or None: the FIRST
     "digits / digits" on the line (the zeny's "33,287" after it has a comma, never a '/')."""
+    span = weight_span(band, font)
+    return None if span is None else (span[0], span[1])
+
+
+def weight_span(band: Bin, font: Mapping[str, Bin]) -> tuple[int, int, int] | None:
+    """PURE: read_weight_font's (N, M) and the column one past M's last ink (2026-11-21: the zeny
+    reader starts there, scripts/zeny_read.py), or None."""
     rs = runs(band, *WEIGHT_SEARCH)
     named = []
     for x, r in rs:
@@ -218,7 +225,7 @@ def read_weight_font(band: Bin, font: Mapping[str, Bin]) -> tuple[int, int] | No
                 b = "".join(str(t[2]) for t in named[m0 : m1 + 1])
                 ok_a = len(a) == 1 or a[0] != "0"
                 if ok_a and b[0] != "0" and len(a) <= 6 and len(b) <= 6:
-                    return int(a), int(b)
+                    return int(a), int(b), int(named[m1][1])
             return None  # the first '/' on the line did not read: never a later pair
         i = k
     return None

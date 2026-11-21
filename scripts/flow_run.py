@@ -745,6 +745,16 @@ class Live:
     trail: list[list[int]] = field(default_factory=list)
     mobs: list[list[Any]] | None = None
     mobs_t_ns: int | None = None
+    # Batt 2026-11-21 ("add SP, the weight as a %, and the zeny: other jobs need them, a mage,
+    # a merchant whose skill costs zeny"): SP from every HP read (sp_pct), the bag's weight from
+    # the runner's weight events (its UI watch: every 10 s outside a fight, an event on a change),
+    # the zeny from the player's read of the same Basic Info line (flow_play.Purse); None: not read
+    sp: int | None = None
+    sp_low: int | None = None
+    weight: float | None = None  # the share, 0..1
+    weight_red: bool = False  # the client draws the line red (>= 50 %: no natural regen)
+    zeny: int | None = None
+    zeny_start: int | None = None
 
     def clock_at(self, t: Any) -> str | None:
         """The event's clock time, "HH:MM:SS", in this server's time zone (None: no clock)."""
@@ -815,6 +825,14 @@ class Live:
             if isinstance(e.get("pct"), int):
                 self.hp = e["pct"]
                 self.hp_low = self.hp if self.hp_low is None else min(self.hp_low, self.hp)
+            sp = e.get("sp_pct")
+            if isinstance(sp, int) and not isinstance(sp, bool):
+                self.sp = sp
+                self.sp_low = sp if self.sp_low is None else min(self.sp_low, sp)
+            z = e.get("zeny")
+            if isinstance(z, int) and not isinstance(z, bool) and z >= 0:
+                self.zeny = z
+                self.zeny_start = z if self.zeny_start is None else self.zeny_start
             if isinstance(e.get("map"), str) and e["map"] and e["map"][:40] != self.map:
                 self.map, self.pos, self.mobs = e["map"][:40], None, None
                 self.trail.clear()  # another map: her cells there are another picture
@@ -830,6 +848,12 @@ class Live:
                     t if isinstance(t, int) else None,
                 )
             return  # a look every tick: what she does stays the last action
+        elif k == "weight":  # the runner's UI watch (mirrored by the player)
+            sh = e.get("share")
+            if isinstance(sh, (int, float)) and not isinstance(sh, bool) and 0 <= sh <= 2:
+                self.weight = float(sh)
+            self.weight_red = bool(e.get("red"))
+            return
         elif k == "press":
             w = str(e.get("what"))
             self.knife += w == "opener"
@@ -864,7 +888,10 @@ class Live:
                 "retries": self.retries, "story": list(self.story),
                 "tz": server_tz(), "map": self.map, "trail": [list(c) for c in self.trail],
                 "mobs": None if self.mobs is None else [list(m) for m in self.mobs],
-                "mobs_age_s": self.mobs_age_s()}  # fmt: skip
+                "mobs_age_s": self.mobs_age_s(), "sp": self.sp, "sp_low": self.sp_low,
+                "weight": None if self.weight is None else round(self.weight * 100, 1),
+                "weight_red": self.weight_red, "zeny": self.zeny,
+                "zeny_start": self.zeny_start}  # fmt: skip
 
     def mobs_age_s(self) -> float | None:
         """How old the monsters' record is (s), by the newest event's time."""

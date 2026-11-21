@@ -629,12 +629,21 @@ _running: list[subprocess.Popen[bytes]] = []  # the records left in the backgrou
 def hunt_sessions(label: str, demo: Path) -> list[Path]:
     """PURE but for the directory listing: a run's HUNT sessions by its label, as the A/B tools'
     scores find them -- the runner's own (``*-<label>``: a runner run) and a box run's hunt cores
-    (``*-<label>-hunt*``); never the player's own session (``*-play-<label>``: no packets)."""
+    (``*-<label>-hunt*``); never the player's own session (``<stamp>-play-<label>``: no packets).
+    2026-11-21: the player's session is told by its KIND (the word after the stamp), not by
+    "-play-" anywhere in the name: a label that holds "-play-" itself (the 1080 item pilots'
+    ``ifH6-play-r01B``) had every hunt core refused, and 18 pilots recorded no economy."""
     if not label:
         return []
     hits = {*demo.glob(f"*-{label}-hunt*"), *demo.glob(f"*-{label}")}
-    return sorted(d for d in hits if d.is_dir() and "-play-" not in d.name
+    return sorted(d for d in hits if d.is_dir() and not player_session(d.name)
                   and (d / "events.jsonl").is_file())  # fmt: skip
+
+
+def player_session(name: str) -> bool:
+    """PURE: a session folder named ``<stamp>-play-...`` (the live player's own record)."""
+    kind = name.split("-", 1)[1] if "-" in name else ""
+    return kind.startswith("play-")
 
 
 def after_run_command(sessions: Sequence[str | Path], db: Path | None = None,

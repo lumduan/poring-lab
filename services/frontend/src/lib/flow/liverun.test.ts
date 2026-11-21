@@ -250,3 +250,38 @@ test("the monitor bar: a tile per fact with its emoji; no Knife tile; steals bes
   assert.ok(!tiles.some((t) => /knife/i.test(`${t.text} ${t.title}`)));
   assert.equal(monitorTiles({ ...st, live: { ...st.live, retries: 2 } }).at(-1)?.key, "retries");
 });
+
+// Batt 2026-11-21: "add SP, the weight as a %, and the zeny: other jobs need them, a mage, a
+// merchant whose skill strikes with money"
+test("the live line and the monitor bar carry SP, the weight % and the zeny", async () => {
+  const { liveLine, monitorTiles, zenyChange, zenyText } = await import("./liverun.ts");
+  assert.equal(zenyText(0), "0");
+  assert.equal(zenyText(33287), "33,287");
+  assert.equal(zenyText(1234567), "1,234,567");
+  assert.equal(zenyChange(33287, 30000), "+3,287");
+  assert.equal(zenyChange(29000, 30000), "-1,000");
+  assert.equal(zenyChange(30000, 30000), "");
+  assert.equal(zenyChange(null, 30000), "");
+  const base = { hp: 99, hp_low: 82, pos: [238, 125], doing: "walking", block: null, elapsed_s: 9297, kills: 346, loot_steps: 399, pickups: 91, knife: 0, steals: 0, potions: 0, flies: 76, end: {}, retries: 0 };
+  const l = { ...base, sp: 74, sp_low: 12, weight: 37.7, weight_red: false, zeny: 33287, zeny_start: 30000 };
+  assert.equal(liveLine(l, null), "HP 99 % · SP 74 % · weight 38 % · 33,287 z · walking · 346 kills · 399 loot steps · 76 Fly Wings · 154:57");
+  assert.equal(liveLine(base, null), "HP 99 % · walking · 346 kills · 399 loot steps · 76 Fly Wings · 154:57"); // an older helper
+  const tiles = monitorTiles({ ...ok, state: "running", live: l });
+  assert.deepEqual(tiles.map((t) => t.key), ["state", "doing", "hp", "sp", "weight", "zeny", "cell", "kills", "items", "potions", "wings", "time"]);
+  const by = Object.fromEntries(tiles.map((t) => [t.key, t]));
+  assert.equal(by.sp.text, "74 % (low 12)");
+  assert.equal(by.sp.bar, 74);
+  assert.equal(by.sp.warn, false);
+  assert.equal(by.weight.text, "38 %");
+  assert.equal(by.weight.warn, false);
+  assert.equal(by.zeny.text, "33,287 (+3,287)");
+  assert.match(by.zeny.title, /30,000 at the Run's first read/);
+  const heavy = Object.fromEntries(monitorTiles({ ...ok, state: "running", live: { ...l, sp: 10, weight: 51, weight_red: true, zeny: null } }).map((t) => [t.key, t]));
+  assert.equal(heavy.sp.warn, true); // SP below 20 %
+  assert.equal(heavy.weight.warn, true); // at 50 %: no natural regen
+  assert.equal(heavy.zeny.text, "zeny not read");
+  const unread = Object.fromEntries(monitorTiles({ ...ok, state: "running", live: { ...l, sp: null, weight: null } }).map((t) => [t.key, t]));
+  assert.equal(unread.sp.text, "SP not read");
+  assert.equal(unread.sp.bar, undefined);
+  assert.equal(unread.weight.text, "weight not read");
+});

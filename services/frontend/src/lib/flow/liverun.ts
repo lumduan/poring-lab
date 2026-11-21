@@ -122,7 +122,29 @@ export type LiveSummary = {
   trail?: number[][];
   mobs?: [number, number, string][] | null;
   mobs_age_s?: number | null;
+  // Batt 2026-11-21 ("add SP, the weight as a %, and the zeny: other jobs need them, a mage, a
+  // merchant whose skill strikes with money"): SP % (every HP read) and its lowest, the bag's
+  // weight % (the runner's UI watch, every 10 s outside a fight) and whether the client draws it
+  // red (>= 50 %: no natural regen), the zeny (Basic Info's weight line) and its first read this
+  // Run. null: not read; absent: an older helper
+  sp?: number | null;
+  sp_low?: number | null;
+  weight?: number | null;
+  weight_red?: boolean;
+  zeny?: number | null;
+  zeny_start?: number | null;
 };
+
+/** PURE: a zeny amount as the client writes it (33,287). */
+export function zenyText(z: number): string {
+  return String(Math.trunc(z)).replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+}
+
+/** PURE: the zeny gained (+) or spent (-) since the Run's first read, "" when none. */
+export function zenyChange(z: number | null | undefined, start: number | null | undefined): string {
+  if (typeof z !== "number" || typeof start !== "number" || z === start) return "";
+  return `${z > start ? "+" : "-"}${zenyText(Math.abs(z - start))}`;
+}
 
 export type StoryLine = { t_s: number | null; words: string; at?: string };
 export type StoryClock = "run" | "clock";
@@ -143,6 +165,9 @@ export function liveLine(l: LiveSummary | null | undefined, minutes: number | nu
   const mm = `${Math.floor(t / 60)}:${String(t % 60).padStart(2, "0")}`;
   const parts = [
     l.hp !== null ? `HP ${l.hp} %` : null,
+    typeof l.sp === "number" ? `SP ${l.sp} %` : null,
+    typeof l.weight === "number" ? `weight ${Math.round(l.weight)} %` : null,
+    typeof l.zeny === "number" ? `${zenyText(l.zeny)} z` : null,
     l.doing,
     `${l.kills} kill${l.kills === 1 ? "" : "s"}`,
     `${l.loot_steps} loot step${l.loot_steps === 1 ? "" : "s"}`,
@@ -182,7 +207,10 @@ export function doingIcon(doing: string): string {
   return rules.find(([re]) => re.test(d))?.[1] ?? "•";
 }
 
-export type MonitorTile = { key: string; icon: string; text: string; title: string; bar?: number };
+// warn: the bar drawn red (HP below 50 %, SP below 20 %, the bag at 50 % or more); default: below 50
+export type MonitorTile = { key: string; icon: string; text: string; title: string; bar?: number; warn?: boolean };
+
+const clampPct = (v: number) => Math.max(0, Math.min(100, v));
 
 /** PURE: the monitor bar's tiles: the state, what she does, HP (with a bar), kills, the items
  * gained (picked up + stolen), potions, Fly Wings, the time, the retries. */
@@ -197,6 +225,21 @@ export function monitorTiles(st: LiveStatus | null | undefined): MonitorTile[] {
   out.push(
     { key: "doing", icon: doingIcon(l.doing), text: l.doing, title: "what she does" },
     { key: "hp", icon: "❤️", text: l.hp === null ? "HP not read" : `${l.hp} %${l.hp_low !== null ? ` (low ${l.hp_low})` : ""}`, title: "HP (the lowest this Run)", ...(l.hp === null ? {} : { bar: Math.max(0, Math.min(100, l.hp)) }) },
+  );
+  if (l.sp !== undefined) {
+    const sp = l.sp;
+    out.push({ key: "sp", icon: "💙", text: sp === null ? "SP not read" : `${sp} %${typeof l.sp_low === "number" ? ` (low ${l.sp_low})` : ""}`, title: "SP (the lowest this Run): a mage's or a skill user's fuel", ...(sp === null ? {} : { bar: clampPct(sp), warn: sp < 20 }) });
+  }
+  if (l.weight !== undefined) {
+    const w = l.weight;
+    out.push({ key: "weight", icon: "🎒", text: w === null ? "weight not read" : `${Math.round(w)} %`, title: "the bag's weight: at 50 % the client stops natural HP / SP regen, at 90 % she cannot attack", ...(w === null ? {} : { bar: clampPct(w), warn: w >= 50 || l.weight_red === true }) });
+  }
+  if (l.zeny !== undefined) {
+    const z = l.zeny;
+    const ch = zenyChange(z, l.zeny_start);
+    out.push({ key: "zeny", icon: "🪙", text: z === null ? "zeny not read" : `${zenyText(z)}${ch ? ` (${ch})` : ""}`, title: `zeny (Basic Info)${typeof l.zeny_start === "number" ? `; ${zenyText(l.zeny_start)} at the Run's first read` : ""}` });
+  }
+  out.push(
     { key: "cell", icon: "📍", text: l.pos ? `${l.pos[0]}, ${l.pos[1]}` : "not read", title: "her cell (the minimap)" },
     { key: "kills", icon: "⚔️", text: String(l.kills), title: "kills" },
     { key: "items", icon: "💰", text: `${l.pickups}${l.steals ? ` + ${l.steals} stolen` : ""}`, title: `items gained: picked up${l.steals ? " + stolen" : ""} (${l.loot_steps} loot steps)` },

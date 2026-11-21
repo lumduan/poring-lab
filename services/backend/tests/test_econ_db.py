@@ -797,6 +797,21 @@ def test_a_runs_hunt_sessions_are_found_by_its_label(tmp_path: Path) -> None:
     assert edb.hunt_sessions("", demo) == []
 
 
+def test_a_label_that_holds_play_still_finds_its_hunt_cores(tmp_path: Path) -> None:
+    """2026-11-21: the 1080 item pilots' labels hold "-play-" (``ifH6-play-r01B``); the player's own
+    session is told by its kind after the stamp, so the hunt core is found and the player's
+    session still refused (18 pilots had recorded no economy)."""
+    demo = tmp_path / "demo"
+    core = "20261121T173835-demo-dungeon-rogue-xmas_dun02-patrol-P2-ifH6-play-r01B-hunt1"
+    for name in (core, "20261121T173820-play-ifH6-play-r01B"):
+        (demo / name).mkdir(parents=True)
+        (demo / name / "events.jsonl").write_text("{}\n")
+    assert [d.name for d in edb.hunt_sessions("ifH6-play-r01B", demo)] == [core]
+    assert edb.player_session("20261121T173820-play-ifH6-play-r01B")
+    assert not edb.player_session(core)
+    assert not edb.player_session("noplay")
+
+
 def test_the_run_helper_and_the_ab_series_record_each_run_and_never_fail_for_it(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
