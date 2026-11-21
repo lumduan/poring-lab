@@ -615,3 +615,15 @@ def test_r7_reads_its_own_new_held_out_and_pack_only(tmp_path: Path) -> None:
     no_comp = [x for x in full if x not in ("--comparator", "xmas02fi5")]
     with pytest.raises(SystemExit, match="--comparator"):  # r7 needs it, as r6
         fe.main(no_comp)
+
+
+def test_r8_names_strata_and_bars() -> None:
+    assert tuple(f"-xmas02-ifH{i}" for i in range(11, 21)) == fe.R8_PILOTS
+    assert fe.R8_STAGING == ("-xmas02-ifsH5", "-xmas02-ifsH6")
+    assert (*fe.R8_PILOTS, *fe.R8_STAGING) == fe.R8_HELD_OUT
+    assert fe.STRATA["r8"] == (fe.R8_HELD_OUT, (), fe.R8_PILOTS)
+    assert fe.STRATA_NAMES["r8"] == ("i1h", "") and fe.SCREEN_OF["r8"] == "1080"
+    assert fe.STRATA_APART["r8"] == {"natural": fe.R8_PILOTS, "staging": fe.R8_STAGING}
+    assert dict(fe.bars_of("r8")) == dict(fe.bars_of("r6"))  # section 8a's bars, unchanged
+    assert not set(fe.R8_HELD_OUT) & (set(fe.R6_HELD_OUT) | set(fe.R7_HELD_OUT))  # a NEW held-out
+    assert not fe.on_suffix("x-rdp-xmas02-ifH1", fe.R8_HELD_OUT)  # ifH11 .. ifH20 only

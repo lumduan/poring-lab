@@ -118,16 +118,25 @@ R7_PILOTS = ("-xmas02-ifH5", "-xmas02-ifH6", "-xmas02-ifH7", "-xmas02-ifH8", "-x
              "-xmas02-ifH10")  # fmt: skip
 R7_STAGING = ("-xmas02-ifsH3", "-xmas02-ifsH4")
 R7_HELD_OUT = (*R7_PILOTS, *R7_STAGING)
+# xmas02-items-1080.md Amendment 26 (round 8, 2026-11-22): a NEW 1080 held-out by NAME, the one
+# extension's names reserved too (fi_labels.R8_HELD_OUT; a test pins them equal)
+R8_PILOTS = tuple(f"-xmas02-ifH{k}" for k in range(11, 21))
+R8_STAGING = ("-xmas02-ifsH5", "-xmas02-ifsH6")
+R8_HELD_OUT = (*R8_PILOTS, *R8_STAGING)
 STRATA = {"r2": (R2_AURA, R2_NOAURA, R2_PILOTS), "r3": (R3_AURA, R3_NOAURA, R3_PILOTS),
           "r4": (R4_AURA, R4_NOAURA, R4_PILOTS), "r5": (R5_AURA_OFF, (), R5_PILOTS),
-          "r6": (R6_HELD_OUT, (), R6_PILOTS), "r7": (R7_HELD_OUT, (), R7_PILOTS)}  # fmt: skip
+          "r6": (R6_HELD_OUT, (), R6_PILOTS), "r7": (R7_HELD_OUT, (), R7_PILOTS),
+          "r8": (R8_HELD_OUT, (), R8_PILOTS)}  # fmt: skip
+# the default: ("aura", "no_aura")
 STRATA_NAMES = {"r5": ("aura_off", ""), "r6": ("i1h", ""),
-                "r7": ("i1h", "")}  # fmt: skip  # the default: ("aura", "no_aura")
+                "r7": ("i1h", ""), "r8": ("i1h", "")}  # fmt: skip
 # the strata reported APART beside the bar (not bars: their verdicts never count)
 STRATA_APART = {"r6": {"natural": R6_PILOTS, "staging": R6_STAGING},
-                "r7": {"natural": R7_PILOTS, "staging": R7_STAGING}}  # fmt: skip
+                "r7": {"natural": R7_PILOTS, "staging": R7_STAGING},
+                "r8": {"natural": R8_PILOTS, "staging": R8_STAGING}}  # fmt: skip
 R2_TARGET = 0.95  # Batt 2026-11-10 night: "toward 95 %" -- reported, not a bar
-SCREEN_OF = {"r6": "1080", "r7": "1080"}  # a round's label files, params, key: this screen
+# a round's label files, params, key: this screen
+SCREEN_OF = {"r6": "1080", "r7": "1080", "r8": "1080"}
 MINS = {
     "i1_recall": 40,
     "i1n_recall": 30,
@@ -142,6 +151,7 @@ MINS = {
 # precision >= 0.95; every other bar and every minimum as rounds 2-5
 ROUND_BARS = {"r6": {**BARS, "i1_recall": 0.90, "i1_precision": 0.95}}
 ROUND_BARS["r7"] = dict(ROUND_BARS["r6"])  # Amendment 22: section 8a's bars, unchanged
+ROUND_BARS["r8"] = dict(ROUND_BARS["r6"])  # Amendment 26: section 8a's bars, unchanged
 
 
 def bars_of(strata: str | None) -> Mapping[str, float]:

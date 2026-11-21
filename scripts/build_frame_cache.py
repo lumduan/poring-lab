@@ -239,7 +239,7 @@ import sys
 import tarfile
 import time
 from collections import Counter
-from collections.abc import Callable, Iterator, Sequence
+from collections.abc import Callable, Iterable, Iterator, Sequence
 from dataclasses import dataclass, field, replace
 from functools import partial
 from pathlib import Path
@@ -2129,6 +2129,39 @@ class ItemLabelInputs:
         return cls(spec, params, docs, join, prov)
 
 
+def with_hard_negatives(
+    picked: Sequence[dict[str, Any]], negs: Sequence[dict[str, Any]], hard: Iterable[int]
+) -> tuple[list[dict[str, Any]], dict[str, int]]:
+    """PURE (xmas02-items-1080.md Amendment 26): the drawn negatives plus every LISTED hard
+    negative that the session's labels keep as item-free (``negs``), each frame once, in frame
+    order. A listed frame the labels do not keep item-free is not written: it is counted."""
+    ids = {int(x) for x in hard}
+    rows = [f for f in negs if int(f["frame_id"]) in ids]
+    have = {int(f["frame_id"]) for f in picked}
+    extra = [f for f in rows if int(f["frame_id"]) not in have]
+    out = sorted([*picked, *extra], key=lambda f: int(f["frame_id"]))
+    return out, {"hard_listed": len(ids), "hard_item_free": len(rows),
+                 "hard_not_item_free": len(ids) - len(rows), "hard_added": len(extra)}  # fmt: skip
+
+
+def load_hard_negatives(path: Path, train: Sequence[str]) -> tuple[dict[str, list[int]], str]:
+    """``--hard-negs FILE`` (Amendment 26): {"sessions": {sid: [frame_id, ...]}, ...}; every
+    session a --train one. Returns (sid -> frame ids, the file's sha256)."""
+    raw = path.read_bytes()
+    doc = json.loads(raw)
+    got = doc.get("sessions") if isinstance(doc, dict) else None
+    if not isinstance(got, dict):
+        raise SystemExit(f'--hard-negs {path}: {{"sessions": {{sid: [frame ids]}}}}')
+    out: dict[str, list[int]] = {}
+    for sid, ids in got.items():
+        if sid not in set(train):
+            raise SystemExit(f"--hard-negs {path}: {sid} is not a --train session")
+        if not isinstance(ids, list) or not all(isinstance(x, int) for x in ids):
+            raise SystemExit(f"--hard-negs {path}: {sid}'s frames are not a list of ints")
+        out[sid] = sorted(set(ids))
+    return out, hashlib.sha256(raw).hexdigest()
+
+
 def item_cache_session(sid: str, part: str, a: argparse.Namespace, sink: ShardSink | None,
                        ili: ItemLabelInputs, chosen_negs: Sequence[dict[str, Any]] | None = None
                        ) -> dict[str, Any]:  # fmt: skip
@@ -2152,6 +2185,10 @@ def item_cache_session(sid: str, part: str, a: argparse.Namespace, sink: ShardSi
         k = session_neg_count(sid, len(items), getattr(a, "session_negs", ()),
                               getattr(a, "session_negs_n", 0))  # fmt: skip
         picked = draw_negatives(negs, k, a.neg_seed, f"{ITEM_RULE}:{sid}")
+    hard_map = getattr(a, "hard_negs_map", None)
+    hard_counts: dict[str, int] | None = None
+    if hard_map is not None:  # Amendment 26: every listed item-free frame joins the draw
+        picked, hard_counts = with_hard_negatives(picked, negs, hard_map.get(sid, ()))
     w, h = V2_SIZE
     row: dict[str, Any] = {"split": part, "path": str(path),
                            "format": recorded.session_format(manifest), "labels": ili.spec.rule,
@@ -2160,6 +2197,8 @@ def item_cache_session(sid: str, part: str, a: argparse.Namespace, sink: ShardSi
                            "label_item_boxes": sum(len(f["items"]) for f in items),
                            "label_negatives": len(negs),
                            "excluded": _keyed(why)}  # fmt: skip
+    if hard_counts is not None:
+        row.update(hard_counts)
     tally = MapTally()
     by_id: Counter[str] = Counter()
     for f, neg in [(f, False) for f in items] + [(f, True) for f in picked]:
@@ -2355,6 +2394,11 @@ def items_main(a: argparse.Namespace) -> int:
     if roles:
         raise SystemExit(f"TRAIN refused by name by a floor-item rule of {ili.spec.name}: {roles}")
     pin = ili.provenance["params_sha256"]  # a mixed cache's rows name their part's params
+    hard_prov: dict[str, Any] | None = None
+    if a.hard_negs is not None:  # Amendment 26 (round 8): the model's own false boxes
+        a.hard_negs_map, sha = load_hard_negatives(a.hard_negs, own["train"])
+        hard_prov = {"file": str(a.hard_negs), "sha256": sha,
+                     "frames": sum(len(v) for v in a.hard_negs_map.values())}  # fmt: skip
     pooled = pooled_negatives(ili, neg, a.neg_total, a.neg_seed)
     order = [("train", s) for s in own["train"]] + [("val", s) for s in own["val"]]
     if a.dry_run:
@@ -2376,6 +2420,9 @@ def items_main(a: argparse.Namespace) -> int:
                    ili.docs[s])[0] for it in f["items"]}) for s in own["train"]),
                "would_refuse_join": sorted(s for s in own["train"]
                                            if ili.join[s] not in ITEM_ADMITTED)}  # fmt: skip
+        if hard_prov is not None:
+            out["hard_negs"] = {**hard_prov, **{k: sum(int(r.get(k, 0)) for r in tr) for k in (
+                "hard_listed", "hard_item_free", "hard_not_item_free", "hard_added")}}  # fmt: skip
         if linked is not None:  # T-I3: both parts' counts; TRAIN = the new part's + the linked
             parts = item_parts(ili, own, rows, linked)
             new_c, old_c = parts["new"]["train_counts"], parts["linked"]["train_counts"]
@@ -2397,6 +2444,8 @@ def items_main(a: argparse.Namespace) -> int:
             "fi_labels": ili.provenance}  # fmt: skip
     if linked is not None:  # an unlinked build keeps its keys (its progress file unchanged)
         args["link"] = linked.provenance
+    if hard_prov is not None:  # likewise: only a build that lists hard negatives records them
+        args["hard_negs"] = hard_prov
     sessions: dict[str, Any] = {}
     shards: dict[str, Any] = {}
     if a.resume:
@@ -2663,6 +2712,10 @@ def main(argv: Sequence[str] | None = None) -> int:
                    help="items: the negatives drawn from --neg-sessions (O.8: 300)")  # fmt: skip
     f.add_argument("--neg-seed", type=int, default=ITEM_NEG_SEED,
                    help="items: the seed of every negative draw")  # fmt: skip
+    f.add_argument("--hard-negs", type=Path, default=None,
+                   help="items: xmas02-items-1080.md Amendment 26 -- a JSON {\"sessions\": {sid: "
+                        "[frame ids]}}: each listed frame the labels keep item-free is written as "
+                        "a negative beside the draw (the model's own false boxes)")  # fmt: skip
     f.add_argument("--pooled-g2", action="store_true",
                    help="items: xmas02-items-1080.md Amendment 7 -- the TRAIN label files whose "
                         "own G2 is NOT_ENOUGH are judged together (fi_labels.pooled_g2); a PASS "
@@ -2672,8 +2725,9 @@ def main(argv: Sequence[str] | None = None) -> int:
         raise SystemExit("--mask-sessions belongs to --labels map (xmas02-detector.md S4)")
     if a.labels == "items":
         return items_main(a)
-    if a.fi_labels or a.item_params or a.neg_sessions:
-        raise SystemExit("--fi-labels / --item-params / --neg-sessions belong to --labels items")
+    if a.fi_labels or a.item_params or a.neg_sessions or a.hard_negs:
+        raise SystemExit("--fi-labels / --item-params / --neg-sessions / --hard-negs belong to "
+                         "--labels items")  # fmt: skip
     if a.labels == "map":
         return map_main(a)
     if a.map_labels or a.map_params or a.own_c1 or a.link_cache:

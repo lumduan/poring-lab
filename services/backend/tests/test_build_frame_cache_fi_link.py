@@ -526,3 +526,39 @@ def test_the_guarded_cache_step_passes_the_link(
                 "--link-cache r5;id"):  # fmt: skip
         with pytest.raises(ValueError):
             gb.parse_step(f"cache@7200=--labels items {bad}")
+
+
+# --- Amendment 26 (round 8): the model's own false boxes as hard negatives ----------------------
+
+
+def test_with_hard_negatives_adds_only_listed_item_free_frames(bfc: ModuleType) -> None:
+    negs = [{"frame_id": k} for k in (20, 21, 22, 30)]
+    drawn = [negs[0], negs[2]]
+    got, c = bfc.with_hard_negatives(drawn, negs, [21, 20, 5, 999])
+    assert [f["frame_id"] for f in got] == [20, 21, 22]  # frame order, each frame once
+    assert c == {"hard_listed": 4, "hard_item_free": 2, "hard_not_item_free": 2, "hard_added": 1}
+    assert bfc.with_hard_negatives(drawn, negs, [])[0] == drawn
+
+
+def test_the_hard_negatives_file_joins_the_draw(
+    bfc: ModuleType, world: dict[str, Any], capsys: pytest.CaptureFixture[str]
+) -> None:
+    """IFT1: frames 1-18 hold items, 19 is excluded, 20-45 are item-free; the draw takes 6."""
+    w = world
+    hard = write(w["tmp"] / "hard.json", {"sessions": {IFT1: [20, 21, 30, 5, 19, 999]}})
+    argv = items_argv(w["p1080"], [w["f1080"][s] for s in (IFT1, IFF)], w, "--train", IFT1,
+                      "--val", IFF)  # fmt: skip
+    base, plan = dry(bfc, capsys, argv), dry(bfc, capsys, [*argv, "--hard-negs", str(hard)])
+    r0, r = base["sessions"][IFT1], plan["sessions"][IFT1]
+    assert "hard_listed" not in r0 and "hard_negs" not in base  # no file: the rows as before
+    assert (r["hard_listed"], r["hard_item_free"], r["hard_not_item_free"]) == (6, 3, 3)
+    assert r["negatives"] == r0["negatives"] + r["hard_added"] and r["hard_added"] >= 1
+    assert plan["hard_negs"]["frames"] == 6 and plan["hard_negs"]["sha256"] == sha(hard)
+    assert plan["hard_negs"]["hard_item_free"] == 3
+    for doc, why in (({"sessions": {IFF: [1]}}, "not a --train session"),
+                     ({"sessions": {IFT1: ["20"]}}, "not a list of ints"),
+                     ({IFT1: [20]}, "sessions")):  # fmt: skip
+        with pytest.raises(SystemExit, match=why):
+            bfc.main([*argv, "--hard-negs", str(write(w["tmp"] / "bad.json", doc)), "--dry-run"])
+    with pytest.raises(SystemExit, match="belong to --labels items"):
+        bfc.main(["--labels", "map", "--hard-negs", str(hard), "--dry-run"])
