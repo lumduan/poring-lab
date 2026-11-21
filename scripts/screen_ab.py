@@ -145,9 +145,9 @@ def box_sets(items: Sequence[str]) -> dict[str, Any] | str:
         f = by.get(name.strip())
         if not sep or f is None:
             return f"--box-set {it!r}: NAME=VALUE, NAME a setting's name"
-        if f.player or not f.flag:
-            return (f"--box-set {f.name}: not a box setting with its own runner flag "
-                    "(--player-set takes the player's)")  # fmt: skip
+        if f.player or not (f.flag or f.tune):
+            return (f"--box-set {f.name}: not a box setting with its own runner flag or a runner "
+                    "number (--player-set takes the player's)")  # fmt: skip
         if f.name in out:
             return f"--box-set {f.name}: given twice"
         raw = raw.strip()
@@ -191,9 +191,25 @@ def with_player_sets(text: str, sets: Mapping[str, Any]) -> str:
     return pj.to_json(pj.validate(d))
 
 
-def argv_differs_in(a: Sequence[str], b: Sequence[str], flags: Sequence[str]) -> bool:
-    """PURE: argv ``b`` is ``a`` but for the VALUES right after ``flags`` (same length, the same
-    arguments everywhere else; each such flag present in both)."""
+def without_tunes(argv: Sequence[str], names: Sequence[str]) -> list[str]:
+    """PURE: ``argv`` without its ``--tune NAME=VALUE`` pairs for ``names`` (cursor-1080.md
+    Amendment 5: a runner number is passed only when a block sets it off its default)."""
+    out: list[str] = []
+    i = 0
+    while i < len(argv):
+        if argv[i] == "--tune" and i + 1 < len(argv) and argv[i + 1].split("=")[0] in names:
+            i += 2
+            continue
+        out.append(argv[i])
+        i += 1
+    return out
+
+
+def argv_differs_in(a: Sequence[str], b: Sequence[str], flags: Sequence[str],
+                    tunes: Sequence[str] = ()) -> bool:  # fmt: skip
+    """PURE: argv ``b`` is ``a`` but for the VALUES right after ``flags`` and the ``--tune`` pairs
+    of ``tunes`` (same length otherwise, the same arguments everywhere else)."""
+    a, b = without_tunes(a, tunes), without_tunes(b, tunes)
     if len(a) != len(b):
         return False
     for i, (x, y) in enumerate(zip(a, b, strict=True)):
@@ -203,7 +219,8 @@ def argv_differs_in(a: Sequence[str], b: Sequence[str], flags: Sequence[str]) ->
 
 
 def player_set_arm(text: str, sets: Mapping[str, Any], secs: int,
-                   flags: Sequence[str] = ()) -> dict[str, Any] | str:  # fmt: skip
+                   flags: Sequence[str] = (),
+                   tunes: Sequence[str] = ()) -> dict[str, Any] | str:  # fmt: skip
     """PURE but for flow_play.prepare: the block's box with its player settings -- its text, its
     settings and its project hash -- or a refusal: the settings must differ from the box's in the
     named ones alone, and the runner must get the same argv, box, keys and loop. ``flags``: runner
@@ -229,9 +246,9 @@ def player_set_arm(text: str, sets: Mapping[str, Any], secs: int,
             return f"refused before any input: {prep}"
         preps.append((h, prep.runners[s10.NODE]))
     (_, a), (h, b) = preps
-    if not argv_differs_in(a.argv("L", None, None), b.argv("L", None, None), flags):
+    if not argv_differs_in(a.argv("L", None, None), b.argv("L", None, None), flags, tunes):
         return ("refused before any input: the settings changed the runner's argv beyond "
-                f"{list(flags) or 'nothing'}'s value")  # fmt: skip
+                f"{list(flags) + list(tunes) or 'nothing'}'s value")  # fmt: skip
     for k in ("box_kwargs", "keys", "loop", "tick_left_out"):
         va, vb = getattr(a, k), getattr(b, k)
         if (va() if callable(va) else va) != (vb() if callable(vb) else vb):
@@ -257,10 +274,12 @@ def plan_doc(label: str, n: int, minutes: float, screen: str, folder: Path,
         from poring_flow import settings as st
 
         by = {f.name: f for f in st.FIELDS}
-        flags = tuple(by[k].flag for k in (box_set or {}))
+        flags = tuple(by[k].flag for k in (box_set or {}) if by[k].flag)
+        tunes = tuple(k for k in (box_set or {}) if by[k].tune)
         ps = player_set_arm(base_text if base_text is not None
                             else s10.arm_text(BOX_ARM, minutes),
-                            {**(sets or {}), **(box_set or {})}, secs, flags)  # fmt: skip
+                            {**(sets or {}), **(box_set or {})}, secs, flags,
+                            tunes)  # fmt: skip
         if isinstance(ps, str):
             return ps
         arm, vals = {**arm, "project_hash": ps["project_hash"]}, ps["vals"]

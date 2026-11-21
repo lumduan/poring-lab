@@ -284,3 +284,18 @@ def test_stop_mode_cycles_its_delays_and_groups_by_them() -> None:
     assert cp.group_key({"mode": "stop", "band": "far",
                          "stop": {"still": True, "waited_ms": 700, "delay_s": 0.25}}) == (
         "stop/far/d0.25")  # fmt: skip
+
+
+def test_the_runner_is_also_replayed_at_the_fix_window() -> None:
+    """cursor-1080.md Amendment 5 (5a): a sword first read at 520 ms is "unknown" in the runner's
+    0.35 s window and "sword" in the 0.75 s one; the summary counts both."""
+    reads = [{"t_ms": 150.0, "verdict": "unknown", "rec": {}}, {"t_ms": 520.0, "verdict": "sword",
+                                                               "rec": {}}]  # fmt: skip
+    assert cp.FIX_WINDOW_S == 0.75 <= cp.READ_S
+    assert cp.runner_replay(reads) == "unknown"
+    assert cp.runner_replay(reads, cp.FIX_WINDOW_S) == "sword"
+    h = {"mode": "stop", "band": "far", "runner": "unknown", "runner_fix": "sword",
+         "runner_at": "sword", "class": "sword_at_point", "first_sword_ms": 520.0,
+         "first_read_ms": 150.0, "frames": {"fps": 30.0, "repeat_share": 0.5}}  # fmt: skip
+    s = cp.summarise([h, {**h, "runner_fix": "unknown"}])["stop/far"]
+    assert s["runner_fix"] == {"sword": 1, "unknown": 1} and s["runner_fix_unknown_share"] == 0.5

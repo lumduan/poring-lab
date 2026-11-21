@@ -311,3 +311,32 @@ def test_plan_doc_records_the_block_s_box_set(tmp_path: Path) -> None:
     assert doc["box_set"] == {"loot_items": "xmas02fi4"} and doc["player_set"] == {}
     assert doc["vals"]["B"]["loot_items"] == "xmas02fi4"
     assert doc["arm"]["project_hash"] != "h" * 64
+
+
+# --- cursor-1080.md Amendment 5: a block's RUNNER NUMBER (--tune), the cursor read window --------
+def test_a_tune_box_set_adds_its_own_tune_pair_alone() -> None:
+    import stage10_ab as s10
+
+    assert sa.box_sets(["CURSOR_WAIT_S=0.75"]) == {"CURSOR_WAIT_S": 0.75}
+    assert isinstance(sa.box_sets(["CURSOR_WAIT_S=9"]), str)  # outside its range
+    a = ["play", "--loot", "trim"]
+    b = ["play", "--loot", "trim", "--tune", "CURSOR_WAIT_S=0.75"]
+    assert sa.argv_differs_in(a, b, (), ("CURSOR_WAIT_S",))
+    assert not sa.argv_differs_in(a, b, ())  # not named: refused
+    assert not sa.argv_differs_in(a, [*b, "--tune", "STILL_N=6"], (), ("CURSOR_WAIT_S",))
+    text = s10.arm_text("B", 20)
+    got = sa.player_set_arm(text, {"CURSOR_WAIT_S": 0.75}, 1200, (), ("CURSOR_WAIT_S",))
+    assert isinstance(got, dict), got
+    base = sa.s5c.vals_of(text)
+    assert isinstance(base, dict) and base["CURSOR_WAIT_S"] == 0.35
+    assert {k for k in got["vals"] if got["vals"][k] != base.get(k)} == {"CURSOR_WAIT_S"}
+
+
+def test_plan_doc_takes_a_tune_box_set(tmp_path: Path) -> None:
+    import stage10_ab as s10
+
+    doc = sa.plan_doc("cw-b", 3, 20, "1080", tmp_path, base=_base(),
+                      box_set={"CURSOR_WAIT_S": 0.75}, base_text=s10.arm_text("B", 20))  # fmt: skip
+    assert isinstance(doc, dict), doc
+    assert doc["box_set"] == {"CURSOR_WAIT_S": 0.75}
+    assert doc["vals"]["B"]["CURSOR_WAIT_S"] == 0.75
