@@ -65,3 +65,23 @@ def test_the_unknown_share_counts_box_target_verdicts() -> None:
     ]
     assert c5.cursor_unknown(ev) == (1, 3)
     assert c5.DEFAULT["D"] == ["c5b-D1", "c5b-D2", "c5b-D3"]
+
+
+def test_a_box_strike_became_an_attack_a_walk_or_nothing_before_the_next_one() -> None:
+    import cursor_5b_packets as cp
+
+    s = 10**9
+    strikes = [
+        {"kind": "strike", "by": "box", "t_ns": 10 * s},  # walk-up, then the attack at 11.2 s
+        {"kind": "strike", "by": "box", "t_ns": 20 * s},  # walks only: the click met the ground
+        {"kind": "strike", "by": "box", "t_ns": 22 * s},  # its attack comes after 6 s: none
+        {"kind": "strike", "by": "scan", "t_ns": 40 * s},  # not a box's
+    ]
+    walks = [int(10.4 * s), int(20.3 * s), int(21.0 * s)]
+    attacks = [int(11.2 * s), int(29.5 * s)]
+    det = [int(9.6 * s), int(19.9 * s)]
+    got = cp.strike_fates(strikes, attacks, walks, det)
+    assert (got["strikes"], got["attacked"], got["walked"], got["none"]) == (3, 1, 1, 1)
+    assert got["walks_without_attack"] == 2
+    assert got["hover_to_attack_s"]["p50"] == 1.2 and got["box_to_attack_s"]["p50"] == 1.6
+    assert cp.merge([got, got])["attack_share"] == round(2 / 6, 3)
