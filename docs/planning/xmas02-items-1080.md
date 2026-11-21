@@ -830,3 +830,47 @@ A count under its minimum is NO VERDICT, never a pass.
     key, both blind labellers' answers and both-good.json are those of the first pass, so the item
     lines I1-I4 are the same by construction.
   - That run is the round's one score.
+
+### Amendment 25 (2026-11-22 03:21 ICT from `date`): ROUND 7 FAILS on I2 and I3-any (scored once, 03:17:04); the false boxes read
+
+- **The one score** (xmas02_items_r7b_score.sh, Amendment 24; `score-r7.json` sha256 4ea7ffaa...;
+  5b's chain ended 03:03:48, no dev detect server, a live Run beside). xmas02fi6 + the fi7 rule
+  (floor 0.50, ring 30 px, pad 6), GPU predictions (the ONNX ones give the same verdict):
+
+  | line | got | bar | |
+  |---|---|---|---|
+  | I1h recall (strata decide) | 65 / 70 = 92.9 % | >= 90 % | PASS |
+  | I1 precision | 1,297 / 1,352 = 95.9 % | >= 95 % | PASS |
+  | I2 first frame of our kills' drops | 19 / 24 = **79.2 %** | >= 80 % | **FAIL** |
+  | I3 any box on an item-free frame | 40 / 5,453 = **0.73 %** | <= 0.5 % | **FAIL** |
+  | I3 inside her 5 x 5 | 9 / 5,453 = 0.17 % | <= 0.2 % | PASS |
+  | I4 a box at a kill with no drop | 0 / 146 | <= 5 % | PASS |
+  | I5 GPU server p95 | 24.85 ms (fi5 24.1; ratio 1.03) | <= 35 ms, <= 1.1 | PASS |
+  | I5 CPU p95 ratio | 1.006 | <= 1.1 | PASS |
+
+  - The rule dropped 179 boxes by the floor and 3 by the ring.
+  - **Beside it (report-only), the deployed xmas02fi5 with no rule, the same held-out:** I3-any
+    70 / 5,453 = 1.28 %, inside 5 x 5 34 = 0.62 %, precision 93.9 %, I1h 63 / 70 = 90.0 %, I2 the
+    same 19 / 24. So round 7 cuts false-item frames 70 -> 40 and those near her 34 -> 9, and does
+    not reach the bars. (The wrapper's report-only pass refused its arguments: the comparator's GPU
+    file given twice. It was run again by hand without the GPU latency input.)
+- **Not deployed.** No 8c. The fi7 rule is not built into the live player.
+- **The false boxes read** (diagnosis on the now-spent held-out; it scores nothing; scratch
+  `diag-r7/diag_r7.py`, which replays fi_eval.i3 after the rule: 42 boxes on 42 frames):
+  - **The cursor ring is gone:** 41 of the 42 hold 0 pure-red pixels (the 42nd 26).
+  - **19 are one object: the Cruiser's projectile** (a small red cylinder with a blue band). It
+    shows beside Cruisers in their fights ("Miss" over her). It stays at one place for runs of
+    frames (ifH10 frames 222-352, ifH9 980-1006) while she fights a Cruiser that does not move.
+  - About 5: the client's own pointer (the white arrow or sword) at native size.
+  - 4: a snowflake mark on the floor (ifH6 1163-1170, one place).
+  - About 6: parts of monsters (a Myst Case's ribbon and eyes, a Cookie's head, a Cruiser);
+    about 4: dust puffs and damage digits; the rest: small light blobs.
+  - Confidence 0.50-0.85, 31-582 px from her.
+- **I2's 5 misses** (the same 5 for fi5 and fi6): every one lies under a monster still dying,
+  behind its fading body or a skill effect (2.8-5.9 s after the kill). Two of them had a box at
+  0.49 and 0.50, at the floor.
+- **So C as Amendment 22 wrote it (cursor-ring hard negatives) would not fix what is left.** Round 8
+  is pre-registered next, before any round-8 data: hard negatives from the model's own false boxes
+  on 1080 TRAIN frames (the Cruiser's projectile first), and drops under dying monsters as
+  positives.
+
