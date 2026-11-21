@@ -633,3 +633,26 @@ A count under its minimum is NO VERDICT, never a pass.
     never shown), two NEW blind labellers, and `fi_eval --strata r6` ONCE. A count still short
     then stays NO VERDICT and is reported so.
 - 8b (the 720 round 5's held-out, its inputs complete) is unchanged and scored once beside it.
+
+### Amendment 17 (2026-11-21 10:08 ICT from `date`): 8b FAILS (scored once, 10:08:06)
+
+- **8b: the 720 round 5's own held-out** (fsH1, fiH1, fiH2; their eval labels, the seed-69 key
+  sha256 `86695fbf9aee3e20...` and the answers of U / V, archived 11-12 and reused unchanged;
+  both-good 81 crops), only the predictions new: xmas02fi6, GPU (predict_dir) and ONNX
+  (fi_onnx_pred). `fi_eval --strata r5`, score sha256 `b80a832d7c63dd19...`:
+
+  | bar (round 5's) | xmas02fi6, GPU | xmas02fi6, ONNX | xmas02fi5 (O26's score) | bar | verdict |
+  |---|---|---|---|---|---|
+  | I1 recall (aura-off, the pooled 81) | 0.901 (73 / 81) | 0.901 | 0.938 (76 / 81) | >= 0.85 | PASS |
+  | I1 precision | 0.979 (776 / 793) | 0.978 (741 / 758) | 0.990 (803 / 811) | >= 0.85 | PASS |
+  | I2 (a drop boxed in its first kept frame) | **0.75 (15 / 20)** | 0.75 | 0.85 (17 / 20) | >= 0.80 | **FAIL** |
+  | I3 item-free frames with a box | **0.95 % (16 / 1,682)** | 0.95 % | 0.48 % (8) | <= 0.5 % | **FAIL** |
+  | I3 ... inside her 5 x 5 | **0.36 % (6 / 1,682)** | 0.36 % | 0.12 % (2) | <= 0.2 % | **FAIL** |
+  | I4 drop-less kills with a box on the death cell | 1.0 % (1 / 97) | 1.0 % | 1.0 % | <= 5 % | PASS |
+
+- **8b: FAIL** ("at 720, no loss"): the 1080 round's model sees fewer drops at once and boxes
+  about twice as many non-items on 720 pictures as xmas02fi5.
+- Under section 8 **8c does not run for xmas02fi6** (it needs 8a AND 8b). 8a is still scored once
+  as registered (Amendment 16's extension), and reported: it says whether the model helps AT
+  1080. Any use of a model per screen size (xmas02fi6 at 1080 only, xmas02fi5 at 720) would be a
+  new decision, Batt's, not this round's.
