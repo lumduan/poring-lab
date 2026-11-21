@@ -228,3 +228,14 @@ def test_the_weight_reads_n_and_m_too() -> None:
     lv.feed({"kind": "hp_read", "t_ns": 1, "pct": 90, "weight_nm": [1680, 4200]})
     lv.feed({"kind": "hp_read", "t_ns": 2, "pct": 90, "weight_nm": [3, 0]})  # never a bad value
     assert lv.summary()["weight_nm"] == [1680, 4200]
+
+
+def test_the_share_comes_from_every_read_not_only_the_change_event() -> None:
+    """Batt 2026-11-21 22:5x: the % showed "not read" for minutes -- the runner's weight event comes
+    only on a >= 0.5 % change; the N / M of every read sets the share."""
+    lv = fr.Live()
+    lv.feed({"kind": "hp_read", "t_ns": 1, "pct": 90, "weight_nm": [1386, 4200]})
+    got = lv.summary()
+    assert got["weight"] == 33.0 and got["weight_nm"] == [1386, 4200] and got["weight_red"] is False
+    lv.feed({"kind": "weight", "t_ns": 2, "share": 0.51, "red": True})  # the event: red too
+    assert lv.summary()["weight"] == 51.0 and lv.summary()["weight_red"] is True

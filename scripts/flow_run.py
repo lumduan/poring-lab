@@ -899,6 +899,11 @@ class Live:
                     and all(isinstance(x, int) and not isinstance(x, bool) for x in nm)
                     and nm[0] >= 0 and nm[1] > 0):  # fmt: skip
                 self.weight_nm = [nm[0], nm[1]]
+                # Batt 2026-11-21 22:5x ("why does the weight show so late: 2 minutes, still
+                # nothing"): the runner's weight EVENT comes only on a change of >= 0.5 % from its
+                # start read, so a light-loot start showed "not read" for minutes; every read
+                # (N / M, each UI watch) sets the share itself
+                self.weight = nm[0] / nm[1]
             z = e.get("zeny")
             if isinstance(z, int) and not isinstance(z, bool) and z >= 0:
                 self.zeny = z
