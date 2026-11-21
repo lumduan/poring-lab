@@ -1,8 +1,12 @@
 "use client";
 
-import { type ReactNode, useEffect, useMemo, useState } from "react";
+import { type ReactNode, useEffect, useMemo, useRef, useState } from "react";
 
 import {
+  parseSavedPrices,
+  pricesBody,
+  samePrices,
+  type SavedPrices,
   basisText,
   consumableLines,
   type DashExport,
@@ -503,6 +507,67 @@ export default function EconomyDashboard({ backendUrl }: { backendUrl: string | 
   const [edits, setEdits] = useState<PriceEdits>(NO_EDITS);
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState(true);
+  // Batt 2026-11-21: the prices saved on the server (Update), for every device and visit
+  const [server, setServer] = useState<SavedPrices | null>(null);
+  const [upd, setUpd] = useState<string | null>(null);
+  const csrf = useRef<string | null>(null);
+
+  useEffect(() => {
+    let alive = true;
+    const base = backendHttpBase(backendUrl);
+    void (async () => {
+      try {
+        const r = await fetch(`${base}/settings/econ-prices`, { cache: "no-store" });
+        const got = r.ok ? parseSavedPrices(await r.json()) : null;
+        if (!alive || !got) return;
+        setServer(got);
+        // this browser's unsaved edits stay on top; with none, the saved prices are the page's
+        setEdits((cur) => (editCount(cur) === 0 ? got.edits : cur));
+      } catch {
+        /* no saved prices: the item table's, as before */
+      }
+    })();
+    return () => {
+      alive = false;
+    };
+  }, [backendUrl]);
+
+  /** Update: the whole set of prices to the server (the CSRF token; a stale one is fetched again once). */
+  const pushPrices = async () => {
+    const base = backendHttpBase(backendUrl);
+    const once = async (): Promise<Response> => {
+      if (!csrf.current) {
+        const t = await fetch(`${base}/settings/csrf`, { cache: "no-store" });
+        csrf.current = t.ok ? ((await t.json()) as { token: string }).token : "";
+      }
+      return fetch(`${base}/settings/econ-prices`, {
+        method: "PUT",
+        headers: { "content-type": "application/json", "x-csrf-token": csrf.current ?? "" },
+        body: JSON.stringify(pricesBody(server, edits)),
+      });
+    };
+    try {
+      let r = await once();
+      if (r.status === 403) {
+        const peek = await r.clone().json().catch(() => null);
+        if (peek?.detail?.reason === "csrf_invalid") {
+          csrf.current = null;
+          r = await once();
+        }
+      }
+      const body: unknown = await r.json().catch(() => null);
+      const got = r.ok ? parseSavedPrices(body) : null;
+      if (got) {
+        setServer(got);
+        setUpd(`Saved on the server: ${editCount(got.edits)} price(s) (revision ${got.revision}).`);
+      } else {
+        const why = (body as { detail?: { reason?: string } } | null)?.detail?.reason ?? `HTTP ${r.status}`;
+        setUpd(why === "revision_conflict" ? "Not saved: another page saved prices first. Reload the page." : `Not saved: ${why}.`);
+      }
+    } catch (e) {
+      setUpd(`Not saved: ${e instanceof Error ? e.message : String(e)}.`);
+    }
+  };
 
   useEffect(() => {
     let alive = true;
@@ -611,6 +676,16 @@ export default function EconomyDashboard({ backendUrl }: { backendUrl: string | 
           >
             Reset all prices{nEdits ? ` (${nEdits} edited)` : ""}
           </button>
+          <button
+            type="button"
+            onClick={() => void pushPrices()}
+            disabled={server !== null && samePrices(server.edits, edits)}
+            className="rounded-md bg-sky-800 px-3 py-1 text-white hover:bg-sky-700 disabled:opacity-40"
+            data-testid="econ-prices-update"
+            title="Save these prices on the server: every device and every next visit uses them"
+          >
+            Update prices
+          </button>
         </div>
       </header>
 
@@ -621,9 +696,15 @@ export default function EconomyDashboard({ backendUrl }: { backendUrl: string | 
         </p>
       )}
       <p className="text-xs text-neutral-500">
-        Fixed NPC prices only (no player market, no rares). Edited prices stay in this browser{saved ? "" : " (not stored: this browser refuses site storage)"} and are
-        never sent to the server. All rates are counts divided by the judged hours.
+        Fixed NPC prices only (no player market, no rares). An item with no price shows a blank box: type its price. Edited prices stay in this
+        browser{saved ? "" : " (not stored: this browser refuses site storage)"} until you press Update prices, which saves them on the server for
+        every device and every next visit{server ? ` (${editCount(server.edits)} saved now)` : ""}. All rates are counts divided by the judged hours.
       </p>
+      {upd && (
+        <p className="text-xs text-sky-300" data-testid="econ-prices-said">
+          {upd}
+        </p>
+      )}
 
       {current && name !== null && <RunView doc={current} name={name} runIx={runIx} edits={edits} update={update} runsOpen={runsOpen} setRunsOpen={setRunsOpen} />}
     </main>

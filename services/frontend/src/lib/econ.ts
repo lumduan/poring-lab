@@ -457,6 +457,31 @@ export function editCount(edits: PriceEdits): number {
   return Object.keys(edits.sell).length + Object.keys(edits.buy).length;
 }
 
+// Batt 2026-11-21 ("an unknown price: blank for the user to type; the system remembers it when
+// Update is pressed, so next time it need not be typed again"): the prices saved ON THE SERVER
+// (GET / PUT /settings/econ-prices, routes_econprices.py), for every device and visit
+export type SavedPrices = { revision: number; edits: PriceEdits };
+
+/** PURE: GET /settings/econ-prices' answer as saved prices, or null (unreadable). */
+export function parseSavedPrices(x: unknown): SavedPrices | null {
+  if (!isObj(x) || typeof x.revision !== "number" || !Number.isInteger(x.revision) || x.revision < 0) return null;
+  return { revision: x.revision, edits: { sell: validPrices(x.sell), buy: validPrices(x.buy) } };
+}
+
+/** PURE: the Update's body: the whole set of prices, against the revision it was read at. */
+export function pricesBody(saved: SavedPrices | null, edits: PriceEdits): { base_revision: number; sell: Record<string, number>; buy: Record<string, number> } {
+  return { base_revision: saved?.revision ?? 0, sell: { ...edits.sell }, buy: { ...edits.buy } };
+}
+
+/** PURE: the same prices, item by item. */
+export function samePrices(a: PriceEdits, b: PriceEdits): boolean {
+  const eq = (x: Record<string, number>, y: Record<string, number>) => {
+    const kx = Object.keys(x);
+    return kx.length === Object.keys(y).length && kx.every((k) => y[k] === x[k]);
+  };
+  return eq(a.sell, b.sell) && eq(a.buy, b.buy);
+}
+
 // --- the tables ----------------------------------------------------------------------------------
 
 /** count / hours, or null (no hours: never a division by zero). */

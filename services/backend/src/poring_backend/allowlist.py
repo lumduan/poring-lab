@@ -47,6 +47,8 @@ class AuditRecord(BaseModel):
         "run_identity_mode", "char_remember", "char_rename", "char_forget",
         # the Settings page's "The Run log" (routes_runlog.py, Batt 2026-11-21)
         "run_log",
+        # the /economy page's saved prices (routes_econprices.py, Batt 2026-11-21)
+        "econ_prices",
     ]  # fmt: skip
     kind: Literal["easy", "normal", "hard", "declare"] | None = None  # the rule that applied
     env_id: str | None

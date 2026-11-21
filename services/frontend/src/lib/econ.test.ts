@@ -299,3 +299,17 @@ test("a screen record parses its own counts and gives them per hour and per kill
   assert.equal(screenOf({ pickup_clicks: -3, weight_start: "a" })?.pickup_clicks, 0);
   assert.equal(screenOf({ weight_start: "a" })?.weight_start, null);
 });
+
+// Batt 2026-11-21: "remember the prices when Update is pressed, so next time they need not be typed"
+test("the saved prices: read, the Update's body, the same prices", async () => {
+  const { parseSavedPrices, pricesBody, samePrices } = await import("./econ.ts");
+  const got = parseSavedPrices({ store: "ok", revision: 3, sell: { "7037": 120, "abc": 5, "12": -1 }, buy: { "601": 60 } });
+  assert.deepEqual(got, { revision: 3, edits: { sell: { "7037": 120 }, buy: { "601": 60 } } });
+  assert.equal(parseSavedPrices({ revision: -1 }), null);
+  assert.equal(parseSavedPrices(null), null);
+  assert.deepEqual(pricesBody(got, { sell: { "1": 2 }, buy: {} }), { base_revision: 3, sell: { "1": 2 }, buy: {} });
+  assert.deepEqual(pricesBody(null, { sell: {}, buy: {} }), { base_revision: 0, sell: {}, buy: {} });
+  assert.equal(samePrices({ sell: { "1": 2 }, buy: {} }, { sell: { "1": 2 }, buy: {} }), true);
+  assert.equal(samePrices({ sell: { "1": 2 }, buy: {} }, { sell: { "1": 3 }, buy: {} }), false);
+  assert.equal(samePrices({ sell: { "1": 2 }, buy: {} }, { sell: {}, buy: {} }), false);
+});
