@@ -14,6 +14,10 @@ export type Sight = { map: string | null; pos: Cell | null; trail: Cell[]; mobs:
 
 export const SIGHT_STALE_S = 3; // the monsters' dots fade when the last read is older
 export const HER_COLOUR = "#22c55e"; // Batt: her dot is green
+// Batt 2026-11-21 ("the green walking line is very hard for a person to see; a white tone is
+// better"): her path is a WHITE line on a thin dark casing, legible on the light floor and the
+// dark walls alike
+export const TRAIL_COLOUR = "#ffffff";
 export const NEAR_R = 18; // the close-up: this many cells on each side of her
 
 export const MAP_VIEWS = ["whole", "near"] as const;
@@ -93,18 +97,22 @@ export function drawLive(ctx: Ctx, d: LiveDraw): { her: boolean; mobs: number; t
   }
   const trail = sight.trail.filter(([x, y]) => inside(win, x, y));
   if (trail.length > 1) {
-    ctx.strokeStyle = HER_COLOUR;
-    ctx.globalAlpha = 0.45;
-    ctx.lineWidth = Math.max(1, scale * 0.35);
+    const w = Math.max(1.5, scale * 0.45);
     ctx.lineJoin = "round";
     ctx.lineCap = "round";
-    ctx.beginPath();
-    trail.forEach(([x, y], i) => {
-      const p = cellPx(win, scale, x, y);
-      if (i === 0) ctx.moveTo(p.x, p.y);
-      else ctx.lineTo(p.x, p.y);
-    });
-    ctx.stroke();
+    // the casing first (dark, wider), then the white line over it
+    for (const [colour, width, alpha] of [[colours.wall, w + 2, 0.7], [TRAIL_COLOUR, w, 0.95]] as const) {
+      ctx.strokeStyle = colour;
+      ctx.lineWidth = width;
+      ctx.globalAlpha = alpha;
+      ctx.beginPath();
+      trail.forEach(([x, y], i) => {
+        const p = cellPx(win, scale, x, y);
+        if (i === 0) ctx.moveTo(p.x, p.y);
+        else ctx.lineTo(p.x, p.y);
+      });
+      ctx.stroke();
+    }
     ctx.globalAlpha = 1;
   }
   let mobs = 0;
