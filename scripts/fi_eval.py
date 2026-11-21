@@ -52,7 +52,16 @@ ROUND 6 (docs/planning/xmas02-items-1080.md 8a, the 1080 item round; ``--strata 
   the detect server's forward p95 <= 35 ms AND <= 1.10 x the comparator's (``--gpu-server ITEM
   COMPARATOR``), CPU p95 <= 1.10 x the comparator's (``--cpu-deployed`` = the comparator).
 A count under its minimum is NO VERDICT, never a pass. Rounds 2-5 are unchanged.
-OFFLINE: JSON files only (no pixel, no packet read here, no GPU).
+
+ROUND 7 (xmas02-items-1080.md Amendment 22, pre-registered 2026-11-21 16:11; ``--strata r7``):
+- xmas02fi6 unchanged plus THE FI7 RULE (scripts/fi7_rule.py), applied to every --predictions file
+  before any bar: ``--item-floor 0.50`` (a floor_item box under it is dropped) and ``--ring-red
+  30`` (a floor_item box whose rectangle plus ``--ring-pad`` 6 px holds >= 30 pure-red px in its
+  recorded frame -- the no-entry cursor ring -- is dropped; the frames from ``--refs``). Each
+  set's drops are recorded beside its bars (``rule``). Without the options nothing changes.
+- a NEW 1080 held-out (natural pilots ifH5-ifH10, NOT immune; stagings ifsH3, ifsH4), packed by
+  ``pack --round 7`` (seed 74); round 6's bar values and minimums; the comparator as round 6.
+OFFLINE: JSON files only (no packet read, no GPU); the ring test alone reads recorded frames.
 """
 
 from __future__ import annotations
@@ -103,14 +112,22 @@ R5_AURA_OFF = (*R5_PILOTS, "-rdp-xmas02-fsH1")
 R6_PILOTS = ("-xmas02-ifH1", "-xmas02-ifH2", "-xmas02-ifH3", "-xmas02-ifH4")
 R6_STAGING = ("-xmas02-ifsH1", "-xmas02-ifsH2")
 R6_HELD_OUT = (*R6_PILOTS, *R6_STAGING)
+# xmas02-items-1080.md Amendment 22 (round 7, 2026-11-21): a NEW 1080 held-out by NAME
+# (fi_labels.R7_HELD_OUT; a test pins them equal): natural pilots NOT immune, stagings immune
+R7_PILOTS = ("-xmas02-ifH5", "-xmas02-ifH6", "-xmas02-ifH7", "-xmas02-ifH8", "-xmas02-ifH9",
+             "-xmas02-ifH10")  # fmt: skip
+R7_STAGING = ("-xmas02-ifsH3", "-xmas02-ifsH4")
+R7_HELD_OUT = (*R7_PILOTS, *R7_STAGING)
 STRATA = {"r2": (R2_AURA, R2_NOAURA, R2_PILOTS), "r3": (R3_AURA, R3_NOAURA, R3_PILOTS),
           "r4": (R4_AURA, R4_NOAURA, R4_PILOTS), "r5": (R5_AURA_OFF, (), R5_PILOTS),
-          "r6": (R6_HELD_OUT, (), R6_PILOTS)}  # fmt: skip
-STRATA_NAMES = {"r5": ("aura_off", ""), "r6": ("i1h", "")}  # the default: ("aura", "no_aura")
+          "r6": (R6_HELD_OUT, (), R6_PILOTS), "r7": (R7_HELD_OUT, (), R7_PILOTS)}  # fmt: skip
+STRATA_NAMES = {"r5": ("aura_off", ""), "r6": ("i1h", ""),
+                "r7": ("i1h", "")}  # fmt: skip  # the default: ("aura", "no_aura")
 # the strata reported APART beside the bar (not bars: their verdicts never count)
-STRATA_APART = {"r6": {"natural": R6_PILOTS, "staging": R6_STAGING}}
+STRATA_APART = {"r6": {"natural": R6_PILOTS, "staging": R6_STAGING},
+                "r7": {"natural": R7_PILOTS, "staging": R7_STAGING}}  # fmt: skip
 R2_TARGET = 0.95  # Batt 2026-11-10 night: "toward 95 %" -- reported, not a bar
-SCREEN_OF = {"r6": "1080"}  # a round's label files, params and key are of this screen only
+SCREEN_OF = {"r6": "1080", "r7": "1080"}  # a round's label files, params, key: this screen
 MINS = {
     "i1_recall": 40,
     "i1n_recall": 30,
@@ -124,6 +141,7 @@ MINS = {
 # xmas02-items-1080.md 8a (round 6): "the minimum is what 720 achieved" -- I1h >= 0.90, I1
 # precision >= 0.95; every other bar and every minimum as rounds 2-5
 ROUND_BARS = {"r6": {**BARS, "i1_recall": 0.90, "i1_precision": 0.95}}
+ROUND_BARS["r7"] = dict(ROUND_BARS["r6"])  # Amendment 22: section 8a's bars, unchanged
 
 
 def bars_of(strata: str | None) -> Mapping[str, float]:
@@ -516,6 +534,20 @@ def evaluated_crops(key: Mapping[str, Any], both: Sequence[str]) -> list[dict[st
     return out
 
 
+def rule_args_refusal(floor: float | None, ring_red: int | None, pad: int | None,
+                      refs: Path | None) -> str | None:  # fmt: skip
+    """PURE (round 7): the fi7 rule's options, or why they are refused."""
+    if floor is not None and not 0.0 < floor <= 1.0:
+        return f"--item-floor {floor}: a confidence in (0, 1]"
+    if ring_red is not None and ring_red < 1:
+        return f"--ring-red {ring_red}: at least 1 pixel"
+    if pad is not None and (ring_red is None or pad < 0):
+        return "--ring-pad goes with --ring-red, and is >= 0"
+    if ring_red is not None and refs is None:
+        return "--ring-red needs --refs (the ring test reads each judged frame's pixels)"
+    return None
+
+
 def round_inputs_refusal(strata: str | None, docs: Sequence[Mapping[str, Any]],
                          params: Mapping[str, Any],
                          key: Mapping[str, Any]) -> str | None:  # fmt: skip
@@ -561,20 +593,39 @@ def main(argv: Sequence[str] | None = None) -> int:
     )
     ap.add_argument("--cpu-deployed", default=None)
     ap.add_argument("--comparator", default=None,
-                    help="round 6 (--strata r6): I5's comparator model (xmas02fi5 this "
-                         "round); the second --gpu-server file is its, --cpu-deployed is "
-                         "it")  # fmt: skip
+                    help="rounds 6-7 (--strata r6 / r7): I5's comparator model (xmas02fi5); the "
+                         "second --gpu-server file is its, --cpu-deployed is it")  # fmt: skip
+    ap.add_argument(
+        "--item-floor",
+        type=float,
+        default=None,
+        help="round 7's fi7 rule A: drop floor_item boxes under this confidence",
+    )
+    ap.add_argument("--ring-red", type=int, default=None,
+                    help="round 7's fi7 rule B: drop floor_item boxes holding >= this many "
+                         "pure-red px (the no-entry cursor ring); needs --refs")  # fmt: skip
+    ap.add_argument("--ring-pad", type=int, default=None, help="the ring window's pad (px; 6)")
+    ap.add_argument(
+        "--refs",
+        type=Path,
+        default=None,
+        help="fi_labels.py refs' refs.json: the frames the ring test reads",
+    )
     ap.add_argument("--out", type=Path, required=True)
     a = ap.parse_args(argv)
     if (a.comparator is not None) != (a.strata in SCREEN_OF):
-        raise SystemExit("--comparator: round 6's I5 comparator, required with --strata r6 and "
-                         "only there")  # fmt: skip
+        raise SystemExit("--comparator: rounds 6-7's I5 comparator, required with --strata r6 / "
+                         "r7 and only there")  # fmt: skip
+    why_rule = rule_args_refusal(a.item_floor, a.ring_red, a.ring_pad, a.refs)
+    if why_rule is not None:
+        raise SystemExit(why_rule)
     cpu_deployed = a.cpu_deployed
     if a.comparator is not None:
         if cpu_deployed is None:
             cpu_deployed = a.comparator
         elif cpu_deployed != a.comparator:
-            raise SystemExit(f"--cpu-deployed {cpu_deployed}: round 6 compares with --comparator "
+            raise SystemExit(f"--cpu-deployed {cpu_deployed}: this round compares with "
+                             "--comparator "
                              f"{a.comparator}")  # fmt: skip
     docs = [json.loads(p.read_text()) for p in a.labels]
     params = {d["params_sha256"] for d in docs}
@@ -589,6 +640,16 @@ def main(argv: Sequence[str] | None = None) -> int:
         if not sep or name in preds:
             raise SystemExit(f"--predictions {spec!r}: NAME=FILE, each name once")
         preds[name] = json.loads(Path(path).read_text())
+    rules: dict[str, dict[str, Any]] = {}
+    if a.item_floor is not None or a.ring_red is not None:  # round 7's fi7 rule, every set
+        import fi7_rule as f7
+
+        refs = json.loads(a.refs.read_text()) if a.refs is not None else {}
+        pad = f7.FI7_PAD if a.ring_pad is None else a.ring_pad
+        for name in list(preds):
+            preds[name], rules[name] = f7.apply_rule(
+                preds[name], refs, lambda r, k: f7.load_frame(r, k), a.item_floor, a.ring_red, pad
+            )
     key = json.loads(a.key.read_text())
     why = round_inputs_refusal(a.strata, docs, params_doc, key)
     if why is not None:
@@ -614,6 +675,8 @@ def main(argv: Sequence[str] | None = None) -> int:
     if a.comparator is not None:
         latency["comparator"] = a.comparator
     res = evaluate(docs, preds, crops, anchor, latency, a.strata)
+    for name, summary in rules.items():  # each set's fi7 drops beside its bars
+        res["per_predictions"][name]["rule"] = summary
     res.update(
         {
             "what": "O.9: the floor-item model's bars I1-I5",
