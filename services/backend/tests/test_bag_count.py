@@ -342,3 +342,40 @@ def test_a_row_that_hides_every_oval_cuts_the_window_and_the_census_check_sees_i
     other_tab = _frame([(ids[k], 1) for k in range(5)], icons, font, rows=9)
     assert not bc.window_at(other_tab, wrong.origin, wrong.rows)
     assert bc.find_bag(other_tab) == bc.Bag(ORIGIN, 9) != wrong
+
+
+def _thin() -> np.ndarray:
+    """A THIN item bitmap (a tooth, a talon, a sword): a 2 px stroke over the key colour, so its
+    cell still shows >= OVAL_SHARE of the oval."""
+    a = np.zeros((24, 24, 3), np.uint8)
+    a[..., 0] = a[..., 2] = 255  # the key colour
+    a[2:22, 11:13] = (40, 90, 160)
+    return a
+
+
+def test_a_thin_icon_is_an_item_not_a_hole_before_the_tail() -> None:
+    """A thin icon leaves the oval showing, but every item shows a count: find_bag takes its cell
+    for an item, so the bag is found at its exact place and read whole (the oval rule alone saw a
+    hole before the empty tail: no bag there, or one a few pixels off). rows_at keeps the oval
+    rule (a pointer may rest on the bag where it looks); the census falls back to find_bag."""
+    font, icons = _font(), _icons(10)
+    icons[2000] = _thin()
+    refs = _refs(icons)
+    ids = list(icons)[:10]
+    items = [(ids[0], 3), (2000, 1), (ids[1], 46), (ids[2], 7)]
+    f = _frame(items, icons, font, rows=9)
+    x, y = bc.icon_xy(ORIGIN, 1)
+    assert bc.oval_share(bc.square(f, ORIGIN, 1)) >= bc.OVAL_SHARE  # the oval shows through it
+    assert bc.find_bag(f) == bc.Bag(ORIGIN, 9)
+    assert not bc.window_at(f, ORIGIN, 9)  # the oval rule alone: a hole before the tail
+    tab = _read(f, refs, font)
+    assert [(b.ids, b.count) for b in tab.items()] == [((iid,), n) for iid, n in items]
+    assert not tab.unread()
+    # its count is what tells it from an empty slot: with an empty cell's pixels where its digits
+    # were, it is a hole before the tail again
+    ex, ey = bc.icon_xy(ORIGIN, 62)
+    rows, cols = slice(bc.COUNT_DY, bc.COUNT_DY + bc.COUNT_ROWS), slice(14, 27)
+    f[y + rows.start : y + rows.stop, x + cols.start : x + cols.stop] = f[
+        ey + rows.start : ey + rows.stop, ex + cols.start : ex + cols.stop
+    ]
+    assert bc.find_bag(f) != bc.Bag(ORIGIN, 9)

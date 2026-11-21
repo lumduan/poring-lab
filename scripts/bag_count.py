@@ -89,6 +89,12 @@ COUNT_DY, COUNT_ROWS = 18, 9  # the digits' rows from the icon's top
 COUNT_X0, COUNT_X1 = -2, 36  # the band searched, from the icon's x
 COUNT_SHAPES = {1: ((14, 15), 19), 2: ((14, 15), 26), 3: ((14, 15), 33), 4: ((0, 1), 26)}
 COUNT_INK = 3  # a count pixel is pure black: max channel <= this
+# find_bag's EMPTY cell also shows no count ink in these columns of the count's rows (from the
+# icon's x): every count starts in them (a 4-digit one at x+0/1, so from x+2 on), and the previous
+# slot's 3-digit count ends at its x+33 = our x+1, outside them. A THIN icon (a tooth, a talon, a
+# sword: 7.5 % of the archive's icons) leaves >= OVAL_SHARE of the oval showing, but every item
+# shows a count (equipment "1"), so its cell is never taken for an empty one.
+COUNT_INK_X = (2, 27)
 DIGIT_GAP = 2  # at most this many blank columns between two digits of one count
 EMPTY_MAX = 4.0  # a square this close (mean |RGB|) to the empty-slot picture is empty
 BG_TOL = 40  # a pixel within this (sum of |RGB|) of the empty slot's is its background
@@ -228,8 +234,16 @@ def find_bag(frame_bgr: Any, min_ovals: int = LATTICE_MIN) -> Bag | None:
     the first row above that shows no slot). Among the bags: the most empty cells, then the most
     TIGHT ones (the exact pixel). Another as good more than half a pitch away = two bags alike:
     None. The tail rule makes the LAST cell empty, so only candidates whose bottom-right cell sits
-    on an oval box are judged (a few hundred, not every pixel)."""
-    maps = cell_maps(frame_bgr)
+    on an oval box are judged (a few hundred, not every pixel).
+
+    An empty cell here also shows no count ink (COUNT_INK_X): a thin icon's cell is an item, not a
+    hole before the tail that moved the bag a few pixels (2026-11-22, the lab's 1080 bag with
+    random archive icons and their counts: 95 of 300 tabs found off their place without it, 0
+    with it). Every caller looks with the pointer parked off the bag. rows_at keeps the oval rule
+    alone: it looks at a known place while the pointer may rest on the bag (ro_agent's drags),
+    where the pointer's black outline over an empty cell would read as a count."""
+    empty, tight, slot = cell_maps(frame_bgr)
+    maps = (empty & ~count_ink(frame_bgr, empty.shape), tight, slot)
     ys, xs = np.nonzero(maps[0])
     ox, oyb = xs - DX0 - PITCH * (COLS - 1), ys - DY0
     keep = ox + DX0 >= 0  # the lattice's first column inside the frame
@@ -250,6 +264,23 @@ def find_bag(frame_bgr: Any, min_ovals: int = LATTICE_MIN) -> Bag | None:
     if np.any((np.abs(oy[same] - oy[k]) > PITCH // 2) | (np.abs(ox[same] - ox[k]) > PITCH // 2)):
         return None
     return Bag((int(ox[k]), int(oy[k])), int(rows[k]))
+
+
+def count_ink(frame_bgr: Any, shape: tuple[int, ...]) -> np.ndarray:
+    """PURE: for an oval box with its top-left at (y, x) (cell_maps' maps, of ``shape``): its cell
+    shows pure-black count ink in the count's rows, columns COUNT_INK_X. Beyond the frame: none."""
+    ink = (np.asarray(frame_bgr)[..., :3].max(axis=2) <= COUNT_INK).astype(np.int32)
+    H, W = ink.shape
+    dy, dx = COUNT_DY - OVAL_BOX[1], COUNT_INK_X[0] - OVAL_BOX[0]  # the band from the oval's box
+    bh, bw = COUNT_ROWS, COUNT_INK_X[1] - COUNT_INK_X[0]
+    eh, ew = shape[0], shape[1]
+    ii = np.zeros((max(H, eh + dy + bh) + 1, max(W, ew + dx + bw) + 1), np.int32)
+    ii[1 : H + 1, 1 : W + 1] = ink.cumsum(0).cumsum(1)
+    ii[1 : H + 1, W + 1 :] = ii[1 : H + 1, W : W + 1]  # no ink beyond the frame
+    ii[H + 1 :, :] = ii[H : H + 1, :]
+    ys, xs = np.arange(eh)[:, None] + dy, np.arange(ew)[None, :] + dx
+    s = ii[ys + bh, xs + bw] - ii[ys, xs + bw] - ii[ys + bh, xs] + ii[ys, xs]
+    return np.asarray(s > 0)
 
 
 def find_window(frame_bgr: Any, min_ovals: int = LATTICE_MIN) -> tuple[int, int] | None:
