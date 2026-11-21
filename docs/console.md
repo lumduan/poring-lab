@@ -420,6 +420,21 @@ Amendment B); a not-adopted model is never offered.
     its log.
   - No Knife row (a Rogue's technique): a steal counts as an item gained.
   - ➡️ 2026-11-20 (Batt): two columns; "what she does" (newest first) on the right.
+  - ➡️ **2026-11-21 (Batt: "add SP, the weight as a %, and the zeny: other jobs need them, a mage,
+    a merchant whose skill strikes with money"):** three more tiles after HP, and the same three
+    in the live line ("HP 99 % · SP 74 % · weight 38 % · 33,287 z · ...").
+    - **💙 SP**: its % and the Run's lowest, read with every HP read. The bar turns red below
+      20 %.
+    - **🎒 weight**: the bag's %, from the runner's own weight read (its UI check, every 10 s
+      outside a fight; a change is shown). The bar turns red at 50 %: there the client stops
+      natural HP / SP regen, and at 90 % she cannot attack.
+    - **🪙 zeny**: Basic Info's zeny (the last number on the weight line), read from the same
+      frames by `scripts/zeny_read.py`, with the gain or spend since the Run's first read, e.g.
+      "33,287 (+3,287)".
+      - It reads the lab's font and a client's own learned font (the live PC's, live-th).
+      - It never guesses: a cut-off, covered or badly grouped number shows "zeny not read".
+    - "not read" says the bot does not see the value; an older Run helper shows no such tile.
+    - Display only: no decision reads them.
   ➡️ **2026-11-21 (Batt): the layout is the person's.**
   - **Hide blocks / Show blocks** (the footer's first button): the blocks and the Python beside
     them go out of sight (nothing is lost: the editor stays as it was) and the panes take the
