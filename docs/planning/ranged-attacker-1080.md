@@ -163,3 +163,27 @@ attacks." On the order (20:2x): after tonight's 5b test.
 - **The shooter pick fires:** R1's player record (the `-play-` session, which the scorer reads)
   holds 4 picks, all Cruisers, at 6, 4, 1 and 8 cells.
 
+### RESULT (2026-11-22 06:47 ICT from `date`): scored ONCE -- FASTER, NOT MORE; R does not join the base
+
+`ranged_ab_score.py score --arm A=rng-A1+rng-A2+rng-A4 --arm R=rng-R1+rng-R3+rng-R4` (Amendment
+3; the dev checkout at abd1ca45; `score-rng.json` sha256 b5ec4afd...). 3 valid runs a side.
+
+| line | A' | R | bar | |
+|---|---|---|---|---|
+| R1 kills/h | 91.0 (SE 9.3) | 99.6 (SE 14.7) | diff +8.7 > 2 SE = 34.7 | **FAIL** |
+| R2 defend-scan s an hour | 726.1 | 474.7 | R < 0.75 x A' = 544.6 | PASS |
+| R3 deaths / errors | 0 / 0 | 0 / 0 | R <= A', none new | PASS |
+
+- **The verdict as registered: "faster, not more".** R stays a player switch, off.
+- **R2 leans on one short piece (read after the score, decides nothing):** the scorer averages the
+  defend-scan rate per HUNT CORE, and rng-A2 had two: a 2-minute first one (1,340 s an hour) and
+  the rest (430). Pooled by time, A2 is ~513 and A' ~549, so R's 474.7 would miss its bar (< 412).
+- **Reported:**
+  - 19 shooter picks in R's 3 runs, all Cruisers: 10 became an attack request on that monster, 7
+    walks only, 2 nothing.
+  - Cruiser hits on her an hour: A' 970.8, R 1,190.1 (R took more).
+  - R's runs: defend-scan s an hour 382.9, 514.7, 526.4.
+- **What it says:** striking the shooter the detector sees does not turn into more kills, and
+  she was not hit less by Cruisers. Round 8 of the item model (the Cruiser's projectile) and
+  Batt's second half (teach which monster attacks) remain; this switch is not the fix.
+
