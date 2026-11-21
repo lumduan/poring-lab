@@ -531,7 +531,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             default=[],
             metavar="NAME=VALUE",
             help="a BOX setting with its own runner flag for this block (xmas02-items-1080.md 8c: "
-            "loot_items=xmas02fi6); the runner's argv may differ in that flag's value alone",
+            "loot_items=MODEL); the runner's argv may differ in that flag's value alone",
         )
         p.add_argument(
             "--player-set",

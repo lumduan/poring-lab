@@ -268,11 +268,12 @@ def test_the_false_boss_line() -> None:
 
 # --- xmas02-items-1080.md 8c: a block's BOX setting (the item model) ------------------------------
 def test_box_sets_take_box_settings_with_a_runner_flag_only() -> None:
-    assert sa.box_sets(["loot_items=xmas02fi6"]) == {"loot_items": "xmas02fi6"}
+    assert sa.box_sets(["loot_items=xmas02fi4"]) == {"loot_items": "xmas02fi4"}
     assert "not a box setting" in sa.box_sets(["alarm_near_px=60"])  # a player setting
     assert "a setting's name" in sa.box_sets(["nope=1"])
-    assert "given twice" in sa.box_sets(["loot_items=xmas02fi6", "loot_items=xmas02fi5"])
+    assert "given twice" in sa.box_sets(["loot_items=xmas02fi4", "loot_items=xmas02fi5"])
     assert isinstance(sa.box_sets(["loot_items=xmas02fi9"]), str)  # not one of its options
+    assert isinstance(sa.box_sets(["loot_items=xmas02fi6"]), str)  # 8b FAILED: not offered
 
 
 def test_argv_may_differ_in_the_named_flags_values_only() -> None:
@@ -292,11 +293,11 @@ def test_a_box_set_block_changes_the_item_model_alone() -> None:
     text = s10.arm_text("B", 20)
     base = sa.s5c.vals_of(text)
     assert isinstance(base, dict) and base["loot_items"] == "xmas02fi5"
-    got = sa.player_set_arm(text, {"loot_items": "xmas02fi6"}, 1200, ("--loot-items",))
+    got = sa.player_set_arm(text, {"loot_items": "xmas02fi4"}, 1200, ("--loot-items",))
     assert isinstance(got, dict), got
     assert {k for k in got["vals"] if got["vals"][k] != base.get(k)} == {"loot_items"}
     # without the flag allowed to differ, the same change is refused (a player set may not)
-    refused = sa.player_set_arm(text, {"loot_items": "xmas02fi6"}, 1200)
+    refused = sa.player_set_arm(text, {"loot_items": "xmas02fi4"}, 1200)
     assert isinstance(refused, str) and "argv" in refused
 
 
@@ -304,9 +305,9 @@ def test_plan_doc_records_the_block_s_box_set(tmp_path: Path) -> None:
     import stage10_ab as s10
 
     text = s10.arm_text("B", 20)
-    doc = sa.plan_doc("fi6-b", 3, 20, "1080", tmp_path, base=_base(),
-                      box_set={"loot_items": "xmas02fi6"}, base_text=text)  # fmt: skip
+    doc = sa.plan_doc("fi-b", 3, 20, "1080", tmp_path, base=_base(),
+                      box_set={"loot_items": "xmas02fi4"}, base_text=text)  # fmt: skip
     assert isinstance(doc, dict), doc
-    assert doc["box_set"] == {"loot_items": "xmas02fi6"} and doc["player_set"] == {}
-    assert doc["vals"]["B"]["loot_items"] == "xmas02fi6"
+    assert doc["box_set"] == {"loot_items": "xmas02fi4"} and doc["player_set"] == {}
+    assert doc["vals"]["B"]["loot_items"] == "xmas02fi4"
     assert doc["arm"]["project_hash"] != "h" * 64
