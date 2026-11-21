@@ -550,3 +550,44 @@ Written before any probe of this round.
   valid.
 - **The fix:** the corrected wrapper (xmas02_items_r7b_score.sh) waits for 5b's OWN last line,
   exactly (`^\[hh:mm:ss\] CHAIN DONE$`), and for no screen_ab run.
+
+### Amendment 12 (2026-11-22 03:09 ICT from `date`, before any 5b score): C1 void (a person's click); C3 not valid by the committed rule; C gets a fifth run
+
+- **The chain ended at 03:03:48.** Valid by the COMMITTED rule (`screen_ab.valid`, which
+  cursor_5b_score.py applies: >= 80 % of the 25 min played, or a home end; rc 0):
+  A1 A2 A3, B2 B3 B4, C2 C4, D1 D2 D3. B1 is void (Amendment 11).
+- **C1 (21:57-22:01) is VOID, an outside event.** The dev input log shows a person's mode change
+  on the DEV console: `set_mode` BOT at 22:01:03 and ASSIST at 22:01:06 (`source: human`).
+  - The hunt core stops when the mux leaves the mode it started in ("mux left ASSIST (BOT):
+    stopping"), as it must (it never fights a person).
+  - Not the arm's doing.
+- **C3 (01:23-01:38) ended after 15.0 min by the runner's own safe end:** "stock_out: item 504
+  reads 0 on the hotbar" (8 White Potions used), then the Butterfly Wing home (geffen:
+  `relocate_no_block`).
+  - The cause, from its packets (report-only; docs/records/scorers/c5b_dmg_taken.py, verbatim): the
+    damage she took jumped at minute 10 (2,418 in that minute). One Cruiser, a ranged attacker
+    (attack range 7), did 1,670 of the run's 6,955.
+  - Damage taken a minute: C3 454. The other 11 full runs: 157-248 (C2 182, C4 248).
+  - Heals used: C3 8; the full runs 0-4.
+  - This is the problem of ranged-attacker-1080.md (Batt's Cruiser clip), the next A/B on dev.
+- **Ruling: the committed rule stands; it is not changed after seeing this.**
+  - C3 played < 80 % and its end is not a home end, so it is not in C's kills/h line.
+  - The chain's "one more run" counted runs 1-3 only, so C has 2 valid runs. 5b registers 3 valid
+    runs a side, so C gets a FIFTH run (c5b-C5), now. It uses the same preamble and flags, and
+    starts after round 7's score wrapper (xmas02_items_r7b_score.sh) has ended
+    (docs/records/scorers/c5b_c5.sh, verbatim).
+  - If C5 is not valid either, C is judged on its 2 valid runs (the scorer allows it), and the
+    report says so.
+- **Scored once, after C5:**
+
+      cursor_5b_score.py score --arm A=c5b-A1+c5b-A2+c5b-A3 --arm B=c5b-B2+c5b-B3+c5b-B4 \
+          --arm C=c5b-C2+c5b-C3+c5b-C4+c5b-C5 --arm D=c5b-D1+c5b-D2+c5b-D3
+
+  - C3 is passed IN the C list, so the committed `valid` excludes it from kills/h while its deaths
+    and errors still count for C. C1 and B1 (void) are left out.
+  - The packet measures (cursor_5b_packets.py) for the same runs, beside it.
+- **Reported beside the verdicts (decides nothing):**
+  - the kills/h line again with C3's own rate (its 15.0 min) added, as a sensitivity;
+  - per arm: the runs ended by a stock-out, the damage taken a minute and the heals used
+    (packets).
+
