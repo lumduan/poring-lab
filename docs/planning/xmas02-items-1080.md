@@ -677,3 +677,22 @@ A count under its minimum is NO VERDICT, never a pass.
 - Two NEW blind labellers, AK and AL (subagents that see only the pack), then `score_8a.sh`
   (scratch): the ONNX set, I5's CPU and GPU latency against xmas02fi5 in a quiet window,
   both-good, and `fi_eval --strata r6 --comparator xmas02fi5`, ONCE. Reported beside 8b's FAIL.
+
+### Amendment 19 (2026-11-21 14:40 ICT from `date`, BEFORE the 8a score): Batt's decision -- a model per screen size; improve until it passes
+
+- Asked (the 14:08 report, decision 3): "If 8a passes: use the new item model at 1080 only?"
+  Batt answered "ใช้ ปรับปรุงให้ผ่าน" ("use it; improve it until it passes").
+- Written before 8a is scored. score-8a.log's last line is 11:16:41, "both answer files hold
+  80". No 8a number exists; the step waits for a quiet GPU.
+- **A model per screen size** (a new decision, Batt's; Amendment 17 said it would be his):
+  - at 1080 the 1080 round's model;
+  - at 720 xmas02fi5 stays;
+  - so 8b (720, no loss) no longer gates a 1080-only use. Its FAIL stands as recorded.
+- **If 8a PASSES** (scored once, the bars of section 8a unchanged):
+  - 8c runs at 1080 as registered: A = xmas02fi5, B = xmas02fi6, 3 valid runs a side;
+  - if 8c passes, xmas02fi6 is deployed for 1080 only (live on Batt's word, as every promote).
+- **If 8a or 8c FAILS:** a round 7, "improve it until it passes". Its changes are
+  pre-registered before any of its data, and it gets a NEW 1080 held-out (this round's are
+  spent once scored).
+- The code that picks the item model by the client's screen size is built and tested before 8c.
+  It is not built yet.
