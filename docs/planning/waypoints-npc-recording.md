@@ -181,3 +181,39 @@ code: `src/lib/mats/path.ts`, `path-edit.ts`, `src/lib/blocks/incoming.ts`,
 - **matpilot may help:** Batt allows asking the matpilot session to look at the web pages or the
   live screen. Its answers are advice, adopted by a recorded amendment, never by its own edits
   here.
+
+## Amendment 4 (2026-11-22 04:47 ICT from `date`): the path recorder's pure core is built (offline); questions for Batt
+
+- **Built** (Amendment 3's "in parallel"): `scripts/path_record.py` + `test_path_record.py`
+  (113 tests on synthetic grids; map_routes' 50 unchanged and passing). It does no live read,
+  sends no input and writes no file.
+  - A versioned path file (`poring-lab-path` v1): named legs, one per map, each with waypoints
+    (x, y, arrival radius, mark) and how the map is left. The exit kinds are the flow IR's own
+    words: walk_exit (a cell), npc_warp (a talk's name), item_warp, end.
+  - **Thinning** raw reads into waypoints (Amendment 1 b): unconfirmed reads dropped; a point every
+    10 cells, at turns over 40 degrees, at every map change and every mark; never two points
+    closer than 3 cells except there. Every threshold is a setting with these as defaults.
+  - **Leg proof** with map_routes' own functions (`route_grid`, `leg_path`, `closed_why`, ...):
+    each point and segment is ok / broken / closed / unproven, for the editor to draw red.
+  - **Edits** (move, insert, delete, radius, exit, rename) return a new path, re-validated.
+  - **Walking:** `ahead` = map_routes' next / entry / resume rule with each point's own radius
+    (Amendment 1 d), and a wrong map stops with the words "she is on X, the path expects Y".
+  - Names in any script, stored as data and never turned into code.
+- **Not built yet:** the live recording loop (selfpos reads, `/where` on a minimap change), the
+  /maps editor UI, the NPC-talk recorder, the `walk_path` block.
+- **Questions for Batt** (current behaviour in brackets; nothing decided silently):
+  1. Which grid proves a path: the walk grid minus every warp span except the leg's own exit?
+     [the caller chooses]
+  2. Do a hunt map's zones apply to a path's legs? [only if passed]
+  3. A map change with no recorded leave: take the nearest warp cell as the exit, or let the
+     walker keep its heading until the map changes? [the last read cell, flagged for the person]
+  4. item_warp: which item / function, and what if none is chosen? [optional]
+  5. Joining a leg: the nearest point (map_routes' rule), or only its first point? [nearest]
+  6. A restart mid-path on a later leg's map: start at that leg? [no: leg 0, else wrong map]
+  7. A warp inside one map stays one leg (no "split a leg" edit yet).
+  8. Over 1,000 points on a leg is refused; the live loop keeps the raw reads to re-thin.
+  9. A path ends with `end`; "walk, then fly home" stays its own block.
+  10. The default thresholds come from the committed routes' 10-12-cell legs; bar 1 (5 of 5
+      replays) tests them.
+  11. A mark is a flag, with no label.
+
