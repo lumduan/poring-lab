@@ -6,7 +6,7 @@ verdict_date: null
 verdict_ticket: null
 supersedes: null
 related: [econ-bag-count.md, ../econ/economics.md, ../../scripts/bare_steal.py, ../../scripts/bag_count.py, ../../scripts/slot_items.py, ../../scripts/econ_screen.py]
-next_action: "Build scripts/item_popup.py + item_popup_eval.py; calibrate on the 720 recordings fiT1-fiT20; score once on the rest; then the 1080 run-time check on dev against packets."
+next_action: "Round 3 PASSED (RESULT round 3, 2026-11-22 19:25): pre-register section 4's 1080 run-time check on dev (its own amendment); the reader feeds no Run before that check passes."
 title: "Every item gained, from the client's item-obtained popup: which item, how many (pre-registration)"
 date: 2026-11-21
 owner: Batt
@@ -363,3 +363,52 @@ set r2; `score-r2.json` sha256 5e2322a7...; pooled counts:
 - **If it passes:** section 4's 1080 run-time check on dev is pre-registered next (its own
   amendment); the reader feeds a Run's item list (section 5) only after that check.
   **If it fails:** a round 4, pre-registered from its diagnosis.
+
+### RESULT round 3 (2026-11-22 19:25 ICT from `date`): the one score -- all four bars PASS; the reader feeds no Run yet (section 4's check first)
+
+`item_popup_eval.py score --set r3` (scratch `popup-r3/score_r3.sh`), 41 sessions, the build's
+inputs: the count font `item_popup_count_r2.npz` (sha256 ade6a384801e...) and slot_items' pictures
+`refs.npz` (1bb96813ff49...).
+
+1. **The development check first** (the spent calibration set, 17:41-18:28): 1,051 right ids
+   (1,054 matched, I1 99.72 %), the diagnosis' 1,051 exactly; the lead read 7 times, 7 right. So
+   r3 was read.
+2. **The one score** (18:28-19:23); `score-r3.json` sha256 34756563...:
+
+   | line | got | bar | |
+   |---|---|---|---|
+   | I1 the right item | 656 / 658 = **99.70 %** (1 unread, 1 wrong) | >= 97 % | **PASS** |
+   | I2 the right amount | 656 / 658 = **99.70 %** (2 unread amounts) | >= 97 % | **PASS** |
+   | P false events | 4 / 662 = **0.60 %** | <= 2 % | **PASS** |
+   | R recall (spaced truths) | 651 / 665 = **97.9 %** | >= 85 % | **PASS** |
+
+   - 673 truths, the packets' count in Amendment 5. Repeats (<= 6 s after the last of the same
+     item): 12, found 2, as the one-event rule predicts.
+- **The commit.** score_r3.sh checked that the worktree was at the build 0dcfd84f and clean at its
+  start (17:41). At 17:53 a flow_play fix (28009d6e: the pause-time count and its test) was
+  committed in the same worktree, so the r3 process (started 18:28) ran at HEAD 28009d6e.
+  `git diff 0dcfd84f 28009d6e` changes only `scripts/flow_play.py` and
+  `services/backend/tests/test_live_player.py`. The scorer never imports either (item_popup ->
+  bare_steal, slot_items -> hotbar_count; ro_agent lazily). So the score ran the build's code byte
+  for byte.
+- **Reported beside (not bars):**
+  - I1 by part: the stagings 246 / 246 = 100 %; natural play 269 / 270 = 99.6 %; Batt's own
+    session (human-xmas02-batt1112b) 141 / 142 = 99.3 %.
+  - The reads by why: "lead" 1, right 1; "same" (a group read) 0, none occurred; "far" 1, right 0
+    (the one unread id); "ok" 656, right 655 (the one wrong id).
+  - Where they sit, by session (counts only; no frame read):
+    - hunt-xmas02-p38: the unread id, the one lead read and 1 false event;
+    - batt1112b: the wrong id, 3 false events and 9 of the 14 missed spaced truths;
+    - xmas02-x2 and hunt-xmas02-p39: one unread amount each. Amendment 5 predicted 2 unread
+      amounts from the packets (a 7 and a 4 the font never learned); that these are the two was
+      not checked frame by frame;
+    - the other missed spaced truths: hunt-xmas02-fiH2 2, p39 1, fp1 1, fp2 1.
+- **What it shows.** r3 holds no magic scroll (Amendment 5). So this pass shows that round 3's
+  reader reads NEW 720 recordings and breaks nothing. The scrolls' own evidence is still the
+  measurement on spent data (Amendment 5's table), and their live check is section 4's.
+- **Not used yet.** As Amendment 5 says, section 4's 1080 run-time check on dev is pre-registered
+  next (its own amendment), and the reader feeds a Run's item list (section 5) only after that
+  check passes. Set r3 is spent.
+- **After the score, reported only:** sets r2 and old (fiT21+) again under round 3's reader
+  (`popup-r3/again_r3.sh`, started 19:25, refusing unless the scorer files equal 0dcfd84f's). The
+  calibration set's run is item 1 above. Their counts go in a labelled note when they end.
