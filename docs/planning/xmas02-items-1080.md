@@ -1354,7 +1354,7 @@ A count under its minimum is NO VERDICT, never a pass.
   --edge-margin / --edge-top`), fi_labels' and fi_eval's round 10 names (ifH31-ifH40, ifsH9,
   ifsH10), seed 77 and `--strata r10`, with tests.
 
-### Amendment 37 (2026-11-22 23:0x ICT from `date`, during round 10's pilots; changes no round-10 step): the player's part C built ahead, off
+### Amendment 37 (2026-11-22 22:51 ICT from `date`, during round 10's pilots; changes no round-10 step): the player's part C built ahead, off
 
 - **What:** the live player's fi7 rule (`flow_play.item_rule`, 1080 only, outside the byte-pinned
   runner) gains part C, the view edge, as two player settings beside `item_floor_1080` and
