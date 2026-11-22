@@ -362,3 +362,107 @@ def test_amendment6_score_events_windows_coverage_and_minimums(tmp_path) -> None
     assert got["lines"]["id_ok"] == 251 and got["verdict"]["I1_id"] == "PASS"
     assert got["lines"]["events"] == 252  # the session windows' events only
     assert got["beside"]["watchers"]["watch1"]["ticks"]["n"] == 9
+
+
+# --- round 4 (Amendment 10): the merge, the nearest glyph, the 1080 digit staging ----------------
+S_NS = 10**9
+
+
+def _ev(t_s: float, ids: tuple[int, ...] | None = (912,), amount: int | None = 1,
+        last_s: float | None = None) -> ip.Event:  # fmt: skip
+    t = int(t_s * S_NS)
+    return ip.Event(t, ids, "ok", 3.0, amount, 180,
+                    t_last=int((t_s if last_s is None else last_s) * S_NS))  # fmt: skip
+
+
+def test_round4_a_piece_joins_only_the_same_read_soon_after() -> None:
+    first = _ev(0.0, last_s=3.0)
+    assert ip.joins(first, _ev(3.5))  # 0.5 s after its last frame, 3.5 s after its first
+    assert ip.joins(first, _ev(4.25))  # MERGE_GAP_S = 1.25 s: at the edge
+    assert not ip.joins(first, _ev(4.3))  # too long after its last frame
+    assert not ip.joins(first, _ev(3.5, ids=(913,)))  # another item
+    assert not ip.joins(first, _ev(3.5, amount=2))  # another amount
+    assert not ip.joins(first, _ev(3.5, amount=None))  # unread only joins unread
+    assert ip.joins(_ev(0.0, amount=None, last_s=3.0), _ev(3.5, amount=None))
+    late = _ev(0.0, last_s=5.5)
+    assert ip.joins(late, _ev(6.0)) and not ip.joins(late, _ev(6.1))  # MERGE_LIFE_S = 6.0 s
+
+
+def test_round4_the_merger_holds_a_piece_until_nothing_can_join_it() -> None:
+    m = ip.Merger()
+    assert m.add(_ev(0.0, last_s=3.0)) == []  # pending
+    assert m.due(int(3.5 * S_NS), _ev(3.4)) == []  # a box opened 0.4 s after: it may join
+    assert m.add(_ev(3.4, last_s=4.8)) == []  # it did: one popup
+    assert m.joined == 1 and m.parts == [int(3.4 * S_NS)]
+    assert m.pending is not None and m.pending.t_last == int(4.8 * S_NS)
+    assert m.pending.frames == 2
+    assert m.due(int(5.0 * S_NS), None) == []  # 0.2 s after its last frame: still open to a join
+    got = m.due(int(6.1 * S_NS), None)  # 1.3 s after: final
+    assert [e.t for e in got] == [0] and m.pending is None
+    # another item closes the pending one at once, in order
+    assert m.add(_ev(10.0, last_s=12.0)) == []
+    assert [e.ids for e in m.add(_ev(12.5, ids=(501,)))] == [(912,)]
+    assert m.due(int(13.0 * S_NS), _ev(20.0)) == [_ev(12.5, ids=(501,))]  # a late box: final
+    assert m.flush() == [] and m.add(_ev(30.0)) == [] and len(m.flush()) == 1
+
+
+def test_round4_watch_joins_a_popup_read_again_after_a_lost_tick(tmp_path, monkeypatch) -> None:  # type: ignore[no-untyped-def]
+    bx, by = ip.BAND[0], ip.BAND[1]
+    monkeypatch.setattr(
+        ip, "box_of", lambda f: None if f[by, bx, 0] == 0 else ip.Popup(541, 720, b"")
+    )
+    # 0.25 s ticks: popup 5, one lost tick, popup 5 again (the same popup), gone 2 s, 5 again (new)
+    seq = [0, 5, 5, 5, 0, 5, 5, 0, 0, 0, 0, 0, 0, 0, 0, 5, 5, 0, 0, 0, 0, 0, 0]
+    it = iter(enumerate(seq))
+    done = [False]
+
+    def grab():  # type: ignore[no-untyped-def]
+        try:
+            k, v = next(it)
+        except StopIteration:
+            done[0] = True
+            return 99 * S_NS, np.zeros((38, 536, 4), np.uint8)
+        band = np.zeros((38, 536, 4), np.uint8)
+        band[0, 0, :3] = v
+        return k * S_NS // 4, band
+
+    clock = iter(range(0, 10**6))
+    got = ip.watch(tmp_path / "w", grab, _Marked(None, None), lambda: done[0], crops=True,  # type: ignore[arg-type]
+                   sleep=lambda s: None, clock=lambda: float(next(clock)) / 100)  # fmt: skip
+    lines = [json.loads(x) for x in (tmp_path / "w" / "events.jsonl").read_text().splitlines()]
+    q = S_NS // 4
+    got_lines = [(e["t"], e["frames"], e["t_last"]) for e in lines]
+    assert got_lines == [(q, 5, 6 * q), (15 * q, 2, 16 * q)]
+    assert got["events"] == 2 and got["joined"] == 1
+    assert sorted(p.name for p in (tmp_path / "w").glob("crop-*.png")) == [
+        f"crop-{q}.png", f"crop-{15 * q}.png"]  # fmt: skip
+
+
+def test_round4_read_count_names_the_nearest_glyph() -> None:
+    run = GLYPH["3"].copy()
+    near, far = run.copy(), run.copy()
+    near[0, 1] = not near[0, 1]  # 1 pixel off
+    far[0, 1], far[1, 1], far[2, 1] = not far[0, 1], not far[1, 1], not far[2, 1]  # 3 off
+    tail = [GLYPH[c] for c in "cab"]
+    b = box("ab 3 cab")
+    for digits in ({"8": far, "3": near}, {"3": near, "8": far}):  # either order: the nearer
+        assert ip.read_count(b, ip.CountFont(tail, digits)) == 3
+    assert ip.read_count(b, ip.CountFont(tail, {"8": far})) == 8  # the only one within SAME
+
+
+def test_round4_the_staging_lines_and_their_events() -> None:
+    rows = [{"t_mono_ns": 5, "cmd": "@item 909 7"},  # before the watcher: not the staging
+            {"t_mono_ns": 20 * S_NS, "cmd": "@item 909 23"},
+            {"t_mono_ns": 10 * S_NS, "cmd": "@item 909 3"},
+            {"t_mono_ns": 30 * S_NS, "cmd": "@delitem 909 26"},
+            {"t_mono_ns": 40 * S_NS, "cmd": "@monsterignore"}]  # fmt: skip
+    lines = ev.staging_lines(rows, t_from=S_NS)
+    assert lines == [(10 * S_NS, 3), (20 * S_NS, 23)]
+    evs = [{"t": 13 * S_NS}, {"t": 22 * S_NS}, {"t": 50 * S_NS}]
+    assert [(e["t"], n) for e, n in ev.pair_lines(lines, evs)] == [(13 * S_NS, 3), (22 * S_NS, 23)]
+    import pytest
+
+    with pytest.raises(SystemExit, match="no event"):
+        ev.pair_lines([(10 * S_NS, 3), (40 * S_NS, 4)], evs)  # 50 s is > 6 s after 40 s
+    with pytest.raises(SystemExit, match="two lines"):
+        ev.pair_lines([(10 * S_NS, 3), (11 * S_NS, 4)], [{"t": 13 * S_NS}])

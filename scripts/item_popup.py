@@ -24,6 +24,12 @@ Read by shape, colour and digits only (Batt 10-26 / 11-11: no word is read):
   square: the popup has no count box over its icon). Pictures with fewer than DISCRIM_MIN such
   pixels are one picture to the eye: their ids join the read (one group, Amendment 4).
 
+- ROUND 4 (Amendment 10, from w1080's diagnosis): (1) the MERGE: a closed event joins the one
+  before it when both read the same ids and amount, it starts <= MERGE_GAP_S after that one's last
+  frame and <= MERGE_LIFE_S after its first (a popup read again after a lost tick while the world
+  scrolls behind it: 38 of w1080's 307 events); (2) read_count names a digit run by the NEAREST
+  glyph within SAME, not the first; (3) the count font with all ten digits is learned at 1080
+  from a GM digit staging (item_popup_eval.py learn-count-1080).
 - AMENDMENT 6 (section 4's 1080 run-time check): at 1920 x 1080 the client draws the popup 1:1 at
   the 720 place moved right by (w - 1280) / 2 on the SAME rows (measured 2026-11-22 19:43 on dev).
   `item_popup.py watch` grabs only that band of the REAL frame (BAND, band_box), puts it back at
@@ -384,17 +390,18 @@ def count_group(box: np.ndarray, runs: Sequence[np.ndarray],
 
 
 def read_count(box: np.ndarray, font: CountFont) -> int | None:
-    """PURE: the count, or None: no tail, an unknown run, a leading zero."""
+    """PURE: the count, or None: no tail, an unknown run, a leading zero. Each run is named by
+    the glyph with the fewest differing pixels among those within SAME (round 4)."""
     runs = text_runs(box)
     grp = count_group(box, runs, font.tail)
     if grp is None:
         return None
     s = ""
-    for r in grp:
-        ch = next((c for c, g in font.digits.items() if same(r, g)), None)
-        if ch is None:
+    for r in grp:  # round 4 (Amendment 10): the NEAREST glyph within SAME, not the first one
+        near = [(float((r != g).mean()), c) for c, g in font.digits.items() if same(r, g)]
+        if not near:
             return None
-        s += ch
+        s += min(near)[1]
     return amount_of([s])
 
 
@@ -502,6 +509,65 @@ class Tracker:
         return out
 
 
+# --- round 4 (Amendment 10): the merge -- a popup read again after a lost tick is the same popup --
+MERGE_GAP_S = 1.25  # a piece joins the one before when it starts <= this after its last frame ...
+MERGE_LIFE_S = 6.0  # ... and <= this after its first frame (w1080: a popup is seen <= 5.51 s)
+
+
+def joins(prev: Event, e: Event, gap_s: float = MERGE_GAP_S,
+          life_s: float = MERGE_LIFE_S) -> bool:  # fmt: skip
+    """PURE (round 4): is the closed event ``e`` the popup of ``prev`` read again? Both read the
+    same ids and the same amount (an unread amount, None, only joins None), and ``e`` starts <=
+    ``gap_s`` after prev's last frame and <= ``life_s`` after its first."""
+    return (e.ids == prev.ids and e.amount == prev.amount
+            and e.t - prev.t_last <= gap_s * 1e9 and e.t - prev.t <= life_s * 1e9)  # fmt: skip
+
+
+class Merger:
+    """Round 4 (Amendment 10): between the Tracker and events.jsonl. ``add`` takes a closed event
+    and returns the events that are final; ``due`` returns the pending one once nothing can join
+    it; ``flush`` the pending one at the end. ``joined`` counts the pieces joined, ``parts`` holds
+    their t (the watcher drops their crops)."""
+
+    def __init__(self, gap_s: float = MERGE_GAP_S, life_s: float = MERGE_LIFE_S) -> None:
+        self.gap_s, self.life_s = gap_s, life_s
+        self.pending: Event | None = None
+        self.joined = 0
+        self.parts: list[int] = []
+
+    def add(self, e: Event) -> list[Event]:
+        p = self.pending
+        if p is not None and joins(p, e, self.gap_s, self.life_s):
+            p.t_last = max(p.t_last, e.t_last)
+            p.frames += e.frames
+            self.joined += 1
+            self.parts.append(e.t)
+            return []
+        self.pending = e
+        return [] if p is None else [p]
+
+    def due(self, t_now: int, open_ev: Event | None) -> list[Event]:
+        """The pending event once nothing can join it: the Tracker's open box began more than
+        gap_s after its last frame (or more than life_s after its first), or no box is open and
+        gap_s have passed."""
+        p = self.pending
+        if p is None:
+            return []
+        limit = p.t_last + self.gap_s * 1e9
+        if open_ev is not None:
+            if open_ev.t <= limit and open_ev.t - p.t <= self.life_s * 1e9:
+                return []  # it may still join when it closes
+        elif t_now <= limit:
+            return []
+        self.pending = None
+        return [p]
+
+    def flush(self) -> list[Event]:
+        out = [] if self.pending is None else [self.pending]
+        self.pending = None
+        return out
+
+
 # --- Amendment 6: the run-time reader at 1080 (item_popup.py watch) -------------------------------
 # The band of the 720 coordinates the watcher grabs: the popup's place with a margin (x 533-1068,
 # rows 72-109; the box is at most POPUP_MAX_W wide from POPUP_LEFT, the count's crop is rows
@@ -553,13 +619,16 @@ def watch(out_dir: Path, grab: Callable[[], tuple[int, np.ndarray]], tracker: Tr
           sleep: Callable[[float], None] = time.sleep,
           clock: Callable[[], float] = time.perf_counter) -> dict[str, Any]:  # fmt: skip
     """The watcher's loop: grab the band (t_mono_ns, BGRA), put it at the 720 place, feed the
-    Tracker, append each CLOSED event to events.jsonl (flushed), until ``stop()``; then the open
-    one. ``crops``: the band of each event's first frame as crop-<t>.png (dev only). A failed grab
-    is counted and the loop goes on. Writes and returns summary.json's dict."""
+    Tracker, pass each CLOSED event through the round-4 Merger and append each FINAL one to
+    events.jsonl (flushed), until ``stop()``; then the open and the pending one. ``crops``: the
+    band of each event's first frame as crop-<t>.png (dev only; a joined piece's is dropped). A
+    failed grab is counted and the loop goes on. Writes and returns summary.json's dict (with
+    ``joined``: the pieces the merge joined)."""
     out_dir.mkdir(parents=True, exist_ok=True)
     ticks: list[float] = []
     slow = errors = events = 0
     first: dict[int, np.ndarray] = {}
+    merger = Merger()
     with open(out_dir / "events.jsonl", "a", encoding="utf-8") as fh:
 
         def write(e: Event) -> None:
@@ -572,6 +641,14 @@ def watch(out_dir: Path, grab: Callable[[], tuple[int, np.ndarray]], tracker: Tr
                 from PIL import Image
 
                 Image.fromarray(band).save(out_dir / f"crop-{e.t}.png")
+
+        def take(closed: Sequence[Event]) -> None:
+            for e in closed:
+                for f in merger.add(e):
+                    write(f)
+            for tp in merger.parts:  # a joined piece is no event: its crop goes
+                first.pop(tp, None)
+            merger.parts.clear()
 
         while not stop():
             t0 = clock()
@@ -586,16 +663,19 @@ def watch(out_dir: Path, grab: Callable[[], tuple[int, np.ndarray]], tracker: Tr
             closed = tracker.feed(int(t), place_band(rgb))
             if crops and tracker.open is not None and tracker.open.t == int(t):
                 first[int(t)] = rgb
-            for e in closed:
-                write(e)
+            take(closed)
+            for f in merger.due(int(t), tracker.open):
+                write(f)
             dt = clock() - t0
             ticks.append(dt * 1000.0)
             slow += g > SLOW_GRAB_S
             sleep(max(0.0, period_s - dt))
-        for e in tracker.flush():
-            write(e)
+        take(tracker.flush())
+        for f in merger.flush():
+            write(f)
     summary = {"ticks": tick_stats(ticks), "slow_grabs": slow, "grab_errors": errors,
-               "events": events, "t_end_mono_ns": time.monotonic_ns()}  # fmt: skip
+               "events": events, "joined": merger.joined,
+               "t_end_mono_ns": time.monotonic_ns()}  # fmt: skip
     (out_dir / "summary.json").write_text(json.dumps(summary, indent=1))
     return summary
 

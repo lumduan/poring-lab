@@ -19,6 +19,13 @@ Amendment 6 (section 4's 1080 run-time check, set w1080): the EVENTS `item_popup
 beside dev 1080 Runs, against each session's packets in its window (manifest t0..t1). Refused
 unless every session lies inside a watcher's span, and below the held-out's minimums (>= 250
 pickups, >= 4 sessions); --sizes counts them from the packets only, reading no event.
+
+    item_popup_eval.py learn-count-1080 --watch DIR --gm-log JSONL --out NPZ
+Round 4 (Amendment 10): the count font with all ten digits, learned at 1080 through the watcher's
+own band from the GM digit staging (`@item <id> N` lines in gm.jsonl after the watcher started):
+each line is paired with the first event starting <= LEARN_PAIR_S after its record; a line with no
+event, or two lines on one event, stops it; each event's first-frame band (crop-<t>.png) is put
+back at the 720 place and its box learned with the typed N. A digit missing stops it too.
 """
 
 from __future__ import annotations
@@ -409,6 +416,76 @@ def score_events(sessions: Sequence[Path], watches: Sequence[Path], sizes_only: 
             "beside": {**beside(per), "watchers": summaries}, "sessions": per}  # fmt: skip
 
 
+LEARN_PAIR_S = 6.0  # round 4: an @item line's popup starts this soon after its gm.jsonl record
+GM_ITEM = re.compile(r"^@item (\d+) (\d+)$")
+
+
+def staging_lines(gm_rows: Sequence[dict[str, Any]], t_from: int) -> list[tuple[int, int]]:
+    """PURE (round 4): the staging's (t_mono_ns, N) from gm.jsonl rows: every `@item <id> N` line
+    recorded at or after ``t_from`` (the watcher's start), in time order."""
+    out = []
+    for r in gm_rows:
+        m = GM_ITEM.match(str(r.get("cmd", "")).strip())
+        if m and int(r["t_mono_ns"]) >= t_from:
+            out.append((int(r["t_mono_ns"]), int(m.group(2))))
+    return sorted(out)
+
+
+def pair_lines(lines: Sequence[tuple[int, int]], events: Sequence[dict[str, Any]],
+               pair_s: float = LEARN_PAIR_S) -> list[tuple[dict[str, Any], int]]:  # fmt: skip
+    """PURE (round 4): each line -> the first event starting in [t, t + pair_s]; SystemExit when a
+    line has none or two lines take one event."""
+    evs = sorted(events, key=lambda e: int(e["t"]))
+    out, used = [], set()
+    for t, n in lines:
+        k = next((i for i, e in enumerate(evs) if t <= int(e["t"]) <= t + pair_s * 1e9), None)
+        if k is None:
+            raise SystemExit(f"learn-count-1080: the line for N={n} at {t} has no event: stopped")
+        if k in used:
+            raise SystemExit(f"learn-count-1080: two lines on the event at {evs[k]['t']}: stopped")
+        used.add(k)
+        out.append((evs[k], n))
+    return out
+
+
+def band_text_box(band_rgb: np.ndarray) -> np.ndarray | None:
+    """A watcher crop (the band, RGB) put back at the 720 place: its popup's text box, or None."""
+    f = ip.place_band(band_rgb)
+    p = ip.box_of(f)
+    return None if p is None else ip.text_box(f, p).copy()
+
+
+def learn_1080(watch: Path, gm_log: Path, out: Path) -> dict[str, Any]:
+    """Round 4 (Amendment 10): the count font from the GM digit staging (module docstring)."""
+    from PIL import Image
+
+    meta = json.loads((watch / "meta.json").read_text())
+    rows = [json.loads(x) for x in gm_log.read_text().splitlines() if x.strip()]
+    lines = staging_lines(rows, int(meta["t_start_mono_ns"]))
+    _span, evs, _summ = watch_dir(watch)
+    pairs = pair_lines(lines, evs)
+    boxes, amounts, lost = [], [], []
+    for e, n in pairs:
+        b = band_text_box(np.asarray(Image.open(watch / f"crop-{e['t']}.png").convert("RGB")))
+        if b is None:
+            lost.append(n)
+            continue
+        boxes.append(b)
+        amounts.append(n)
+    if lost:
+        raise SystemExit(f"learn-count-1080: no box on the crops of N={lost}: stopped")
+    font = ip.learn_count(boxes, amounts)
+    missing = sorted(set("0123456789") - set(font.digits))
+    if missing:
+        raise SystemExit(f"learn-count-1080: digits {missing} not learned: stopped")
+    ip.save_count(font, out)
+    reads = [ip.read_count(b, font) for b in boxes]
+    return {"lines": len(lines), "amounts": amounts, "tail": len(font.tail),
+            "digits": sorted(font.digits), "self_read": reads,
+            "self_read_ok": sum(r == n for r, n in zip(reads, amounts, strict=True)),
+            "font": str(out), "sha256": hashlib.sha256(out.read_bytes()).hexdigest()}  # fmt: skip
+
+
 def verdict(lines: dict[str, Any]) -> dict[str, str]:
     """PURE: section 4's bars (P is a maximum, the rest minimums)."""
     out = {}
@@ -438,6 +515,10 @@ def main(argv: Sequence[str] | None = None) -> int:
     se.add_argument("--sessions", nargs="+", required=True, help="the NAS sessions, by name")
     se.add_argument("--sizes", action="store_true", help="count the pickups only (no event read)")
     se.add_argument("--out", type=Path)
+    lc4 = sub.add_parser("learn-count-1080", help="round 4: the font from the GM digit staging")
+    lc4.add_argument("--watch", type=Path, required=True, help="the staging watcher's folder")
+    lc4.add_argument("--gm-log", type=Path, required=True, help="gm.jsonl (the typed lines)")
+    lc4.add_argument("--out", type=Path, required=True, help="the font (.npz, under data/)")
     a = ap.parse_args(argv)
     if a.cmd == "score-events":
         got = score_events([NAS / n for n in a.sessions], a.watch, a.sizes)
@@ -467,6 +548,9 @@ def main(argv: Sequence[str] | None = None) -> int:
         if a.out:
             a.out.write_text(text)
         print(text)
+        return 0
+    if a.cmd == "learn-count-1080":
+        print(json.dumps(learn_1080(a.watch, a.gm_log, a.out), indent=1))
         return 0
     if a.cmd == "learn-count":
         got = popups_with_truth(session_set(a.set))
