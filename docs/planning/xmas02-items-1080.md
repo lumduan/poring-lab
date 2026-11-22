@@ -1055,3 +1055,102 @@ A count under its minimum is NO VERDICT, never a pass.
      the fi7 rule unchanged (floor 0.50, ring 30, pad 6);
   4. report only (no bar): xmas02fi6 + the fi7 rule, and xmas02fi5 without it, on the same
      evaluated crops.
+
+### Amendment 31 (2026-11-22 15:21 ICT from `date`): ROUND 8 FAILS on I1h by one crop (scored once, 15:07:39); the misses read
+
+- **The one score** (`xmas02_items_r8_score.sh`, committed in 2db1e6d2 before any answer; ran
+  14:45-15:08; `score-r8.json` sha256 6876291d...; a live Run played beside). xmas02fi8 + the fi7
+  rule (floor 0.50, ring 30 px, pad 6), GPU predictions; the ONNX ones give the same verdict on
+  every line:
+
+  | line | got | bar | |
+  |---|---|---|---|
+  | I1h recall (the stratum decides) | 53 / 59 = **89.8 %** | >= 90 % | **FAIL** |
+  | I1 precision | 1,129 / 1,148 = 98.3 % | >= 95 % | PASS |
+  | I2 first frame of our kills' drops | 18 / 21 = 85.7 % | >= 80 % | PASS |
+  | I3 any box on an item-free frame | 15 / 5,425 = 0.28 % | <= 0.5 % | PASS |
+  | I3 inside her 5 x 5 | 4 / 5,425 = 0.07 % | <= 0.2 % | PASS |
+  | I4 a box at a kill with no drop | 2 / 131 = 1.5 % | <= 5 % | PASS |
+  | I5 GPU server p95 | 24.16 ms (fi5 23.45; ratio 1.03) | <= 35 ms, <= 1.1 | PASS |
+  | I5 CPU p95 ratio | 1.008 (178.3 vs 176.9 ms) | <= 1.1 | PASS |
+
+  - The blind step: both labellers answered all 87; q1 agreed on 87, q2 on 84. Good boxes: L1 62,
+    L2 59; both good: **59** (the evaluated crops). Every E crop answered "no" by both.
+  - The rule dropped 124 boxes by the floor and 26 by the ring.
+  - I1h by session: ifH11 0 / 3, ifH12 15 / 15, ifH13 12 / 12, ifH14 4 / 4, ifH15 8 / 9,
+    ifH16 5 / 7, ifsH5 3 / 3, ifsH6 6 / 6 (natural 44 / 50, staging 9 / 9).
+  - **Round 7's two failures are fixed:** I2 79.2 -> 85.7 %, I3-any 0.73 -> 0.28 %.
+- **Beside it (report only, the same held-out and evaluated crops):**
+
+  | | I1h | precision | I2 | I3-any | I3 5 x 5 | I4 |
+  |---|---|---|---|---|---|---|
+  | xmas02fi6 + the fi7 rule | 53 / 59 | 96.8 % | 19 / 21 | 29 = **0.53 %** | 6 = 0.11 % | 2 / 131 |
+  | xmas02fi5, no rule (deployed) | 49 / 59 | 92.1 % | 17 / 21 | 86 = 1.59 % | 61 = 1.12 % | 5 / 131 |
+
+- **Not deployed.** No 8c.
+- **The 6 missed crops are 3 items** (from the predictions and the labellers' own notes, read after
+  the score):
+  - ifH11 floor item 403, frames 1090, 1091, 1095: an egg partly under a dark wooden block.
+    xmas02fi8 boxed it on 1095 at conf 0.445, under the floor; on 1090 and 1091 it gave no box
+    at the predictor's 0.25. xmas02fi6 and xmas02fi5 boxed it in none of the three.
+  - ifH16 floor item 464, frames 991, 993: beside a post, with the pointer near. xmas02fi8 0.468
+    on 991, under the floor; nothing on 993. xmas02fi6 boxed both (0.61, 0.52).
+  - ifH15 floor item 454, frame 706: under damage digits. No model boxes it.
+  - **So 2 of the 6 misses were the floor's** (boxes at 0.445 and 0.468); 4 had no box at all.
+    xmas02fi8 is less sure of true items than xmas02fi6. It learnt 242 hard negatives, and the
+    0.50 floor was fitted on xmas02fi6's round-6 boxes (Amendment 21).
+  - I2's 3 misses: ifH11 1090 (the same egg), ifH12 1223 (floor item 410), ifH16 991.
+- **The floor's sensitivity (on the now-spent held-out; it scores nothing; scratch
+  `r8/sens/`):** xmas02fi8 + the rule (ring 30, pad 6) at other floors, GPU (ONNX the same counts):
+
+  | floor | I1h | precision (false) | I2 | I3-any | I3 5 x 5 | I4 |
+  |---|---|---|---|---|---|---|
+  | 0.30 | 55 / 59 | 96.5 % (43) | 19 / 21 | 35 = 0.65 % | 10 = 0.18 % | 3 |
+  | 0.35 | 55 / 59 | 97.3 % (33) | 19 / 21 | 26 = 0.48 % | 8 = 0.15 % | 3 |
+  | **0.40** | **55 / 59** | 97.9 % (25) | 19 / 21 | 19 = 0.35 % | 6 = 0.11 % | 2 |
+  | 0.45 | 54 / 59 | 98.1 % (22) | 19 / 21 | 17 = 0.31 % | 4 = 0.07 % | 2 |
+  | 0.50 (scored) | 53 / 59 | 98.3 % (19) | 18 / 21 | 15 = 0.28 % | 4 = 0.07 % | 2 |
+
+  At 0.40 every line would sit inside its bar here. That is fitted on this held-out, so it is not a
+  pass. Round 9 tests it on a NEW one (Amendment 32).
+
+### Amendment 32 (2026-11-22 15:21 ICT from `date`, BEFORE any round-9 data): ROUND 9 pre-registered -- xmas02fi8 unchanged, the fi7 rule's floor at 0.40, a NEW held-out
+
+- **Why** (Amendment 31): round 8 misses I1h by one crop. 2 of its 6 misses are boxes the 0.50
+  floor dropped (0.445, 0.468), and every other line passes with a margin. A floor is the
+  smallest change that addresses what was found; a new training is not needed for it.
+- **The change, and only it:** the fi7 rule's floor 0.50 -> **0.40**. Chosen on round 8's spent
+  held-out (Amendment 31's table) by one rule: the highest floor, of 0.30-0.50 in steps of 0.05,
+  that finds the most I1h crops. Ring 30 px and pad 6 are unchanged. The model is xmas02fi8
+  unchanged (last.pt 74092985..., ONNX 371c2f2c...): no training, no new cache.
+  - This is how round 7 got its rule: chosen on spent data (round 6's, Amendment 21), then
+    tested on a new held-out.
+- **The new held-out** (every name refused for TRAIN in code before its first recording):
+  - **stagings, immune**, `--views near --n 4`, as rounds 7 and 8:
+    - **ifsH7: seed 2612934**, spots (60,93), (225,205), (236,170), (137,214);
+    - **ifsH8: seed 2613040**, spots (81,180), (236,38), (49,181), (159,192).
+    - Their cells share NONE with the 23 earlier stagings on this map (2,172 distinct cells:
+      `cells/earlier-r9.json` = round 8's file + ifsH5 + ifsH6), nor with each other.
+      2612849 and 2612948 (round 8's other clean seeds) now share 12 cells each with ifsH5 /
+      ifsH6. 2613040 is the first clean seed of 2613000-2613299.
+  - **natural pilots ifH21, ifH22, ...**, NOT immune (OFF read back before each), 25 min each,
+    xmas02v1080, the same chain (`chain.sh` / `pilot_rec.sh`). 6 to start, then Amendment 16's
+    one extension if I2 has fewer than 20 episodes or the pack fewer than 40 item crops. The
+    extension's names are reserved too: ifH21 .. ifH30.
+  - The order: ifsH7, then ifsH8 (immunity ON judged on a frame first); immunity OFF, its reply
+    read on a frame; then the pilots.
+  - Labelled `--eval-test` against xmas02fi8 (the labels' model and params unchanged). One pack,
+    `pack --round 9 --seed 76`; two NEW blind labellers.
+- **The bars:** section 8a's, unchanged, scored ONCE by a wrapper committed before the score
+  (round 8's wrapper with `--strata r9` and `--item-floor 0.4`). I5 is measured again in the same
+  way (the model is the same; the rule is a CPU step after the detector).
+  Reported beside them (no bar), on the same held-out: xmas02fi8 + the rule at 0.50 (round 8's),
+  xmas02fi6 + the rule at 0.50, and xmas02fi5 with no rule.
+- **Round 8's held-out is spent.** It stays refused for TRAIN until a training round releases it
+  by name.
+- **If it passes:** 8c at 1080 (A = xmas02fi5, B = xmas02fi8 + the fi7 rule at 0.40, 3 valid runs a
+  side). The rule and the per-screen model picker are built into the live player first, then it is
+  deployed at 1080 only, on Batt's word.
+- **If it fails:** a round 10, pre-registered from its diagnosis.
+- **Code first** (this commit's sibling): fi_labels' and fi_eval's round 9 names (ifH21-ifH30,
+  ifsH7, ifsH8), seed 76 and `--strata r9`, with tests.
