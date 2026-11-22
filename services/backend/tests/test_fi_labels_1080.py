@@ -73,7 +73,8 @@ def test_the_1080_spec_reads_every_pixel_constant_from_its_params() -> None:
         "-xmas02-ifsH2",
         *fl.R7_HELD_OUT,
         *fl.R8_HELD_OUT,
-    )  # Amendment 16; + round 7's new held-out (Amendment 22); + round 8's (Amendment 26)
+        *fl.R9_HELD_OUT,
+    )  # Amendment 16; + round 7's new held-out (Amendment 22); + round 8's (26); + round 9's (32)
     assert (SPEC.screen, SPEC.world_scale) == ("1080", rec_paths.VIEW_1080["world_scale"]) == \
         ("1080", 1.5)  # fmt: skip
     assert SPEC.rule == fl.RULE_1080 == "xmas02-fi-1-1080" and fl.RULE == "xmas02-fi-1"
@@ -666,9 +667,10 @@ def test_round6_pack_draws_natural_first_slot_and_staging_second() -> None:
     import fi_eval as fe
 
     assert fl.R6_STAGING == fe.R6_STAGING  # + round 7's new held-out (Amendment 22)
-    assert set(fl.IF_HELD_OUT) == set(fe.R6_HELD_OUT) | set(fe.R7_HELD_OUT) | set(fe.R8_HELD_OUT)
-    assert set(fe.R6_PILOTS) | set(fl.R6_STAGING) | set(fl.R7_HELD_OUT) | set(fl.R8_HELD_OUT) == \
-        set(SPEC.eval_suffixes)  # fmt: skip
+    assert set(fl.IF_HELD_OUT) == set(fe.R6_HELD_OUT) | set(fe.R7_HELD_OUT) | \
+        set(fe.R8_HELD_OUT) | set(fe.R9_HELD_OUT)  # fmt: skip
+    assert set(fe.R6_PILOTS) | set(fl.R6_STAGING) | set(fl.R7_HELD_OUT) | set(fl.R8_HELD_OUT) | \
+        set(fl.R9_HELD_OUT) == set(SPEC.eval_suffixes)  # fmt: skip
     c = {"frame_id": 1, "floor_id": 1, "stratum": "N", "rel": [1.0, 0.0], "under": None}
     nat = [{**c, "session": HELD[i % 2], "frame_id": i, "floor_id": i} for i in range(90)]
     stg = [{**c, "session": HELD[2], "frame_id": i, "floor_id": 1000 + i} for i in range(80)]
@@ -735,7 +737,7 @@ def test_the_spent_held_outs_are_released_by_their_exact_names() -> None:
         assert fl.role_refusal(SPEC, sid, "train", False) is None
     # a suffix is a whole name's end: ifH1 releases neither ifH11 nor ifH21
     assert "held-out" in str(fl.role_refusal(SPEC, "x-rdp-xmas02-ifH11", "train", False))
-    assert fl.role_refusal(SPEC, "x-rdp-xmas02-ifH21", "train", False) is None  # never named
+    assert fl.role_refusal(SPEC, "x-rdp-xmas02-ifH31", "train", False) is None  # never named
     assert "VAL only" in str(fl.role_refusal(SPEC, "x-rdp-xmas02-ifF", "train", False))
 
 
@@ -752,10 +754,42 @@ def test_round_8_pack_rules() -> None:
     assert "not round 7's held-out" in str(fl.round_docs_refusal(7, ok))
 
 
+# --- Amendment 32: round 9 (xmas02fi8 unchanged + the fi7 rule at floor 0.40; a NEW held-out) ---
+
+
+def test_round9_names_pinned_reserved_and_refused_for_train() -> None:
+    import fi_eval as fe
+
+    assert fl.R9_PILOTS == fe.R9_PILOTS == tuple(f"-xmas02-ifH{k}" for k in range(21, 31))
+    assert fl.R9_STAGING == fe.R9_STAGING == ("-xmas02-ifsH7", "-xmas02-ifsH8")
+    assert fl.R9_HELD_OUT == fe.R9_HELD_OUT and fl.R9_EVAL_SEED == 76
+    assert not set(fl.R9_HELD_OUT) & (set(fl.IF_RELEASED) | set(fl.R8_HELD_OUT))
+    for sid in ("20261122T170000-rdp-xmas02-ifH21", "20261122T200000-rdp-xmas02-ifH30",
+                "20261122T160000-rdp-xmas02-ifsH7",
+                "20261122T161000-rdp-xmas02-ifsH8"):  # fmt: skip
+        assert "held-out" in str(fl.role_refusal(SPEC, sid, "train", False))
+        assert fl.role_refusal(SPEC, sid, None, True) is None
+        assert fl.foreign_refusal(fl.XMAS02_FI, sid) is not None
+    # the spent ifH2 stays released: ifH21 .. ifH30 do not pull it back (a whole name's end)
+    assert fl.role_refusal(SPEC, "x-rdp-xmas02-ifH2", "train", False) is None
+
+
+def test_round_9_pack_rules() -> None:
+    assert "--spec 1080" in str(fl.round_refusal(fl.XMAS02_FI, 9, True))
+    assert fl.round_refusal(SPEC, 9, True) is None
+    assert fl.seed_source(9, True, True) == "Amendment 32"
+    ok = [{"session": "20261122T170000-rdp-xmas02-ifH21"}]
+    assert fl.round_docs_refusal(9, ok) is None
+    assert "not round 9's held-out" in str(
+        fl.round_docs_refusal(9, [{"session": "20261122T071723-rdp-xmas02-ifH11"}])
+    )
+    assert "not round 8's held-out" in str(fl.round_docs_refusal(8, ok))
+
+
 def test_round_refusal_puts_round_7_on_1080_only() -> None:
     assert "--spec 1080" in str(fl.round_refusal(fl.XMAS02_FI, 7, True))
     assert fl.round_refusal(SPEC, 7, True) is None
-    assert "--round 6, 7 or 8" in str(fl.round_refusal(SPEC, 1, True))
+    assert "--round 6, 7, 8 or 9" in str(fl.round_refusal(SPEC, 1, True))
 
 
 def test_round7_pack_reads_its_own_held_out_only() -> None:

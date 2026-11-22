@@ -617,6 +617,20 @@ def test_r7_reads_its_own_new_held_out_and_pack_only(tmp_path: Path) -> None:
         fe.main(no_comp)
 
 
+def test_r9_names_strata_and_bars() -> None:
+    assert tuple(f"-xmas02-ifH{i}" for i in range(21, 31)) == fe.R9_PILOTS
+    assert fe.R9_STAGING == ("-xmas02-ifsH7", "-xmas02-ifsH8")
+    assert (*fe.R9_PILOTS, *fe.R9_STAGING) == fe.R9_HELD_OUT
+    assert fe.STRATA["r9"] == (fe.R9_HELD_OUT, (), fe.R9_PILOTS)
+    assert fe.STRATA_NAMES["r9"] == ("i1h", "") and fe.SCREEN_OF["r9"] == "1080"
+    assert fe.STRATA_APART["r9"] == {"natural": fe.R9_PILOTS, "staging": fe.R9_STAGING}
+    assert dict(fe.bars_of("r9")) == dict(fe.bars_of("r6"))  # section 8a's bars, unchanged
+    old = set(fe.R6_HELD_OUT) | set(fe.R7_HELD_OUT) | set(fe.R8_HELD_OUT)
+    assert not set(fe.R9_HELD_OUT) & old  # a NEW held-out
+    assert not fe.on_suffix("x-rdp-xmas02-ifH2", fe.R9_HELD_OUT)  # ifH21 .. ifH30 only
+    assert fe.on_suffix("x-rdp-xmas02-ifH30", fe.R9_HELD_OUT)
+
+
 def test_r8_names_strata_and_bars() -> None:
     assert tuple(f"-xmas02-ifH{i}" for i in range(11, 21)) == fe.R8_PILOTS
     assert fe.R8_STAGING == ("-xmas02-ifsH5", "-xmas02-ifsH6")
