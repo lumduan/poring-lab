@@ -6,7 +6,7 @@ verdict_date: null
 verdict_ticket: null
 supersedes: null
 related: [xmas02-1080-detector.md, xmas02-detector.md, rogue-xmas02.md, screen-size-ab.md, fullscreen-client.md, ../../scripts/fi_labels.py, ../../scripts/fi_eval.py, ../../scripts/stage_items.py, ../../scripts/build_frame_cache.py]
-next_action: "Round 10 with its one extension (Amendment 39): the eleven sessions labelled, every minimum met (I2 28, I1h 93 item crops, I3 8,333, I4 203), the seed-78 pack built, two NEW blind labellers answering; then xmas02_items_r10x_score.sh ONCE. A pass -> 8c (Batt deploys); a fail -> round 11 from its diagnosis."
+next_action: "ROUND 10 FAILS on I3-any (52 / 8,333 = 0.62 %; Amendment 40): 24 of the 52 frames are the snowflakes of one wall picture. Round 11 is pre-registered next from that diagnosis, before any round-11 data."
 title: "The floor-item model at 1920x1080: a 1080 round of the item detector, the 720 round 5's recipe with only the screen changed (pre-registration)"
 date: 2026-11-20
 owner: Batt
@@ -1452,3 +1452,70 @@ A count under its minimum is NO VERDICT, never a pass.
   (`fi_eval --strata r10 --item-floor 0.4 --ring-red 30 --edge-margin 12 --edge-top 32`), then the
   report-only lines (fi8 without the edge, fi6 + the rule at 0.50, fi5 with no rule). The bars are
   section 8a's, unchanged.
+
+### Amendment 40 (2026-11-23 06:54 ICT from `date`): ROUND 10 FAILS on I3-any (scored once, 06:47:49); the false boxes read
+
+- **The one score** (`score_r10x.sh` = `xmas02_items_r10x_score.sh`, committed in cbdfa616 before
+  any extension label; ran 06:25-06:48 after both answer files held 113; `score-r10.json` sha256
+  c30364f658848622...; no live Run at the start, one beside the GPU-server step). xmas02fi8 + the
+  fi7 rule at floor 0.40 (ring 30 px, pad 6) + the view edge (12 / 32), GPU predictions. The ONNX
+  ones give the same verdict on every line:
+
+  | line | got | bar | |
+  |---|---|---|---|
+  | I1h recall (the stratum decides) | 91 / 93 = 97.8 % | >= 90 % | PASS |
+  | I1 precision | 1,557 / 1,630 = 95.5 % (73 false, 64 ambiguous) | >= 95 % | PASS |
+  | I2 first frame of our kills' drops | 25 / 28 = 89.3 % | >= 80 % | PASS |
+  | I3 any box on an item-free frame | **52 / 8,333 = 0.62 %** | <= 0.5 % | **FAIL** |
+  | I3 inside her 5 x 5 | 7 / 8,333 = 0.08 % | <= 0.2 % | PASS |
+  | I4 a box at a kill with no drop | 1 / 203 = 0.5 % | <= 5 % | PASS |
+  | I5 GPU server p95 | 23.52 ms (fi5 23.94; ratio 0.98) | <= 35 ms, <= 1.1 | PASS |
+  | I5 CPU p95 ratio | 1.006 (177.6 vs 176.5 ms) | <= 1.1 | PASS |
+
+  - The blind step: both labellers answered all 113 and agreed on every q1 and q2: yes to all 93
+    item crops (all good), no to all 20 E crops. Both good: **93** (the evaluated crops).
+  - The rule dropped 209 boxes by the floor and 35 by the ring (ONNX 148 and 35); **the view edge
+    dropped 1** (GPU and ONNX), and I3-any is 52 with or without it.
+  - I1h by session: ifH31 9 / 9, ifH33 2 / 3, ifH34 4 / 5, ifH35 13 / 13, ifH36 12 / 12, ifH37
+    7 / 7, ifH38 6 / 6, ifH39 15 / 15, ifsH9 8 / 8, ifsH10 15 / 15 (natural 68 / 70, staging
+    23 / 23). Misses: ifH33 947, ifH34 513 (I2 misses those two and ifH39 395).
+  - The six first pilots alone would fail too: 32 / 5,492 = 0.58 %; the extension added 20 / 2,841.
+- **Beside it (report only, the same held-out and evaluated crops; no I5 for these lines):**
+
+  | | I1h | precision | I2 | I3-any | I3 5 x 5 | I4 |
+  |---|---|---|---|---|---|---|
+  | xmas02fi8 + the rule at 0.40, no edge (round 9's) | 91 / 93 | 95.5 % | 25 / 28 | 52 = 0.62 % | 7 | 1 / 203 |
+  | xmas02fi6 + the rule at 0.50 | 90 / 93 | 96.8 % | 25 / 28 | 38 = 0.46 % | 2 | 1 / 203 |
+  | xmas02fi5, no rule (deployed) | 87 / 93 | 92.4 % | 25 / 28 | 130 = 1.56 % | 69 | 3 / 203 |
+
+- **Not deployed.** No 8c.
+- **The 52 false-box frames** (read after the score; scratch `r10/diag/diag_i3_r10x.py`, which
+  replays fi_eval.i3 after the rule and the edge, and `r10/diag/look/`): 26 distinct objects.
+
+  | what the box sits on | frames | where |
+  |---|---|---|
+  | **the snowflakes painted on ONE wall picture** (a snowman and a "MERRY X-MAS" ribbon) | **24** | ifH36 703-713 (947, 59); ifH38 542-550, two snowflakes at (790, 185) and (772, 280); ifH39 1541-1544 (619, 59) |
+  | parts of monsters or of her own body (a toy soldier's hat, red boots, a green glove-like piece at a black map edge) | 11 | 3 of them inside her 5 x 5 |
+  | small pale or white shapes (light blobs, a white cone) | 6 | 3 inside her 5 x 5 |
+  | the foot of a lamp post (a scenery figure under a red lantern) | 4 | ifH33 424, 427; ifH35 806, 808 |
+  | damage digits ("8" of 68, "5" of 53, a yellow "1") | 3 | |
+  | light effects (a cyan swirl, a sparkle) | 2 | 1 inside her 5 x 5 |
+  | other scenery (a red disc on a wall, a crane's hub) | 2 | |
+
+  - The snowflake picture is fully inside the view, 59-280 px from its top: the edge rule cannot
+    reach it. Round 9's top-edge ornament (ifH26, Amendment 35) and round 7's floor snowflake (ifH6,
+    Amendment 25) were the same kind of mark. Without these 24 frames I3-any would be 28 = 0.34 %.
+  - Confidence: the snowflakes 0.41-0.76; across all 52, 0.41-0.84.
+- **The floor's sensitivity (on the now-spent held-out; it scores nothing; scratch `r10/diag/sens-*`):**
+  xmas02fi8 + the rule + the edge, GPU:
+
+  | floor | I1h | precision | I2 | I3-any | I3 5 x 5 | I4 |
+  |---|---|---|---|---|---|---|
+  | **0.40 (scored)** | 91 / 93 | 95.5 % | 25 / 28 | 52 = 0.62 % | 7 | 1 |
+  | 0.45 | 91 / 93 | 96.5 % | 25 / 28 | 45 = 0.54 % | 6 | 1 |
+  | 0.50 | 91 / 93 | 96.8 % | 25 / 28 | 41 = 0.49 % | 5 | 1 |
+
+  The floor trades against I1h on round 8's held-out (0.50 fails it there: 53 / 59) and against
+  I3-any here and on round 9's. Each held-out sits on one edge; the floor is not the fix.
+- **So the model has to learn the scenery as background.** Round 11 is pre-registered next, from
+  this diagnosis and before any round-11 data.
