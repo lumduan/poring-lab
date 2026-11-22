@@ -6,7 +6,7 @@ verdict_date: null
 verdict_ticket: null
 supersedes: null
 related: [xmas02-1080-detector.md, xmas02-detector.md, rogue-xmas02.md, screen-size-ab.md, fullscreen-client.md, ../../scripts/fi_labels.py, ../../scripts/fi_eval.py, ../../scripts/stage_items.py, ../../scripts/build_frame_cache.py]
-next_action: "Round 10 (Amendment 36): its code and score wrapper first, then the new held-out (ifsH9, ifsH10, ifH31+), labelled, packed (seed 77), two new blind labellers, scored ONCE. A pass -> 8c at 1080; deploy only on Batt's word."
+next_action: "Round 10's held-out was SHORT on I2 (18 < 20): Amendment 38's one extension, ifH37-ifH39 (her Knife-swap build restored first), then all eleven labelled, refs/predictions in xmas02fi8-r10x, the seed-78 pack, two new blind labellers, scored ONCE by xmas02_items_r10x_score.sh. A pass -> 8c (Batt deploys); a fail -> round 11 from its diagnosis."
 title: "The floor-item model at 1920x1080: a 1080 round of the item detector, the 720 round 5's recipe with only the screen changed (pre-registration)"
 date: 2026-11-20
 owner: Batt
@@ -1368,3 +1368,43 @@ A count under its minimum is NO VERDICT, never a pass.
   held-out is scored offline by the committed wrapper. The dev checkout is fast-forwarded only after
   round 10's eval chain ends.
 - Live gets it only with a promotion on Batt's word, and it stays off there until 8c passes.
+
+### Amendment 38 (2026-11-23 03:05 ICT from `date`, BEFORE any answer and BEFORE any score): round 10's held-out is SHORT on I2 -- the one extension
+
+- **The chain (Amendment 36):** the six pilots ifH31-ifH36 ran 22:43-01:47, each rc 0, >= 1,600
+  frames, 0 PAUSED, under the popup watcher. eval_chain_r10.sh: the eight sessions labelled
+  `--eval-test` against xmas02fi8 01:48-01:56 (all rc 0), refs 6,629 frames, GPU predictions fi8
+  02:08, fi6 02:21, fi5 02:33, ONNX fi8 02:55, the seed-77 pack 03:01:12 (commit bee54533), CHAIN
+  DONE.
+- **The size check (labels and the pack summary only; `r10/size_r10.py`, I3 on the natural pilots):**
+
+  | count | value | minimum | |
+  |---|---|---|---|
+  | I2: natural drop episodes | **18** (ifH31-ifH36: 4, 0, 2, 3, 5, 4; the stagings none) | 20 | **SHORT** |
+  | I1h: item crops in the pack | 65 (85 crops: E 20, F 37, M 8, N 20) | 40 | met |
+  | I3: item-free kept frames (natural) | 5,492 | 200 | met |
+  | I4: drop-less kills judged | 133 (2 with no frame) | 40 | met |
+
+- **So the one extension (Amendment 36 -> Amendment 16's rule):** three more natural pilots,
+  **ifH37, ifH38, ifH39** (names reserved in Amendment 36; ifH40 stays unused), exactly as
+  ifH31-ifH36: `chain.sh` (pilot_rec.sh: 25 min, xmas02v1080, stage2_ab's setup), NOT immune (OFF
+  read back before the first), round 9's check after each (>= 1,400 frames, no PAUSED line). Three,
+  not two, because one of the six gave no episode at all.
+  - **Her build first:** after ifH36 ended, the Rogue was rebuilt for Batt's fists trial
+    (fists-1080.md Amendment 1: stats, no weapon, other gear). It is put back to the build ifH31-
+    ifH36 played with (Str 1, Agi 99, Vit 1, Int 1, Dex 99, Luk 1; Damascus +8 worn, its shortcut on
+    F5, the Knife on F4; both Rosaries, the plain Manteau, Thief Clothes +0), and her status window
+    is read against the old one (HIT 205, FLEE 246 + 1, Aspd 176) before ifH37.
+  - The popup reader's round-4 watcher runs beside each (item-popup-reader.md Amendment 11): these
+    recordings are sessions of its set w1080b.
+- **Then, all eleven:** the three new sessions labelled `--eval-test` against xmas02fi8 (the eight
+  labels unchanged); refs over all eleven, GPU predictions (fi8, fi6, fi5) and ONNX fi8 in
+  `data/train/eval/xmas02fi8-r10x`; ONE pack `--round 10 --eval-test --seed 78` over all eleven
+  (the seed-77 pack and key are set aside, never shown to anyone); two NEW blind labellers
+  (t6/answers-eval-r10x-L1/L2.json); the score ONCE by
+  `docs/records/scorers/xmas02_items_r10x_score.sh` (round 10's wrapper with these inputs only).
+  A count still short then stays NO VERDICT and is reported so.
+- **Code (cbdfa616, ruff 9c10d035):** `fi_labels.r10_seed` -- a round-10 pack that holds any of
+  ifH37-ifH40 takes seed 78, else 77 (from the label files' names, then checked against their
+  sessions); the wrapper above. Both committed before any extension label.
+- The bars are section 8a's, unchanged.
