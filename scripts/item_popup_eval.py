@@ -5,11 +5,12 @@ item_id, amount, t_mono_ns); the frames' t_mono_ns is the same clock.
 
     item_popup_eval.py calibrate [--out JSON]                        the icon offset and bars
     item_popup_eval.py learn-count --out NPZ [--set calib]           the count font (round 2)
-    item_popup_eval.py score --set old|r2 --count NPZ [--out JSON]    ONCE per held-out set
+    item_popup_eval.py score --set old|r2|r3 --count NPZ [--out JSON] ONCE per held-out set
 
 Sets: calib = fiT1-fiT20; old = every other fiT (round 1's one score, used since); r2 = round 2's
 held-out (Amendment 2): every other 720 recording with packets, R2_FAMILY. Round 2 reads one event
-per popup shown (item_popup.Tracker).
+per popup shown (item_popup.Tracker). r3 = round 3's held-out (Amendment 5): 41 unread 720
+recordings (stagings, Batt's own play, natural play), pinned by the sha256 of their names.
 
 The recordings are read in place, read-only (the NAS); no frame is written.
 """
@@ -19,6 +20,7 @@ from __future__ import annotations
 import argparse
 import bisect
 import gzip
+import hashlib
 import io
 import json
 import re
@@ -42,6 +44,15 @@ CALIB = range(1, 21)  # fiT1 .. fiT20 (section 4)
 # round 2's held-out (item-popup-reader.md RESULT + Amendment 2): the other 720 recordings with
 # packets -- xmas02 xw* and fs* (fsTa / fsTn / fsH too), rogue-*, thief-*
 R2_FAMILY = re.compile(r"-rdp-(xmas02-(xw|fs)[\w-]*|rogue-[\w-]+|thief-[\w-]+)$")
+# round 3's held-out (Amendment 5): 41 unread 720 recordings with packets (stagings, Batt's own
+# play, natural play), PINNED by the sha256 of their names (name order, one per line, each ending
+# in a newline): a later recording that matches the pattern cannot change the set
+R3_FAMILY = re.compile(
+    r"-rdp-(stage-items-[bc]|stage-gef10-e3[bx]?|watch-w\d+|ow\d+|w\d+|fp\d+[a-z]?"
+    r"|s2-xmas_dun02-p\d+|sk-watch\d+|gb-gw\d+|flee-xmas02-sk|human-xmas02-batt\w+"
+    r"|hunt-xmas02-(p\d+|bs\d+|fiH\d+(-ABORTED)?)|xmas02-(x\d+|xp\d+|xmw\d+|sk\d+a))$"
+)
+R3_SHA256 = "d2bf7aa0fb4c67d033a0e233bf462460cfe32e602b396ec00bf70c2a264cc2b7"
 REPEAT_S = 6.0  # a truth whose previous truth is the same item <= this before: a "repeat"
 OFFSETS = [(dx, dy) for dx in range(6, 17) for dy in range(0, 9)]
 
@@ -61,11 +72,37 @@ def session_set(name: str) -> list[Path]:
         return sessions(list(CALIB))
     if name == "old":
         return sessions(None, exclude=list(CALIB))
-    if name != "r2":
+    if name not in ("r2", "r3"):
         raise ValueError(f"unknown set {name!r}")
-    out = [d for d in NAS.iterdir() if R2_FAMILY.search(d.name)
-           and (d / "packets.jsonl.gz").is_file() and any(d.glob("shard-*.tar"))]  # fmt: skip
-    return sorted(out, key=lambda p: p.name)
+    fam = R2_FAMILY if name == "r2" else R3_FAMILY
+    out = sorted((d for d in NAS.iterdir() if fam.search(d.name)
+                  and (d / "packets.jsonl.gz").is_file() and any(d.glob("shard-*.tar"))),
+                 key=lambda p: p.name)  # fmt: skip
+    if name == "r3":
+        pinned([d.name for d in out], R3_SHA256)
+    return out
+
+
+def names_sha256(names: Sequence[str]) -> str:
+    """PURE: the sha256 of session names, one per line, each ending in a newline."""
+    return hashlib.sha256("".join(f"{n}\n" for n in names).encode()).hexdigest()
+
+
+def pinned(names: Sequence[str], sha: str) -> None:
+    """PURE: refuse a set whose names are not the pre-registered list."""
+    got = names_sha256(names)
+    if got != sha:
+        raise SystemExit(f"the set's {len(names)} sessions hash {got[:12]}, not the "
+                         f"pre-registered {sha[:12]}: refused")  # fmt: skip
+
+
+def part_of(name: str) -> str:
+    """PURE: a session's part for the beside-counts: stagings, Batt's own play, natural play."""
+    if "-rdp-stage-" in name or "-rdp-xmas02-fs" in name:
+        return "stagings"
+    if "-rdp-human-" in name:
+        return "own_play"
+    return "natural"
 
 
 def truths(session: Path) -> list[dict[str, Any]]:
@@ -231,13 +268,18 @@ def match(events: Sequence[dict[str, Any]], truth: Sequence[dict[str, Any]],
             continue
         used.add(hit)
         e = events[hit]
-        rows.append({"found": True, "gap": gap, "repeat": repeat,
+        rows.append({"found": True, "gap": gap, "repeat": repeat, "why": e.get("why"),
                      "id_ok": bool(e["ids"]) and tr["id"] in e["ids"],
                      "id_unread": not e["ids"], "amount_ok": e["amount"] == tr["amount"],
                      "amount_unread": e["amount"] is None})  # fmt: skip
     found = [r for r in rows if r["found"]]
     spaced = [r for r in rows if r["gap"] is None or r["gap"] >= 2.0]
-    return counts_lines({
+    by_why: dict[str, list[int]] = {}  # round 3's beside-count: the event's why -> [matched, right]
+    for r in found:
+        k = by_why.setdefault(str(r["why"]), [0, 0])
+        k[0] += 1
+        k[1] += int(r["id_ok"])
+    return counts_lines({"by_why": by_why,
         "truths": len(rows), "events": len(events), "matched": len(found),
         "id_ok": sum(r["id_ok"] for r in found), "id_unread": sum(r["id_unread"] for r in found),
         "amount_ok": sum(r["amount_ok"] for r in found),
@@ -248,7 +290,7 @@ def match(events: Sequence[dict[str, Any]], truth: Sequence[dict[str, Any]],
     })  # fmt: skip
 
 
-def counts_lines(c: dict[str, int]) -> dict[str, Any]:
+def counts_lines(c: dict[str, Any]) -> dict[str, Any]:
     """PURE: the counts and their four lines (None when a line has no denominator)."""
 
     def div(a: int, b: int) -> float | None:
@@ -258,6 +300,28 @@ def counts_lines(c: dict[str, int]) -> dict[str, Any]:
             "I2_amount": div(c["amount_ok"], c["matched"]),
             "P_false": div(c["events"] - c["matched"], c["events"]),
             "R_spaced": div(c["spaced_found"], c["spaced"])}  # fmt: skip
+
+
+def beside(per: dict[str, dict[str, Any]]) -> dict[str, Any]:
+    """PURE (round 3, Amendment 5; no bars): I1 apart for each part (stagings, Batt's own play,
+    natural play), and the reads by why ("ok", "lead", "same"), each with how many were right."""
+    parts: dict[str, list[int]] = {}
+    whys: dict[str, list[int]] = {}
+    for name, v in per.items():
+        k = parts.setdefault(part_of(name), [0, 0])
+        k[0] += int(v["matched"])
+        k[1] += int(v["id_ok"])
+        for w, (n, ok) in v.get("by_why", {}).items():
+            kw = whys.setdefault(w, [0, 0])
+            kw[0] += int(n)
+            kw[1] += int(ok)
+    return {
+        "I1_by_part": {
+            p: {"matched": n, "id_ok": ok, "I1": ok / n if n else None}
+            for p, (n, ok) in sorted(parts.items())
+        },
+        "reads_by_why": {w: {"matched": n, "right": ok} for w, (n, ok) in sorted(whys.items())},
+    }
 
 
 BARS = {"I1_id": 0.97, "I2_amount": 0.97, "P_false": 0.02, "R_spaced": 0.85}
@@ -283,7 +347,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     lc.add_argument("--set", default="calib", choices=["calib"])
     lc.add_argument("--out", type=Path, required=True, help="the font (.npz, under data/)")
     sc = sub.add_parser("score")
-    sc.add_argument("--set", required=True, choices=["calib", "old", "r2"])
+    sc.add_argument("--set", required=True, choices=["calib", "old", "r2", "r3"])
     sc.add_argument("--refs")
     sc.add_argument("--count", type=Path, required=True, help="the learned count font (.npz)")
     sc.add_argument("--out", type=Path)
@@ -298,7 +362,13 @@ def main(argv: Sequence[str] | None = None) -> int:
         keys = ("truths", "events", "matched", "id_ok", "id_unread", "amount_ok",
                 "amount_unread", "spaced", "spaced_found", "repeats", "repeats_found")  # fmt: skip
         lines = counts_lines({k: sum(int(v[k]) for v in per.values()) for k in keys})
-        got = {"set": a.set, "lines": lines, "verdict": verdict(lines), "sessions": per}
+        got = {
+            "set": a.set,
+            "lines": lines,
+            "verdict": verdict(lines),
+            "beside": beside(per),
+            "sessions": per,
+        }
         text = json.dumps(got, indent=1, default=str)
         if a.out:
             a.out.write_text(text)

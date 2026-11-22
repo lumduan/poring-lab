@@ -18,6 +18,11 @@ Read by shape, colour and digits only (Batt 10-26 / 11-11: no word is read):
 - ROUND 2 (item-popup-reader.md, Amendment 2): one event per popup SHOWN (Tracker). A new event
   needs the box to have left the screen, or another item, or another width read with its text's
   tail; while the same box stays, an unread item or amount is read again (the first read wins).
+- ROUND 3 (Amendment 5): when another picture is within ICON_MARGIN of the best (the magic
+  scrolls: one shape, a 5 x 6 seal of another colour), the hotbar reader's PAIR LEAD decides on the
+  pixels where the two pictures differ (slot_items' DIFF_PX / DISCRIM_MIN / PAIR_LEAD, on the whole
+  square: the popup has no count box over its icon). Pictures with fewer than DISCRIM_MIN such
+  pixels are one picture to the eye: their ids join the read (one group, Amendment 4).
 
 PURE (numpy only) but for the pictures' loader; no input, no grabs.
 """
@@ -104,6 +109,13 @@ class Icons:
     own: np.ndarray  # (P, 24, 24) bool: the picture's own (non-key) pixels
     ids: tuple[tuple[int, ...], ...]
     names: Mapping[int, str] = field(default_factory=dict)
+    # round 3: each picture as the popup shows it, its key pixels the box's white (slot_items'
+    # composite, whose face is the same white)
+    comp: np.ndarray = field(init=False, repr=False)
+
+    def __post_init__(self) -> None:
+        rgb = np.asarray(self.rgb, np.float32)[..., :3]
+        self.comp = np.where(np.asarray(self.own, bool)[..., None], rgb, np.float32(WHITE))
 
     @classmethod
     def from_refs(cls, refs: Any) -> Icons:
@@ -139,8 +151,55 @@ class Icons:
         if float(d[best]) > icon_max:
             return ItemRead(None, float(d[best]), dm, "far")
         if dm is not None and dm < margin:
-            return ItemRead(None, float(d[best]), dm, "ambiguous")
+            return self.close_read(sq, d, icon_max, margin, dm)
         return ItemRead(tuple(ids), float(d[best]), dm, "ok")
+
+    def lead(self, sq: np.ndarray, p: int, q: int) -> tuple[int, float]:
+        """PURE (round 3): slot_items.SlotRefs.pair's rival test of pictures ``p`` and ``q`` on the
+        whole square: (the pixels that tell them apart -- where their composited pictures differ
+        by more than DIFF_PX --, the read's LEAD of ``p`` over ``q`` there, in [-1, 1]: (its mean
+        difference from ``q`` - from ``p``) / the pictures' own mean difference there)."""
+        import slot_items as si
+
+        a, b = self.comp[p].reshape(-1, 3), self.comp[q].reshape(-1, 3)
+        apart = np.abs(a - b).mean(axis=1) > si.DIFF_PX
+        n = int(apart.sum())
+        if n == 0:
+            return 0, 0.0
+        o = np.asarray(sq, np.float32)[..., :3].reshape(-1, 3)[apart]
+        e_p, e_q = float(np.abs(o - a[apart]).mean()), float(np.abs(o - b[apart]).mean())
+        return n, (e_q - e_p) / float(np.abs(a[apart] - b[apart]).mean())
+
+    def close_read(self, sq: np.ndarray, d: np.ndarray, icon_max: float, margin: float,
+                   dm: float) -> ItemRead:  # fmt: skip
+        """Round 3 (Amendment 5): the close set is the best picture and every picture within
+        ``margin`` of it. The read names the nearest member (at most ``icon_max`` away) whose lead
+        is >= PAIR_LEAD over every other member it differs from on >= DISCRIM_MIN pixels; members
+        with fewer such pixels are the same picture to the eye and their ids join the read.
+        why: "lead" (a lead was needed) or "same" (only same-looking members); else "ambiguous"."""
+        import slot_items as si
+
+        order = [int(i) for i in np.argsort(d)]
+        top = float(d[order[0]])
+        close = [i for i in order if float(d[i]) < top + margin]
+        for c in close:
+            if float(d[c]) > icon_max:
+                break
+            ids, led, beaten = set(self.ids[c]), False, True
+            for m in close:
+                if m == c:
+                    continue
+                n, lead = self.lead(sq, c, m)
+                if n < si.DISCRIM_MIN:
+                    ids |= set(self.ids[m])
+                elif lead >= si.PAIR_LEAD:
+                    led = True
+                else:
+                    beaten = False
+                    break
+            if beaten:
+                return ItemRead(tuple(sorted(ids)), float(d[c]), dm, "lead" if led else "same")
+        return ItemRead(None, top, dm, "ambiguous")
 
 
 def digit_groups(ink: np.ndarray, font: Mapping[str, np.ndarray], max_dist: float = 0.12,
