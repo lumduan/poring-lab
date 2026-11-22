@@ -6,7 +6,7 @@ verdict_date: null
 verdict_ticket: null
 supersedes: null
 related: [econ-bag-count.md, ../econ/economics.md, ../../scripts/bare_steal.py, ../../scripts/bag_count.py, ../../scripts/slot_items.py, ../../scripts/econ_screen.py]
-next_action: "Section 4's 1080 run-time check is pre-registered (Amendment 6): build item_popup.py watch + item_popup_eval.py score-events, run the watcher beside the next dev 1080 Runs (>= 250 pickups, >= 4 sessions), score once."
+next_action: "Set w1080 closed at 8 sessions / 269 pickups (Amendment 8); score-events runs ONCE, then the RESULT."
 title: "Every item gained, from the client's item-obtained popup: which item, how many (pre-registration)"
 date: 2026-11-21
 owner: Batt
@@ -490,3 +490,36 @@ read before (r2 is spent); these counts change nothing above.
   (70 of 70 right) and leaves 18 unread ("far"). I2, P and R are unchanged (round 3 changes only
   which picture is named).
 - On old: 13 "lead" reads, all right; 11 unread ("far"); 1 wrong of 2,527 "ok".
+
+### Amendment 8 (2026-11-23 02:04 ICT from `date`, BEFORE the w1080 score): the set is closed
+
+- **The set w1080 (Amendment 6's rule):** the dev 1080 sessions on xmas_dun02 in time order, each
+  under the watcher, until >= 250 pickup_results and >= 4 sessions. Counted from the packets only
+  (`item_popup_eval.py score-events --sizes`: no event read):
+
+  | session | pickups | running total |
+  |---|---|---|
+  | 20261122T222134-rdp-xmas02-ifsH9 | 24 | 24 |
+  | 20261122T223231-rdp-xmas02-ifsH10 | 24 | 48 |
+  | 20261122T224432-rdp-xmas02-ifH31 | 31 | 79 |
+  | 20261122T231506-rdp-xmas02-ifH32 | 36 | 115 |
+  | 20261122T234526-rdp-xmas02-ifH33 | 42 | 157 |
+  | 20261123T001601-rdp-xmas02-ifH34 | 34 | 191 |
+  | 20261123T004829-rdp-xmas02-ifH35 | 32 | 223 |
+  | 20261123T011835-rdp-xmas02-ifH36 | 46 | 269 |
+
+  The 250th pickup falls in ifH36, so it is the last: **8 sessions, 269 truths.** None was cut short
+  or aborted (the stagings and the six pilots ended rc 0; each pilot >= 1,600 frames, 0 PAUSED).
+- **Coverage (meta.json / summary.json against each manifest):** every watcher started 64-70 s
+  before its session's t0_mono_ns and stopped 45-143 s after its t1_mono_ns; grab errors 0; one
+  slow grab (> 250 ms) in each.
+- **Seen before the score:** `watch_around.sh` printed each watcher's own event count
+  (summary.json `events`) into watch.log, and those lines were on screen while the coverage was
+  checked. No event was read, matched or looked at.
+- **The score, ONCE** (Amendment 6's bars unchanged: I1 >= 97 %, I2 >= 97 %, P <= 2 %, R >= 85 %),
+  from the dev checkout:
+
+        .venv/bin/python scripts/item_popup_eval.py score-events \
+          --watch /dev/shm/poring-lab-tmp/popup-w1080/{ifsH9,ifsH10,ifH31,ifH32,ifH33,ifH34,ifH35,ifH36} \
+          --sessions <the eight names above, in that order> \
+          --out /dev/shm/poring-lab-tmp/popup-w1080/score-w1080.json
