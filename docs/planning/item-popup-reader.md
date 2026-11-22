@@ -6,7 +6,7 @@ verdict_date: null
 verdict_ticket: null
 supersedes: null
 related: [econ-bag-count.md, ../econ/economics.md, ../../scripts/bare_steal.py, ../../scripts/bag_count.py, ../../scripts/slot_items.py, ../../scripts/econ_screen.py]
-next_action: "Set w1080 closed at 8 sessions / 269 pickups (Amendment 8); score-events runs ONCE, then the RESULT."
+next_action: "w1080 FAILS on P only (Amendment 9: 38 re-reads of popups already counted; the count font lacks 3-9). Round 4 is pre-registered from that diagnosis (Amendment 10) before any of its data."
 title: "Every item gained, from the client's item-obtained popup: which item, how many (pre-registration)"
 date: 2026-11-21
 owner: Batt
@@ -523,3 +523,52 @@ read before (r2 is spent); these counts change nothing above.
           --watch /dev/shm/poring-lab-tmp/popup-w1080/{ifsH9,ifsH10,ifH31,ifH32,ifH33,ifH34,ifH35,ifH36} \
           --sessions <the eight names above, in that order> \
           --out /dev/shm/poring-lab-tmp/popup-w1080/score-w1080.json
+
+### Amendment 9 (2026-11-23 02:09 ICT from `date`): RESULT of the 1080 run-time check (set w1080) -- FAIL on P; the diagnosis
+
+**Scored ONCE** at 02:05:00-02:05:01 with Amendment 8's command (the committed scorer, rc 0;
+`score-w1080.json`).
+
+| line | count | value | bar | verdict |
+|---|---|---|---|---|
+| I1 (the item, of matched) | 268 / 269 | 99.6 % | >= 97 % | PASS |
+| I2 (the amount, of matched) | 261 / 269 (2 unread, 6 wrong) | 97.0 % | >= 97 % | PASS |
+| P (events matching no pickup) | 38 / 307 | **12.4 %** | <= 2 % | **FAIL** |
+| R (spaced pickups found) | 268 / 268 | 100 % | >= 85 % | PASS |
+
+- By session (events / pickups): the stagings ifsH9 24 / 24 and ifsH10 24 / 24 (P 0); the pilots
+  ifH31 35 / 31, ifH32 39 / 36, ifH33 52 / 42, ifH34 42 / 34, ifH35 41 / 32, ifH36 50 / 46.
+  One repeat (the same item <= 6 s after the last), found.
+- Reported beside: reads by why "ok" 261 / 262 right, "lead" 7 / 7. The watcher's ticks p50
+  6.2-6.9 ms, p95 77-94 ms, max 564-804 ms; one slow grab and 0 grab errors in each session.
+
+**The diagnosis (on the spent set; it scores nothing):**
+- **P: the 38 extra events all come from popups read again after they were counted.**
+  - 37 re-read the popup of the event just before them (the same ids). They begin 0.5-5.5 s
+    after that popup's first frame (p50 4.24 s), 0.27-1.0 s after the previous piece's last
+    frame (p50 0.5 s: one to four 4 Hz ticks missed).
+  - The 38th (ifH33) is the matcher's side of a re-read: a re-read of item 538 fell inside the
+    next pickup's window (item 911, 0.7 s later), took it, and left the 911 event unmatched. It
+    is also the set's only I1 miss.
+  - Their crops show the same opaque popup each time, over a world that scrolls behind it. The
+    Tracker ends an event when `box_of` loses the box for a tick, or when it reads another width
+    (the re-reads' widths vary: 178 / 196, 181 / 164). A moving background does both; in the two
+    stagings she stood still and there was none.
+- **The popup's life** (pickups with the next one > 10 s later, n 209): its first frame comes
+  0.08-0.81 s after the packet (p50 0.25 s); first to last frame p50 4.75 s, p95 5.25 s, max
+  5.51 s.
+- **The same item as the previous pickup** came within 2-4 s once in 269, within 4-6 s never,
+  within 6-8 s once.
+- **I2: all 8 misses are the Runs' GM top-ups at their setup:** Fly Wing x 30 read unread (twice),
+  x 18 read 10 (twice); Butterfly Wing x 3 read 0 (twice); White Potion x 6 read 0 (twice). The
+  popups are clear on their crops ("- 30 obtained."). The count font (`item_popup_count_r2.npz`)
+  holds the glyphs 0, 1 and 2 only: it was learned at 720, where nearly every pickup is x 1. And
+  `read_count` takes the FIRST glyph within `SAME`, not the nearest, so a 3 or a 6 passes as 0 and
+  an 8 as 0.
+- **A merge rule on this spent set** (diagnosis only, not a score): an event joins the one before
+  it when the ids and the amount are the same, it starts <= 1.25 s after that one's last frame and
+  <= 6.0 s after its first. Then: 268 events, P 0.0 %, I1 100 %, I2 97.0 %, R 99.6 % (the one
+  genuine 2-4 s repeat is merged).
+
+**Next:** round 4, pre-registered from this diagnosis in Amendment 10, before any of its data.
+Section 5 (the item list in the screen record) waits for a pass.
