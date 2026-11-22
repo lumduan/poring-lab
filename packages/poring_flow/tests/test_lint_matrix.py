@@ -1329,3 +1329,16 @@ def test_the_schema_layer_reports_pydantic_errors_by_path() -> None:
     with pytest.raises(ir.FlowError) as e:
         irflow(SIT | {"on_fail": "retry"})()
     assert e.value.messages == ["main.0: on_fail: Input should be 'stop' or 'continue'"]
+
+
+def test_a_route_crossing_a_warp_is_a_warning_and_an_unreachable_cell_an_error() -> None:
+    """waypoints-npc-recording.md Amendment 7 (Batt 2026-11-22): the user's line is followed and a
+    warp entered by mistake is walked back out of, so crossing a warp does not stop the Run's start
+    check; a cell the bot cannot reach at all still does."""
+    by_id = {c.id: c for c in CASES}
+    for cid, want in (("crosses_warp", "warning"), ("unreachable", "error")):
+        c = by_id[cid]
+        w = c.world if c.world is not None else (farm_world() if c.farm else PLAIN_WORLD)
+        got = {f.severity for f in _run(c, _flow(c.source, c.farm), w) if f.rule == "routes"
+               and f.message in c.expected}  # fmt: skip
+        assert got == {want}, (cid, got)

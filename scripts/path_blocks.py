@@ -398,9 +398,17 @@ def walk_blocks(map_id: str, points: Iterable[Point | Sequence[int]], *,
     return tuple(out)
 
 
-def run_blocks(run: Run, *, mark_note: str = MARK_NOTE) -> tuple[ir.ActionStmt, ...]:
-    """PURE: a run's blocks, for its own map's flow."""
-    return walk_blocks(run.map, run.points, mark_note=mark_note)
+def run_blocks(run: Run, *, mark_note: str = MARK_NOTE,
+               keep_exit_cell: bool = False) -> tuple[ir.ActionStmt, ...]:  # fmt: skip
+    """PURE: a run's blocks, for its own map's flow. A run that ENDED IN A MAP CHANGE drops its
+    last point (waypoints-npc-recording.md Amendment 7, Batt 2026-11-22): that cell is the last one
+    read before the change, often the warp itself, and a walk_to there would change the map in the
+    middle of the block. The map's own exit block (take_exit) crosses instead. ``keep_exit_cell``
+    keeps it (a caller that wants the raw line)."""
+    pts = run.points
+    if run.next_map is not None and not keep_exit_cell:
+        pts = pts[:-1]
+    return walk_blocks(run.map, pts, mark_note=mark_note) if pts else ()
 
 
 # --- the route in a flow (Amendment 5: consecutive walk_to blocks) --------------------------------

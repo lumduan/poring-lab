@@ -133,9 +133,12 @@ def _leg(
     for c in route[1:]:
         w = sheet.warp_at(c)
         if w is not None and c not in allowed:
+            # a WARNING, not an error (waypoints-npc-recording.md Amendment 7, Batt 2026-11-22): the
+            # user's line is followed; a warp entered by mistake changes the minimap and the bot
+            # walks back out. A cell the bot cannot reach at all stays an error (above).
             ctx.add(
                 "routes",
-                "error",
+                "warning",
                 3,
                 path,
                 f"the route from {origin} to ({to[0]}, {to[1]}) crosses the warp at "

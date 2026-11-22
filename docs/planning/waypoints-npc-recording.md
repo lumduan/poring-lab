@@ -288,3 +288,17 @@ to create the blocks faster."
 - Scope as built: inserts go into a map node's main tab at a top-level position; a route counts
   literal cells only (a walk_to with a variable cell ends it).
 
+## Amendment 7 (2026-11-22 08:56 ICT from `date`): Batt's answers to Amendment 6's three questions (built)
+
+Batt, 2026-11-22 (~08:3x): "ok" to each recommendation.
+1. **The studio's lint, rule `routes`:** a walk_to line that crosses a warp is now a WARNING (it
+   no longer stops the Run's start check): the user's line is followed, and a warp entered by
+   mistake is walked back out of. A cell the bot cannot reach at all stays an ERROR (the bot would
+   be stuck there). `poring_flow/lint/simulate.py`; a test pins both levels.
+2. **The rejoin stays a straight-line nearest point** (fast). A walk-distance rejoin comes only if
+   a real test shows a U-shaped route rejoining behind a wall.
+3. **A run that ended in a map change leaves out its last point** (the cell read just before the
+   change, often the warp itself): `run_blocks` drops it, and the map's own exit block
+   (`take_exit`) crosses. A one-point stay before a change gives no block.
+   `keep_exit_cell=True` keeps the raw line for a caller that wants it.
+

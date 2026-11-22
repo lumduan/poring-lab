@@ -173,6 +173,20 @@ def test_a_map_change_splits_the_recording_by_map() -> None:
     blocks = [pb.run_blocks(r) for r in t.runs]
     assert {pb.walk_cell(b)[0] for b in blocks[1]} == {"fix_b"}  # type: ignore[index]
     assert {pb.walk_cell(b)[0] for b in blocks[0] + blocks[2]} == {"fix_a"}  # type: ignore[index]
+    # Amendment 7: a run that ended in a map change leaves out the cell read just before it (the
+    # warp, often); the map's own take_exit crosses. The last stay keeps its end.
+    assert [pb.walk_cell(b)[1] for b in blocks[0]] == [(5, 5), (15, 5)]
+    assert [pb.walk_cell(b)[1] for b in blocks[1]] == [(30, 30), (30, 20)]
+    assert [pb.walk_cell(b)[1] for b in blocks[2]] == [(3, 3), (8, 3)]
+    kept = pb.run_blocks(t.runs[0], keep_exit_cell=True)
+    assert [pb.walk_cell(b)[1] for b in kept] == [(5, 5), (15, 5), (25, 5)]
+
+
+def test_a_one_point_stay_before_a_map_change_gives_no_block() -> None:
+    a = walk("fix_a", [(5, 5)])
+    b = walk("fix_b", [(30, 30), (31, 30)], t0=10.0)
+    t = pb.thin(a + b)
+    assert cells_of(t, 0) == [(5, 5)] and pb.run_blocks(t.runs[0]) == ()
 
 
 def test_a_map_change_is_kept_even_one_cell_from_the_last_point() -> None:
