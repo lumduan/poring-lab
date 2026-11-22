@@ -198,6 +198,18 @@ R10_PILOTS = tuple(f"-xmas02-ifH{k}" for k in range(31, 41))
 R10_STAGING = ("-xmas02-ifsH9", "-xmas02-ifsH10")
 R10_HELD_OUT = (*R10_PILOTS, *R10_STAGING)
 R10_EVAL_SEED = 77
+# Amendment 38 (2026-11-23): I2 was short (18 < 20), so round 10 takes Amendment 16's ONE extension,
+# ifH37 .. ifH39 (ifH40 reserved). A pack that holds any of them is the extension's: seed 78 (the
+# seed-77 pack and key are set aside, never shown).
+R10_EXT_PILOTS = tuple(f"-xmas02-ifH{k}" for k in range(37, 41))
+R10_EXT_SEED = 78
+
+
+def r10_seed(names: Sequence[str]) -> int:
+    """PURE (Amendment 38): round 10's pack seed for these sessions (ids, or label file stems):
+    the extension's 78 when any is ifH37 .. ifH40, else Amendment 36's 77."""
+    ext = any(str(n).endswith(x) for n in names for x in R10_EXT_PILOTS)
+    return R10_EXT_SEED if ext else R10_EVAL_SEED
 # every round `pack` packs (the CLI's --round choices; round 9's code first missed it, 11-22)
 PACK_ROUNDS = (1, 2, 3, 4, 5, 6, 7, 8, 9, 10)
 # Amendment 26: rounds 6 and 7's held-outs are SPENT (each scored once: 8a 11-21 14:59, round 7
@@ -2106,14 +2118,15 @@ def cmd_pack(a: argparse.Namespace) -> dict[str, Any]:
         # round 6: the seed from the CLI (T-I4), recorded in the key; round 7: the plan's 74
         want = {3: R3_EVAL_SEED, 4: R4_EVAL_SEED, 5: R5_EVAL_SEED, 6: a.seed,
                 7: R7_EVAL_SEED, 8: R8_EVAL_SEED, 9: R9_EVAL_SEED,
-                10: R10_EVAL_SEED}[rnd]  # fmt: skip
+                10: r10_seed([Path(p).stem for p in a.labels])}[rnd]  # fmt: skip
     elif r2:
         want = R2_EVAL_SEED if a.eval_test else R2_PACK_SEED
     else:
         want = spec.eval_seed if a.eval_test else spec.pack_seed
     if a.seed != want:
-        raise SystemExit(f"--seed {a.seed}: the pre-registered seed is {want} "
-                         f"({seed_source(rnd, r2, bool(a.eval_test))})")  # fmt: skip
+        src = ("Amendment 38" if rnd == 10 and want == R10_EXT_SEED
+               else seed_source(rnd, r2, bool(a.eval_test)))  # fmt: skip
+        raise SystemExit(f"--seed {a.seed}: the pre-registered seed is {want} ({src})")
     raw = INSTRUCTIONS.read_bytes()
     if sha256_bytes(raw) != INSTRUCTIONS_SHA256:
         raise SystemExit(f"{INSTRUCTIONS}: not the pinned instructions ({INSTRUCTIONS_SHA256[:8]})")
@@ -2121,6 +2134,9 @@ def cmd_pack(a: argparse.Namespace) -> dict[str, Any]:
     prm = load_params(a.params, spec)
     docs = [json.loads(p.read_text()) for p in a.labels]
     check_pack_docs(spec, docs, a.eval_test, sha256_bytes(params_raw))
+    if rnd == 10 and r10_seed([str(d.get("session")) for d in docs]) != a.seed:
+        raise SystemExit(f"--seed {a.seed}: the labels' sessions are not that pack's "
+                         "(Amendment 38: seed 78 exactly when one is ifH37 .. ifH40)")  # fmt: skip
     why_docs = round_docs_refusal(rnd, docs)
     if why_docs is not None:
         raise SystemExit(why_docs)

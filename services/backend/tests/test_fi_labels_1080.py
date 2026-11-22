@@ -907,3 +907,30 @@ def test_round7_pack_draws_natural_first_slot_and_staging_second() -> None:
     assert sum(g["aura"] for g in got) == 70  # the natural slot capped at 70
     assert sum(not g["aura"] for g in got) == 50  # the stagings capped at 50
     assert {g["session"] for g in got if not g["aura"]} == set(HELD7[2:])
+
+
+# --- Amendment 38: round 10's one extension (ifH37 .. ifH39), its pack seed 78 --------------------
+def test_round10_extension_seed_follows_the_sessions() -> None:
+    assert fl.R10_EXT_PILOTS == tuple(f"-xmas02-ifH{k}" for k in range(37, 41))
+    assert set(fl.R10_EXT_PILOTS) <= set(fl.R10_PILOTS)  # reserved and refused for TRAIN already
+    eight = ["20261122T224432-rdp-xmas02-ifH31", "20261122T222134-rdp-xmas02-ifsH9"]
+    assert fl.r10_seed(eight) == 77
+    assert fl.r10_seed([*eight, "20261123T040000-rdp-xmas02-ifH37"]) == 78
+    assert fl.r10_seed(["20261123T040000-rdp-xmas02-ifH3"]) == 77  # a whole name's end only
+
+
+def test_pack_round10_extension_takes_seed_78_through_the_cli(
+        tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:  # fmt: skip
+    ext = str(tmp_path / "20261123T040000-rdp-xmas02-ifH38.json")
+
+    def pack(*extra: str) -> None:
+        fl.main(["pack", "x.json", ext, "--params", "p.json", "--out", str(tmp_path / "o.json"),
+                 "--spec", "1080", "--round", "10", "--eval-test", *extra])  # fmt: skip
+
+    with pytest.raises(SystemExit, match=r"pre-registered seed is 78 \(Amendment 38\)"):
+        pack("--seed", "77")
+    fake = tmp_path / "instructions.txt"
+    fake.write_text("other instructions")
+    monkeypatch.setattr(fl, "INSTRUCTIONS", fake)
+    with pytest.raises(SystemExit, match="pinned instructions"):  # past the seed check
+        pack("--seed", "78")
