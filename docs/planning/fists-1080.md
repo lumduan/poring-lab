@@ -7,7 +7,7 @@ verdict_date: null
 verdict_ticket: null
 supersedes: null
 related: [rogue-xmas02.md, xmas02-items-1080.md, screen-size-ab.md, ../../scripts/screen_ab.py, ../../scripts/stage2_ab.py, ../../scripts/bare_steal.py]
-next_action: "Built 2026-11-23 01:50-02:01 (section 5). Batt: keep the build for the trial, or match differently (section 5 options). The trial block after round 10's score (section 4)."
+next_action: "The trial per Amendment 2: three recorded 25-min pilots fst1-fst3 (round 10's pilot procedure, the Knife swap off) after round 10's eval chain, under the round-4 popup watcher; then the report against ifH31-ifH36 (Amendment 2's rulers). Batt: keep the build (Amendment 1 options)."
 title: "The fists at 1080: Batt's build, no Knife swap (a trial, written before any of its data)"
 date: 2026-11-22
 owner: Batt
@@ -83,6 +83,8 @@ not removed), and on this server the same build reads other numbers: Amendment 1
 2. Round 10's score waits for no dev detect server, so the trial's runs start after it (~04:00).
 
 ## 4. The trial (reported; Batt decides)
+
+➡️ The procedure and the rulers are Amendment 2's (section 6): recorded pilots, 25 min.
 
 - **The block:** `screen_ab.py run --label fst1080 --screen 1080 --runs 3 --minutes 20 --box-set
   knife_swap=false`.
@@ -161,3 +163,48 @@ this server turns into its own numbers.
 **Restore (section 2's record, updated):** `@str -62`, `@vit -16`, `@int -3`, `@dex 26`,
 `@luk -1`, `@refine 16 -6`; the Damascus, both Rosaries and the plain Manteau back on through the
 windows; the Damascus shortcut back to F5. The carded Manteau [1] stays in her bag.
+
+## 6. Amendment 2 (2026-11-23 02:27 ICT from `date`, BEFORE any fists data): the trial's procedure and rulers
+
+**The procedure: round 10's own base pilots, with one change.** Section 4's block becomes three
+pilots, fst1, fst2, fst3, each one exactly what ifH31-ifH36 were (xmas02-items-1080.md Amendment 36's
+`pilot_rec.sh`): `@heal`, `@warp xmas_dun02 114 23`, the zoom check (1.000), the chat-window
+standard, the 1 fps PNG recorder beside ONE `screen_ab.py run --runs 1 --minutes 25 --model
+xmas02v1080`, then the recording shipped to the NAS; NOT immune. The one change:
+`--box-set knife_swap=false` (section 4's switch). So:
+- 25 minutes, not section 4's 20: the base pilots' length, one procedure on both sides;
+- recorded: each session's packets judge its kills and steals, as for the base.
+- Round 10's checks after each pilot: >= 1,400 frames and no PAUSED line, else a stop (a person
+  first). A RAM check (>= 3,000 MB) before each.
+- When: after round 10's eval chain ends and the dev checkout is fast-forwarded to main (it holds
+  6e109461's switch); round 10's score waits for no screen_ab run by its own rule.
+- The build: Amendment 1's (option 1, his stats and gear; Batt may still choose otherwise).
+- The popup reader's round-4 watcher runs beside each (item-popup-reader.md Amendment 11): these
+  recordings are sessions of its set w1080b.
+
+**The rulers, the same on both sides:**
+- the runner's own records: `stage10_ab.score_run` per run (kills/h and loot/h over the played
+  minutes, deaths, how it ended, errors);
+- the packets: `weapon_swap_study.py SESSION` (dungeon_judge's window): kills, kills with a steal
+  (an item gain between our first hit on the monster and 1 s after its death, not <= 2 s after a
+  pickup request of ours), kills/h and steals/h over the window, the kill time with and without a
+  steal;
+- z/h: `score_run`'s economy (gross / net per hour);
+- Batt's 228.5 kills/h (his Knife-swap run of 2026-11-12) beside.
+
+**The base, computed with those rulers at 02:2x (ifH31-ifH36, the Knife swap at 1080):**
+
+| pilot | runner kills/h | runner loot/h | packet kills/h | steals/h | kills stolen | kill s with / without a steal |
+|---|---|---|---|---|---|---|
+| ifH31 | 65.6 | 82.6 | 55.4 | 44.4 | 20 / 25 | 20.8 / 5.2 |
+| ifH32 | 97.1 | 128.7 | 80.3 | 53.5 | 24 / 36 | 10.4 / 7.7 |
+| ifH33 | 82.6 | 131.1 | 70.8 | 55.3 | 25 / 32 | 11.7 / 7.5 |
+| ifH34 | 65.6 | 128.7 | 60.0 | 41.4 | 20 / 29 | 14.7 / 8.9 |
+| ifH35 | 94.8 | 116.6 | 71.9 | 51.6 | 23 / 32 | 15.2 / 8.7 |
+| ifH36 | 114.2 | 140.9 | 86.4 | 73.1 | 33 / 39 | 13.1 / 9.6 |
+
+Pooled by packets: 70.7 kills/h, 53.1 steals/h, 75.1 % of kills stolen. Every base run: 24.7 min
+played, 0 deaths, ended by its time box, no error.
+
+**Still not an A/B** (section 4): one block after the other, and the build differs. No verdict; an
+interleaved A/B is the next step only on Batt's word.
