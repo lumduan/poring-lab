@@ -248,3 +248,17 @@ set r2; `score-r2.json` sha256 5e2322a7...; pooled counts:
   (the scrolls), or a group for pictures closer than the true-read spread; each scored on a NEW
   held-out.
 
+### Amendment 4 (2026-11-22 07:35 ICT from `date`): Batt's decision on same-looking icons
+
+- Batt, on the round-2 result: "That is fine: the pictures are the same, so they can count as the
+  same kind of item. If the colour can tell them apart, OK: try the colour first. If not, count
+  them as one kind, so we do not spend much time; it is a rough estimate anyway, and scrolls are
+  not the main items we sell to the NPC."
+- **Round 3, in this order** (its details pre-registered before it is built):
+  1. Try a colour-aware compare for pictures of one shape (the magic scrolls first), measured on
+     the spent set r2 and the calibration sessions.
+  2. If the colour does not separate them reliably, pictures that look the same become ONE group
+     (the reader says "one of these ids"), and the economy page prices the group as one kind.
+- Time-boxed: a rough estimate is the use. Scored on a new held-out, the same four bars; a group
+  read counts right when the true id is in it (the scorer's rule since round 1).
+
