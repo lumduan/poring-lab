@@ -12,6 +12,15 @@ signal (2 of 53 drops lay within 20 px of it).
 
 Every other class's box is untouched. PURE functions (ring_red_px, fi7_drop, apply_rule) and one
 loader (load_frame: a recorded frame from a refs.json entry, fi_labels.py refs' format).
+
+➡️ Round 10 (Amendment 36, pre-registered 2026-11-22 21:49 ICT before any round-10 data) adds
+
+- C. the VIEW EDGE: every ``floor_item`` box whose CENTRE lies within FI10_EDGE (12) px of the
+  1280 x 720 view's left, right or bottom edge, or within FI10_TOP (32) px of its top
+  (``edge_drop`` / ``apply_edge``; a separate pass after A and B, so rounds 7-9 read as before).
+
+Read on the spent rounds 8 and 9 (Amendment 35, diagnosis only): it dropped 3 and 17 false boxes
+(a wall ornament at the top edge held 8 frames; an object cut by the right edge 8) and no true item.
 """
 
 from __future__ import annotations
@@ -30,6 +39,9 @@ RED_MIN_R = 150  # pure red: R >= 150 ...
 RED_MAX_GB = 30  # ... and G, B <= 30
 ITEM_CLASS = "floor_item"  # fi_eval.CLASS, dungeon_hunt.LOOT_ITEMS_CLASS
 CONTAINER_ROOT = "/datasets"  # fi_labels.py refs --container-root's default
+FI10_EDGE = 12  # C: px from the view's left, right and bottom edges (Amendment 36)
+FI10_TOP = 32  # C: px from the view's top
+VIEW_W, VIEW_H = 1280, 720  # the virtual 1080 view the boxes are in (rec_paths.VIRTUAL_1080)
 
 
 def ring_red_px(img: Any, box: Sequence[float], pad: int = FI7_PAD) -> int:
@@ -102,6 +114,30 @@ def apply_rule(
     summary = {"floor": floor, "ring_red": ring_red, "pad": pad, "dropped": dropped,
                "kept_items": kept_items, "frames_loaded": loaded}  # fmt: skip
     return {**pred_doc, "frames": out}, summary
+
+
+def edge_drop(det: Mapping[str, Any], edge: int = FI10_EDGE, top: int = FI10_TOP,
+              w: int = VIEW_W, h: int = VIEW_H) -> bool:  # fmt: skip
+    """PURE (C, Amendment 36): True when this predict_dir detection is a ``floor_item`` box whose
+    centre lies within ``edge`` px of the view's left, right or bottom edge or within ``top`` px
+    of its top (strictly inside the band; a centre exactly on its inner line stays)."""
+    if det.get("cls") != ITEM_CLASS:
+        return False
+    x1, y1, x2, y2 = det_box(det)
+    cx, cy = (x1 + x2) / 2, (y1 + y2) / 2
+    return cx < edge or cx > w - edge or cy > h - edge or cy < top
+
+
+def apply_edge(pred_doc: Mapping[str, Any], edge: int = FI10_EDGE, top: int = FI10_TOP,
+               w: int = VIEW_W, h: int = VIEW_H) -> tuple[dict[str, Any], int]:  # fmt: skip
+    """PURE (C): the document with ``edge_drop``'s boxes removed (the same shape), and how many."""
+    out: dict[str, list[Any]] = {}
+    n = 0
+    for key, dets in pred_doc["frames"].items():
+        keep = [d for d in dets if not edge_drop(d, edge, top, w, h)]
+        n += len(dets) - len(keep)
+        out[key] = keep
+    return {**pred_doc, "frames": out}, n
 
 
 def host_path(path: str, store: Path | None = None, container_root: str = CONTAINER_ROOT) -> Path:

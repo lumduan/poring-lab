@@ -141,3 +141,40 @@ def test_load_frame_reads_the_tar_member_under_the_storage_folder(tmp_path: Path
     with pytest.raises(SystemExit, match="no frame k.2"):
         f7.load_frame(refs, "k.2", store=tmp_path)
     json.dumps(refs)  # refs.json's own shape
+
+
+# --- C, the view edge (round 10, Amendment 36) ---------------------------------------------------
+
+
+def test_the_view_edge_constants_are_amendment_36s_and_the_view_is_the_virtual_1080_one() -> None:
+    import rec_paths
+
+    assert (f7.FI10_EDGE, f7.FI10_TOP) == (12, 32)
+    assert rec_paths.VIRTUAL_1080["game_region"][2:] == [f7.VIEW_W, f7.VIEW_H]
+
+
+def test_edge_drop_judges_the_box_centre_against_each_band() -> None:
+    def at(cx: float, cy: float, cls: str = "floor_item") -> dict[str, Any]:
+        return det([cx - 8, cy - 8, cx + 8, cy + 8], cls=cls)
+
+    assert not f7.edge_drop(at(640, 360))  # the middle
+    assert f7.edge_drop(at(11, 360)) and not f7.edge_drop(at(12, 360))  # left: inside the band
+    assert f7.edge_drop(at(1269, 360)) and not f7.edge_drop(at(1268, 360))  # right
+    assert f7.edge_drop(at(640, 709)) and not f7.edge_drop(at(640, 708))  # bottom
+    assert f7.edge_drop(at(640, 31)) and not f7.edge_drop(at(640, 32))  # top: its own 32 px
+    assert f7.edge_drop(at(620, 24))  # round 9's wall ornament (ifH26 298-305)
+    assert f7.edge_drop(at(1271, 444))  # round 9's object cut by the right edge (ifH23 328-335)
+    assert not f7.edge_drop(at(5, 5, cls="monster"))  # every other class is untouched
+    assert not f7.edge_drop(at(11, 360), edge=0, top=0)  # zero bands drop nothing
+
+
+def test_apply_edge_keeps_the_document_shape_and_counts_its_drops() -> None:
+    doc = {"weights": "w.pt", "frames": {
+        "a": [det([600, 10, 640, 38]), det([600, 300, 640, 340])],  # top band, middle
+        "b": [det([1262, 400, 1280, 440], cls="monster"), det([1262, 400, 1280, 440])],
+        "c": []}}  # fmt: skip
+    out, n = f7.apply_edge(doc)
+    assert n == 2 and out["weights"] == "w.pt" and set(out["frames"]) == {"a", "b", "c"}
+    assert out["frames"]["a"] == [doc["frames"]["a"][1]]
+    assert out["frames"]["b"] == [doc["frames"]["b"][0]]  # the monster box stays
+    assert doc["frames"]["a"][0] in doc["frames"]["a"]  # the input is not changed

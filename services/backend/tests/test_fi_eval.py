@@ -617,6 +617,60 @@ def test_r7_reads_its_own_new_held_out_and_pack_only(tmp_path: Path) -> None:
         fe.main(no_comp)
 
 
+def test_r10_names_strata_and_bars() -> None:
+    assert tuple(f"-xmas02-ifH{i}" for i in range(31, 41)) == fe.R10_PILOTS
+    assert fe.R10_STAGING == ("-xmas02-ifsH9", "-xmas02-ifsH10")
+    assert (*fe.R10_PILOTS, *fe.R10_STAGING) == fe.R10_HELD_OUT
+    assert fe.STRATA["r10"] == (fe.R10_HELD_OUT, (), fe.R10_PILOTS)
+    assert fe.STRATA_NAMES["r10"] == ("i1h", "") and fe.SCREEN_OF["r10"] == "1080"
+    assert fe.STRATA_APART["r10"] == {"natural": fe.R10_PILOTS, "staging": fe.R10_STAGING}
+    assert dict(fe.bars_of("r10")) == dict(fe.bars_of("r6"))  # section 8a's bars, unchanged
+    old = set(fe.R6_HELD_OUT) | set(fe.R7_HELD_OUT) | set(fe.R8_HELD_OUT) | set(fe.R9_HELD_OUT)
+    assert not set(fe.R10_HELD_OUT) & old  # a NEW held-out
+    assert not fe.on_suffix("x-rdp-xmas02-ifH3", fe.R10_HELD_OUT)  # ifH31 .. ifH40 only
+    assert not fe.on_suffix("x-rdp-xmas02-ifsH1", fe.R10_HELD_OUT)  # ifsH10 is not ifsH1
+    assert fe.on_suffix("x-rdp-xmas02-ifH40", fe.R10_HELD_OUT)
+    assert fe.on_suffix("x-rdp-xmas02-ifsH10", fe.R10_HELD_OUT)
+
+
+def test_edge_args_refusal() -> None:
+    assert fe.edge_args_refusal(None, None) is None
+    assert fe.edge_args_refusal(12, 32) is None
+    assert "go together" in str(fe.edge_args_refusal(12, None))
+    assert "go together" in str(fe.edge_args_refusal(None, 32))
+    assert ">= 0" in str(fe.edge_args_refusal(-1, 32))
+
+
+def test_r10_the_view_edge_drops_boxes_after_the_floor_and_ring(tmp_path: Path) -> None:
+    """The staged list as a round-10 pilot: rule C (--edge-margin 12 --edge-top 32) after A and B.
+    A box moved into the view's top band on an item-free frame leaves I3; one in the middle stays;
+    its count is reported beside the bars. Without C the result is round 9's path, unchanged."""
+    sid = "20261123T010000-rdp-xmas02-ifH31"
+    args = _round_files(tmp_path, sid, "r10", 10)
+    assert fe.main(args) == 0
+    plain = json.loads((tmp_path / "out.json").read_text())["per_predictions"]["gpu"]
+    pred_path = Path(args[args.index("--predictions") + 1].split("=", 1)[1])
+    pred = json.loads(pred_path.read_text())
+    k41, k42 = fe.frame_key(sid, 41), fe.frame_key(sid, 42)
+    for d in pred["frames"][k42]:  # frame 42's box (an I3 frame, outside her 5 x 5) to the top
+        h = d["y2"] - d["y1"]
+        d["y1"], d["y2"] = 2.0, 2.0 + h
+    pred_path.write_text(json.dumps(pred))
+    assert fe.main(args) == 0
+    moved = json.loads((tmp_path / "out.json").read_text())["per_predictions"]["gpu"]
+    assert moved["i3"]["any"]["num"] == plain["i3"]["any"]["num"]  # no rule: still counted
+    assert fe.main([*args, "--edge-margin", "12", "--edge-top", "32"]) == 0
+    out = json.loads((tmp_path / "out.json").read_text())
+    g = out["per_predictions"]["gpu"]
+    assert g["i3"]["any"]["num"] == plain["i3"]["any"]["num"] - 1
+    assert g["rule"]["edge"] == {"margin": 12, "top": 32, "dropped": len(pred["frames"][k42])}
+    assert g["i1_strata"]["i1h"]["num"] == plain["i1_strata"]["i1h"]["num"]  # no true item lost
+    assert pred["frames"][k41]  # frame 41's box (inside her 5 x 5) was not moved and stays
+    assert out["strata"] == "r10"
+    with pytest.raises(SystemExit, match="go together"):
+        fe.main([*args, "--edge-margin", "12"])
+
+
 def test_r9_names_strata_and_bars() -> None:
     assert tuple(f"-xmas02-ifH{i}" for i in range(21, 31)) == fe.R9_PILOTS
     assert fe.R9_STAGING == ("-xmas02-ifsH7", "-xmas02-ifsH8")
