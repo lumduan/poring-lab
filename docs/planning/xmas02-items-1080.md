@@ -970,3 +970,54 @@ A count under its minimum is NO VERDICT, never a pass.
   training log and started the pilots at 07:16, before the training. The second launcher waits for
   the training's own end lines only.
 
+
+### Amendment 29 (2026-11-22 10:49 ICT from `date`, BEFORE any round-8 eval label): the supervisor killed for low memory; the run's end proven by its own files; the pilots resumed
+
+- **What was killed (about 09:42):** the agent host (Claude Code) reaped two background shells
+  when the machine ran low on memory: 592 MB available, swap 2.6 of 4 GB in use. The training's
+  dataloader workers (4 processes, about 5 GB RSS each, mostly shared) were the largest user.
+  - `r8_train.sh`: training run 1's guard, the live p95 watcher, and the freeze after the run;
+  - `r8_pilots2.sh`: the waiter that starts ifH12 .. ifH16 after the training.
+  - Neither was restarted until Batt said "ok" (11-22 ~10:4x), with a RAM check before each step.
+- **The training ran on in the worker and ended at 10:37:19** (results.csv's epoch-3 row; the
+  weights were written at 10:37:22). The killed guard never wrote ALL STEPS OK, so
+  `freeze_r8b.sh` proves the end from the run's own files instead. All four hold:
+  - no trainer process;
+  - no `mid.pt` left (the trainer removes it at a run's end);
+  - `last.pt` is stripped: its pickle reads epoch -1 and ema / updates None, as round 6's finished
+    `last.pt` does (`ckpt_fields.py`, read from the opcodes, nothing executed). Both are
+    5,529,242 bytes;
+  - `last.pt` is not older than results.csv.
+- **FROZEN 10:48:29:**
+  - xmas02fi8 `last.pt` sha256 `74092985465cb990d814226fdfaf83d6abb5b9d90a52981bdec1caf175119d42`;
+  - ONNX `xmas02fi8-last-736x1280.onnx` sha256
+    `371c2f2cfaeefcca6d7e05c76932d8ecb5555464e3a1a7a32d6dbf52ed143297`, classes `["floor_item"]`;
+  - archived to the NAS (size and count verified; the NAS `last.pt` has the same sha256), and the
+    local copy removed.
+  - The single-session validation (ifF) read mAP50 0.974 / 0.948 / 0.931 by epoch. That is not a
+    bar; section 8a's bars are scored on the held-out.
+- **The live detect server beside the training** (Amendment 26's report): 117 minute values
+  were logged from 07:45:07 to 09:41:45, when the watcher was killed. The first was 23.85 ms;
+  over the run the median was 155.7 ms, the p95 159.5 ms and the max 161.8 ms. Batt 11-22: dev
+  work runs beside live without yielding.
+- **Found before the pilots:** the dev Rogue was dead (frame 10:45: HP 1/5070, the death dialog,
+  "[Cruiser] inflicts 142 / 145 damage points on you" in the Battle Log).
+  - It had stood NOT immune at the stand since ifH12's setup (07:49). No run was playing; the
+    death is not a pilot event.
+  - It was revived with `@alive`, the dialog's "return to game" button, and the chat input closed.
+    Judged on the 10:52 frame: HP 5070/5070, no dialog, the chat closed.
+  - pilot_rec.sh's own setup (`@heal`, `@warp xmas_dun02 114 23`, the zoom and chat checks) runs
+    before every pilot.
+  - A possible cause of ranged-attacker-1080 Amendment 3's void A3 / R2 ("HP 0 after @heal" at
+    setup) is a Cruiser shooting the idle Rogue at the same stand. Not proven.
+- **The pilots resumed at 10:48:25** (`r8_pilots3.sh`): ifH12 .. ifH16, one `chain.sh` call
+  each, every one only while MemAvailable >= 3,000 MB (else it waits, logged).
+  - The freeze's CPU export ran beside ifH12's first minutes (10:48:29-10:49:03). The pilots are
+    held-out recordings, not timed arms.
+  - The eval (refs, GPU predictions, the seed-75 pack, two new blind labellers, the score
+    wrapper committed first, fi_eval `--strata r8` once) follows the pilots. The worker is
+    single-job.
+- **For later trainings (Batt 11-22):** `--workers 2` becomes `--workers 1`. That is data-loading
+  parallelism, not a model setting; it costs speed only.
+  - Swap grew from 4 to 12 GB: `/swap2.img`, 8 GB, in fstab with `nofail`. RAM cannot grow for
+    now.
