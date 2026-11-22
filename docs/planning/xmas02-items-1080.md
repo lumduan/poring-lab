@@ -6,7 +6,7 @@ verdict_date: null
 verdict_ticket: null
 supersedes: null
 related: [xmas02-1080-detector.md, xmas02-detector.md, rogue-xmas02.md, screen-size-ab.md, fullscreen-client.md, ../../scripts/fi_labels.py, ../../scripts/fi_eval.py, ../../scripts/stage_items.py, ../../scripts/build_frame_cache.py]
-next_action: "Round 10's held-out was SHORT on I2 (18 < 20): Amendment 38's one extension, ifH37-ifH39 (her Knife-swap build restored first), then all eleven labelled, refs/predictions in xmas02fi8-r10x, the seed-78 pack, two new blind labellers, scored ONCE by xmas02_items_r10x_score.sh. A pass -> 8c (Batt deploys); a fail -> round 11 from its diagnosis."
+next_action: "Round 10 with its one extension (Amendment 39): the eleven sessions labelled, every minimum met (I2 28, I1h 93 item crops, I3 8,333, I4 203), the seed-78 pack built, two NEW blind labellers answering; then xmas02_items_r10x_score.sh ONCE. A pass -> 8c (Batt deploys); a fail -> round 11 from its diagnosis."
 title: "The floor-item model at 1920x1080: a 1080 round of the item detector, the 720 round 5's recipe with only the screen changed (pre-registration)"
 date: 2026-11-20
 owner: Batt
@@ -1408,3 +1408,47 @@ A count under its minimum is NO VERDICT, never a pass.
   ifH37-ifH40 takes seed 78, else 77 (from the label files' names, then checked against their
   sessions); the wrapper above. Both committed before any extension label.
 - The bars are section 8a's, unchanged.
+
+### Amendment 39 (2026-11-23 06:24 ICT from `date`, BEFORE any blind answer and BEFORE any score): round 10's evaluation inputs with the extension; every minimum met
+
+- **Her build before ifH37 (Amendment 38):** the fists build undone and the Knife-swap build of
+  ifH31-ifH36 put back; her status window read against the old one (HIT 205, FLEE 246 + 1, Aspd
+  176; weight 927 / 2,430); immunity OFF read back in the Chat tab ("Returned to normal state.")
+  at 03:10 (`r10/immune_off_ext.ok` = 1).
+- **The extension pilots (`r10x_pilots.sh`, 03:10-04:44):** ifH37 (03:10:55-03:41:08), ifH38
+  (03:41:10-04:13:53), ifH39 (04:13:54-04:44:14); each `chain.sh` rc 0, 25.3-25.4 min of play,
+  shipped, the economy recorded; round 9's check after each: 1,607 / 1,720 / 1,617 frames, 0 PAUSED.
+  The popup reader's round-4 watcher ran beside each (its set w1080b; not read or scored here).
+- **The eval chain (`eval_chain_r10x.sh`, 04:44-06:22):** it waited for the pilots' own last line;
+  the frozen sha256 checked (74092985..., the archive matches); the three new sessions labelled
+  `--eval-test` against xmas02fi8, all rc 0 (04:45-04:47); the eight earlier label files are
+  untouched (their times 01:49-01:56); refs over all eleven: **9,791 frames**; GPU predictions fi8
+  05:05, fi6 05:24, fi5 05:43; ONNX fi8 06:15; all rc 0, in `data/train/eval/xmas02fi8-r10x`.
+- **The pack (seed 78, `--round 10 --eval-test` over all eleven; built 06:22:08 at 61a4f913):**
+  **113 crops**: N 35, F 52, M 6 (**93 ITEM crops**) and E 20 (10 plain, 10 hard). The natural
+  slot drew all 70 and the staging slot 23 of its 50 (the summary's `short`: no_aura 27). The
+  answer key `key-eval-seed78/answer_key.json` sha256 `b4852e329d8f72f1...`. The seed-77 pack and
+  key stay set aside, never shown.
+- **The held-out's size, counted from the LABELS only** (no prediction read; `r10/size_r10x.py`,
+  size_r10.py with the seed-78 pack summary; fi_eval's own selection rules):
+
+  | count | value | minimum | |
+  |---|---|---|---|
+  | I2: natural drop episodes | **28** (ifH31-ifH39: 4, 0, 2, 3, 5, 4, 3, 2, 5; the stagings none) | 20 | met |
+  | I1h: item crops in the pack | 93 | 40 evaluated | met (both labellers' good boxes decide) |
+  | I3: item-free kept frames (natural) | 8,333 | 200 / 500 | met |
+  | I4: drop-less kills judged | 203 (4 more with no frame) | 40 | met |
+
+  I2's side counts: 101 drops of our kills, 19 behind her (4 of them with a kept label).
+- **So the held-out is the eleven:** ifsH9, ifsH10, ifH31 .. ifH39. ifH40 stays unused.
+- **For I5:** the model is round 8's, unchanged (xmas02fi8, still registered for the detect
+  server; its ONNX the same file in the detector's model folder).
+- **Two NEW blind labellers, L1 and L2:** fresh agents that open only the pack's folder
+  (instructions, reference, crops) and write `t6/answers-eval-r10x-L1.json` / `-L2.json`. They
+  started at about 06:22 and 06:23, before this amendment; no answer has been read.
+- **The score:** `docs/records/scorers/xmas02_items_r10x_score.sh`, committed in cbdfa616 before
+  any extension label, is copied to the scratch `score_r10x.sh` (`cmp` identical). It runs ONCE,
+  after both answer files hold 113 entries: the I5 latency sample, both-good, THE BARS
+  (`fi_eval --strata r10 --item-floor 0.4 --ring-red 30 --edge-margin 12 --edge-top 32`), then the
+  report-only lines (fi8 without the edge, fi6 + the rule at 0.50, fi5 with no rule). The bars are
+  section 8a's, unchanged.
