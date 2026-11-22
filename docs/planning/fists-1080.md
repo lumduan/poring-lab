@@ -164,7 +164,7 @@ this server turns into its own numbers.
 `@luk -1`, `@refine 16 -6`; the Damascus, both Rosaries and the plain Manteau back on through the
 windows; the Damascus shortcut back to F5. The carded Manteau [1] stays in her bag.
 
-## 6. Amendment 2 (2026-11-23 02:27 ICT from `date`, BEFORE any fists data): the trial's procedure and rulers
+## 6. Amendment 2 (2026-11-23 02:25 ICT from `date`, BEFORE any fists data): the trial's procedure and rulers
 
 **The procedure: round 10's own base pilots, with one change.** Section 4's block becomes three
 pilots, fst1, fst2, fst3, each one exactly what ifH31-ifH36 were (xmas02-items-1080.md Amendment 36's
