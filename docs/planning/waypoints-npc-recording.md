@@ -358,3 +358,64 @@ for PNG at 1 fps). PNG at 1080 and 1 fps measured 124.6 MB/min on ifH13 today.
         events.jsonl    minimap-change marks, readiness, notifications shown, the /where replies read
         derived/        positions.jsonl (the smoothed track), blocks.json (the walk_to made)
       <storage>/recordings/index.json   what the page lists: size, age, purpose, keep
+
+## Amendment 9 (2026-11-22 12:33 ICT from `date`, BEFORE any route recording): phase 1 built (`scripts/route_track.py`); its dev check; the score pre-registered
+
+- **Built** (2b81c223; new files only, no existing module changed): `scripts/route_track.py` and
+  47 tests (`services/backend/tests/test_route_track.py`; with path_blocks' and map_routes' tests,
+  179 pass).
+  - **The pure core**, `build_track(reads, grid, zones, settings)`, works on one map stay:
+    - a read is a candidate only on a walkable cell;
+    - it is ACCEPTED when its neighbours agree (consistent = `cheb <= max_speed * dt + slack`),
+      voted twice so a good read beside a misread burst survives;
+    - an out-and-back faster than walking is dropped as an `excursion`;
+    - frames between two accepted reads are FILLED from `map_routes.leg_path`, timed by walk time;
+    - a gap that is too long, a jump, or no path SPLITS the track;
+    - `to_reads(map, segment)` gives path_blocks' `(t, map, x, y, confirmed)`;
+    - path_blocks.thin splits only at a map change, so each segment is thinned on its own.
+  - **Settings** (user settings, these defaults):
+    - `max_speed` 10 cells/s (the default walk is ~6.7, plus speed effects);
+    - `slack` 2 cells;
+    - `window` 3 reads a side;
+    - `max_gap_s` 2.0;
+    - `min_support` 1 (PosConfirm's "another read agrees").
+  - **The CLI:**
+    - `reads SESSION` reads every 0.2 s with `selfpos.read_minimap(light=True)`; a 1080 frame
+      goes through clientview's virtual client;
+    - `track RAW --map` builds the track;
+    - `check` compares it with the packet truth, reusing selfpos_calibrate's and selfpos_eval's
+      functions unchanged.
+- **Dev check (NOT a score; the reader's own calibration sessions, in-sample):**
+  - The raw reads were already right: outdoor-a 6,001 standing frames 100 % exact;
+    outdoor-b 99.28 % exact and 100 % within 1 (117 walking frames: 93.16 % exact, 100 % within 1).
+  - The track dropped nothing, but there was also nothing wrong to drop.
+  - Synthetic damage on outdoor-b's prt_fild08 stay (the raw file edited, dev only):
+    - half the frames blanked: coverage 49.96 -> 100 %, within 1 100 %;
+    - every 10th / 37th read shifted 30 / 20 cells: within 1 87.35 -> 100 %;
+    - 3-frame misread bursts: 93.63 -> 100 %;
+    - 6-frame bursts: 87.17 -> 99.28 % (23 of 24 caught).
+    - Every dropped read was a real error (> 1 cell).
+  - **Known limits:**
+    - a fill over a > 1 s hole is timed proportionally, so a start or stop inside the gap misses
+      (2 of 15 filled frames > 1 cell off at 1.2 s holes; none at 0.4 s);
+    - a misread burst right before a REAL jump survives as its own segment (1 of 24).
+- **The score, PRE-REGISTERED now (before any route recording exists; scored ONCE by a wrapper
+  committed before the score):**
+  - **Held-out:** the first 3 route recordings made after this amendment on the dev lab,
+    `route-H1` .. `route-H3`:
+    - 1080, 5 fps (`record_session.py --fps 5`, the RDP default video);
+    - packets on (the lab sniffer: truth only, offline);
+    - each walking for most of its time (>= 60 % walking frames by selfpos_eval's classes);
+    - at least 2 outdoor maps in all;
+    - one may cross an indoor map, which is reported apart (no readout there, decision 3).
+    - A recording that misses these is void and replaced (the next name).
+  - **Scored frames:** selfpos_eval's classes and exclusions (GM windows, map loading, frames
+    without a true position), on maps whose client draws a minimap, in map stays cut by the
+    PACKETS' map changes (the recorder's own cut is phase 2).
+  - **Bars (pooled over the 3, walking frames, the TRACK):**
+    - T1: within one cell >= 97 % (T0's walking bar, applied to the track);
+    - T2: coverage (a read or filled cell) >= 95 %;
+    - T3: the walk_to blocks made from each recording (path_blocks.thin per segment ->
+      run_blocks) give no `routes` lint ERROR on the map (warnings allowed, Amendment 7).
+  - **Reported beside them (no bar):** the raw reads' rates, standing frames, every source /
+    drop / split count, and the indoor stay.
