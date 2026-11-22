@@ -232,3 +232,17 @@ not chosen.
 - `poring-lab/media-probe:local` (225 MB) and its apt build cache (~1 GB in the lab builder):
   **KEEP** (Batt 2026-11-08 ~15:4x, "keep it for now"): re-measuring with real streams and the
   GPU-recording bench (docs/planning/gpu-recording.md) reuse them. Prune = Batt's call.
+
+## Moves on bot-server -- 2026-11-22 22:53 ICT (the 1080 item rounds 7-9, spent)
+
+| time | item | where | how | result |
+|---|---|---|---|---|
+| 22:53:02 | `data/train/eval/xmas02fi6-r7` (round 7's predictions, refs, scores) | `archive/train/eval/xmas02fi6-r7/` | guarded `archive:` | verified + deleted; worst stall 0.0 % |
+| 22:53:09 | `data/train/eval/xmas02fi8-r8` (round 8's, 3.3 MB) | `archive/train/eval/xmas02fi8-r8/` | guarded `archive:` | verified + deleted; worst stall 0.0 % |
+| 22:53:15 | `data/train/eval/xmas02fi8-r9` (round 9's, 3.6 MB) | `archive/train/eval/xmas02fi8-r9/` | guarded `archive:` | verified + deleted; worst stall 0.0 % |
+
+- The rounds' scratch went to `scratch-archive/2026-11-22/` the same day (tar + sha256, the file
+  count checked before the delete): `arch-i1080-r9-20261122.tar` (192 files),
+  `arch-popup-r3-20261122.tar` (15 files).
+- Left locally: round 10's `data/train/eval/xmas02fi8-r10` (in use) and the older eval folders
+  (`xmas02fi4`, `xmas02fi5`, `xmas02fi6*`, `xmas02gb`, the benches), unchanged.
