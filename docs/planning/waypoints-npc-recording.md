@@ -502,3 +502,52 @@ setting).
   red at the login screen and green in game; a 2-min route on xmas_dun02 with one warp (the map
   change notification shown once); the rate measured.
 - **Deployment:** dev first; the live lab only on Batt's word (code changes only between Runs).
+
+## Amendment 12 (2026-11-22 15:42 ICT from `date`): phase 2's server side built; the video stays on the local disk, the route folder holds a pointer
+
+- **Built** (f06b0e12, 80e35d1e, 41676429, 235da180; 46 new Python tests and 13 TypeScript tests;
+  551 existing Python tests pass beside them; nothing run live yet):
+  - `scripts/route_rec.py`, the host helper (`serve` / `status` / `check`), on flow_run's
+    channel (`settings/routerec/request.json` in, `status.json` out every 2 s). It sends no
+    input. It refuses a start while a bot of ours plays.
+  - The check, on one fresh frame:
+    - the capture lock;
+    - Basic Information and the chat window;
+    - the minimap, reported but not required;
+    - the recorder's own start rules, read-only;
+    - the disk.
+  - The guide notifications follow Amendment 11. A window appearing or disappearing also needs 2
+    reads in a row, so a one-frame flicker is not a map change.
+  - Every number is a setting; `settings/routerec/settings.json` may override any of them.
+  - The split: held-out for the first 3 route recordings (route-H1..H3, Amendment 9), then every
+    5th.
+  - `scripts/host/poring-lab-routerec.service`, the user unit; not installed yet.
+  - `routes_routerec.py`: `GET` / `POST /routes/record` behind `routes_settings.write_gate`,
+    unchanged.
+  - `services/frontend/src/lib/routerec.ts`, the panel's pure logic. The component comes next.
+- **Changed from Amendment 11: where the video goes.** `record_session.py`'s video formats write
+  only into its own local root (`dataset_ship.LOCAL_ROOT`): the GPU video joins the sidecar's
+  folder by a rename, and H.264 moves the S2 client's files by a rename. That is also CLAUDE.md
+  rule 7: every recording goes to the root disk as sequential files, and reaches the NAS by
+  shipping.
+  - So the recorder runs with its default `--out`.
+  - Amendment 8's route folder (`<storage>/recordings/<date>/<stamp>-<map>-route/`) holds a
+    POINTER: `manifest.json` names the recorder's session id and local path, beside
+    `events.jsonl` and `recorder.log`.
+  - Once a session is shipped, its local path is gone. The id stays, and phase 4's page finds
+    the shipped copy by it.
+- **The minutes estimate reads the disk the video fills:** `LOCAL_ROOT`'s filesystem, its free
+  space minus the recorder's floor. It also counts the recorder's second local limit, at most 20
+  GB unshipped (`dataset_ship.local_caps`). Without that, a check could promise far more minutes
+  than the recorder allows.
+- **Known limits, accepted for this phase:**
+  - a helper restart does not re-attach to a recording in progress; the recording ends at its own
+    length;
+  - no sha256 in the manifest; shipping checksums the session.
+- **Next:**
+  1. the console component (the toolbar button, the panel, the toasts, the browser notification)
+     and its typecheck;
+  2. the rdp video rate at 5 fps, measured on the dev lab, as its default;
+  3. live checks on the dev lab: readiness red at the login screen and green in game; a 2-min
+     route on xmas_dun02 with one warp, the map change shown once;
+  4. the unit installed on dev. The live lab only on Batt's word.
