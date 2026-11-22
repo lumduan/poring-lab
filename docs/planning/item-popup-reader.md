@@ -6,7 +6,7 @@ verdict_date: null
 verdict_ticket: null
 supersedes: null
 related: [econ-bag-count.md, ../econ/economics.md, ../../scripts/bare_steal.py, ../../scripts/bag_count.py, ../../scripts/slot_items.py, ../../scripts/econ_screen.py]
-next_action: "Round 3 PASSED (RESULT round 3, 2026-11-22 19:25): pre-register section 4's 1080 run-time check on dev (its own amendment); the reader feeds no Run before that check passes."
+next_action: "Section 4's 1080 run-time check is pre-registered (Amendment 6): build item_popup.py watch + item_popup_eval.py score-events, run the watcher beside the next dev 1080 Runs (>= 250 pickups, >= 4 sessions), score once."
 title: "Every item gained, from the client's item-obtained popup: which item, how many (pre-registration)"
 date: 2026-11-21
 owner: Batt
@@ -412,3 +412,51 @@ inputs: the count font `item_popup_count_r2.npz` (sha256 ade6a384801e...) and sl
 - **After the score, reported only:** sets r2 and old (fiT21+) again under round 3's reader
   (`popup-r3/again_r3.sh`, started 19:25, refusing unless the scorer files equal 0dcfd84f's). The
   calibration set's run is item 1 above. Their counts go in a labelled note when they end.
+
+### Amendment 6 (2026-11-22 19:45 ICT from `date`, BEFORE any 1080 held-out Run): section 4's 1080 run-time check pre-registered
+
+- **Where the popup is at 1920 x 1080** (dev, 19:43, measured; scores nothing):
+  - One GM line, `@item 909 2`, typed to the dev Rogue in town (crusader.py's guarded line). No
+    other input.
+  - Real-frame grabs of the band x 400-1519, y 0-539 every ~0.5 s (scratch `popup1080/a1`).
+  - The popup was on 10 grabs in a row (~4.3 s). It is drawn 1:1 at the 720 place moved right by
+    (1920 - 1280) / 2 = **320 px**, on the SAME rows (76-105). That is the centring the drop
+    prompt showed (ro_agent: its OK button at the 720 box + 320 in x).
+  - With the band put back at the 720 coordinates, `bare_steal.popup_box` gives (541, 735) on all
+    10. Round 3's reader, unchanged, gives ONE event: id 909 (Jellopy), distance 2.98 (ICON_MAX
+    15), amount 2, "ok".
+  - One positive case, not a score. Other client sizes are not measured; the rule x + (w - 1280) /
+    2, rows unchanged, is assumed only for 1920 x 1080.
+- **The run-time reader (the build, the next commit):** `item_popup.py watch`, a host process
+  beside a dev Run. It never sends input.
+  - Every 0.25 s it grabs the real frame's popup band through its own `ro_agent.Screen`: 520 x 34
+    px at (541 + 320, 74). Measured at 19:4x (40 grabs, round 9's labelling on the CPU beside): p50
+    2.7 ms, p95 7.8 ms, one of 607 ms.
+  - It puts the band at the 720 coordinates and feeds round 3's `Tracker` unchanged: the same
+    pictures (`refs.npz` 1bb96813...), count font (`item_popup_count_r2.npz` ade6a384...), margins
+    and rules.
+  - It writes `events.jsonl`, one line per event: the bus frame's t_mono_ns (the packets' clock),
+    ids, why, dist, amount, width, frames. Beside it goes a small crop of each event's box, for
+    reading misses on DEV only (our own character); off by default.
+  - It logs its per-tick time (p50 / p95) and its grabs that took > 250 ms.
+- **The held-out (set `w1080`):** the dev 1080 sessions on xmas_dun02 recorded by `record_session`
+  (with their packets on the NAS) that START after the build commit, with the watcher running over
+  the whole session (t0_mono_ns .. t1_mono_ns in the manifest). In time order, until the sessions
+  hold **>= 250 pickup_results** and there are **>= 4 sessions**. The session in progress at that
+  point is the last.
+  - Whatever those Runs are for (round 9's 8c, a round 10's pilots) does not change: the watcher
+    runs beside EVERY Run of a series (both arms of an A/B), so no arm differs.
+  - A session cut short or ABORTED by its own rules is left out, by name, before any event is
+    read.
+  - Truth: every ok `pickup_result` in the session window, including the GM top-up lines at a
+    Run's setup (they draw the same popup).
+- **The score, ONCE**, by `item_popup_eval.py score-events` (built in the same commit). The same
+  match as sections 3 and 4: an event at t_f matches a truth at t when t <= t_f <= t + 3.0 s, its
+  id is in the read and the amounts are equal. Events outside the session windows are not counted.
+  **The same four bars:** I1 >= 97 %, I2 >= 97 %, P <= 2 %, R >= 85 % (spaced truths, the
+  previous >= 2 s before).
+  - Reported beside: the watcher's tick time p50 / p95, its slow grabs, and I1 by why.
+- **If it passes:** section 5 (a Run's item list into the screen record, /economy) is built on dev.
+  Live gets it only on Batt's word, and Batt's own client (Thai text, "Scell 1 ชิ้น") is a check of
+  its own: the digits sit before a Thai word there, and the count font is the dev client's.
+  **If it fails:** a round 4, pre-registered from its diagnosis.
