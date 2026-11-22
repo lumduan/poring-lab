@@ -190,6 +190,8 @@ R9_PILOTS = tuple(f"-xmas02-ifH{k}" for k in range(21, 31))
 R9_STAGING = ("-xmas02-ifsH7", "-xmas02-ifsH8")
 R9_HELD_OUT = (*R9_PILOTS, *R9_STAGING)
 R9_EVAL_SEED = 76
+# every round `pack` packs (the CLI's --round choices; round 9's code first missed it, 11-22)
+PACK_ROUNDS = (1, 2, 3, 4, 5, 6, 7, 8, 9)
 # Amendment 26: rounds 6 and 7's held-outs are SPENT (each scored once: 8a 11-21 14:59, round 7
 # 11-22 03:17) and RELEASED for TRAIN from round 8; --eval-test still reads them (old scores stay
 # reproducible). Matched like every name (the id ENDS with it): "-xmas02-ifH1" is not "-ifH11".
@@ -2283,10 +2285,11 @@ def main(argv: Sequence[str] | None = None) -> int:
     p.add_argument("--spec", choices=SCREENS, default="720", help="T-I1: the screen's spec")
     p.add_argument("--params", type=Path, required=True)
     p.add_argument("--seed", type=int, required=True)
-    p.add_argument("--round", type=int, choices=(1, 2, 3, 4, 5, 6, 7, 8), default=1,
+    p.add_argument("--round", type=int, choices=PACK_ROUNDS, default=1,
                    help="O15: round 2's seeds (65 T2-r2, 66 the evaluation) and sizes; "
                         "6: the 1080 round's evaluation (T-I4, --spec 1080); 7: Amendment 22's "
-                        "(seed 74); 8: Amendment 26's (seed 75)")  # fmt: skip
+                        "(seed 74); 8: Amendment 26's (seed 75); 9: Amendment 32's "
+                        "(seed 76)")  # fmt: skip
     p.add_argument("--eval-test", action="store_true")
     p.add_argument("--pack-dir", type=Path, default=None)
     p.add_argument("--key-dir", type=Path, default=None)

@@ -786,6 +786,32 @@ def test_round_9_pack_rules() -> None:
     assert "not round 8's held-out" in str(fl.round_docs_refusal(8, ok))
 
 
+def test_pack_round9_takes_the_plans_seed_76_through_the_cli(
+        tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:  # fmt: skip
+    # Amendment 32's command line itself (round 9's chain stopped at argparse 11-22 20:54: the
+    # choices lacked 9 while every function took it)
+    def pack(*extra: str) -> None:
+        fl.main(["pack", "x.json", "--params", "p.json", "--out", str(tmp_path / "o.json"),
+                 *extra])  # fmt: skip
+
+    with pytest.raises(SystemExit, match="--spec 1080"):
+        pack("--seed", "76", "--round", "9", "--eval-test")
+    with pytest.raises(SystemExit, match="evaluation's pack only"):
+        pack("--spec", "1080", "--seed", "76", "--round", "9")
+    with pytest.raises(SystemExit, match="pre-registered seed is 76"):
+        pack("--spec", "1080", "--seed", "75", "--round", "9", "--eval-test")
+    fake = tmp_path / "instructions.txt"
+    fake.write_text("other instructions")
+    monkeypatch.setattr(fl, "INSTRUCTIONS", fake)
+    with pytest.raises(SystemExit, match="pinned instructions"):  # past the seed check
+        pack("--spec", "1080", "--seed", "76", "--round", "9", "--eval-test")
+
+
+def test_pack_cli_takes_every_round_the_seeds_know() -> None:
+    # a round the pack's seed table knows and the parser refuses is round 9's slip again
+    assert tuple(range(1, 10)) == fl.PACK_ROUNDS
+
+
 def test_round_refusal_puts_round_7_on_1080_only() -> None:
     assert "--spec 1080" in str(fl.round_refusal(fl.XMAS02_FI, 7, True))
     assert fl.round_refusal(SPEC, 7, True) is None
