@@ -1,0 +1,33 @@
+# poring-lab: the console's Record route button, the host side (scripts/route_rec.py;
+# docs/planning/waypoints-npc-recording.md Amendment 11). A USER unit (no root): it runs as the lab's
+# user, who owns the repo. It sends NO input: it reads the game's picture, checks the disk, and
+# starts / stops scripts/record_session.py for the person's own play.
+#
+# Install (as the lab user; linger keeps it running without a login):
+#     mkdir -p ~/.config/systemd/user
+#     cp scripts/host/poring-lab-routerec.service ~/.config/systemd/user/
+#     systemctl --user daemon-reload && systemctl --user enable --now poring-lab-routerec.service
+# Undo: systemctl --user disable --now poring-lab-routerec.service
+# Check: python3 scripts/route_rec.py status (its t_wall advances every 2 s)
+#
+# KillMode=mixed: a stop sends SIGTERM to the helper ALONE, which ends a recording cleanly (SIGINT
+# to record_session's PID) and waits for its manifest; the rest of the unit (the recorder, its grab
+# helper) is killed only after TimeoutStopSec.
+[Unit]
+Description=poring-lab: the console's Record route helper (records the person's play, no input)
+
+[Service]
+Type=simple
+WorkingDirectory=%h/docker/poring-lab
+Environment=PATH=%h/.local/bin:/usr/local/bin:/usr/bin:/bin
+Environment=TZ=Asia/Bangkok
+Environment=PYTHONDONTWRITEBYTECODE=1
+ExecStart=%h/docker/poring-lab/.venv/bin/python %h/docker/poring-lab/scripts/route_rec.py serve
+Restart=on-failure
+RestartSec=10
+Nice=5
+KillMode=mixed
+TimeoutStopSec=150
+
+[Install]
+WantedBy=default.target
