@@ -6,7 +6,7 @@ verdict_date: null
 verdict_ticket: null
 supersedes: null
 related: [econ-bag-count.md, ../econ/economics.md, ../../scripts/bare_steal.py, ../../scripts/bag_count.py, ../../scripts/slot_items.py, ../../scripts/econ_screen.py]
-next_action: "Round 4 pre-registered (Amendment 10): build the merge + the nearest glyph + the digit staging and font (Amendment 11 records its sha), then the watcher (round 4) beside the next dev 1080 sessions (set w1080b, >= 250 pickups, >= 4 sessions), score once."
+next_action: "Round 4 built and its font recorded (Amendment 11). The round-4 watcher runs beside the next RECORDED dev 1080 sessions (set w1080b, >= 250 pickups, >= 4 sessions), then score-events once."
 title: "Every item gained, from the client's item-obtained popup: which item, how many (pre-registration)"
 date: 2026-11-21
 owner: Batt
@@ -618,3 +618,31 @@ Section 5 (the item list in the screen record) waits for a pass.
   ticks, and how many events the merge joined.
 - **If it passes:** section 5 on dev (Amendment 6). Live only on Batt's word. **If it fails:** a
   round 5 from its diagnosis.
+
+### Amendment 11 (2026-11-23 02:20 ICT from `date`, BEFORE any w1080b session): round 4 built; its font
+
+- **The code:** 80bcf00a (the merge, the nearest glyph, `learn-count-1080`; tests) and a3c81cb7
+  (one fix found when the learning first ran, below).
+- **The digit staging** (dev, the Rogue standing in Prontera, not immune, no recording): the
+  watcher (the dev checkout's, crops on) started 02:14:05; the 18 lines `@item 909 N` were typed
+  02:14:17-02:18:47 (N in Amendment 10's order; each one in the server's `atcommandlog`); the
+  watcher stopped 02:18:59 with 18 events (ticks p50 6.68 ms, p95 92.29 ms; 1 slow grab, 0 grab
+  errors); `@delitem 909 548` at 02:19:07.
+- **The fix (a3c81cb7):** the first learning stopped before learning anything, on a gm.jsonl line
+  from an earlier boot (`@item ... 1` with a monotonic time larger than today's: the clock
+  restarts at each boot). `learn-count-1080` now takes the lines inside the watcher's span (its
+  start .. its end), as the staging meant.
+- **The font:** `data/ui_anchors/item_popup_count_r4.npz` (not committed),
+  sha256 `3f1ff7eece0033d9c2d6675ebee97705158f7980c66c35f634764e436458ea15`: the ten digits, a
+  tail of 9 runs; it reads its own 18 boxes right, 18 of 18 (reported, no bar).
+- **Reported on the spent set w1080 (no score):** the 8 top-up popups Amendment 9 missed read
+  3, 30, 6, 18, 6, 3, 30, 18 with the new font (all right). The old font, with the nearest glyph,
+  reads 2, 20, 0, 10, 0, 2, 20, 10.
+- **The round-4 watcher for w1080b,** from the dev checkout at a3c81cb7 or later:
+
+        .venv/bin/python scripts/item_popup.py watch --out <dir> \
+          --count data/ui_anchors/item_popup_count_r4.npz --crops
+
+- **Which sessions:** w1080b takes `record_session` recordings only (Amendment 10). The fists
+  trial (docs/planning/fists-1080.md section 4) runs `screen_ab.py run` blocks, which are not such
+  recordings: the watcher runs beside them, reported only, and they are not w1080b's.
