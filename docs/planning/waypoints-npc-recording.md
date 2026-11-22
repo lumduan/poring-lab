@@ -445,7 +445,8 @@ for PNG at 1 fps). PNG at 1080 and 1 fps measured 124.6 MB/min on ifH13 today.
 ## Amendment 11 (2026-11-22 14:47 ICT from `date`): phase 2's design -- the "Record route" button, its readiness and disk checks, the guide notifications
 
 Amendment 8's decisions 1-5, made concrete. Nothing here changes a decision; every number below is
-a user setting with this value as its default ([[feedback-everything-user-settable]]).
+a user setting with this value as its default (Batt 11-13: everything a user would set is a
+setting).
 
 - **Where the person meets it:** the CONSOLE page (the stream view), a "Record route" button in
   its toolbar with a small panel: readiness, free disk and the minutes that fit, then Start / Stop,
