@@ -6,7 +6,7 @@ verdict_date: null
 verdict_ticket: null
 supersedes: null
 related: [econ-bag-count.md, ../econ/economics.md, ../../scripts/bare_steal.py, ../../scripts/bag_count.py, ../../scripts/slot_items.py, ../../scripts/econ_screen.py]
-next_action: "w1080 FAILS on P only (Amendment 9: 38 re-reads of popups already counted; the count font lacks 3-9). Round 4 is pre-registered from that diagnosis (Amendment 10) before any of its data."
+next_action: "Round 4 pre-registered (Amendment 10): build the merge + the nearest glyph + the digit staging and font (Amendment 11 records its sha), then the watcher (round 4) beside the next dev 1080 sessions (set w1080b, >= 250 pickups, >= 4 sessions), score once."
 title: "Every item gained, from the client's item-obtained popup: which item, how many (pre-registration)"
 date: 2026-11-21
 owner: Batt
@@ -572,3 +572,49 @@ read before (r2 is spent); these counts change nothing above.
 
 **Next:** round 4, pre-registered from this diagnosis in Amendment 10, before any of its data.
 Section 5 (the item list in the screen record) waits for a pass.
+
+### Amendment 10 (2026-11-23 02:10 ICT from `date`, BEFORE any round-4 data): round 4 pre-registered from Amendment 9's diagnosis
+
+**Three changes; everything else in the watcher stays as Amendment 6 built it** (the band, the
+4 Hz grabs, the pictures refs.npz 1bb96813..., the Tracker's own rules, the scorer):
+
+1. **The merge (P).** A step between the Tracker and events.jsonl (`item_popup.Merger`): a
+   closed event JOINS the one before it when both read the same ids and the same amount (an
+   unread amount is a value: None only joins None), it starts <= `MERGE_GAP_S` = 1.25 s after
+   that one's last frame, and <= `MERGE_LIFE_S` = 6.0 s after that one's first frame. The joined
+   event keeps the first piece's t, ids, why, dist and amount; its t_last and frames grow. An
+   event is written once nothing can join it any more (the Tracker shows no box that began within
+   1.25 s of its last frame, and 1.25 s have passed), and at the end.
+   - Why these numbers: the re-reads came 0.27-1.0 s after the piece before, all within 5.5 s
+     of the popup's first frame; a popup is seen at most 5.51 s (Amendment 9). A genuine second
+     pickup of the same item and amount within 6 s is merged (it came once in 269, at 2-4 s).
+2. **The nearest glyph (I2).** `read_count` names each digit run by the glyph with the FEWEST
+   differing pixels among those within `SAME` (the same shape), not the first such glyph.
+3. **A count font with all ten digits (I2), learned at 1080 through the watcher's own band:**
+   - **The digit staging** (dev, the lab Rogue standing still in Prontera, not immune; no
+     recording, no held-out session): `item_popup.py watch --crops` runs, and the GM lines
+     `@item 909 N` are typed for N = 2, 3, 4, 5, 6, 7, 8, 9, 10, 23, 45, 67, 89, 90, 78, 56,
+     34, 12 in that order, >= 8 s apart (every digit 2-3 times; 548 Jellopy), then
+     `@delitem 909 548` (both commands are in GM group 20).
+   - **The learning** (`item_popup_eval.py learn-count-1080`): each GM line is paired with the
+     first watcher event that starts within 6 s after its record in gm.jsonl; a line with no
+     such event, or two lines on one event, stops the learning. Each event's first-frame band
+     (crop-<t>.png) is put back at the 720 place (place_band), `box_of` / `text_box` give the
+     box, and the existing `learn_count` learns the tail and the digits from those boxes and the
+     typed N. A digit missing from the result stops it.
+   - The font is `data/ui_anchors/item_popup_count_r4.npz` (client pixels: never committed). Its
+     sha256, the staging's times and its read-back (the font reading its own 18 boxes: reported,
+     no bar) go into Amendment 11 BEFORE the first w1080b session starts.
+- **The held-out (set `w1080b`):** the dev 1080 sessions on xmas_dun02 recorded by
+  `record_session` that START after Amendment 11's commit, with the round-4 watcher (that commit's
+  code and font, from the dev checkout) over the whole session. In time order until >= 250
+  pickup_results and >= 4 sessions; the session in progress then is the last. A session cut short
+  or ABORTED by its own rules is left out by name before any event is read. Truth as Amendment 6
+  (every ok pickup_result in the window, the GM top-ups included).
+  - Whatever the Runs are for (the fists trial, round 10's 8c), the watcher runs beside every Run
+    of a series.
+- **The score, ONCE**, by `item_popup_eval.py score-events` (unchanged): **the same four bars**,
+  I1 >= 97 %, I2 >= 97 %, P <= 2 %, R >= 85 %. Reported beside: by session, by why, the watcher's
+  ticks, and how many events the merge joined.
+- **If it passes:** section 5 on dev (Amendment 6). Live only on Batt's word. **If it fails:** a
+  round 5 from its diagnosis.
