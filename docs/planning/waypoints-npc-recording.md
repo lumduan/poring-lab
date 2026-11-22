@@ -324,7 +324,8 @@ for PNG at 1 fps). PNG at 1080 and 1 fps measured 124.6 MB/min on ifH13 today.
    is missing, the editor asks for the map from a picker.
    - Where it shows: in the CONSOLE page (web), over the stream view, plus an optional browser
      notification. It is never drawn on the Windows game window: ADR-0019 (Windows stays clean)
-     needs a new ADR for any Windows-side piece. Agent's reading, to be confirmed by Batt.
+     needs a new ADR for any Windows-side piece. ➡️ CONFIRMED by Batt 2026-11-22 12:11 ICT
+     ("agree, this is right").
 2. **5 fps video for a route recording** (agreed). The gap between two frames is filled with the
    shortest walkable path on the map's GAT (`map_routes`).
 3. **The recording starts only when the game UI is up** (Batt: "this is easy"):
