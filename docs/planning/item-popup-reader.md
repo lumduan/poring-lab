@@ -262,3 +262,103 @@ set r2; `score-r2.json` sha256 5e2322a7...; pooled counts:
 - Time-boxed: a rough estimate is the use. Scored on a new held-out, the same four bars; a group
   read counts right when the true id is in it (the scorer's rule since round 1).
 
+
+### Amendment 5 (2026-11-22 17:36 ICT from `date`, BEFORE round 3's held-out is read): round 3 pre-registered -- the colour, its numbers, its held-out
+
+- **The diagnosis** (spent sets only: r2, the calibration fiT1-fiT20, round 1's fiT21+; scratch
+  `popup-r3-diag/`, scores nothing). Every frame from 2 s before to 10 s after each pickup_result
+  was cached (the box, a 28 x 28 icon patch, round 2's count read), and round 2's `Tracker` was
+  replayed on the cache under each candidate rule. The cache is checked: today's rule gives
+  `score-r2.json`'s counts on 77 / 77 sessions, and Amendment 2's development check on the
+  calibration (I1 99.05 %). P is not measured (frames outside the windows are not seen).
+  - **Pictures that look the same** under today's compare (mean |RGB| over a picture's own pixels):
+    of the 2,381 pictures, 94 pairs are closer than the margin (10.0): 24 groups, 68 pictures,
+    155 ids.
+    - Only two of them occur in the three sets, and today every such read is "ambiguous": the
+      Level 3 Heal picture (12001; 26 ids, with Sealed Scroll and Level 1 Teleport): r2 71,
+      calib 2, fiT21+ 6; the Level 3 Cold Bolt picture (688; 6 ids, with Frost Diver and Storm
+      Gust): calib 5, fiT21+ 7.
+  - **The magic scrolls** share one shape (355 px). They differ only on a 5 x 6 seal at rows 3-8,
+    columns 9-13: 20-25 pixels, by 54-84 levels (Heal orange, Cold Bolt bluish).
+  - **The colour, by the pair lead** (`slot_items.SlotRefs.pair`, the hotbar reader's rule since
+    2026-11-13): on the pixels where two pictures differ by more than 30, the read's lead of one
+    over the other, (|o - q| - |o - p|) / |p - q| (1: it is p; -1: it is q).
+
+    | picture | frames (events) | its lead over every rival scroll, min / p50 |
+    |---|---|---|
+    | 12001 Heal, r2 | 330 (70) | 0.855 / 0.97 (1 covered frame, 38.8 away, is "far" first) |
+    | 12001 Heal, calib + fiT21+ | 40 (8) | 0.856 / 0.97 |
+    | 688 Cold Bolt, calib + fiT21+ | 56 (12) | 0.829 / 0.834 |
+
+    - The weakest rival is always the other scroll.
+    - A whole-icon colour distance (chroma) is too thin: its margin is 0.59-0.61 on Cold Bolt and
+      1.33-1.61 on Heal, so a bar of 1.0 leaves every Cold Bolt unread.
+  - **Nothing right today breaks.** The lead is asked only when another picture is within the
+    margin. Every other frame with such a rival (285 in the three sets) is covered (its nearest
+    picture >= 32 away) and stays "far". Not one frame is turned wrong.
+  - **A development check, not a score** (events, the scorer's match):
+
+    | set | today | round 3 | change |
+    |---|---|---|---|
+    | r2 | 94.2 % (1,503 / 1,595) | 98.6 % (1,573) | +70 Heal, 0 new wrong, 0 right lost |
+    | calib | 99.05 % (1,044 / 1,054) | 99.72 % (1,051) | +7 (5 Cold Bolt, 2 Heal) |
+    | fiT21+ | 99.02 % (2,526 / 2,551) | 99.53 % (2,539) | +13 (7 Cold Bolt, 6 Heal) |
+
+    - The counts are the same for any lead bar from 0.3 to 0.7. One group per set of close
+      pictures gives the same counts too, but with a 50-id read for the scrolls.
+    - Unchanged: r2's other 18 unread (with fsH1's 4 "far" items) and the wrong reads already
+      there (r2 4, calib 1, fiT21+ 1).
+- **=> The colour is used** (Amendment 4: "try the colour first"). Groups stay only where the
+  colour has nothing to test:
+  1. A read with no other picture within ICON_MARGIN (10.0) of the best is unchanged.
+  2. Otherwise the close set is the best picture and every picture within ICON_MARGIN of it. Two of
+     them TELL APART on the pixels where their pictures (composited over the box's white) differ
+     by more than DIFF_PX = 30.
+  3. The read names the member whose lead is >= PAIR_LEAD = 0.5 over every other member it differs
+     from on at least DISCRIM_MIN = 6 pixels, at a distance <= ICON_MAX (15.0). Members with fewer
+     than 6 such pixels are the same picture to the eye: their ids join the read (one group).
+     Otherwise the read is "ambiguous".
+  - The three numbers are slot_items' own (the hotbar reader, 2026-11-13), not tuned here. 0.5
+    sits 0.33 under the least lead measured (0.829).
+  - Still one group under this rule: 43 of the 94 close pairs (0-4 telling pixels), e.g. the 10
+    arrow quivers, Silver and Platinum Coin, Plant Nutrient and Spicy Sauce, two FB hats. None
+    occurs in any recording. The economy page prices such a read as one kind (Amendment 4).
+- **The held-out (set `r3`), fixed now:** every NAS session matching
+
+      -rdp-(stage-items-[bc]|stage-gef10-e3[bx]?|watch-w\d+|ow\d+|w\d+|fp\d+[a-z]?|s2-xmas_dun02-p\d+|sk-watch\d+|gb-gw\d+|flee-xmas02-sk|human-xmas02-batt\w+|hunt-xmas02-(p\d+|bs\d+|fiH\d+(-ABORTED)?)|xmas02-(x\d+|xp\d+|xmw\d+|sk\d+a))$
+
+  with a packets file and at least one frame shard.
+  - **41 sessions**, all 720 recordings (region 80,77,1280,720, PNG); none in r2 or fiT*, none read
+    by rounds 1-2 of this reader. The list (names in name order, one per line, each ending in a
+    newline) has sha256 **d2bf7aa0fb4c67d033a0e233bf462460cfe32e602b396ec00bf70c2a264cc2b7**
+    (recomputed by the parent from the NAS listing, 17:3x). The code pins it: `--set r3` refuses
+    when the matching list's sha256 differs, so a later recording cannot change the set.
+  - Its stagings were used before by OTHER work only (the detectors, the minimap, the loot step);
+    the popup reader never read them.
+  - From the packets only (no frame read): 673 pickups of 29 items in 20 sessions. Stagings 246
+    (stage-items-b/c, stage-gef10-e3/e3b), Batt's own play 152, natural play 275. The other 21
+    sessions have no pickup and count for P only.
+  - **It holds no magic scroll.** Only Darkgreen Dyestuffs (979, once) has a picture within the
+    margin. So r3 tests that round 3's reader reads NEW recordings and breaks nothing; the
+    scrolls' evidence is the measurement above (spent data). Their live check is section 4's
+    1080 run-time check on dev, pre-registered by its own amendment. (The scrolls in the 1080 if*
+    recordings cannot be read offline: those frames are a 2/3 shrink.)
+  - Two amounts (a 7 and a 4) use digits the count font never learned: they read as unread
+    amounts (2 of ~673 for I2). No new digit is learned this round.
+- **Scored ONCE**, the same four bars (I1 >= 97 %, I2 >= 97 %, P <= 2 %, R >= 85 %). A read is
+  right when the true id is in it. Run at the commit that builds this rule:
+
+      item_popup_eval.py score --set r3 --refs data/slot_items/refs.npz \
+          --count data/ui_anchors/item_popup_count_r2.npz --out <scratch>/score-r3.json
+
+- **Reported beside (not bars):** I1 apart for the stagings, natural play and Batt's own session;
+  the reads the lead made and the group reads, each with how many were right; after the score,
+  sets r2, calib and fiT21+ again under round 3's reader (reported only).
+- **The build** (the next commit, before the score): `item_popup.Icons.read` gains the close-set
+  step (reusing slot_items' DIFF_PX / DISCRIM_MIN / PAIR_LEAD and its pair formula on the whole
+  24 x 24 square: the popup has no count box over its icon); `ItemRead.why` says "lead" or "same";
+  `item_popup_eval` gains set `r3` (the regex, the packets and shard rule, the sha256 pin);
+  synthetic tests (one shape with a tinted 6-pixel seal: a lead >= 0.5 is named; fewer than 6
+  telling pixels joins the ids; no rival inside the margin = unchanged).
+- **If it passes:** the reader feeds each Run's item list (section 5) at 720; 1080 waits for
+  section 4's run-time check. **If it fails:** a round 4, pre-registered from its diagnosis.
