@@ -6,7 +6,7 @@ verdict_date: null
 verdict_ticket: null
 supersedes: null
 related: [xmas02-1080-detector.md, xmas02-detector.md, rogue-xmas02.md, screen-size-ab.md, fullscreen-client.md, ../../scripts/fi_labels.py, ../../scripts/fi_eval.py, ../../scripts/stage_items.py, ../../scripts/build_frame_cache.py]
-next_action: "Round 9 (Amendment 34): both blind answers, then score_r9.sh ONCE (committed 2cdb4868); then the RESULT amendment. A pass -> 8c at 1080; deploy only on Batt's word."
+next_action: "Round 10 (Amendment 36): its code and score wrapper first, then the new held-out (ifsH9, ifsH10, ifH31+), labelled, packed (seed 77), two new blind labellers, scored ONCE. A pass -> 8c at 1080; deploy only on Batt's word."
 title: "The floor-item model at 1920x1080: a 1080 round of the item detector, the 720 round 5's recipe with only the screen changed (pre-registration)"
 date: 2026-11-20
 owner: Batt
@@ -1228,3 +1228,128 @@ A count under its minimum is NO VERDICT, never a pass.
   before any round-9 label, is copied to the scratch `score_r9.sh` (`cmp` identical). It runs ONCE,
   after both answer files hold 104 entries. Its steps are Amendment 32's: the I5 latency sample,
   both-good, THE BARS (`fi_eval --strata r9 --item-floor 0.4`), then the report-only lines.
+
+### Amendment 35 (2026-11-22 21:49 ICT from `date`): ROUND 9 FAILS on I3-any (scored once, 21:30:28); the misses read
+
+- **The one score** (`score_r9.sh` = `xmas02_items_r9_score.sh`, committed in 2cdb4868 before any
+  round-9 label; ran 21:11-21:30 after both answer files held 104; `score-r9.json` sha256
+  5630fcef...; a live Run played beside). xmas02fi8 + the fi7 rule at floor **0.40** (ring 30 px,
+  pad 6), GPU predictions. The ONNX ones give the same verdict on every line:
+
+  | line | got | bar | |
+  |---|---|---|---|
+  | I1h recall (the stratum decides) | 78 / 81 = 96.3 % | >= 90 % | PASS |
+  | I1 precision | 1,517 / 1,554 = 97.6 % (37 false, 10 ambiguous) | >= 95 % | PASS |
+  | I2 first frame of our kills' drops | 20 / 23 = 87.0 % | >= 80 % | PASS |
+  | I3 any box on an item-free frame | **34 / 5,702 = 0.60 %** | <= 0.5 % | **FAIL** |
+  | I3 inside her 5 x 5 | 4 / 5,702 = 0.07 % | <= 0.2 % | PASS |
+  | I4 a box at a kill with no drop | 0 / 142 = 0.0 % | <= 5 % | PASS |
+  | I5 GPU server p95 | 24.22 ms (fi5 24.72; ratio 0.98) | <= 35 ms, <= 1.1 | PASS |
+  | I5 CPU p95 ratio | 1.022 (193.0 vs 188.9 ms) | <= 1.1 | PASS |
+
+  - The blind step: both labellers answered all 104; q1 agreed on 104, q2 on 103. Both said yes to
+    all 84 item crops and no to all 20 E crops. Good boxes: L1 82, L2 81; both good: **81** (the
+    evaluated crops).
+  - The rule dropped 94 boxes by the floor and 23 by the ring (ONNX: 65 and 23).
+  - I1h by session: ifH21 15 / 16, ifH22 6 / 6, ifH23 11 / 11, ifH24 2 / 2, ifH25 5 / 5, ifH26
+    10 / 12, ifsH7 7 / 7, ifsH8 22 / 22 (natural 49 / 52, staging 29 / 29).
+  - **Round 8's failure is fixed:** I1h 89.8 -> 96.3 %. The floor's cost shows on I3-any: 0.28 %
+    (round 8 at 0.50) -> 0.60 %.
+  - **A correction to Amendment 34:** its "I3: 5,922 item-free kept frames" counted the two stagings
+    too. The bar's set is the six natural pilots' (fi_eval's own rule): **5,702**. Its minimums (200
+    / 500) are met either way. Round 8's Amendment 30 had the same slip (5,630 vs the score's 5,425).
+- **Beside it (report only, the same held-out and evaluated crops; no I5 for these lines):**
+
+  | | I1h | precision | I2 | I3-any | I3 5 x 5 | I4 |
+  |---|---|---|---|---|---|---|
+  | xmas02fi8 + the rule at 0.50 (round 8's) | 77 / 81 | 97.9 % | 19 / 23 | 28 = 0.49 % | 2 = 0.04 % | 0 / 142 |
+  | xmas02fi6 + the rule at 0.50 | 76 / 81 | 97.7 % | 21 / 23 | 24 = 0.42 % | 3 = 0.05 % | 0 / 142 |
+  | xmas02fi5, no rule (deployed) | 73 / 81 | 94.1 % | 20 / 23 | 87 = 1.53 % | 41 = 0.72 % | 5 / 142 |
+
+- **Not deployed.** No 8c.
+- **The 34 false boxes on item-free frames** (read after the score; scratch `r9/diag-i3.json`,
+  `r9/look/`):
+  - **16 are two objects held across 8 frames each:**
+    - ifH26 frames 298-305, one box at (620, 24) of the 1280 x 720 view, conf 0.79-0.85: a
+      snowflake ornament on the wall at the view's TOP edge;
+    - ifH23 frames 328-335, one box at (1271, 444), conf 0.47-0.72: an object cut off by the
+      view's RIGHT edge.
+  - 18 single frames, 4 of them inside her 5 x 5. Of the 6 looked at: part of her own body, a
+    Christmas Cookie's body, floor sparkles, and small round blobs that may be scenery or items
+    the labels do not know.
+  - 6 of the 34 sit between 0.40 and 0.50 (so 0.50 leaves 28 = 0.49 %); 2 sit under 0.45.
+- **The floor alone cannot pass both new held-outs** (both spent now; xmas02fi8 + the rule, ring 30,
+  pad 6, GPU; scratch `r9/edge-sens.json`):
+
+  | floor | round 8 (I1h / I3-any) | round 9 (I1h / I3-any) |
+  |---|---|---|
+  | 0.40 | 55 / 59 PASS / 19 = 0.35 % PASS | 78 / 81 PASS / 34 = 0.60 % **FAIL** |
+  | 0.45 | 54 / 59 PASS / 17 = 0.31 % PASS | 77 / 81 PASS / 32 = 0.56 % **FAIL** |
+  | 0.50 | 53 / 59 **FAIL** / 15 = 0.28 % PASS | 77 / 81 PASS / 28 = 0.49 % PASS |
+
+  Every other line passes in all six cells. The floor trades I1h against I3-any, and each held-out
+  sits on the edge of one of them.
+- **A view-edge rule separates them** (diagnosis on the two spent held-outs; it scores nothing):
+  drop a floor_item box whose CENTRE lies within M px of the 1280 x 720 view's left, right or
+  bottom edge, or within T px of its top. The grid read: M 8 / 12 / 16, T 32 / 40, alone and
+  together, at floors 0.40 / 0.45 / 0.50:
+  - at floor 0.40, M 12 + T 32 drops 3 boxes on round 8 (I3-any 19 -> 16 = 0.29 %) and 17 on round 9
+    (34 -> 17 = 0.30 %). Precision rises (round 9: 97.6 -> 98.7 %);
+  - **it removes no true item on either held-out, at any floor:** I1h, I2 and I4 are unchanged in
+    every cell (round 8: 55 / 59, 19 / 21; round 9: 78 / 81, 20 / 23);
+  - M 16 + T 40 gives exactly the same counts as M 12 + T 32 on both; M 8 alone drops nothing;
+  - every bar passes on both held-outs at floors 0.40 and 0.45 with it (0.50 still fails round 8's
+    I1h).
+  - **Why it is not only a fit:** a box centred within 12 px of a side or bottom edge is an object
+    cut by the edge; the top 32 px of the view (48 real px at 1080) hold the client's hotbar row
+    and, on this map, the wall's ornaments. The bot loots near her (its 5 x 5 and its walk range),
+    never at the view's edge: an item there comes back into the view as she moves.
+
+### Amendment 36 (2026-11-22 21:49 ICT from `date`, BEFORE any round-10 data): ROUND 10 pre-registered -- xmas02fi8 + the fi7 rule at 0.40 unchanged, PLUS the view-edge rule (M 12, T 32), on a NEW held-out
+
+- **Why** (Amendment 35): round 9 misses I3-any by 6 boxes (34 against <= 28 allowed); 16 of the 34
+  are two objects at the view's top and right edges. On both spent held-outs a view-edge rule drops
+  only false boxes, and with it every bar passes on both. The floor alone cannot do that.
+- **The change, and only it:** a third part of the rule, **C. the view edge**: after A (the floor,
+  0.40) and B (the cursor ring, 30 px, pad 6), drop every floor_item box whose centre lies within
+  **12 px** of the 1280 x 720 view's left, right or bottom edge, or within **32 px** of its top.
+  - Chosen on the two spent held-outs by one rule: of the grid read (M 8 / 12 / 16, T 32 / 40), the
+    smallest margins that drop the most false boxes while keeping every true item (I1h, I2) on
+    both. M 12 + T 32 and M 16 + T 40 tie; the smaller is taken.
+  - The model is xmas02fi8 unchanged (last.pt 74092985..., ONNX 371c2f2c...), the floor 0.40 and
+    the ring unchanged: no training, no new cache.
+  - This is how rounds 7 and 9 got their rules: chosen on spent data, then tested on a new
+    held-out.
+- **The new held-out** (every name refused for TRAIN in code before its first recording):
+  - **stagings, immune**, `--views near --n 4`, as rounds 7-9:
+    - **ifsH9: seed 2613315**, spots (59,116), (225,192), (236,101), (94,93);
+    - **ifsH10: seed 2613433**, spots (93,192), (223,49), (38,236), (201,192).
+    - Their cells share NONE with the 25 earlier stagings on this map (2,268 distinct cells:
+      `cells/earlier-r10.json` = round 9's file + ifsH7 + ifsH8), nor with each other. 2613315 is
+      the first clean seed of 2613300-2613599; 2613433 the next clean one sharing no cell with it.
+  - **natural pilots ifH31, ifH32, ...**, NOT immune (OFF read back before each), 25 min each,
+    xmas02v1080, the same chain (`chain.sh`), with round 9's check after each (>= 1,400 frames, no
+    PAUSED line). 6 to start, then Amendment 16's one extension if I2 has fewer than 20 episodes or
+    the pack fewer than 40 item crops. The extension's names are reserved too: ifH31 .. ifH40.
+  - The order: ifsH9, then ifsH10 (immunity ON judged on a frame first); immunity OFF, its reply
+    read on a frame; then the pilots.
+  - Labelled `--eval-test` against xmas02fi8 (the labels' model and params unchanged). One pack,
+    `pack --round 10 --seed 77`; two NEW blind labellers.
+  - The size check counts I3 on the natural pilots only (Amendment 35's correction).
+- **The bars:** section 8a's, unchanged, scored ONCE by a wrapper committed before any round-10
+  label: round 9's wrapper with `--strata r10` and the edge rule (`--edge-margin 12 --edge-top 32`).
+  I5 is measured again in the same way (the model is the same; the rule is a CPU step after the
+  detector). Reported beside them (no bar), on the same held-out: xmas02fi8 + the rule at 0.40
+  WITHOUT the edge (round 9's), xmas02fi6 + the rule at 0.50, and xmas02fi5 with no rule.
+- **Round 9's held-out is spent.** It stays refused for TRAIN until a training round releases it by
+  name.
+- **Beside the natural pilots: the popup reader's 1080 run-time check** (item-popup-reader.md
+  Amendment 6): `item_popup.py watch` runs from the dev checkout over each whole pilot. It only
+  grabs pixels (no input, no file the pilot reads), so the held-out is unchanged by it.
+- **If it passes:** 8c at 1080 (A = xmas02fi5, B = xmas02fi8 + the fi7 rule at 0.40 with the view
+  edge, 3 valid runs a side). The rule and the per-screen model picker are built into the live
+  player first, then it is deployed at 1080 only, on Batt's word.
+- **If it fails:** a round 11, pre-registered from its diagnosis.
+- **Code first** (this commit's sibling): the view-edge rule (`fi7_rule.edge_drop`, `fi_eval
+  --edge-margin / --edge-top`), fi_labels' and fi_eval's round 10 names (ifH31-ifH40, ifsH9,
+  ifsH10), seed 77 and `--strata r10`, with tests.
