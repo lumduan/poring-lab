@@ -474,3 +474,19 @@ inputs: the count font `item_popup_count_r2.npz` (sha256 ade6a384801e...) and sl
   code (`/mnt/poring-lab-datasets`) and broke `test_no_host_code_hard_codes_the_labs_nas` (CLAUDE.md
   rule 6) since ca92dbf7 (11-21). It now reads the storage folder from `lab_env.store_dir()`. In the
   dev checkout that is the same folder (read back), so what `score-events` reads does not change.
+
+### Note to RESULT round 3 (2026-11-22 22:43 ICT from `date`): sets r2 and old again under round 3's reader (reported only; no bar, no decision)
+
+`popup-r3/again_r3.sh` (started 19:25, refusing unless the scorer files equal 0dcfd84f's; they did:
+the worktree's HEAD moved to 28009d6e and 8a08efd8 by doc and flow commits only). Both sets were
+read before (r2 is spent); these counts change nothing above.
+
+| set | I1 the right item | I2 the right amount | P false events | R spaced truths | wall / maxrss |
+|---|---|---|---|---|---|
+| r2 (77 sessions, 1,692 truths) | 1,573 / 1,595 = 98.6 % | 1,560 / 1,595 = 97.8 % | 3 / 1,598 = 0.19 % | 1,546 / 1,629 = 94.9 % | 97 min / 126 MB |
+| old (fiT21+, 2,620 truths) | 2,539 / 2,551 = 99.5 % | 2,536 / 2,551 = 99.4 % | 4 / 2,555 = 0.16 % | 2,515 / 2,581 = 97.4 % | 88 min / 122 MB |
+
+- On r2, round 2 read 1,503 of the same 1,595 right (94.2 %). Round 3 adds the 70 "lead" reads
+  (70 of 70 right) and leaves 18 unread ("far"). I2, P and R are unchanged (round 3 changes only
+  which picture is named).
+- On old: 13 "lead" reads, all right; 11 unread ("far"); 1 wrong of 2,527 "ok".
