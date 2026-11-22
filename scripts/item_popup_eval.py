@@ -13,6 +13,12 @@ per popup shown (item_popup.Tracker). r3 = round 3's held-out (Amendment 5): 41 
 recordings (stagings, Batt's own play, natural play), pinned by the sha256 of their names.
 
 The recordings are read in place, read-only (the NAS); no frame is written.
+
+    item_popup_eval.py score-events --watch DIR.. --sessions NAME.. [--out JSON] [--sizes]
+Amendment 6 (section 4's 1080 run-time check, set w1080): the EVENTS `item_popup.py watch` wrote
+beside dev 1080 Runs, against each session's packets in its window (manifest t0..t1). Refused
+unless every session lies inside a watcher's span, and below the held-out's minimums (>= 250
+pickups, >= 4 sessions); --sizes counts them from the packets only, reading no event.
 """
 
 from __future__ import annotations
@@ -326,6 +332,81 @@ def beside(per: dict[str, dict[str, Any]]) -> dict[str, Any]:
 
 BARS = {"I1_id": 0.97, "I2_amount": 0.97, "P_false": 0.02, "R_spaced": 0.85}
 
+# Amendment 6: set w1080's minimums (its sessions are taken in time order until both are met)
+W1080_MIN_TRUTHS = 250
+W1080_MIN_SESSIONS = 4
+
+
+def session_window(session: Path) -> tuple[int, int]:
+    """A recording's span on the host clock (its manifest's t0_mono_ns .. t1_mono_ns)."""
+    m = json.loads((session / "manifest.json").read_text())
+    return int(m["t0_mono_ns"]), int(m["t1_mono_ns"])
+
+
+def in_window(rows: Sequence[dict[str, Any]], t0: int, t1: int, pad_s: float = 0.0
+              ) -> list[dict[str, Any]]:  # fmt: skip
+    """PURE: the rows whose t lies in [t0, t1 + pad_s], in time order."""
+    return sorted((r for r in rows if t0 <= int(r["t"]) <= t1 + pad_s * 1e9),
+                  key=lambda r: int(r["t"]))  # fmt: skip
+
+
+def covered(window: tuple[int, int], spans: Sequence[tuple[int, int]]) -> bool:
+    """PURE: a session window lies inside one watcher span (its start .. its end)."""
+    return any(a <= window[0] and window[1] <= b for a, b in spans)
+
+
+def watch_dir(d: Path) -> tuple[tuple[int, int] | None, list[dict[str, Any]], dict[str, Any]]:
+    """A watcher's folder: its span (meta's start .. summary's end; None while it runs), its
+    events, its summary."""
+    meta = json.loads((d / "meta.json").read_text())
+    summ = json.loads((d / "summary.json").read_text()) if (d / "summary.json").is_file() else {}
+    span = None
+    if summ.get("t_end_mono_ns"):
+        span = (int(meta["t_start_mono_ns"]), int(summ["t_end_mono_ns"]))
+    evs = []
+    p = d / "events.jsonl"
+    if p.is_file():
+        for ln in p.read_text().splitlines():
+            if ln.strip():
+                evs.append(json.loads(ln))
+    return span, evs, summ
+
+
+def score_events(sessions: Sequence[Path], watches: Sequence[Path], sizes_only: bool = False
+                 ) -> dict[str, Any]:  # fmt: skip
+    """Amendment 6's score of set w1080 (see the module's docstring)."""
+    spans, events, summaries = [], [], {}
+    for d in watches:
+        span, evs, summ = watch_dir(d)
+        if span is not None:
+            spans.append(span)
+        events += evs
+        summaries[d.name] = summ
+    sizes = {}
+    for s_ in sessions:
+        w = session_window(s_)
+        if not covered(w, spans):
+            raise SystemExit(f"{s_.name}: no finished watcher span covers {w}: refused")
+        sizes[s_.name] = len(in_window(truths(s_), *w))
+    total = sum(sizes.values())
+    size_ok = total >= W1080_MIN_TRUTHS and len(sessions) >= W1080_MIN_SESSIONS
+    if sizes_only:
+        return {"sizes": sizes, "truths": total, "sessions": len(sessions), "size_ok": size_ok}
+    if not size_ok:
+        need = f">= {W1080_MIN_TRUTHS} and >= {W1080_MIN_SESSIONS}"
+        raise SystemExit(
+            f"w1080 below its minimums ({total} pickups, {len(sessions)} sessions; {need}): refused"
+        )
+    per = {}
+    for s_ in sessions:
+        t0, t1 = session_window(s_)
+        per[s_.name] = match(in_window(events, t0, t1, WINDOW_S), in_window(truths(s_), t0, t1))
+    keys = ("truths", "events", "matched", "id_ok", "id_unread", "amount_ok", "amount_unread",
+            "spaced", "spaced_found", "repeats", "repeats_found")  # fmt: skip
+    lines = counts_lines({k: sum(int(v[k]) for v in per.values()) for k in keys})
+    return {"set": "w1080", "lines": lines, "verdict": verdict(lines),
+            "beside": {**beside(per), "watchers": summaries}, "sessions": per}  # fmt: skip
+
 
 def verdict(lines: dict[str, Any]) -> dict[str, str]:
     """PURE: section 4's bars (P is a maximum, the rest minimums)."""
@@ -351,7 +432,19 @@ def main(argv: Sequence[str] | None = None) -> int:
     sc.add_argument("--refs")
     sc.add_argument("--count", type=Path, required=True, help="the learned count font (.npz)")
     sc.add_argument("--out", type=Path)
+    se = sub.add_parser("score-events", help="Amendment 6: set w1080, the watcher's events")
+    se.add_argument("--watch", type=Path, nargs="+", required=True, help="the watchers' folders")
+    se.add_argument("--sessions", nargs="+", required=True, help="the NAS sessions, by name")
+    se.add_argument("--sizes", action="store_true", help="count the pickups only (no event read)")
+    se.add_argument("--out", type=Path)
     a = ap.parse_args(argv)
+    if a.cmd == "score-events":
+        got = score_events([NAS / n for n in a.sessions], a.watch, a.sizes)
+        text = json.dumps(got, indent=1, default=str)
+        if a.out:
+            a.out.write_text(text)
+        print(text)
+        return 0
     if a.cmd == "score":
         icons, count = ip.Icons.load(a.refs), ip.load_count(a.count)
         per = {}

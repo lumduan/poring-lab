@@ -4,6 +4,7 @@ text's constant tail, the icon pick, and the scorer's match rule and bars. Synth
 
 from __future__ import annotations
 
+import json
 import sys
 from pathlib import Path
 
@@ -227,3 +228,137 @@ def test_round3_set_is_pinned_and_the_beside_counts() -> None:
     b = ev.beside({names[0]: got, names[1]: got})
     assert b["reads_by_why"]["lead"] == {"matched": 2, "right": 2}
     assert b["I1_by_part"]["stagings"]["I1"] == 0.5
+
+
+# --- Amendment 6 (section 4's 1080 run-time check): the watcher and set w1080 --------------------
+def _draw_popup(img: np.ndarray, x0: int, width: int = 188) -> np.ndarray:
+    """test_bare_steal's popup frame (fiT14's measure), its left edge at x0."""
+    t, b, x1 = ip.bs.POPUP_TOP, ip.bs.POPUP_BOTTOM, x0 + width - 1
+    img[t + 2 : b - 1, x0 : x0 + 2] = 255
+    img[t + 2 : b - 1, x0 + 2] = 190
+    img[t + 2 : b - 1, x0 + 3 : x1 - 1] = 254
+    img[t, x0 + 3 : x1 - 1] = 255
+    img[b, x0 + 3 : x1 - 1] = 255
+    img[t + 8 : t + 22, x0 + 8 : x0 + 22] = 40
+    return img
+
+
+def test_amendment6_the_band_is_the_720_place_moved_by_the_centring() -> None:
+    bx, by, bw, bh = ip.BAND
+    assert (bx, by, bw, bh) == (533, 72, 536, 38)
+    assert ip.band_box((0, 0, 1920, 1080)) == (853, 72, 536, 38)  # + (1920 - 1280) / 2
+    assert ip.band_box((10, 20, 1920, 1080)) == (863, 92, 536, 38)  # the region's own origin
+    assert ip.band_box((0, 0, 1280, 720)) == (533, 72, 536, 38)  # 720: the place itself
+    # the band holds the whole box (POPUP_MAX_W from POPUP_LEFT) and the count's rows
+    assert bx < ip.bs.POPUP_LEFT - ip.bs.POPUP_LEFT_TOL
+    assert bx + bw > ip.bs.POPUP_LEFT + ip.bs.POPUP_MAX_W
+    assert by <= ip.bs.POPUP_TOP - 2 and by + bh > ip.bs.POPUP_BOTTOM + 2
+
+
+def test_amendment6_a_real_1080_band_put_back_reads_as_the_720_popup() -> None:
+    real = _draw_popup(np.full((1080, 1920, 3), 120, np.uint8), ip.bs.POPUP_LEFT + 320, 194)
+    x, y, w, h = ip.band_box((0, 0, 1920, 1080))
+    frame = ip.place_band(real[y : y + h, x : x + w])
+    assert frame.shape == (110, 1280, 3)
+    p = ip.box_of(frame)
+    assert p is not None and (p.left, p.right - p.left + 1) == (ip.bs.POPUP_LEFT, 194)
+    flat = _draw_popup(np.full((720, 1280, 3), 120, np.uint8), ip.bs.POPUP_LEFT, 194)
+    assert ip.bs.popup_box(flat) == ip.bs.popup_box(frame)
+    # the uncentred place on the real frame (the 720 one) shows no popup
+    assert ip.box_of(ip.place_band(real[72:110, 533:1069])) is None
+
+
+class _Marked(ip.Tracker):
+    """The Tracker's rules on bands whose first pixel names the item (0: no popup)."""
+
+    def read(self, frame_rgb, p):  # type: ignore[no-untyped-def]
+        k = int(frame_rgb[ip.BAND[1], ip.BAND[0], 0])
+        return ip.FrameRead(ip.ItemRead((k,), 3.0, None, "ok"), 1, 180)
+
+
+def test_amendment6_watch_writes_one_event_per_popup_and_its_summary(tmp_path, monkeypatch) -> None:  # type: ignore[no-untyped-def]
+    bx, by = ip.BAND[0], ip.BAND[1]
+    monkeypatch.setattr(
+        ip, "box_of", lambda f: None if f[by, bx, 0] == 0 else ip.Popup(541, 720, b"")
+    )
+    seq = [0, 5, 5, None, 5, 0, 7, 7]  # None: a grab that failed
+    it = iter(enumerate(seq))
+    done = [False]
+
+    def grab():  # type: ignore[no-untyped-def]
+        try:
+            t, k = next(it)
+        except StopIteration:
+            done[0] = True
+            return 99, np.zeros((38, 536, 4), np.uint8)
+        if k is None:
+            raise OSError("the pipe broke")
+        band = np.zeros((38, 536, 4), np.uint8)
+        band[0, 0, :3] = k
+        return t, band
+
+    clock = iter(range(0, 10**6))
+    got = ip.watch(tmp_path / "w", grab, _Marked(None, None), lambda: done[0], crops=True,  # type: ignore[arg-type]
+                   sleep=lambda s: None, clock=lambda: float(next(clock)) / 100)  # fmt: skip
+    lines = [json.loads(x) for x in (tmp_path / "w" / "events.jsonl").read_text().splitlines()]
+    assert [(e["t"], e["ids"], e["frames"]) for e in lines] == [(1, [5], 3), (6, [7], 2)]
+    assert got["events"] == 2 and got["grab_errors"] == 1 and got["ticks"]["n"] == 8
+    assert sorted(p.name for p in (tmp_path / "w").glob("crop-*.png")) == [
+        "crop-1.png",
+        "crop-6.png",
+    ]
+    assert json.loads((tmp_path / "w" / "summary.json").read_text())["events"] == 2
+    assert ip.tick_stats([1.0, 2.0, 3.0, 4.0])["p50"] == 2.0 and ip.tick_stats([])["n"] == 0
+
+
+def _session(root: Path, name: str, t0: int, n: int) -> Path:
+    import gzip
+
+    d = root / name
+    d.mkdir()
+    s = 10**9
+    (d / "manifest.json").write_text(json.dumps({"t0_mono_ns": t0, "t1_mono_ns": t0 + 1000 * s}))
+    with gzip.open(d / "packets.jsonl.gz", "wt") as fh:
+        # n pickups 10 s apart inside the window, then one outside it
+        for t in [t0 + (k + 1) * 10 * s for k in range(n)] + [t0 + 2000 * s]:
+            row = {"type": "pickup_result", "ok": True, "t_mono_ns": t, "item_id": 909}
+            fh.write(json.dumps({**row, "amount": 1}) + "\n")
+    return d
+
+
+def test_amendment6_score_events_windows_coverage_and_minimums(tmp_path) -> None:  # type: ignore[no-untyped-def]
+    s = 10**9
+    assert ev.covered((5, 9), [(0, 4), (4, 10)]) and not ev.covered((5, 11), [(0, 10)])
+    rows = [{"t": 3}, {"t": 1}, {"t": 12}]
+    assert [r["t"] for r in ev.in_window(rows, 1, 10)] == [1, 3]
+    assert [r["t"] for r in ev.in_window(rows, 1, 10, pad_s=2e-9)] == [1, 3, 12]
+    sessions = [
+        _session(tmp_path, f"x-rdp-xmas02-w{k}", (k + 1) * 10_000 * s, 63) for k in range(4)
+    ]
+    w = tmp_path / "watch1"
+    w.mkdir()
+    (w / "meta.json").write_text(json.dumps({"t_start_mono_ns": 0}))
+    events = [{"t": t["t"] + s // 2, "ids": [909], "amount": 1, "why": "ok"}
+              for d in sessions for t in ev.truths(d)]  # fmt: skip
+    events[0]["ids"] = [501]  # one wrong item
+    (w / "events.jsonl").write_text("".join(json.dumps(e) + "\n" for e in events))
+    try:  # still running (no summary): no span covers any session
+        ev.score_events(sessions, [w])
+    except SystemExit as exc:
+        assert "no finished watcher span" in str(exc)
+    else:
+        raise AssertionError("an unfinished watcher must be refused")
+    (w / "summary.json").write_text(json.dumps({"t_end_mono_ns": 10**6 * s, "ticks": {"n": 9}}))
+    sizes = ev.score_events(sessions, [w], sizes_only=True)
+    assert sizes["truths"] == 252 and sizes["size_ok"]  # 4 x 63, the outside one left out
+    try:
+        ev.score_events(sessions[:3], [w])
+    except SystemExit as exc:
+        assert "below its minimums" in str(exc)
+    else:
+        raise AssertionError("3 sessions must be refused")
+    got = ev.score_events(sessions, [w])
+    assert got["lines"]["truths"] == 252 and got["lines"]["matched"] == 252
+    assert got["lines"]["id_ok"] == 251 and got["verdict"]["I1_id"] == "PASS"
+    assert got["lines"]["events"] == 252  # the session windows' events only
+    assert got["beside"]["watchers"]["watch1"]["ticks"]["n"] == 9

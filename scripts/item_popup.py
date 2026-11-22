@@ -24,13 +24,24 @@ Read by shape, colour and digits only (Batt 10-26 / 11-11: no word is read):
   square: the popup has no count box over its icon). Pictures with fewer than DISCRIM_MIN such
   pixels are one picture to the eye: their ids join the read (one group, Amendment 4).
 
-PURE (numpy only) but for the pictures' loader; no input, no grabs.
+- AMENDMENT 6 (section 4's 1080 run-time check): at 1920 x 1080 the client draws the popup 1:1 at
+  the 720 place moved right by (w - 1280) / 2 on the SAME rows (measured 2026-11-22 19:43 on dev).
+  `item_popup.py watch` grabs only that band of the REAL frame (BAND, band_box), puts it back at
+  the 720 coordinates (place_band) and feeds the Tracker unchanged; events.jsonl, no input.
+
+PURE (numpy only) but for the pictures' loader and the `watch` command's grabs (ro_agent, imported
+lazily in main); no input.
 """
 
 from __future__ import annotations
 
+import argparse
+import json
+import os
+import signal
 import sys
-from collections.abc import Mapping, Sequence
+import time
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -489,3 +500,143 @@ class Tracker:
         out = [self.open] if self.open is not None else []
         self.open = None
         return out
+
+
+# --- Amendment 6: the run-time reader at 1080 (item_popup.py watch) -------------------------------
+# The band of the 720 coordinates the watcher grabs: the popup's place with a margin (x 533-1068,
+# rows 72-109; the box is at most POPUP_MAX_W wide from POPUP_LEFT, the count's crop is rows
+# POPUP_TOP - 2 .. POPUP_BOTTOM + 1). On the real frame it sits (w - 1280) / 2 to the right.
+BAND = (
+    bs.POPUP_LEFT - 8,
+    bs.POPUP_TOP - 4,
+    bs.POPUP_MAX_W + 16,
+    bs.POPUP_BOTTOM - bs.POPUP_TOP + 9,
+)
+VIRTUAL_W = 1280
+WATCH_PERIOD_S = 0.25  # 4 grabs a second (the popup stays ~4-5 s)
+SLOW_GRAB_S = 0.25  # a grab slower than this is logged
+
+
+def band_box(region: Sequence[int]) -> tuple[int, int, int, int]:
+    """PURE: the band's desktop box for a client REGION (x, y, w, h): the 720 place moved right by
+    (w - 1280) / 2 (none at 1280 or less), the same rows (Amendment 6, measured at 1920 x 1080)."""
+    rx, ry, rw, _rh = (int(v) for v in region)
+    dx = max(0, (rw - VIRTUAL_W) // 2)
+    bx, by, bw, bh = BAND
+    return rx + bx + dx, ry + by, bw, bh
+
+
+def place_band(band_rgb: np.ndarray) -> np.ndarray:
+    """PURE: a grabbed band (RGB) put back at the 720 coordinates: a frame of rows 0 .. the band's
+    last, VIRTUAL_W wide, black outside the band -- what box_of / the Tracker read."""
+    bx, by, bw, bh = BAND
+    out = np.zeros((by + bh, VIRTUAL_W, 3), np.uint8)
+    h, w = min(int(band_rgb.shape[0]), bh), min(int(band_rgb.shape[1]), bw)
+    out[by : by + h, bx : bx + w] = np.asarray(band_rgb)[:h, :w, :3]
+    return out
+
+
+def tick_stats(ms: Sequence[float]) -> dict[str, Any]:
+    """PURE: a list of tick times (ms) as n / p50 / p95 / max (nearest rank)."""
+    if not ms:
+        return {"n": 0, "p50": None, "p95": None, "max": None}
+    v = sorted(ms)
+
+    def rank(q: float) -> float:
+        return round(float(v[min(len(v) - 1, max(0, int(np.ceil(q * len(v))) - 1))]), 2)
+
+    return {"n": len(v), "p50": rank(0.50), "p95": rank(0.95), "max": round(float(v[-1]), 2)}
+
+
+def watch(out_dir: Path, grab: Callable[[], tuple[int, np.ndarray]], tracker: Tracker,
+          stop: Callable[[], bool], period_s: float = WATCH_PERIOD_S, crops: bool = False,
+          sleep: Callable[[float], None] = time.sleep,
+          clock: Callable[[], float] = time.perf_counter) -> dict[str, Any]:  # fmt: skip
+    """The watcher's loop: grab the band (t_mono_ns, BGRA), put it at the 720 place, feed the
+    Tracker, append each CLOSED event to events.jsonl (flushed), until ``stop()``; then the open
+    one. ``crops``: the band of each event's first frame as crop-<t>.png (dev only). A failed grab
+    is counted and the loop goes on. Writes and returns summary.json's dict."""
+    out_dir.mkdir(parents=True, exist_ok=True)
+    ticks: list[float] = []
+    slow = errors = events = 0
+    first: dict[int, np.ndarray] = {}
+    with open(out_dir / "events.jsonl", "a", encoding="utf-8") as fh:
+
+        def write(e: Event) -> None:
+            nonlocal events
+            fh.write(json.dumps(e.doc()) + "\n")
+            fh.flush()
+            events += 1
+            band = first.pop(e.t, None)
+            if crops and band is not None:
+                from PIL import Image
+
+                Image.fromarray(band).save(out_dir / f"crop-{e.t}.png")
+
+        while not stop():
+            t0 = clock()
+            try:
+                t, bgra = grab()
+            except Exception:  # noqa: BLE001 -- a grab that failed: counted, the loop goes on
+                errors += 1
+                sleep(period_s)
+                continue
+            g = clock() - t0
+            rgb = np.ascontiguousarray(np.asarray(bgra)[..., 2::-1])
+            closed = tracker.feed(int(t), place_band(rgb))
+            if crops and tracker.open is not None and tracker.open.t == int(t):
+                first[int(t)] = rgb
+            for e in closed:
+                write(e)
+            dt = clock() - t0
+            ticks.append(dt * 1000.0)
+            slow += g > SLOW_GRAB_S
+            sleep(max(0.0, period_s - dt))
+        for e in tracker.flush():
+            write(e)
+    summary = {"ticks": tick_stats(ticks), "slow_grabs": slow, "grab_errors": errors,
+               "events": events, "t_end_mono_ns": time.monotonic_ns()}  # fmt: skip
+    (out_dir / "summary.json").write_text(json.dumps(summary, indent=1))
+    return summary
+
+
+def main(argv: Sequence[str] | None = None) -> int:
+    ap = argparse.ArgumentParser(description="The item popup reader (item-popup-reader.md).")
+    sub = ap.add_subparsers(dest="cmd", required=True)
+    w = sub.add_parser("watch", help="Amendment 6: read the real frame's popup beside a Run")
+    w.add_argument("--out", type=Path, required=True, help="a folder: events.jsonl, meta, summary")
+    w.add_argument("--refs", help="slot_items' pictures (default: this checkout's data/)")
+    w.add_argument("--count", type=Path, required=True, help="the count font (.npz)")
+    w.add_argument("--seconds", type=float, help="stop after this long (default: SIGTERM/SIGINT)")
+    w.add_argument("--period", type=float, default=WATCH_PERIOD_S)
+    w.add_argument("--crops", action="store_true", help="save each event's band (dev only)")
+    a = ap.parse_args(argv)
+    import ro_agent as r  # the grabs: its own Screen (one pipe), never another process's
+
+    os.environ.pop("PORING_PAUSE_AWAY", None)  # a Run's pause gate is the runner's, not ours
+    tracker = Tracker(Icons.load(a.refs), load_count(a.count))
+    region = r.real_game_region()
+    box = band_box(region)
+    screen = r.Screen()
+    stopping = [False]
+
+    def on_signal(_sig: int, _frm: Any) -> None:
+        stopping[0] = True
+
+    signal.signal(signal.SIGTERM, on_signal)
+    signal.signal(signal.SIGINT, on_signal)
+    end = None if a.seconds is None else time.monotonic() + a.seconds
+    a.out.mkdir(parents=True, exist_ok=True)
+    meta = {"region": list(region), "band_box": list(box), "period_s": a.period,
+            "refs": a.refs, "count": str(a.count), "pid": os.getpid(),
+            "t_start_mono_ns": time.monotonic_ns()}  # fmt: skip
+    (a.out / "meta.json").write_text(json.dumps(meta, indent=1))
+    summary = watch(a.out, lambda: screen.grab(*box), tracker,
+                    lambda: stopping[0] or (end is not None and time.monotonic() >= end),
+                    a.period, a.crops)  # fmt: skip
+    print(json.dumps(summary))
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
