@@ -1021,3 +1021,37 @@ A count under its minimum is NO VERDICT, never a pass.
   parallelism, not a model setting; it costs speed only.
   - Swap grew from 4 to 12 GB: `/swap2.img`, 8 GB, in fstab with `nofail`. RAM cannot grow for
     now.
+
+### Amendment 30 (2026-11-22 14:44 ICT from `date`, BEFORE any blind answer and BEFORE any score): round 8's evaluation inputs; the score wrapper committed
+
+- **The eval chain (`eval_chain_r8.sh`, 13:26-14:39), all steps rc 0:**
+  - the frozen sha256 checked against the freeze log (74092985...);
+  - the eight held-out sessions labelled `--eval-test` against xmas02fi8: ifsH5, ifsH6,
+    ifH11 .. ifH16 (ifH12 is the 10:51 recording; the aborted 07:48 one is not in it);
+  - refs: 6,543 frames;
+  - GPU predictions of xmas02fi8, xmas02fi6 and xmas02fi5, and xmas02fi8's ONNX on the CPU;
+  - the pack, `pack --round 8 --seed 75`: **87 crops**: N 27, F 27, M 13 (67 ITEM crops) and E 20
+    (10 plain, 10 hard).
+- **The held-out's size, counted from the LABELS only** (no prediction read):
+  - I2: 21 drop episodes in the six natural pilots (61 drops of our kills; 8 behind her, 1 of
+    them with a kept label). The minimum is 20;
+  - I3: 5,630 item-free kept frames (minimums 200 / 500);
+  - I4: 131 of our kills without a drop with a judged frame (1 more has none; minimum 40);
+  - I1h: 67 item crops in the pack (minimum 40 evaluated: both labellers' good boxes decide).
+  - Every minimum is met, so Amendment 16's one extension is not used.
+- **For I5:** xmas02fi8 is registered for the detect server (ac1cda92; not in MAP_MODELS), and
+  its ONNX is copied to the storage folder's models (`archive/models`, sha256 371c2f2c... read
+  back), as xmas02fi6's was.
+- **Two NEW blind labellers, L1 and L2:** fresh agents that open only the pack's folder
+  (instructions, reference, crops) and write `t4/answers-eval-r8-L1.json` / `-L2.json`. They
+  started at 14:41 and 14:4x, before this amendment, and no answer has been read.
+- **The score:** `docs/records/scorers/xmas02_items_r8_score.sh`, committed here, runs ONCE after
+  both answer files hold 87 entries:
+  1. a latency sample (every 7th ref): CPU xmas02fi8 vs xmas02fi5; GPU, the detect server's
+     forward, each model. It waits for no dev detect server, no screen_ab run, an idle worker and
+     2.5 GB available; a live Run may play beside, and the log says so;
+  2. both-good (`fi_blind_score`); a failed blind step stops with no score;
+  3. THE BARS: `fi_eval --strata r8 --comparator xmas02fi5` on xmas02fi8's GPU and ONNX sets with
+     the fi7 rule unchanged (floor 0.50, ring 30, pad 6);
+  4. report only (no bar): xmas02fi6 + the fi7 rule, and xmas02fi5 without it, on the same
+     evaluated crops.
