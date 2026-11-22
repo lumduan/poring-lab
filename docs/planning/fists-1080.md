@@ -1,13 +1,13 @@
 ---
 doc_type: plan
-hypothesis: "On xmas_dun02 at 1920x1080, the Rogue built to Batt's 2026-11-22 numbers (ATK 110 + 25, HIT 354, FLEE 366 + 1, DEF 82 + 120) and fighting with her FISTS (no Knife swap, no weapon worn; Snatcher steals on the punches) kills and steals at least as well as the current base (the Knife swap, tonight's round-10 pilots)."
+hypothesis: "On xmas_dun02 at 1920x1080, the Rogue built to Batt's 2026-11-22 numbers (ATK 110 + 25, HIT 354, FLEE 366 + 1, DEF 82 + 120) and fighting with her FISTS (no Knife swap, no weapon worn; Snatcher steals on the punches) kills and steals at least as well as the current base (the Knife swap, tonight's round-10 pilots). ➡️ AMENDMENT 1 (2026-11-23): the lab server is PRE-RENEWAL, so those four values cannot be reached here; the Rogue carries his stat totals and gear choices instead, and her window reads ATK 121 + 0, HIT 179, FLEE 266 + 1, DEF 27 + 23 (section 5)."
 status: ACTIVE
 role: null
 verdict_date: null
 verdict_ticket: null
 supersedes: null
 related: [rogue-xmas02.md, xmas02-items-1080.md, screen-size-ab.md, ../../scripts/screen_ab.py, ../../scripts/stage2_ab.py, ../../scripts/bare_steal.py]
-next_action: "After round 10's pilots (~01:50): the build on the dev Rogue (section 3), its status window read against Batt's numbers; the trial block after round 10's score (section 4)."
+next_action: "Built 2026-11-23 01:50-02:01 (section 5). Batt: keep the build for the trial, or match differently (section 5 options). The trial block after round 10's score (section 4)."
 title: "The fists at 1080: Batt's build, no Knife swap (a trial, written before any of its data)"
 date: 2026-11-22
 owner: Batt
@@ -28,7 +28,12 @@ His status window (a picture he sent): Str 60+9, Agi 99+8, Vit 17+6, Int 1+7, De
 **Atk 110 + 25, Hit 354, Flee 366 + 1, Def 82 + 120**; Matk 52, Mdef 53 + 6, Critical 1, Aspd 176,
 status points 0.
 
-## 1. What his numbers are (the lab server is RENEWAL: `services/rathena/Dockerfile` PRERE=no)
+## 1. What his numbers are (the RENEWAL rules: his server's, not the lab's)
+
+➡️ **WRONG FOR THE LAB (Amendment 1, section 5): the lab server is PRE-RENEWAL.** `.env`
+`RATHENA_PRERE=yes` on both labs overrides the Dockerfile's default `PRERE=no` that this
+section read (`.env.example`: Batt 2026-09-30, the Classic ruleset). The table below stays true
+of HIS window (his numbers fit the renewal rules exactly): he plays on a renewal server.
 
 | line | renewal rule | his | from |
 |---|---|---|---|
@@ -45,6 +50,9 @@ status points 0.
   Clothes).
 
 ## 2. The build (the same totals; his +3 goes into her base stats)
+
+➡️ Built 2026-11-23 01:50-02:01 with two changes (no `@item2`; the dagger's shortcut moved to F7,
+not removed), and on this server the same build reads other numbers: Amendment 1 (section 5).
 
 - **Base stats:** Str 63, Agi 99, Vit 17, Int 4, Dex 73, Luk 2. Totals with the job bonus and
   Thief Clothes: Str 69, Agi 107, Vit 23, Int 8, Dex 80, Luk 2. These give HIT 354, ATK 110 and
@@ -96,3 +104,60 @@ status points 0.
 - **Not an A/B:** the base runs are not interleaved with the fists' runs, and the build differs too
   (Batt asked for both together). If the fists look at least as good, a pre-registered A/B
   (interleaved, one build) is the next step, and adoption is Batt's word.
+
+## 5. Amendment 1 (2026-11-23 02:02 ICT from `date`): the lab is PRE-RENEWAL; the build as made
+
+**The correction.** Section 1 took the lab server for renewal from the Dockerfile's default
+(`ARG PRERE=no`). The lab's `.env` sets `RATHENA_PRERE=yes` (dev and live alike; `.env.example`:
+Batt 2026-09-30, "the Ragnarok Classic ruleset the lab's research targets"), and
+`docs/planning/rogue-xmas02.md` section 1 says pre-renewal too. Her status window proves it (below).
+His window fits the renewal rules exactly, so it comes from the renewal server his own client plays
+on (the live lab has no rAthena of its own).
+
+**What was done (the GM lines from the server's `atcommandlog`, ICT):**
+- 01:50:52-01:51:19 `@str 62`, `@vit 16`, `@int 3`, `@dex -26`, `@luk 1`; 01:51:53 `@refine 16 6`
+  (Thief Clothes +6, worn).
+- `@item2 2506 1 1 0 0 4102 0 0 0` was NOT run: the server echoed it as plain chat, its answer when
+  the group lacks the command. Group 20 has `item`, not `item2`, and each of its permissions is
+  Batt's word, so none was added. Instead: 01:55:24 `@item 2506 1` (Manteau [1]), 01:55:32
+  `@item 4102 1` (Whisper Card), then the client's own Insert Card window put the card in.
+- The client's own clicks at 1920x1080 (each read back on a frame): the equipment window
+  (Alt+Q, home (185, 300)) double-clicks took off the Damascus +8 and both Rosaries; the carded
+  Manteau [1] was put on from the bag (Battle Log: the Manteau "is taken off", the Manteau [1] "is
+  put on"); the plain Manteau (2505) is in the bag.
+- The hotbar: a shortcut dragged onto the world is NOT removed by this client ("Item cannot be
+  discarded from the window"; nothing dropped, the weight unchanged). The Damascus shortcut was
+  moved along the bar from F5 to the empty F7; the Knife stays on F4. On a frame afterwards:
+  `clear_bag_bare_refused` passes (F5 empty), `clear_bag_eqp_refused` passes with the series' tabs
+  (etc, use) and still refuses with eqp (it guards the Knife and the Damascus).
+
+**Her status window, 02:01 (fullscreen frame):**
+
+| line | hers now | his (renewal) | the pre-renewal rule (rAthena) |
+|---|---|---|---|
+| Str .. Luk | 63+6, 99+8, 17+6, 4+4, 73+7, 2 | 60+9, 99+8, 17+6, 1+7, 70+10, 2 | the same totals 69 / 107 / 23 / 8 / 80 / 2 |
+| Atk | **121 + 0** | 110 + 25 | STR + (STR/10)^2 + DEX/5 + LUK/5 = 69 + 36 + 16 + 0; + weapon ATK (none) |
+| Hit | **179** | 354 | BaseLv + DEX = 99 + 80 |
+| Flee | **266 + 1** | 366 + 1 | BaseLv + AGI + Improve Dodge 40 + Whisper 20 = 99 + 107 + 40 + 20 |
+| Def | **27 + 23** | 82 + 120 | equipment DEF (with the +6) + VIT |
+| Aspd | 180 | 176 | bare hands |
+
+Also: Matk 9 + 9, Mdef 0 + 8, Critical 1, Status Point 688, HP 5,828, SP 545, weight 987 / 4,290.
+Her old build's window (2026-11-05 15:05, recorded in `scripts/dungeon_hunt.py` CHARS_CONF
+"rogue"): HIT 205, FLEE 246 + 1, Aspd 176.
+
+**His four values cannot be reached on this server:** HIT 354 would need DEX ~255 (BaseLv 99 +
+DEX; the most DEX is 99 + 7); FLEE 366 is ~100 over this build with its FLEE card; 82 + 120 is not
+a pre-renewal DEF. The closest faithful build is his: the same stat totals and gear choices, which
+this server turns into its own numbers.
+
+**Options for Batt (the trial runs with option 1 unless he says otherwise; it is a trial):**
+1. Keep it: his stats and gear, this server's numbers (the table).
+2. Match the fight, not the numbers (e.g. his hit and dodge chances against his monsters): it needs
+   his server's monster data; not proposed now.
+3. A renewal lab: `RATHENA_PRERE=no` is a rebuild that changes the whole lab's rules (monsters,
+   drops, every baseline measured since 2026-09-30). His 2026-09-30 decision; not proposed.
+
+**Restore (section 2's record, updated):** `@str -62`, `@vit -16`, `@int -3`, `@dex 26`,
+`@luk -1`, `@refine 16 -6`; the Damascus, both Rosaries and the plain Manteau back on through the
+windows; the Damascus shortcut back to F5. The carded Manteau [1] stays in her bag.
