@@ -280,3 +280,62 @@ export function recordReasonText(reason: string, detail?: string): string {
   const base = REASONS[reason] ?? `Refused (${reason}).`;
   return reason === "input_writer_busy" && detail ? `${base} (${detail})` : base;
 }
+
+// --- the console component's pure parts (RouteRecPanel.tsx) ---------------------------------------
+
+/** This browser's choice for the guide's browser notifications (Amendment 11: asked on the first
+ * Start press; off is a setting). Remembered with the console's toggles (localStorage, every access
+ * wrapped); "on" is the default: the browser itself still asks the person first. */
+export const ROUTEREC_NOTIFY_KEY = "poring-lab.console.routerec-notify.v1";
+export const NOTIFY_CHOICES = ["on", "off"] as const;
+export type NotifyChoice = (typeof NOTIFY_CHOICES)[number];
+
+/** What the browser can do: the Notification API exists, the page is a secure context (browsers
+ * give notifications only to https or localhost pages), and the permission so far. */
+export type NotifyApi = { present: boolean; secure: boolean; permission: "default" | "granted" | "denied" };
+
+export type NotifyPlan =
+  | "off" // the person turned them off here
+  | "unavailable" // no API, or a plain-http page: the toasts in the page only
+  | "ask" // ask the browser's permission (on a Start press: a person's gesture)
+  | "show" // permitted: show action and warn notifications
+  | "denied"; // the person (or the browser) refused: the toasts only
+
+export function notifyPlan(api: NotifyApi, choice: NotifyChoice): NotifyPlan {
+  if (choice === "off") return "off";
+  if (!api.present || !api.secure) return "unavailable";
+  if (api.permission === "granted") return "show";
+  if (api.permission === "denied") return "denied";
+  return "ask";
+}
+
+/** The plan in words, beside the panel's checkbox. */
+export function notifyPlanText(plan: NotifyPlan): string {
+  switch (plan) {
+    case "off":
+      return "Browser notifications are off in this browser: the guide shows over the game picture only.";
+    case "unavailable":
+      return "This browser gives notifications only to https pages: the guide shows over the game picture.";
+    case "ask":
+      return "The browser asks once, when you press Start.";
+    case "show":
+      return "The guide's requests (type /where, low disk) also show as browser notifications.";
+    case "denied":
+      return "The browser refused notifications for this page: the guide shows over the game picture only.";
+  }
+}
+
+/** How long a guide toast stays over the stream (ms): a request to type something stays longest. */
+export const TOAST_MS: Record<string, number> = { action: 15_000, warn: 12_000, info: 6_000 };
+
+export function toastMs(n: RouteRecNotification): number {
+  return TOAST_MS[n.level] ?? TOAST_MS.info;
+}
+
+/** The toolbar button's label: the recording sign while one goes (elapsed time), else its name. */
+export function toolbarLabel(m: PanelModel): { text: string; recording: boolean } {
+  if (m.rec?.stopping) return { text: "Stopping…", recording: true };
+  if (m.rec) return { text: `● REC ${m.rec.elapsed}`, recording: true };
+  if (m.recording) return { text: "● REC starting…", recording: true };
+  return { text: "Record route", recording: false };
+}

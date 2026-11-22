@@ -10,6 +10,7 @@ import ModeSwitch from "@/components/ModeSwitch";
 import OverlayCanvas from "@/components/OverlayCanvas";
 import PacketTimeline from "@/components/PacketTimeline";
 import PastePanel from "@/components/PastePanel";
+import RouteRecPanel, { RouteRecToasts, useRouteRec } from "@/components/RouteRecPanel";
 import RouteCanvas from "@/components/RouteCanvas";
 import SceneCanvas from "@/components/SceneCanvas";
 import StatsPanel, { EMPTY_STATS, type Links, type Stats } from "@/components/StatsPanel";
@@ -118,6 +119,10 @@ export default function Console({ backendUrl }: Props) {
   const pasteSourceRef = useRef<PasteSource>("panel");
   const [pasteSource, setPasteSource] = useState<PasteSource>("panel");
   const [toast, setToast] = useState<Toast | null>(null);
+  // The Record route button (waypoints Amendment 11): its status poll and guide toasts live here,
+  // so the recording sign and the toasts show while its panel is closed.
+  const routeRec = useRouteRec(backendUrl);
+  const [routeRecOpen, setRouteRecOpen] = useState(false);
   const toastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const showToast = useCallback((next: Toast) => {
@@ -522,7 +527,9 @@ export default function Console({ backendUrl }: Props) {
         onReleaseAll={releaseAll}
         onModeChange={changeView}
         onSecretChange={setSecret}
+        routeRec={{ ...routeRec.label, open: routeRecOpen, onToggle: () => setRouteRecOpen((o) => !o) }}
       />
+      {routeRecOpen && <RouteRecPanel rr={routeRec} />}
       <StreamCanvas
         videoRef={videoRef}
         frameIdRef={frameIdRef}
@@ -535,12 +542,17 @@ export default function Console({ backendUrl }: Props) {
         moveIntervalMs={status?.move_interval_ms ?? null}
         watchOnly={watchOnly}
         overlay={
-          toast && (
-            <div
-              role="status"
-              className={`rounded-md border px-3 py-1.5 text-sm shadow-lg ${TOAST_TONE[toast.tone]}`}
-            >
-              {toast.text}
+          (toast || routeRec.toasts.length > 0) && (
+            <div className="flex flex-col items-end gap-1.5">
+              {toast && (
+                <div
+                  role="status"
+                  className={`rounded-md border px-3 py-1.5 text-sm shadow-lg ${TOAST_TONE[toast.tone]}`}
+                >
+                  {toast.text}
+                </div>
+              )}
+              <RouteRecToasts rr={routeRec} />
             </div>
           )
         }

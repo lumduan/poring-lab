@@ -5,10 +5,15 @@ import {
   diskLine,
   elapsedText,
   newNotifications,
+  notifyPlan,
+  notifyPlanText,
   panelModel,
   recordReasonText,
   sizeText,
+  toastMs,
+  toolbarLabel,
   wantsBrowserNotification,
+  type NotifyApi,
   type RouteRecCheck,
   type RouteRecNotification,
   type RouteRecRecording,
@@ -193,4 +198,34 @@ test("refusals read as words", () => {
   assert.match(recordReasonText("helper_not_running"), /poring-lab-routerec\.service/);
   assert.match(recordReasonText("lab_host_peer"), /another computer on the LAN/);
   assert.match(recordReasonText("something_new"), /Refused \(something_new\)/);
+});
+
+test("browser notifications: off, unavailable on plain http, asked once, then shown or refused", () => {
+  const api = (over: Partial<NotifyApi> = {}): NotifyApi => ({ present: true, secure: true, permission: "default", ...over });
+  assert.equal(notifyPlan(api(), "off"), "off");
+  assert.equal(notifyPlan(api({ permission: "granted" }), "off"), "off"); // the person's choice wins
+  assert.equal(notifyPlan(api({ secure: false }), "on"), "unavailable"); // http://<lan ip>:3000
+  assert.equal(notifyPlan(api({ present: false }), "on"), "unavailable");
+  assert.equal(notifyPlan(api(), "on"), "ask");
+  assert.equal(notifyPlan(api({ permission: "granted" }), "on"), "show");
+  assert.equal(notifyPlan(api({ permission: "denied" }), "on"), "denied");
+  for (const p of ["off", "unavailable", "ask", "show", "denied"] as const) assert.ok(notifyPlanText(p).length > 10);
+});
+
+test("a request to type something stays longest; an unknown level stays as info", () => {
+  assert.equal(toastMs(note("a", "action")), 15_000);
+  assert.equal(toastMs(note("b", "warn", "low_disk")), 12_000);
+  assert.equal(toastMs(note("c", "info", "started")), 6_000);
+  assert.equal(toastMs(note("d", "loud")), 6_000);
+});
+
+test("the toolbar button shows the recording sign while one goes", () => {
+  assert.deepEqual(toolbarLabel(panelModel(status())), { text: "Record route", recording: false });
+  assert.deepEqual(toolbarLabel(panelModel(status({ state: "recording", recording: recording() }))), {
+    text: "● REC 12:34",
+    recording: true,
+  });
+  assert.equal(toolbarLabel(panelModel(status({ state: "stopping", recording: recording({ state: "stopping" }) }))).text, "Stopping…");
+  assert.equal(toolbarLabel(panelModel(status({ state: "starting" }))).text, "● REC starting…");
+  assert.equal(toolbarLabel(panelModel(status({ helper_alive: false, state: "recording" }))).text, "Record route"); // a dead helper shows no sign
 });

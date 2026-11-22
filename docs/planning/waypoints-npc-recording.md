@@ -551,3 +551,33 @@ setting).
   3. live checks on the dev lab: readiness red at the login screen and green in game; a 2-min
      route on xmas_dun02 with one warp, the map change shown once;
   4. the unit installed on dev. The live lab only on Batt's word.
+
+## Amendment 13 (2026-11-22 21:16 ICT from `date`): phase 2's console component built; not live yet
+
+- **Built** (Amendment 12's next step 1):
+  - `services/frontend/src/components/RouteRecPanel.tsx`: `useRouteRec` polls `GET /routes/record`
+    every 2 s while the tab is visible. It sends Check / Start / Stop with the CSRF token, as the
+    Settings sections do. The panel shows the readiness list, the disk line, the recording line
+    and the last recording's end. `RouteRecToasts` shows the guide notifications over the stream
+    view.
+  - The toolbar's **Record route** button opens the panel. While a recording goes it shows the
+    recording sign (`● REC m:ss`), so the sign and the toasts show with the panel closed. It is
+    not input: it works in Watch only too.
+  - The browser's own notification (decision 1) is asked on the first Start press only.
+    "Browser notifications" is a checkbox remembered in this browser (localStorage; on by
+    default, off allowed). Only action and warn notices use it.
+    - Browsers give notifications only to https or localhost pages. On the console's plain
+      `http://<lan ip>:3000` the panel says so, and the toasts are the guide.
+  - Pure parts in `routerec.ts`, with tests: `notifyPlan` (off / unavailable / ask / show /
+    denied), how long a toast stays (action 15 s, warn 12 s, info 6 s) and the toolbar label.
+    16 routerec tests; 226 frontend unit tests pass.
+- **Checked:** tsc 5.9.3 (strict, the project's compiler options) on Console.tsx, Toolbar.tsx,
+  RouteRecPanel.tsx and everything they import: no error. A planted type error was reported, so
+  the check is real. It ran with TypeScript and the React types installed in /dev/shm only,
+  because the dev console (frontend-dev) is closed.
+  - **Not run yet:** the project's own `pnpm typecheck` and `pnpm lint` inside frontend-dev, and
+    the page in a browser. They wait for frontend-dev to run again (Batt closed it on 11-22 to free
+    RAM).
+- **Next:** Amendment 12's steps 2-4 (the rdp 5 fps rate, the dev live checks, the unit on dev).
+  The backend's `/routes/record` goes live on dev with the next `restart:backend`. The live lab
+  only on Batt's word.

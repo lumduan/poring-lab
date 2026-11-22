@@ -21,6 +21,9 @@ type Props = {
   onReleaseAll: () => void;
   onModeChange: (mode: ViewMode) => void;
   onSecretChange: (on: boolean) => void;
+  /** The Record route button (waypoints Amendment 11): opens its panel; shows the recording sign
+   * (elapsed time) while one goes. Not input: it works in Watch only too. */
+  routeRec?: { text: string; recording: boolean; open: boolean; onToggle: () => void };
 };
 
 const button =
@@ -34,6 +37,8 @@ const watchOn =
   "rounded-md border border-amber-400 bg-amber-500 px-2.5 py-1 text-sm font-semibold text-neutral-950 hover:bg-amber-400";
 const hudOn =
   "rounded-md border border-fuchsia-400 bg-fuchsia-900/60 px-2.5 py-1 text-sm font-semibold text-fuchsia-100 hover:bg-fuchsia-900";
+const recOn =
+  "rounded-md border border-red-500 bg-red-900/60 px-2.5 py-1 font-mono text-sm font-semibold text-red-100 hover:bg-red-900";
 
 export default function Toolbar({
   disabled,
@@ -47,6 +52,7 @@ export default function Toolbar({
   onReleaseAll,
   onModeChange,
   onSecretChange,
+  routeRec,
 }: Props) {
   return (
     <div className="flex flex-wrap items-center gap-2" role="toolbar" aria-label="Remote keys">
@@ -103,6 +109,17 @@ export default function Toolbar({
       >
         {hudToggle(hud).label}
       </button>
+      {routeRec && (
+        <button
+          type="button"
+          className={routeRec.recording ? recOn : button}
+          aria-expanded={routeRec.open}
+          title="Record your own play once: the route's waypoints come from the video (the panel checks the game screen and the disk first)"
+          onClick={routeRec.onToggle}
+        >
+          {routeRec.text}
+        </button>
+      )}
       <span className="mx-1 h-5 w-px bg-neutral-700" aria-hidden />
       <button
         type="button"
