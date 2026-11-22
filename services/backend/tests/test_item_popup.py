@@ -455,8 +455,9 @@ def test_round4_the_staging_lines_and_their_events() -> None:
             {"t_mono_ns": 20 * S_NS, "cmd": "@item 909 23"},
             {"t_mono_ns": 10 * S_NS, "cmd": "@item 909 3"},
             {"t_mono_ns": 30 * S_NS, "cmd": "@delitem 909 26"},
-            {"t_mono_ns": 40 * S_NS, "cmd": "@monsterignore"}]  # fmt: skip
-    lines = ev.staging_lines(rows, t_from=S_NS)
+            {"t_mono_ns": 40 * S_NS, "cmd": "@monsterignore"},
+            {"t_mono_ns": 900 * S_NS, "cmd": "@item 4102 1"}]  # an earlier boot's line  # fmt: skip
+    lines = ev.staging_lines(rows, t_from=S_NS, t_to=60 * S_NS)
     assert lines == [(10 * S_NS, 3), (20 * S_NS, 23)]
     evs = [{"t": 13 * S_NS}, {"t": 22 * S_NS}, {"t": 50 * S_NS}]
     assert [(e["t"], n) for e, n in ev.pair_lines(lines, evs)] == [(13 * S_NS, 3), (22 * S_NS, 23)]

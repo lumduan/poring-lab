@@ -22,10 +22,12 @@ pickups, >= 4 sessions); --sizes counts them from the packets only, reading no e
 
     item_popup_eval.py learn-count-1080 --watch DIR --gm-log JSONL --out NPZ
 Round 4 (Amendment 10): the count font with all ten digits, learned at 1080 through the watcher's
-own band from the GM digit staging (`@item <id> N` lines in gm.jsonl after the watcher started):
-each line is paired with the first event starting <= LEARN_PAIR_S after its record; a line with no
-event, or two lines on one event, stops it; each event's first-frame band (crop-<t>.png) is put
-back at the 720 place and its box learned with the typed N. A digit missing stops it too.
+own band from the GM digit staging: the `@item <id> N` lines in gm.jsonl inside the staging
+watcher's span (its start .. its end: gm.jsonl keeps lines from earlier boots, whose monotonic
+times can be larger). Each line is paired with the first event starting <= LEARN_PAIR_S after its
+record; a line with no event, or two lines on one event, stops it. Each event's first-frame band
+(crop-<t>.png) is put back at the 720 place and its box learned with the typed N. A digit missing
+stops it too.
 """
 
 from __future__ import annotations
@@ -420,13 +422,15 @@ LEARN_PAIR_S = 6.0  # round 4: an @item line's popup starts this soon after its 
 GM_ITEM = re.compile(r"^@item (\d+) (\d+)$")
 
 
-def staging_lines(gm_rows: Sequence[dict[str, Any]], t_from: int) -> list[tuple[int, int]]:
+def staging_lines(gm_rows: Sequence[dict[str, Any]], t_from: int,
+                  t_to: int) -> list[tuple[int, int]]:  # fmt: skip
     """PURE (round 4): the staging's (t_mono_ns, N) from gm.jsonl rows: every `@item <id> N` line
-    recorded at or after ``t_from`` (the watcher's start), in time order."""
+    recorded inside the watcher's span [t_from, t_to], in time order. Both ends: gm.jsonl keeps
+    lines from earlier boots, whose monotonic times can be LARGER than today's."""
     out = []
     for r in gm_rows:
         m = GM_ITEM.match(str(r.get("cmd", "")).strip())
-        if m and int(r["t_mono_ns"]) >= t_from:
+        if m and t_from <= int(r["t_mono_ns"]) <= t_to:
             out.append((int(r["t_mono_ns"]), int(m.group(2))))
     return sorted(out)
 
@@ -459,10 +463,11 @@ def learn_1080(watch: Path, gm_log: Path, out: Path) -> dict[str, Any]:
     """Round 4 (Amendment 10): the count font from the GM digit staging (module docstring)."""
     from PIL import Image
 
-    meta = json.loads((watch / "meta.json").read_text())
     rows = [json.loads(x) for x in gm_log.read_text().splitlines() if x.strip()]
-    lines = staging_lines(rows, int(meta["t_start_mono_ns"]))
-    _span, evs, _summ = watch_dir(watch)
+    span, evs, _summ = watch_dir(watch)
+    if span is None:
+        raise SystemExit("learn-count-1080: the staging watcher has not finished: stopped")
+    lines = staging_lines(rows, *span)
     pairs = pair_lines(lines, evs)
     boxes, amounts, lost = [], [], []
     for e, n in pairs:
