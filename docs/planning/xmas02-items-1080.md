@@ -951,3 +951,22 @@ A count under its minimum is NO VERDICT, never a pass.
 - The recordings may run while xmas02fi8 trains on the GPU. They are labelled (--eval-test) only
   after its freeze (O.9).
 
+### Amendment 28 (2026-11-22 07:50 ICT from `date`): the held-out pilots wait for the training; an aborted ifH12
+
+- **Done so far:** ifsH5 (06:54-07:04) and ifsH6 (07:05-07:15), immune and shipped; immunity OFF
+  judged at 07:15 ("Returned to normal state." on a frame); ifH11 (07:17-07:47) played and shipped.
+- **The training started at 07:44:37** in the gap after ifH11: 62 sessions, 7,282 frames
+  (2,095 with items, 5,187 negatives), 242 hard negatives all item-free by the TRAIN labels (202
+  beyond the draw), written counts EQUAL to the dry run; 3 epochs from xmas02fi6's last.pt.
+- **ifH12 was stopped at 07:49:25 by its own setup:** "the detect server refused". The dev GPU
+  worker runs ONE job, and the training holds it. Amendment 27's "the recordings may run while
+  xmas02fi8 trains" does not hold on this host: round 6's supervisor waited for the same reason.
+  - That 36-frame recording was shipped; it is renamed on the NAS
+    `20261122T074851-rdp-xmas02-ifH12-ABORTED` and is not part of the held-out.
+- **The rest:** ifH12 .. ifH16 start once the training has ended (r8_pilots2.sh), with the same
+  pilot_rec.sh. The held-out is then ifsH5, ifsH6, ifH11 .. ifH16; the one-extension rule
+  (Amendment 16) still applies if I2 has fewer than 20 episodes.
+- **A slip (mine), no data lost:** the first pilot launcher matched an older "STOP" line in the
+  training log and started the pilots at 07:16, before the training. The second launcher waits for
+  the training's own end lines only.
+
