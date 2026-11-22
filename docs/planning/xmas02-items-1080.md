@@ -6,7 +6,7 @@ verdict_date: null
 verdict_ticket: null
 supersedes: null
 related: [xmas02-1080-detector.md, xmas02-detector.md, rogue-xmas02.md, screen-size-ab.md, fullscreen-client.md, ../../scripts/fi_labels.py, ../../scripts/fi_eval.py, ../../scripts/stage_items.py, ../../scripts/build_frame_cache.py]
-next_action: "Build tools T-I1..T-I5 offline (tests first), then record the 1080 FIT session."
+next_action: "Round 9 (Amendment 34): both blind answers, then score_r9.sh ONCE (committed 2cdb4868); then the RESULT amendment. A pass -> 8c at 1080; deploy only on Batt's word."
 title: "The floor-item model at 1920x1080: a 1080 round of the item detector, the 720 round 5's recipe with only the screen changed (pre-registration)"
 date: 2026-11-20
 owner: Batt
@@ -1186,3 +1186,45 @@ A count under its minimum is NO VERDICT, never a pass.
   otherwise it stops for a person. Nothing else changes: the held-out is ifsH7, ifsH8 and
   ifH21 .. ifH26 (plus Amendment 32's one extension if a minimum is short), labelled, packed and
   scored as Amendment 32 says.
+
+### Amendment 34 (2026-11-22 21:11 ICT from `date`, BEFORE any blind answer and BEFORE any score): round 9's evaluation inputs; the pack step run again after a command-line fix
+
+- **The eval chain (`eval_chain_r9.sh`).** It waited for the pilots' own last line (19:42:06), then
+  ran 19:42-20:54:
+  - the frozen sha256 checked against the freeze log (74092985..., the archive matches);
+  - the eight held-out sessions labelled `--eval-test` against xmas02fi8, all rc 0: ifsH7, ifsH8,
+    ifH21 .. ifH26. ifH22 is the 17:08 recording; the crashed 16:23 attempt (`-ABORTED`,
+    Amendment 33) is not in it;
+  - refs: 6,753 frames;
+  - GPU predictions of xmas02fi8, xmas02fi6 and xmas02fi5, and xmas02fi8's ONNX on the CPU, all
+    rc 0.
+- **The pack step stopped at the command line** (20:54:46, rc 2): `--round: invalid choice: '9'`.
+  - Round 9's code (5a79a123) taught every pack function round 9 but left the parser's `--round`
+    choices at 1-8. Its tests called the functions directly and never parsed the command line.
+  - Fixed in **b3e13bba**: the choices are `PACK_ROUNDS` (1-9). A new test runs Amendment 32's own
+    command line through `main()`. Nothing else changed: fi_eval is byte-identical to round 9's
+    code commit, and fi_labels differs from it only in those parser lines.
+  - The pack step alone was run again at b3e13bba (built 21:03:20, rc 0), with the chain's command
+    unchanged: `pack --spec 1080 --round 9 --eval-test --seed 76` over the same eight label files.
+    No pack existed before it, and no answer or score exists.
+- **The pack (seed 76): 104 crops.** By stratum: N 36, F 45, M 3 (**84 ITEM crops**) and E 20 (10
+  plain, 10 hard). The natural slot drew 53 of its 70 and the staging slot 31 of its 50 (the
+  summary's `short`: 17 and 19).
+- **The held-out's size, counted from the LABELS only** (no prediction read; `size_r9.py` with
+  fi_eval's own selection rules):
+  - I2: **23** drop episodes in the six natural pilots (49 drops of our kills; 11 behind her, 3 of
+    them with a kept label). The minimum is 20;
+  - I3: **5,922** item-free kept frames (minimums 200 / 500);
+  - I4: **142** of our kills without a drop with a judged frame (2 more have none; minimum 40);
+  - I1h: **84** item crops in the pack (minimum 40 evaluated: both labellers' good boxes decide).
+  - Every minimum is met, so Amendment 32's one extension (ifH27+) is not used. The held-out is
+    ifsH7, ifsH8 and ifH21 .. ifH26.
+- **For I5:** the model is round 8's, unchanged. xmas02fi8 is still registered for the detect
+  server, and its ONNX is the same file in the detector's model folder.
+- **Two NEW blind labellers, L1 and L2:** fresh agents that open only the pack's folder
+  (instructions, reference, crops) and write `t5/answers-eval-r9-L1.json` / `-L2.json`. They
+  started at about 21:09 and 21:10, before this amendment, and no answer has been read.
+- **The score:** `docs/records/scorers/xmas02_items_r9_score.sh`, committed in 2cdb4868 (15:27)
+  before any round-9 label, is copied to the scratch `score_r9.sh` (`cmp` identical). It runs ONCE,
+  after both answer files hold 104 entries. Its steps are Amendment 32's: the I5 latency sample,
+  both-good, THE BARS (`fi_eval --strata r9 --item-floor 0.4`), then the report-only lines.
