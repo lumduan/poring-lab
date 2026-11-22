@@ -52,7 +52,7 @@ def test_the_floor_drops_faint_item_boxes_only_and_other_classes_pass() -> None:
 
 
 def test_both_off_by_default_and_player_settings() -> None:
-    for name in ("item_floor_1080", "item_ring_1080"):
+    for name in ("item_floor_1080", "item_ring_1080", "item_edge_1080", "item_edge_top_1080"):
         f = st.BY_NAME[name]
         assert f.optional and f.player and f.group == "loot" and st.DEFAULTS[name] == 0.0
 
@@ -94,8 +94,60 @@ def test_a_failing_filter_gives_the_detectors_own_boxes(monkeypatch: Any) -> Non
         assert ud.GpuDetector.detect(types.SimpleNamespace(), None) == out
 
 
-@pytest.mark.parametrize("name", ["item_floor_1080", "item_ring_1080"])
+@pytest.mark.parametrize(
+    "name", ["item_floor_1080", "item_ring_1080", "item_edge_1080", "item_edge_top_1080"]
+)
 def test_never_a_runner_flag(name: str) -> None:
     """The live player applies it (flow_play.item_rule); no runner argv ever carries it."""
     f = st.BY_NAME[name]
     assert f.player and not f.flag
+
+
+# --- C, the view edge (xmas02-items-1080.md Amendment 36, round 10) ------------------------------
+
+
+def at(cx: float, cy: float, cls: str = "floor_item") -> Any:
+    return types.SimpleNamespace(x0=cx - 8, y0=cy - 8, x1=cx + 8, y1=cy + 8, cls=cls, score=0.8)
+
+
+def test_the_edge_drops_item_boxes_by_their_centre_on_the_frames_own_size() -> None:
+    img = np.full((720, 1280, 3), 90, dtype=np.uint8)
+    mid, left, right = at(640, 360), at(11, 360), at(1269, 360)
+    bottom, top = at(640, 709), at(620, 24)
+    inside = [at(12, 360), at(1268, 360), at(640, 708), at(640, 32)]  # on the bands' inner lines
+    mob = at(5, 5, cls="monster")
+    every = [mid, left, right, bottom, top, *inside, mob]
+    assert fp.item_boxes_kept(every, img, 0.0, 0, edge=12, top=32) == [mid, *inside, mob]
+    assert fp.item_boxes_kept([top], img, 0.0, 0, edge=12, top=0) == [top]  # each band its own
+    assert fp.item_boxes_kept([left], img, 0.0, 0, edge=0, top=32) == [left]
+    assert fp.item_boxes_kept([right], None, 0.0, 0, edge=12, top=32) == []  # no frame: 1280 x 720
+
+
+def test_the_players_edge_is_the_evaluations_edge_drop() -> None:
+    """One test for both (Amendment 36): what the player drops is what fi_eval --edge-* dropped."""
+    import fi7_rule as f7
+
+    img = np.zeros((720, 1280, 3), dtype=np.uint8)
+    for cx in (0, 5, 11, 12, 13, 640, 1267, 1268, 1269, 1279):
+        for cy in (0, 20, 31, 32, 33, 360, 707, 708, 709, 719):
+            b = at(cx, cy)
+            det = {"cls": "floor_item", "x1": b.x0, "y1": b.y0, "x2": b.x1, "y2": b.y1}
+            dropped = fp.item_boxes_kept([b], img, 0.0, 0, edge=12, top=32) == []
+            assert dropped == f7.edge_drop(det, 12, 32), (cx, cy)
+
+
+def test_the_rule_wraps_the_detector_with_only_the_edge_set(monkeypatch: Any) -> None:
+    import ro_agent as r
+    import unit_detector as ud
+
+    def fake(self: Any, img: Any) -> list[Any]:
+        return [at(620, 24), at(640, 360), at(620, 24, cls="monster")]
+
+    monkeypatch.setattr(ud.GpuDetector, "detect", fake)
+    monkeypatch.setattr(ud.UnitDetector, "detect", fake)
+    monkeypatch.setattr(r, "virtual_active", lambda: True)
+    on = {**st.flag_defaults(), "item_edge_1080": 12.0, "item_edge_top_1080": 32.0}
+    with fp.item_rule(on):
+        got = ud.UnitDetector.detect(types.SimpleNamespace(), np.zeros((720, 1280, 3), np.uint8))
+    assert [(b.cls, b.y0) for b in got] == [("floor_item", 352), ("monster", 16)]
+    assert ud.UnitDetector.detect is fake  # restored

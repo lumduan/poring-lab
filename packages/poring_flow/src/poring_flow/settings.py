@@ -479,6 +479,33 @@ FIELDS: tuple[Field, ...] = (
         optional=True,
         player=True,
     ),  # fmt: skip
+    # xmas02-items-1080.md Amendment 36 (round 10, 2026-11-22): C, the VIEW EDGE -- an item box
+    # whose centre lies this close to the view's left, right or bottom edge, or (its own number)
+    # to its top, is dropped (fi7_rule.edge_drop, the same test the evaluation scores). 0 = off.
+    Field(
+        "item_edge_1080",
+        "loot",
+        "number",
+        "at 1080: drop item boxes centred this close to the view's sides or bottom (0 = off)",
+        0.0,
+        200.0,
+        1.0,
+        unit="px",
+        optional=True,
+        player=True,
+    ),  # fmt: skip
+    Field(
+        "item_edge_top_1080",
+        "loot",
+        "number",
+        "at 1080: drop item boxes centred this close to the view's top (0 = off)",
+        0.0,
+        200.0,
+        1.0,
+        unit="px",
+        optional=True,
+        player=True,
+    ),  # fmt: skip
     Field(
         "EXPLORE_LEG_MAX_S",
         "walk",
@@ -1169,6 +1196,8 @@ DEFAULTS: dict[str, Any] = {
     "alarm_near_score": 0.85,
     "item_floor_1080": 0.0,  # xmas02-items-1080.md Amendment 22: off until 8a7 / 8c pass (then 0.5)
     "item_ring_1080": 0.0,  # ... (then 30)
+    "item_edge_1080": 0.0,  # Amendment 36: off until round 10 and 8c pass (then 12)
+    "item_edge_top_1080": 0.0,  # ... (then 32)
     # the Run settings (dungeon@9.41-9.43): the heal and escape numbers are --strategy P2's own
     "knife_max_s": 8.0,
     "knife_hp_min": 0.50,
@@ -1354,6 +1383,8 @@ FIND: dict[str, tuple[str, ...]] = {
     "alarm_near_score": ("garm", "alarm", "goblin", "near"),
     "item_floor_1080": ("item", "loot", "floor", "score", "1080"),
     "item_ring_1080": ("item", "loot", "cursor", "ring", "red", "1080"),
+    "item_edge_1080": ("item", "loot", "edge", "side", "bottom", "view", "1080"),
+    "item_edge_top_1080": ("item", "loot", "edge", "top", "view", "1080"),
     "fly_first": ("boss", "knight", "fly", "wing", "first"),
     "fly_first_hp": ("hp", "fly", "wing", "first"),
     "fly_first_land": ("boss", "fly", "wing", "land", "stale", "teleport"),

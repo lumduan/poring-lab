@@ -2372,21 +2372,31 @@ def near_alarm(dh: Any, vals: Mapping[str, Any]) -> Iterator[None]:
 
 
 def item_boxes_kept(boxes: Sequence[Any], img_bgr: Any, floor: float, ring: int,
-                    pad: int = 6) -> list[Any]:  # fmt: skip
+                    pad: int = 6, edge: int = 0, top: int = 0) -> list[Any]:  # fmt: skip
     """PURE (xmas02-items-1080.md Amendment 22, the fi7 rule at run time): the detector's boxes
     without the FLOOR-ITEM boxes under ``floor`` (A) or on the no-entry cursor ring, ``ring`` or
-    more pure-red px in the box plus ``pad`` (B). ``img_bgr``: the runner's frame (BGR, from BGRA;
-    fi7_rule counts in RGB, so the channels are swapped). Every other class passes untouched; 0
-    turns a half off."""
+    more pure-red px in the box plus ``pad`` (B), or (Amendment 36, C) centred within ``edge`` px
+    of the frame's sides or bottom or ``top`` px of its top -- fi7_rule.edge_drop, the test the
+    evaluation scores, on the frame's own size (the virtual 1280 x 720 without a frame).
+    ``img_bgr``: the runner's frame (BGR, from BGRA; fi7_rule counts in RGB, so the channels are
+    swapped). Every other class passes untouched; 0 turns a part off."""
     import fi7_rule as f7
 
     out = []
     rgb = None
+    if img_bgr is not None:
+        h, w = int(img_bgr.shape[0]), int(img_bgr.shape[1])
+    else:
+        h, w = f7.VIEW_H, f7.VIEW_W
     for b in boxes:
         if getattr(b, "cls", None) != f7.ITEM_CLASS:
             out.append(b)
             continue
         if floor > 0 and float(getattr(b, "score", 0.0)) < floor:
+            continue
+        if (edge > 0 or top > 0) and f7.edge_drop(
+            {"cls": f7.ITEM_CLASS, "x1": b.x0, "y1": b.y0, "x2": b.x1, "y2": b.y1}, edge, top, w, h
+        ):
             continue
         if ring > 0 and img_bgr is not None:
             if rgb is None:
@@ -2402,15 +2412,18 @@ def item_rule(vals: Mapping[str, Any]) -> Iterator[None]:
     """xmas02-items-1080.md Amendment 22 (round 7): at 1080 only (ro_agent.virtual_active), the
     item model's boxes pass item_boxes_kept before the runner sees them -- the detector's own
     ``detect`` (both classes, as seen_boxes) is wrapped for this hunt core; the runner file stays
-    byte-identical. Off (both 0, not in use, or 720) = unchanged. A failing filter gives the
-    detector's own boxes (the old behaviour), never a stop."""
+    byte-identical. Off (every part 0, not in use, or 720) = unchanged. A failing filter gives the
+    detector's own boxes (the old behaviour), never a stop. Amendment 36 adds C, the view edge
+    (item_edge_1080 / item_edge_top_1080)."""
     from poring_flow import settings as st
 
     floor = float(vals.get("item_floor_1080") or 0.0) if st.in_use("item_floor_1080", vals) else 0.0
     ring = int(vals.get("item_ring_1080") or 0) if st.in_use("item_ring_1080", vals) else 0
+    edge = int(vals.get("item_edge_1080") or 0) if st.in_use("item_edge_1080", vals) else 0
+    top = int(vals.get("item_edge_top_1080") or 0) if st.in_use("item_edge_top_1080", vals) else 0
     import ro_agent as r
 
-    if (floor <= 0 and ring <= 0) or not r.virtual_active():
+    if (floor <= 0 and ring <= 0 and edge <= 0 and top <= 0) or not r.virtual_active():
         yield
         return
     import unit_detector as ud
@@ -2421,7 +2434,7 @@ def item_rule(vals: Mapping[str, Any]) -> Iterator[None]:
         def detect(self: Any, img: Any, *a: Any, **k: Any) -> Any:
             got = f(self, img, *a, **k)
             try:
-                return item_boxes_kept(got, img, floor, ring)
+                return item_boxes_kept(got, img, floor, ring, edge=edge, top=top)
             except Exception:  # never a stop: the detector's own boxes
                 return got
 

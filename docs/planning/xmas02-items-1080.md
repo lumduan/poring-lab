@@ -1353,3 +1353,18 @@ A count under its minimum is NO VERDICT, never a pass.
 - **Code first** (this commit's sibling): the view-edge rule (`fi7_rule.edge_drop`, `fi_eval
   --edge-margin / --edge-top`), fi_labels' and fi_eval's round 10 names (ifH31-ifH40, ifsH9,
   ifsH10), seed 77 and `--strata r10`, with tests.
+
+### Amendment 37 (2026-11-22 23:0x ICT from `date`, during round 10's pilots; changes no round-10 step): the player's part C built ahead, off
+
+- **What:** the live player's fi7 rule (`flow_play.item_rule`, 1080 only, outside the byte-pinned
+  runner) gains part C, the view edge, as two player settings beside `item_floor_1080` and
+  `item_ring_1080`: **`item_edge_1080`** (the sides and bottom) and **`item_edge_top_1080`** (the
+  top). Both are **0 = off by default**. It calls `fi7_rule.edge_drop`, the same test `fi_eval
+  --edge-*` scores; a test pins the two equal on a grid of centres.
+- **Why now:** if round 10 passes, 8c's arm B is `screen_ab --box-set loot_items=xmas02fi8
+  --player-set item_floor_1080=0.4 --player-set item_ring_1080=30 --player-set item_edge_1080=12
+  --player-set item_edge_top_1080=32`, and nothing waits on code.
+- **It changes nothing in round 10:** the pilots play with the rule off (the defaults), and the
+  held-out is scored offline by the committed wrapper. The dev checkout is fast-forwarded only after
+  round 10's eval chain ends.
+- Live gets it only with a promotion on Batt's word, and it stays off there until 8c passes.

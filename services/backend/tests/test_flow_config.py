@@ -89,6 +89,8 @@ def test_every_setting_has_a_valid_default_and_the_run_flows_are_todays() -> Non
         "alarm_near_px": 0.0, "alarm_near_score": 0.85,
         # xmas02-items-1080.md Amendment 22: the fi7 rule at 1080, off until 8a7 / 8c pass
         "item_floor_1080": 0.0, "item_ring_1080": 0.0,
+        # Amendment 36: the fi7 rule's view edge (C), off until round 10 and 8c pass
+        "item_edge_1080": 0.0, "item_edge_top_1080": 0.0,
         # cursor-1080.md Amendment 8: click on sight (5b's arm C), off by default
         "cursor_click_on_sight": False,
         # ranged-attacker-1080.md: the defend box takes the shooter first, off by default
