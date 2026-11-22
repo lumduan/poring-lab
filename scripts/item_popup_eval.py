@@ -42,8 +42,9 @@ import numpy as np
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import item_popup as ip  # noqa: E402
+import lab_env  # noqa: E402
 
-NAS = Path("/mnt/poring-lab-datasets")
+NAS = lab_env.store_dir()  # the storage folder (LAB_STORE_DIR; the lab: its NAS mount)
 FAMILY = re.compile(r"-rdp-hunt-xmas02-fiT(\d+)$")
 WINDOW_S = 3.0
 CALIB = range(1, 21)  # fiT1 .. fiT20 (section 4)

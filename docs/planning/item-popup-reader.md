@@ -460,3 +460,17 @@ inputs: the count font `item_popup_count_r2.npz` (sha256 ade6a384801e...) and sl
   Live gets it only on Batt's word, and Batt's own client (Thai text, "Scell 1 ชิ้น") is a check of
   its own: the digits sit before a Thai word there, and the count font is the dev client's.
   **If it fails:** a round 4, pre-registered from its diagnosis.
+
+### Amendment 7 (2026-11-22 22:21 ICT from `date`, BEFORE any w1080 event is read or scored): the watcher's first sessions; one code fix to the scorer, no change here
+
+- **The watcher runs beside round 10 of the item model** (xmas02-items-1080.md Amendment 36: two
+  stagings ifsH9 and ifsH10, then the natural pilots ifH31 ..). Every one of those sessions runs
+  under `item_popup.py watch` from the dev checkout (f1307d69, which holds the watcher of eced7732
+  unchanged), started before the session and stopped after it (`r10/watch_around.sh`). The
+  pictures and the count font are the pinned ones (refs.npz 1bb96813..., item_popup_count_r2.npz
+  ade6a384..., read back at 22:20). The first, ifsH9, started at 22:20:26. Crops are on (dev only,
+  our own character).
+- **One fix to `item_popup_eval.py`, before any w1080 score:** its NAS folder was written into the
+  code (`/mnt/poring-lab-datasets`) and broke `test_no_host_code_hard_codes_the_labs_nas` (CLAUDE.md
+  rule 6) since ca92dbf7 (11-21). It now reads the storage folder from `lab_env.store_dir()`. In the
+  dev checkout that is the same folder (read back), so what `score-events` reads does not change.
