@@ -441,3 +441,63 @@ for PNG at 1 fps). PNG at 1080 and 1 fps measured 124.6 MB/min on ifH13 today.
   - The track cannot fix a stay where most reads abstain. Town stays may need the light reader's
     fix, or `/where` prompts. route-H1..H3 (Amendment 9) report town stays apart; the bars count
     the walking frames as pre-registered.
+
+## Amendment 11 (2026-11-22 14:47 ICT from `date`): phase 2's design -- the "Record route" button, its readiness and disk checks, the guide notifications
+
+Amendment 8's decisions 1-5, made concrete. Nothing here changes a decision; every number below is
+a user setting with this value as its default ([[feedback-everything-user-settable]]).
+
+- **Where the person meets it:** the CONSOLE page (the stream view), a "Record route" button in
+  its toolbar with a small panel: readiness, free disk and the minutes that fit, then Start / Stop,
+  a visible "recording" sign with the elapsed time and the size. The guide notifications (decision
+  1) show over the stream view as toasts, and as a browser notification when the person allows it
+  (asked on the first Record press; off is a setting). The recordings page (list, keep, delete, the
+  auto-delete setting) is phase 4.
+- **The channel** (the /flows Run's pattern, scripts/flow_run.py; the backend starts nothing on the
+  host):
+  - the backend's `routes_routerec.py`: `GET /routes/record` (the helper's status), `POST
+    /routes/record {"action": "check" | "start" | "stop"}` behind `routes_settings.write_gate`
+    unchanged (a console browser, the CSRF token, rate-limited, audited). It writes ONE request
+    file, `settings/routerec/request.json`, and reads the helper's `status.json`;
+  - the host helper `scripts/route_rec.py serve`, a user service like the flow-run helper
+    (`scripts/host/poring-lab-routerec.service`). It is NOT an input writer: it sends no input,
+    ever. It refuses a start while a bot of ours plays (flow_run.writer_busy: a route recording is
+    of the PERSON's play).
+- **A check, and every start first** (decision 3), on one fresh frame (the virtual client at 1080):
+  - the capture lock is steady (rdp or console), and picks record_session's `--backend`;
+  - Basic Information on screen (`panelfind.find_basic_info`) and the chat window
+    (`chat_window`'s check, read only);
+  - the minimap: present or absent, reported, never required (Amendment 10: indoors has none);
+  - the disk: free bytes on the recordings folder's filesystem (`df -B1`) minus the recorder's
+    floor (recorder-disk-floor: 30 GB on this host; record_session refuses below it), divided by
+    the format's rate -> "about N minutes fit". The rate is the median of this install's own
+    finished recordings of the same format and fps (index.json), else a default per format:
+    console H.264 41 MB/min (ADR-0010, every frame); rdp video at 5 fps is MEASURED on the dev lab
+    before the estimate ships (a 2-min walk; the number goes in the code with its source). Fewer
+    than 10 minutes warns; 0 refuses.
+- **The recording:** `record_session.py --fps 5`, the lock's backend and its default format, `--out`
+  in the recordings folder (Amendment 8's layout under the storage setting), `--seconds` = the
+  max-length setting (60 min) and `--max-bytes` = what fits above the floor. Stop = SIGINT (its
+  clean end). It also stops when the readiness is lost for 60 s (a logout, the client closed),
+  with the reason in the manifest. The manifest adds purpose `route`, keep `false`, split (decided
+  at the start, before anyone looks), the stop reason.
+- **The guide notifications** (decision 1), from the helper's own light watch while it records (a
+  frame every 0.5 s, the minimap reader with light=True; no input):
+  - "Recording started" / "Recording stopped (why)";
+  - **a map change** -> "New map: type /where in the chat". The cue is the minimap window
+    appearing or disappearing, or the readout jumping farther than walking allows (route_track's
+    consistency test) for 2 reads in a row. It is shown once per change (a 10 s quiet time);
+  - indoors (no minimap): after the change cue, "No minimap here: type /where again when you
+    stop" every 60 s while it stays absent (a setting; off allowed);
+  - **low disk:** at 10 and at 2 minutes left;
+  - each one is logged in the recording's `events.jsonl` (what was shown, when), so the offline
+    pass knows where to look for the reply.
+- **Not in phase 2:** the reply's reading (offline, phase 3, from the video's chat area), the
+  blocks, the recordings page and deletion (phase 4), the light reader's bright-town fix.
+- **Tests first** (pure parts): the request parser, the minutes estimate, the notification rules
+  over a scripted sequence of reads (a map change, indoors, a jump that is a misread), the
+  manifest; the backend route with the write gate (as routes_flowrun's tests); the console's
+  logic in `services/frontend/src/lib/` (node --test). Live checks on the dev lab after: readiness
+  red at the login screen and green in game; a 2-min route on xmas_dun02 with one warp (the map
+  change notification shown once); the rate measured.
+- **Deployment:** dev first; the live lab only on Batt's word (code changes only between Runs).
