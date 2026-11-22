@@ -615,6 +615,10 @@ def test_the_deployed_gpu_weights_and_the_server_step() -> None:
     assert ud.GPU_WEIGHTS["xmas02fi6"].sha256.startswith("4014ae968b")
     assert ud.GPU_WEIGHTS["xmas02fi6"].onnx_sha256.startswith("3f05f9bb30")
     assert all(m.gpu != "xmas02fi6" for m in ud.MAP_MODELS.values())
+    # xmas02-items-1080.md Amendment 29: round 8's frozen model, registered for its evaluation only
+    assert ud.GPU_WEIGHTS["xmas02fi8"].sha256.startswith("74092985465c")
+    assert ud.GPU_WEIGHTS["xmas02fi8"].onnx_sha256.startswith("371c2f2cfaee")
+    assert all(m.gpu != "xmas02fi8" for m in ud.MAP_MODELS.values())
     # S4 (2026-11-14): the Goblin round, frozen 0b43ebbf, exported 76316fb4; S7.6 PASSED and
     # DEPLOYED 2026-11-17 (live-blocks.md 18.15): xmas_dun02's model, its GPU twin the same files
     assert ud.GPU_WEIGHTS["xmas02sk"].sha256.startswith("0b43ebbfe8")
