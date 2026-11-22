@@ -419,3 +419,25 @@ for PNG at 1 fps). PNG at 1080 and 1 fps measured 124.6 MB/min on ifH13 today.
       run_blocks) give no `routes` lint ERROR on the map (warnings allowed, Amendment 7).
   - **Reported beside them (no bar):** the raw reads' rates, standing frames, every source /
     drop / split count, and the indoor stay.
+
+## Amendment 10 (2026-11-22 13:33 ICT from `date`): the indoor test (decision 3) and a bright-town finding, on the dev client at 1080
+
+- **Indoors there is NO minimap window at all** (`@warp prt_in 134 106`, frame 13:3x): no picture,
+  no `x y` readout. `selfpos.read_minimap` gives `no_glyph`. Basic Information and the chat
+  window stay, so the readiness check (decision 3) passes indoors.
+  - The position source indoors is the player's `/where`, which already works indoors (where@1 /
+    where@2 on prt_church, docs/demonstrations.md 3.13 / 3.15).
+  - The window's DISAPPEARANCE is itself a clear map-change cue for the notification ("type
+    /where").
+  - Between two `/where` replies indoors, the route is unknown from the minimap. A possible
+    later source is the player's own walk clicks (the input log) projected to cells. It is not
+    designed yet.
+- **A bright town defeats the reader at 1080:** in Prontera at (156, 191) the readout
+  `156 191` is plainly on screen. Two frames (13:26, 13:4x) both read None (`light_failed`:
+  `uncovered_ink`). The bright paving shows through the translucent strip; this is the reader's
+  known light-strip weak spot.
+  - The same 1080 path (the virtual client, the minimap anchored top-right) reads xmas_dun02
+    correctly on 3 of 3 frames: (93, 82).
+  - The track cannot fix a stay where most reads abstain. Town stays may need the light reader's
+    fix, or `/where` prompts. route-H1..H3 (Amendment 9) report town stays apart; the bars count
+    the walking frames as pre-registered.
