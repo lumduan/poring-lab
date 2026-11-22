@@ -217,3 +217,42 @@ code: `src/lib/mats/path.ts`, `path-edit.ts`, `src/lib/blocks/incoming.ts`,
       replays) tests them.
   11. A mark is a flag, with no label.
 
+## Amendment 5 (2026-11-22 07:54 ICT from `date`): Batt's design -- the recorder GENERATES BLOCKS in the map's own flow; nothing new
+
+Batt, on Amendment 4 (2026-11-22 ~08:1x), confirmed after a restatement: "What we build is not a
+new system. It makes waypoints from what we already have, the block coding in /flows of each map.
+The system looks where the player walked and creates blocks in that map's flow, nothing more. Or
+the user writes the blocks himself from the start, without walking, if he knows the way (A -> B,
+short). In matpilot I did this too: the system is only a block generator. It is very simple." And:
+"The user can edit and tune the walking path through the code blocks himself; we only make a tool
+to create the blocks faster."
+
+**The design (it replaces Amendment 4's multi-map path file):**
+- **Recording = generating ordinary blocks.** The player walks; the tool thins the reads (Amendment
+  1 b) and writes a run of `walk_to(x, y)` blocks (the palette's existing block, `nav.walk_to`)
+  into the flow of the map she is on. The user edits them like any block, or writes them by hand.
+- **One map, one flow.** Whatever map she is on, the bot runs that map's flow; a map change hands
+  over to the next map's flow through the /maps links that exist already. No path spans maps; no
+  "wrong map" state; no length limit beyond the map's own flow.
+- **Off the route: GPS.** Knocked off by a monster, or any detour: rejoin at the nearest point
+  ALONG the route's line (between two points too), ahead of where she was, and walk on from there.
+  Never back to the start. A run of consecutive `walk_to` blocks is the route for this.
+- **Batt's answers to Amendment 4's questions:**
+  1. No warp cells cut from the grid: the user's line is followed. If a warp should be avoided, a
+     no-enter zone does it. If she walks into a warp by mistake and the minimap changes, she walks
+     back out.
+  2. No-enter zones are respected; the user's waypoints come first; off the route = back to it.
+  3. The exit is the nearest warp portal (option a): the game puts her on the new map next to the
+     portal she came through.
+  4. An item exit uses the flow's "home" key; none set = a warning at the start check.
+  5. The nearest point, GPS-like (as above).
+  6. Not a question any more: each map runs its own flow.
+  7. GPS-like as well. Wings are never used inside a map (their destination cannot be chosen).
+  8. Not an issue: a route lives in one map's flow.
+  9. Gone: flying home is its own block.
+  10. The thinning defaults stay settings.
+  11. A mark becomes a note on its block.
+- **Kept from the core already built (1424b810):** thinning, the walk proof of each segment on the
+  walk grid with the zones (drawn red, a warning only), the GPS rejoin. Dropped: the multi-map path
+  file, legs, exits and the wrong-map rule.
+
