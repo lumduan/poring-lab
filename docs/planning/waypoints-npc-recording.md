@@ -182,7 +182,7 @@ code: `src/lib/mats/path.ts`, `path-edit.ts`, `src/lib/blocks/incoming.ts`,
   live screen. Its answers are advice, adopted by a recorded amendment, never by its own edits
   here.
 
-## Amendment 4 (2026-11-22 04:47 ICT from `date`): the path recorder's pure core is built (offline); questions for Batt
+## Amendment 4 (SUPERSEDED by Amendment 5: the multi-map path file is gone; the code is now scripts/path_blocks.py, see Amendment 6) (2026-11-22 04:47 ICT from `date`): the path recorder's pure core is built (offline); questions for Batt
 
 - **Built** (Amendment 3's "in parallel"): `scripts/path_record.py` + `test_path_record.py`
   (113 tests on synthetic grids; map_routes' 50 unchanged and passing). It does no live read,
@@ -255,4 +255,36 @@ to create the blocks faster."
 - **Kept from the core already built (1424b810):** thinning, the walk proof of each segment on the
   walk grid with the zones (drawn red, a warning only), the GPS rejoin. Dropped: the multi-map path
   file, legs, exits and the wrong-map rule.
+
+## Amendment 6 (2026-11-22 08:16 ICT from `date`): Amendment 5 built -- scripts/path_blocks.py; what is still open
+
+- **Built** (af4cd0c6): `scripts/path_record.py` became `scripts/path_blocks.py` (81 tests in
+  test_path_blocks.py; map_routes' 50 unchanged). Nothing else imported the old module.
+  - `thin(reads)`: one run of points per map stay, in walking order.
+  - `walk_blocks` / `run_blocks`: the studio's own `walk_to` statement, field for field (concept
+    `nav.walk_to`, timeout 120 s); a mark becomes the block's note. Example, in the Python view:
+
+        walk_to(cell("town_1", 55, 45))
+        walk_to(cell("town_1", 85, 60), note="mark")
+
+  - `propose(project, node, at, blocks)` -> a proposal; `apply(proposal, current)` makes the new
+    project only on the user's click, and refuses if the project changed meanwhile. The input
+    is never changed.
+  - `check_route`: each segment ok / broken / unproven on the walk grid with the zones; no warp
+    cell cut; a warning, never a refusal.
+  - `routes_in` / `route_at`: a run of consecutive walk_to is one route. `rejoin(cells, here, last)`
+    is the GPS rule: the nearest point (straight line) on the remaining line ahead of the last point
+    passed. On a tie, the first equally near stretch, at its far end, so a loop or an out-and-back
+    never skips ahead.
+  - Dropped, as Amendment 5 says: the path file, legs, exits, names, WrongMap, the radius.
+- **Open (Batt):**
+  1. The studio's lint (`poring_flow/lint/simulate.py`, rule `routes`) already checks walk_to legs.
+     It calls an unreachable cell and a line that crosses a warp ERRORS, which refuse the Run's
+     start check. That contradicts "a warning only" and "no warp cutting".
+  2. The rejoin distance is a straight line, so on a U-shaped route the nearest point can be behind
+     a wall. A walk-distance rejoin is possible (one A* search per candidate).
+  3. A run that ended in a map change keeps its last read cell, which may be the warp cell itself;
+     a walk_to there changes the map in the middle of the block.
+- Scope as built: inserts go into a map node's main tab at a top-level position; a route counts
+  literal cells only (a walk_to with a variable cell ends it).
 
