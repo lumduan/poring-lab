@@ -34,30 +34,41 @@ A CHECK, and every start first (Amendment 11 / decision 3), on ONE fresh frame o
   base parser and, when the light fallback ran, from it too); a readout that is there but unread
   (Prontera's paving, ``uncovered_ink``) is present;
 - the recorder's own start rules for this lock: ``record_session.resolve_format`` itself (the
-  default format, and its refusal in its own words), and for h264 the S2 recording dir it needs
-  (``record_session.rec_dir``) on the same filesystem as the folder (it moves the files by rename);
-- the disk: free bytes on the recordings folder's filesystem (``dataset_ship.free_bytes``, statvfs)
-  minus the recorder's floor (``dataset_ship.min_free_bytes()``, record_session's --min-free-gb
-  default: it refuses below it), divided by the RATE -> the minutes that fit. The rate is the median
-  of this install's own finished recordings of the same format and fps (index.json), else the
-  format's default (DEFAULT_RATES): the console's raw H.264 41 MB/min (ADR-0010 C3: 40.7 MB/min at
-  IDR 1 s, every frame). The rdp video at 5 fps is NOT measured yet: no default, the minutes are
-  then UNKNOWN (Amendment 11: measured on the dev lab before the estimate ships). Fewer than
-  ``warn_minutes`` warns; 0 refuses.
+  default format, and its refusal in its own words; it is given the recorder's DEFAULT --out, the
+  folder it will record into), then the video side's start checks (media_rec: its control and
+  bitstream directories, ``dir_problem``; the sidecar running, ``container_state``) or, for h264,
+  the S2 recording dir (``record_session.rec_dir``) on the local root's filesystem (it moves the
+  files by rename);
+- the disk the VIDEO fills: the recorder's local root (``dataset_ship.LOCAL_ROOT``, its default
+  --out). Free bytes there (``dataset_ship.free_bytes``, statvfs) minus the recorder's floor
+  (``dataset_ship.min_free_bytes()``, its --min-free-gb default), and no more than its unshipped
+  cap leaves (``dataset_ship.MAX_UNSHIPPED_BYTES`` minus ``unshipped_bytes``: record_session's other
+  local cap, ``local_caps``, refuses and stops on it too), divided by the RATE -> the minutes that
+  fit. The rate is the median of this install's own finished recordings of the same format and fps
+  (index.json), else the format's default (DEFAULT_RATES): the console's raw H.264 41 MB/min
+  (ADR-0010 C3: 40.7 MB/min at IDR 1 s, every frame). The rdp video at 5 fps is NOT measured yet:
+  no default, the minutes are then UNKNOWN (Amendment 11: measured on the dev lab before the
+  estimate ships). Fewer than ``warn_minutes`` warns; 0 refuses.
 
 A START: ``record_session.py --fps 5 --backend <the lock's> --label route --seconds <max length>
---max-bytes <what fits above the floor> --out <the route folder>``, its default format (no
---format). h264 keeps record_session's own caps (H264_MAX_SECONDS, H264_MAX_MB). The route folder is
-Amendment 8's layout under the storage setting (lab_env.store_dir(); no NAS assumed):
+--max-bytes <what fits>``, its default format (no --format) and its DEFAULT --out (no --out: every
+recording goes to the root disk as sequential files, CLAUDE.md rule 7; long-term copies reach the
+NAS by shipping, ``dataset_ship.py``, never by recording onto NFS). h264 keeps record_session's own
+caps (H264_MAX_SECONDS, H264_MAX_MB). The ROUTE FOLDER is Amendment 8's layout under the storage
+setting (lab_env.store_dir(); no NAS assumed), and holds a POINTER to the video, not the video:
 
     <storage>/recordings/<YYYY-MM-DD>/<stamp>-<map or "route">-route/
       manifest.json     this helper's: purpose route, keep false, split (decided at the start),
-                        start / end, the stop reason, format, fps, bytes, the recorder's argv + rc
+                        start / end, the stop reason, format, fps, the recorder's argv + rc, and
+                        ``session``: record_session's session id and its local path (found under
+                        the local root after the start, then as record_session reports it), with
+                        ``bytes`` measured from that local session folder at the end
       events.jsonl      the start, every notification shown, the minimap's changes, the readout's
                         jumps, readiness lost / back, the end (t_wall, t_mono_ns: the frames' clock)
       recorder.log      record_session's own output (its last line is its result JSON)
-      <stamp>-<backend>-route/   record_session's own session (its manifest, video, packets)
     <storage>/recordings/index.json   {"v", "recordings": [...]}: what the page lists, the rates
+    <LOCAL_ROOT>/<stamp>-<backend>-route/   record_session's own session (its manifest, video,
+                        packets), shipped later like every other session
 
 A STOP = SIGINT to the recorder's PID (its clean end: the runbooks' ``kill -INT "$rpid"``). Not its
 process group: record_session's grab helper is a ``docker exec`` child in it, and a signalled grab
@@ -85,13 +96,11 @@ EVERY NUMBER is a ``RecSettings`` field, its default our value (Batt 2026-11-13:
 would set is a setting); ``settings/routerec/settings.json`` may override any of them (checked;
 a bad file keeps the defaults and the status says why).
 
-KNOWN LIMITS (2026-11-22, phase 2's first code):
-- the rdp video format (the rdp default, ADR-0024) records only into ``dataset_ship.LOCAL_ROOT``
-  (record_session.resolve_format refuses any other --out), and the console's h264 needs its S2
-  recording dir beside the folder; so the layout above cannot record on the rdp path as written:
-  the check reports record_session's own refusal and a start is refused with it (nothing is
-  redesigned here);
-- a helper restart mid-recording does not re-adopt the recorder (it ends at its own --seconds).
+KNOWN LIMITS (2026-11-22, phase 2; accepted for this phase by the parent's review):
+- a helper restart mid-recording does not re-attach to the recorder: the recorder ends at its own
+  --seconds, and its route folder's manifest keeps no end (the pointer is written once found);
+- no sha256 of the video in the manifest yet (Amendment 8 lists one): dataset_ship's checksums
+  cover the session when it is shipped.
 """
 
 from __future__ import annotations
@@ -532,11 +541,16 @@ def rate_of(index: Mapping[str, Any], fmt: str | None, fps: float,
     return None, f"not measured yet ({fmt or 'no format'} at {fps:g} fps)"
 
 
-def estimate(free: int, floor: int, rate: float | None, source: str,
-             s: RecSettings = DEFAULTS) -> dict[str, Any]:  # fmt: skip
-    """PURE: the minutes that fit above the recorder's floor. verdict "refuse" (nothing fits),
-    "unknown" (room, no rate), "warn" (< warn_minutes), "ok"."""
-    usable = max(0, int(free) - int(floor))
+def estimate(free: int, floor: int, rate: float | None, source: str, s: RecSettings = DEFAULTS,
+             *, unshipped: int = 0, cap: int | None = None) -> dict[str, Any]:  # fmt: skip
+    """PURE: the minutes that fit on the recorder's local root: above its floor (``free - floor``)
+    and, with ``cap``, within its unshipped cap (``cap - unshipped``), the smaller of the two
+    (``limit`` says which). verdict "refuse" (nothing fits), "unknown" (room, no rate), "warn"
+    (< warn_minutes), "ok"."""
+    above = max(0, int(free) - int(floor))
+    room = None if cap is None else max(0, int(cap) - int(unshipped))
+    usable = above if room is None else min(above, room)
+    limit = "unshipped" if room is not None and room < above else "floor"
     minutes = None if rate is None or rate <= 0 else int(usable // rate)
     if usable <= 0 or minutes == 0:
         verdict = "refuse"
@@ -546,16 +560,23 @@ def estimate(free: int, floor: int, rate: float | None, source: str,
         verdict = "warn"
     else:
         verdict = "ok"
-    return {"free_bytes": int(free), "floor_bytes": int(floor), "usable_bytes": usable,
-            "rate_bytes_per_min": None if rate is None else round(rate),
+    return {"free_bytes": int(free), "floor_bytes": int(floor), "unshipped_bytes": int(unshipped),
+            "unshipped_cap_bytes": None if cap is None else int(cap), "usable_bytes": usable,
+            "limit": limit, "rate_bytes_per_min": None if rate is None else round(rate),
             "rate_source": source, "minutes": minutes, "max_minutes": s.max_minutes,
             "verdict": verdict}  # fmt: skip
 
 
-def minutes_left(free: int, floor: int, rate: float | None) -> float | None:
+def minutes_left(free: int, floor: int, rate: float | None,
+                 cap_room: int | None = None) -> float | None:  # fmt: skip
+    """PURE: the minutes of recording left: above the floor and, with ``cap_room``, within what
+    the unshipped cap still allows."""
     if rate is None or rate <= 0:
         return None
-    return max(0, free - floor) / rate
+    left = max(0, free - floor)
+    if cap_room is not None:
+        left = min(left, max(0, cap_room))
+    return left / rate
 
 
 # --- the recording's folder, the recorder's argv, the split, the manifest, the index (PURE) ------
@@ -582,25 +603,29 @@ def recorder_max_bytes(usable: int, fmt: str | None, lim: Limits) -> int:
     return min(usable, lim.h264_max_mb * MB) if fmt == "h264" else usable
 
 
-def recorder_argv(py: str, backend: str, out: Path, fps: float, seconds: float,
+def recorder_argv(py: str, backend: str, fps: float, seconds: float,
                   max_bytes: int) -> list[str]:  # fmt: skip
-    """PURE: record_session's argv: its default format (no --format), --fps, the lock's backend."""
-    return [
-        py,
-        RECORDER,
-        "--backend",
-        backend,
-        "--label",
-        LABEL,
-        "--fps",
-        f"{fps:g}",
-        "--seconds",
-        f"{seconds:g}",
-        "--max-bytes",
-        str(int(max_bytes)),
-        "--out",
-        str(out),
-    ]
+    """PURE: record_session's argv: its default format (no --format) and its DEFAULT --out (no
+    --out: the local root, dataset_ship.LOCAL_ROOT; CLAUDE.md rule 7), --fps, the lock's backend."""
+    return [py, RECORDER, "--backend", backend, "--label", LABEL, "--fps", f"{fps:g}",
+            "--seconds", f"{seconds:g}", "--max-bytes", str(int(max_bytes))]  # fmt: skip
+
+
+SESSION_NAME = re.compile(r"^\.?([0-9]{8}T[0-9]{6})-([a-z]+)-" + LABEL + r"(?:\.h264|\.hevc)?$")
+
+
+def pick_session(names: Sequence[str], backend: str, since: str) -> str | None:
+    """PURE: record_session's session id for a recording started at ``since`` (its stamp, STAMP)
+    from the local root's listing and its staging dirs' (h264: ``.<id>.h264`` in the S2 dir until
+    the end; the video: ``<id>/`` at once, ``.<id>.hevc`` in .media-rec): the earliest
+    ``<stamp>-<backend>-route`` at or after ``since`` (record_session stamps its id a moment
+    after it starts), None before it shows."""
+    found = set()
+    for n in names:
+        m = SESSION_NAME.match(n)
+        if m is not None and m.group(2) == backend and m.group(1) >= since:
+            found.add(f"{m.group(1)}-{backend}-{LABEL}")
+    return min(found) if found else None
 
 
 def decide_split(index: Mapping[str, Any], s: RecSettings = DEFAULTS) -> tuple[str, str]:
@@ -620,18 +645,26 @@ def decide_split(index: Mapping[str, Any], s: RecSettings = DEFAULTS) -> tuple[s
     return "train", f"route recording {k}"
 
 
+def session_pointer(local: Path, sid: str | None, how: str | None) -> dict[str, Any]:
+    """PURE: where the video is: record_session's session under the recorder's local root."""
+    return {"id": sid, "path": None if sid is None else str(local / sid), "root": str(local),
+            "found": how}  # fmt: skip
+
+
 def manifest(rid: str, folder: Path, *, map_name: str | None, backend: str, fmt: str | None,
              fps: float, split: tuple[str, str], start: str, t0_mono_ns: int, argv: Sequence[str],
-             max_bytes: int, max_s: float, check: Mapping[str, Any] | None,
+             max_bytes: int, max_s: float, check: Mapping[str, Any] | None, local: Path,
              s: RecSettings) -> dict[str, Any]:  # fmt: skip
-    """PURE: the route recording's manifest at its START (end, stop reason and bytes None until
-    the end: ``ended``)."""
+    """PURE: the route recording's manifest at its START: a POINTER to the video (``session``,
+    its id unknown until record_session makes it); end, stop reason and bytes None until the end
+    (``ended``)."""
     return {"v": VERSION, "id": rid, "purpose": "route", "keep": False, "split": split[0],
             "split_rule": split[1], "dir": folder.name, "map": map_name, "backend": backend,
             "format": fmt, "fps": fps, "start": start, "end": None, "t0_mono_ns": t0_mono_ns,
             "t1_mono_ns": None, "stop_reason": None, "bytes": None, "seconds": None,
             "max_bytes": int(max_bytes), "max_s": max_s,
-            "recorder": {"argv": list(argv), "rc": None, "session": None, "result": None},
+            "session": session_pointer(local, None, None),
+            "recorder": {"argv": list(argv), "rc": None, "result": None},
             "check": dict(check) if check else None, "settings": settings_json(s)}  # fmt: skip
 
 
@@ -645,15 +678,17 @@ def ended(
     result: Mapping[str, Any] | None,
     seconds: float,
     refused: bool,
+    session: Mapping[str, Any],
+    folder_bytes: int | None,
 ) -> dict[str, Any]:
-    """PURE: the manifest at the END: the stop reason, the recorder's own result (its bytes)."""
+    """PURE: the manifest at the END: the stop reason, the video's pointer (``session``), its
+    ``bytes`` measured from the local session folder, the recorder's own result."""
     res = dict(result) if result else None
     out = {**man, "end": end, "t1_mono_ns": t1_mono_ns, "stop_reason": stop_reason,
-           "bytes": None if res is None else res.get("bytes"),
+           "bytes": folder_bytes, "session": dict(session),
            "seconds": res.get("seconds", round(seconds, 1)) if res else round(seconds, 1),
            "refused": refused}  # fmt: skip
-    out["recorder"] = {**man["recorder"], "rc": rc, "session": None if res is None
-                       else res.get("dir"), "result": res}  # fmt: skip
+    out["recorder"] = {**man["recorder"], "rc": rc, "result": res}
     return out
 
 
@@ -662,7 +697,16 @@ def index_entry(man: Mapping[str, Any], rel: str) -> dict[str, Any]:
             "bytes", "seconds", "stop_reason")  # fmt: skip
     e = {k: man.get(k) for k in keys}
     res = (man.get("recorder") or {}).get("result") or {}
-    e.update({"dir": rel, "mb_per_min": res.get("mb_per_min"), "refused": bool(man.get("refused"))})
+    sess = man.get("session") or {}
+    e.update(
+        {
+            "dir": rel,
+            "session": sess.get("id"),
+            "session_path": sess.get("path"),
+            "mb_per_min": res.get("mb_per_min"),
+            "refused": bool(man.get("refused")),
+        }
+    )
     return e
 
 
@@ -782,6 +826,26 @@ class LiveHost:
     def floor(self) -> int:
         return dataset_ship.min_free_bytes()
 
+    def unshipped(self, root: Path) -> int:
+        return dataset_ship.unshipped_bytes(root)  # record_session's own measure (a tree walk)
+
+    def unshipped_cap(self) -> int:
+        return dataset_ship.MAX_UNSHIPPED_BYTES
+
+    def session_names(self, local: Path) -> list[str]:
+        """The local root's names and its two staging dirs' (one listing each, no walk)."""
+        import media_rec
+        import record_session as rs
+
+        names: list[str] = []
+        for d in (local, rs.rec_dir(local), media_rec.rec_dir(local)):
+            with contextlib.suppress(OSError):
+                names += os.listdir(d)
+        return names
+
+    def tree_bytes(self, path: Path) -> int | None:
+        return dataset_ship.tree_bytes(path) if path.is_dir() else None
+
     def ps(self) -> list[str]:
         return flow_run.copy_ps_lines()
 
@@ -790,8 +854,8 @@ class LiveHost:
 
         return Limits(float(rs.H264_MAX_SECONDS), int(rs.H264_MAX_MB))
 
-    def preflight(self, backend: str, out: Path) -> tuple[str | None, str | None]:
-        return preflight(backend, out)
+    def preflight(self, backend: str, local: Path) -> tuple[str | None, str | None]:
+        return preflight(backend, root=local)
 
     def spawn(self, argv: Sequence[str], log: Path) -> Any:
         with open(log, "ab") as fh:
@@ -799,31 +863,59 @@ class LiveHost:
                                     stdin=subprocess.DEVNULL, start_new_session=True)  # fmt: skip
 
 
-def preflight(backend: str, out: Path) -> tuple[str | None, str | None]:
-    """(the default format, why record_session would refuse this --out, or None), by
-    record_session's OWN rules: resolve_format (it sets the default format before it refuses, so
-    the format is known either way) and, for h264, its S2 recording dir (rec_dir) -- which must
-    exist and sit on the folder's filesystem (record_h264 renames the files into the session)."""
+def preflight(
+    backend: str,
+    *,
+    root: Path | None = None,
+    ctl: Path | None = None,
+    uid: int | None = None,
+    container_state: Callable[[], str] | None = None,
+) -> tuple[str | None, str | None]:
+    """(the default format, why record_session would refuse to start, or None), by its OWN rules,
+    for its DEFAULT --out (the local root: the helper passes no --out):
+    - ``record_session.resolve_format`` (it sets the default format before it refuses, so the
+      format is known either way);
+    - the video format: the video side's start checks, read-only, in media_rec.VideoFeed's order
+      (its control and bitstream directories, ``dir_problem``; the sidecar running,
+      ``container_state``: a ``docker inspect``) -- record_session refuses then ("the video side
+      cannot start");
+    - h264: its S2 recording dir (``rec_dir``), which must exist and sit on the local root's
+      filesystem (record_h264 renames the files into the session).
+    ``root`` / ``ctl`` / ``uid`` / ``container_state``: the tests' own (default: media_rec's and
+    dataset_ship.LOCAL_ROOT)."""
+    import media_rec
     import record_session as rs
 
-    ns = argparse.Namespace(backend=backend, format=None, out=out, also_png=False, seconds=0.0,
-                            max_bytes=0, idr_every=1.0)  # fmt: skip
+    root = dataset_ship.LOCAL_ROOT if root is None else root
+    # record_session's --out default IS dataset_ship.LOCAL_ROOT (the helper passes no --out)
+    ns = argparse.Namespace(backend=backend, format=None, out=dataset_ship.LOCAL_ROOT,
+                            also_png=False, seconds=0.0, max_bytes=0, idr_every=1.0)  # fmt: skip
     try:
         rs.resolve_format(ns)
     except SystemExit as e:  # ro_agent.Stop: the recorder's refusal, in its words
         return ns.format, str(e)
-    if ns.format == "h264":
-        rec = rs.rec_dir(out)
+    if ns.format == rs.VIDEO_FORMAT:
+        for d in (media_rec.CTL if ctl is None else ctl, media_rec.rec_dir(root)):
+            why = media_rec.dir_problem(d, media_rec.UID if uid is None else uid)
+            if why:
+                return ns.format, f"the video side cannot start: {why}"
+        state = (container_state or media_rec.container_state)()
+        if state != "running":
+            return ns.format, (f"the video side cannot start: {media_rec.CONTAINER} is {state}: "
+                               f"python3 scripts/guarded_build.py start:{media_rec.SERVICE}@60 "
+                               "first")  # fmt: skip
+    elif ns.format == "h264":
+        rec = rs.rec_dir(root)
         if not rec.is_dir():
             return ns.format, (
                 f"{rec} does not exist (the S2 recording dir; compose.dev.yaml S2_REC_DIR)"
             )  # record_h264's own first refusal
-        probe = out
+        probe = root
         while not probe.exists() and probe != probe.parent:
             probe = probe.parent
         if os.stat(rec).st_dev != os.stat(probe).st_dev:
             return ns.format, (
-                f"{rec} is on another filesystem than {out}: record_session "
+                f"{rec} is on another filesystem than {root}: record_session "
                 "moves the S2 client's files by rename (same filesystem only)"
             )
     return ns.format, None
@@ -847,9 +939,13 @@ class Rec:
     t0: float  # the helper's clock
     start: str  # ISO
     max_s: float
-    free0: int
+    free0: int  # free bytes on the local root at the start
     rate: float | None
     rate_source: str
+    unshipped0: int = 0  # unshipped bytes under the local root at the start
+    cap: int | None = None  # the recorder's unshipped cap
+    session: str | None = None  # record_session's session id, once found
+    session_how: str | None = None  # "listing" (found under the local root) | "recorder"
     state: str = "starting"  # starting | recording | stopping
     stop_reason: str | None = None
     by_person: bool = False
@@ -870,10 +966,13 @@ class Rec:
 class Helper:
     def __init__(self, d: Path = DIR, host: Any = None, root: Path | None = None,
                  clock: Callable[[], float] = time.monotonic,
-                 wall: Callable[[], float] = time.time) -> None:  # fmt: skip
+                 wall: Callable[[], float] = time.time,
+                 local: Path | None = None) -> None:  # fmt: skip
         self.dir = d
         self.host = host if host is not None else LiveHost()
         self.root = root if root is not None else lab_env.store_dir() / "recordings"
+        # the recorder's local root: its DEFAULT --out, the disk the video fills (tests: their own)
+        self.local = local if local is not None else dataset_ship.LOCAL_ROOT
         self.clock, self.wall = clock, wall
         self.s, self.settings_note = load_settings(d / SETTINGS_FILE)
         self.state = "idle"
@@ -900,12 +999,15 @@ class Helper:
                 "minutes_left": None if r.left is None else math.floor(r.left),
                 "rate_source": r.rate_source, "ready": not r.missing, "missing": list(r.missing),
                 "missing_words": missing_words(r.missing) if r.missing else None,
-                "minimap": r.minimap, "xy": r.xy}  # fmt: skip
+                "minimap": r.minimap, "xy": r.xy, "session": r.session,
+                "session_path": None if r.session is None else str(self.local / r.session),
+                }  # fmt: skip
 
     def status(self) -> dict[str, Any]:
         return {"v": VERSION, "state": self.state, "detail": self.detail, "t_wall": self.wall(),
                 "busy": self.busy, "check": self.check, "recording": self.rec_status(),
                 "last": self.last, "notifications": list(self.notes), "root": str(self.root),
+                "local_root": str(self.local),
                 "settings": settings_json(self.s), "settings_note": self.settings_note}  # fmt: skip
 
     def write_status(self) -> None:
@@ -996,20 +1098,27 @@ class Helper:
         backend = lock.backend if lock_ok(lock) else None
         fmt, problem = (None, None)
         if backend is not None:
-            fmt, problem = self.host.preflight(backend, route_dir(self.root, datetime.now(), None))
+            fmt, problem = self.host.preflight(backend, self.local)
         rate, source = rate_of(load_index(self.root), fmt, self.s.fps, self.s)
-        try:
-            disk = estimate(self.host.free(self.root), self.host.floor(), rate, source, self.s)
+        try:  # the disk the video fills: the recorder's local root (its floor, its unshipped cap)
+            disk = estimate(self.host.free(self.local), self.host.floor(), rate, source, self.s,
+                            unshipped=self.host.unshipped(self.local),
+                            cap=self.host.unshipped_cap())  # fmt: skip
         except OSError as e:
             disk = {"verdict": "refuse", "error": f"{type(e).__name__}: {e}", "minutes": None}
+        disk["root"] = str(self.local)
         self.busy_tick()
         can = not missing and disk["verdict"] != "refuse" and problem is None and not self.busy
         if missing:
             words = f"not ready: {missing_words(missing)}"
         elif problem:
             words = f"the recorder would refuse: {problem}"
+        elif disk["verdict"] == "refuse" and disk.get("limit") == "unshipped":
+            words = (f"no room: recordings waiting to be shipped fill the recorder's cap under "
+                     f"{self.local} (run scripts/dataset_ship.py ship)")  # fmt: skip
         elif disk["verdict"] == "refuse":
-            words = "no room: nothing fits above the space the recorder keeps free"
+            words = (f"no room on {self.local}'s disk: nothing fits above the space the recorder "
+                     "keeps free")  # fmt: skip
         elif self.busy:
             words = f"a bot of ours is playing: {self.busy}"
         elif disk["minutes"] is None:
@@ -1049,7 +1158,7 @@ class Helper:
         backend, fmt = chk["lock"]["backend"], chk["format"]
         seconds = recorder_seconds(self.s, fmt, lim)
         max_bytes = recorder_max_bytes(int(chk["disk"]["usable_bytes"]), fmt, lim)
-        argv = recorder_argv(PY, backend, folder, self.s.fps, seconds, max_bytes)
+        argv = recorder_argv(PY, backend, self.s.fps, seconds, max_bytes)  # no --out: LOCAL_ROOT
         index = load_index(self.root)
         split = decide_split(index, self.s)
         rid = when.strftime(STAMP)
@@ -1057,7 +1166,7 @@ class Helper:
         man = manifest(rid, folder, map_name=req.get("map"), backend=backend, fmt=fmt,
                        fps=self.s.fps, split=split, start=iso(now), t0_mono_ns=int(t0 * 1e9),
                        argv=argv, max_bytes=max_bytes, max_s=seconds, check=chk,
-                       s=self.s)  # fmt: skip
+                       local=self.local, s=self.s)  # fmt: skip
         try:
             folder.mkdir(parents=True)
             flow_run.write_json(folder / "manifest.json", man)
@@ -1070,8 +1179,10 @@ class Helper:
                 proc=None, log=folder / "recorder.log", t0=t0, start=iso(now), max_s=seconds,
                 free0=int(chk["disk"]["free_bytes"]),
                 rate=chk["disk"]["rate_bytes_per_min"], rate_source=chk["disk"]["rate_source"],
-                next_frame=t0, next_ready=t0 + self.s.ready_every_s,
-                next_disk=t0 + self.s.disk_every_s, places=dict(self.places))  # fmt: skip
+                unshipped0=int(chk["disk"].get("unshipped_bytes") or 0),
+                cap=chk["disk"].get("unshipped_cap_bytes"), next_frame=t0,
+                next_ready=t0 + self.s.ready_every_s, next_disk=t0 + self.s.disk_every_s,
+                places=dict(self.places))  # fmt: skip
         self.rec = r
         self.map_watch, self.ready_watch = MapWatch(self.s), ReadyWatch(self.s)
         self.disk_watch = DiskWatch(self.s)
@@ -1157,8 +1268,12 @@ class Helper:
             self.stop(why)
 
     def watch_disk(self, r: Rec) -> None:
+        """The local root's free bytes (the disk the video fills): the minutes left, low disk; and
+        the session pointer, until it is found."""
+        if r.session is None:
+            self.find_session(r)
         try:
-            free, floor = self.host.free(self.root), self.host.floor()
+            free, floor = self.host.free(self.local), self.host.floor()
         except OSError:
             return
         r.used = max(0, r.free0 - free)
@@ -1166,10 +1281,29 @@ class Helper:
         rate = r.rate
         if rate is None and elapsed_min >= 1.0 and r.used > 0:  # unknown: this recording's own
             rate = r.used / elapsed_min
-        r.left = minutes_left(free, floor, rate)
+        room = None if r.cap is None else r.cap - r.unshipped0 - r.used
+        r.left = minutes_left(free, floor, rate, room)
         hit = self.disk_watch.feed(r.left)
         if hit is not None and r.left is not None:
             self.notify(r, "low_disk", minutes=r.left)
+
+    def find_session(self, r: Rec) -> None:
+        """record_session's session under the local root (one listing each of it and its staging
+        dirs): written into the manifest at once, so the pointer survives a helper restart."""
+        try:
+            sid = pick_session(self.host.session_names(self.local), r.backend, r.id)
+        except OSError:
+            return
+        if sid is None:
+            return
+        r.session, r.session_how = sid, "listing"
+        self.event(r, "session_found", session=sid, path=str(self.local / sid))
+        try:
+            man = json.loads((r.dir / "manifest.json").read_text())
+            man["session"] = session_pointer(self.local, sid, "listing")
+            flow_run.write_json(r.dir / "manifest.json", man)
+        except (OSError, ValueError) as e:
+            self.log_note(event="pointer_not_written", id=r.id, why=str(e))
 
     def finish(self, rc: int | None, why: str | None = None) -> None:
         r = self.rec
@@ -1185,6 +1319,19 @@ class Helper:
                 last = next(iter(reversed(flow_run.tail(r.log, 3, 300))), "")
                 why = (f"the recorder refused to start ({last})" if refused
                        else f"the recorder ended rc {rc} ({last})")  # fmt: skip
+        # the pointer: as record_session reports its session, else as found under the local root
+        local, sid, how = self.local, r.session, r.session_how
+        if res is not None and isinstance(res.get("dir"), str) and res["dir"]:
+            reported = Path(res["dir"])
+            local, sid, how = reported.parent, reported.name, "recorder"
+        elif sid is None and r.proc is not None:
+            self.find_session(r)
+            sid, how = r.session, r.session_how
+        pointer = session_pointer(local, sid, how)
+        folder_bytes = None
+        if sid is not None:
+            with contextlib.suppress(OSError):
+                folder_bytes = self.host.tree_bytes(local / sid)  # the local session folder
         try:
             man = json.loads((r.dir / "manifest.json").read_text())
         except (OSError, ValueError):
@@ -1200,6 +1347,8 @@ class Helper:
                 result=res,
                 seconds=t1 - r.t0,
                 refused=refused or r.proc is None,
+                session=pointer,
+                folder_bytes=folder_bytes,
             )
             try:
                 flow_run.write_json(r.dir / "manifest.json", man)
@@ -1207,10 +1356,11 @@ class Helper:
             except OSError as e:
                 self.log_note(event="end_files_not_written", id=r.id, why=str(e))
         self.notify(r, "stopped", why=why, by_person=r.by_person)
-        self.event(r, "end", rc=rc, why=why, bytes=None if res is None else res.get("bytes"))
+        self.event(r, "end", rc=rc, why=why, bytes=folder_bytes, session=pointer["path"])
         self.last = {"id": r.id, "dir": str(r.dir), "ended": iso(self.wall()), "stop_reason": why,
-                     "rc": rc, "bytes": None if res is None else res.get("bytes"),
-                     "split": r.split, "refused": refused}  # fmt: skip
+                     "rc": rc, "bytes": folder_bytes, "session": pointer["id"],
+                     "session_path": pointer["path"], "split": r.split,
+                     "refused": refused}  # fmt: skip
         ok = rc == 0 and not refused
         self.state, self.detail = ("ended" if ok else "failed"), f"stopped: {why}"
         self.log_note(event="end", id=r.id, rc=rc, why=why)

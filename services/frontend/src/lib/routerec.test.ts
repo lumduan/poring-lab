@@ -56,6 +56,8 @@ function recording(over: Partial<RouteRecRecording> = {}): RouteRecRecording {
     missing_words: null,
     minimap: "present",
     xy: [93, 82],
+    session: "20261122T150001-console-route",
+    session_path: "/home/bot/poring-lab-rec/20261122T150001-console-route",
     ...over,
   };
 }
@@ -128,6 +130,8 @@ test("the disk: fewer than ten minutes warns, nothing refuses, no rate is unknow
   assert.match(unk.text, /not known yet/);
   assert.match(diskLine({ minutes: 900, verdict: "ok", max_minutes: 60 }).text, /stops at 60 min/);
   assert.match(diskLine({ minutes: null, verdict: "refuse", error: "OSError: gone" }).text, /could not be read/);
+  assert.match(diskLine({ minutes: 0, verdict: "refuse", usable_bytes: 0, limit: "floor" }).text, /keeps free on the bot server's disk/);
+  assert.match(diskLine({ minutes: 0, verdict: "refuse", usable_bytes: 0, limit: "unshipped" }).text, /waiting to be shipped/);
 });
 
 test("recording: elapsed, size, minutes left, Stop only; a stopping one cannot be stopped twice", () => {
@@ -162,7 +166,7 @@ test("a check asked and not answered yet shows checking until the helper writes 
 });
 
 test("the last recording's end is said in words", () => {
-  const m = panelModel(status({ state: "ended", last: { id: "x", dir: "d", ended: "t", stop_reason: "you pressed Stop", rc: 0, bytes: 1_230_000_000, split: "train", refused: false } }));
+  const m = panelModel(status({ state: "ended", last: { id: "x", dir: "d", ended: "t", stop_reason: "you pressed Stop", rc: 0, bytes: 1_230_000_000, session: "s", session_path: "/home/bot/poring-lab-rec/s", split: "train", refused: false } }));
   assert.equal(m.last, "The last recording stopped: you pressed Stop (1.2 GB).");
 });
 

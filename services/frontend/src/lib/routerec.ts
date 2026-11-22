@@ -5,6 +5,9 @@
  * (ready or which item is missing, the minutes that fit or unknown, the recording's elapsed time and
  * size), and which guide notifications are NEW since the last poll (by id: the toasts and the
  * browser notification). No React, no fetch. Values are rendered as TEXT only.
+ *
+ * The video is recorded on the bot server's own disk (record_session's local root, shipped to the
+ * storage later); the route folder holds a pointer to it. So the disk line is that local disk's.
  */
 
 export type RouteRecNotification = {
@@ -17,9 +20,13 @@ export type RouteRecNotification = {
 };
 
 export type RouteRecDisk = {
+  root?: string; // the recorder's local root: the disk the video fills
   free_bytes?: number;
   floor_bytes?: number;
+  unshipped_bytes?: number;
+  unshipped_cap_bytes?: number | null;
   usable_bytes?: number;
+  limit?: "floor" | "unshipped"; // which of the recorder's two local limits leaves less room
   rate_bytes_per_min?: number | null;
   rate_source?: string;
   minutes: number | null;
@@ -65,6 +72,8 @@ export type RouteRecRecording = {
   missing_words: string | null;
   minimap: "present" | "absent" | null;
   xy: [number, number] | null;
+  session: string | null; // record_session's session id, once found
+  session_path: string | null;
 };
 
 export type RouteRecLast = {
@@ -73,7 +82,9 @@ export type RouteRecLast = {
   ended: string;
   stop_reason: string;
   rc: number | null;
-  bytes: number | null;
+  bytes: number | null; // measured from the local session folder
+  session: string | null;
+  session_path: string | null;
   split: string;
   refused: boolean;
 };
@@ -129,7 +140,11 @@ export function sizeText(bytes: number): string {
 export function diskLine(disk: RouteRecDisk): { level: Level; text: string; minutes: number | null } {
   const room = disk.usable_bytes == null ? "" : ` (${sizeText(disk.usable_bytes)} free above the space the recorder keeps)`;
   if (disk.verdict === "refuse") {
-    return { level: "bad", minutes: disk.minutes, text: disk.error ? `The disk could not be read: ${disk.error}.` : "No room: nothing fits above the space the recorder keeps free." };
+    if (disk.error) return { level: "bad", minutes: disk.minutes, text: `The disk could not be read: ${disk.error}.` };
+    if (disk.limit === "unshipped") {
+      return { level: "bad", minutes: disk.minutes, text: "No room: recordings waiting to be shipped fill the recorder's limit on the bot server's disk. Ship them first." };
+    }
+    return { level: "bad", minutes: disk.minutes, text: "No room: nothing fits above the space the recorder keeps free on the bot server's disk." };
   }
   if (disk.verdict === "unknown" || disk.minutes == null) {
     return { level: "unknown", minutes: null, text: `The minutes that fit are not known yet: this format has no measured rate${room}.` };

@@ -179,10 +179,29 @@ def test_the_minutes_that_fit_above_the_floor() -> None:
         "verdict"] == "warn"  # fmt: skip
 
 
+def test_the_recorders_unshipped_cap_can_leave_less_room_than_its_floor() -> None:
+    """record_session's other local cap (dataset_ship.local_caps): no more than
+    MAX_UNSHIPPED_BYTES waiting under its local root; the smaller room is the one that counts."""
+    e = rr.estimate(100 * GB, 30 * GB, 41e6, "src", unshipped=5 * GB, cap=20 * GB)
+    assert (e["usable_bytes"], e["limit"], e["minutes"]) == (15 * GB, "unshipped", 365)
+    full = rr.estimate(100 * GB, 30 * GB, 41e6, "src", unshipped=21 * GB, cap=20 * GB)
+    assert (full["usable_bytes"], full["limit"], full["verdict"]) == (0, "unshipped", "refuse")
+    floor = rr.estimate(40 * GB, 30 * GB, 41e6, "src", unshipped=0, cap=20 * GB)
+    assert (floor["usable_bytes"], floor["limit"]) == (10 * GB, "floor")
+    assert rr.minutes_left(40 * GB, 30 * GB, 1e9) == 10.0
+    assert rr.minutes_left(40 * GB, 30 * GB, 1e9, cap_room=4 * GB) == 4.0
+    assert rr.minutes_left(40 * GB, 30 * GB, 1e9, cap_room=-1) == 0.0
+    assert rr.minutes_left(40 * GB, 30 * GB, None) is None
+
+
 def test_the_floor_is_the_recorders_own() -> None:
     """record_session refuses below dataset_ship.MIN_FREE_BYTES (its --min-free-gb default); the
     helper's floor is the same function, not a copied number."""
     assert rr.LiveHost().floor() == dataset_ship.min_free_bytes() == dataset_ship.MIN_FREE_BYTES
+    assert rr.LiveHost().unshipped_cap() == dataset_ship.MAX_UNSHIPPED_BYTES
+    assert rr.Helper(Path("/nonexistent-routerec"), host=object(), root=Path("/r")).local == (
+        dataset_ship.LOCAL_ROOT
+    )  # the recorder's default --out: the disk the video fills
 
 
 def test_the_rate_is_this_installs_median_else_the_formats_default_else_unknown() -> None:
@@ -324,11 +343,12 @@ def test_the_folder_is_amendment_8s_layout() -> None:
 
 
 def test_the_recorder_argv_and_its_caps() -> None:
-    out = Path("/store/recordings/2026-11-22/20261122T150405-route-route")
-    argv = rr.recorder_argv("py", "rdp", out, 5.0, 3600.0, 70 * GB)
+    """No --out: the recorder's default, the local root (CLAUDE.md rule 7: every recording on the
+    root disk as sequential files, shipped to the storage later)."""
+    argv = rr.recorder_argv("py", "rdp", 5.0, 3600.0, 70 * GB)
     assert argv == ["py", rr.RECORDER, "--backend", "rdp", "--label", "route", "--fps", "5",
-                    "--seconds", "3600", "--max-bytes", str(70 * GB),
-                    "--out", str(out)]  # fmt: skip
+                    "--seconds", "3600", "--max-bytes", str(70 * GB)]  # fmt: skip
+    assert "--out" not in argv
     assert "--format" not in argv  # its default format
     assert rr.recorder_seconds(rr.DEFAULTS, "vpp-hevc444-10-q20", LIM) == 3600.0  # 60 min
     assert rr.recorder_seconds(rr.DEFAULTS, "h264", LIM) == 3570.0  # the S2 client's cap
@@ -351,23 +371,60 @@ def test_the_h264_caps_are_record_sessions_own() -> None:
         rs.resolve_format(argparse.Namespace(**{**vars(ok), "format": None, "seconds": 3600.0}))
 
 
-def test_the_rdp_video_default_cannot_record_into_the_route_folder(
+def test_the_preflight_uses_the_default_out_and_keeps_the_recorders_other_refusals(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """Pins the conflict this phase reports (record_session unchanged): its rdp default records
-    only into dataset_ship.LOCAL_ROOT, so Amendment 8's folder under the storage setting is
-    refused in record_session's own words; the console's h264 needs its S2 dir beside it."""
+    """record_session's own rules for its DEFAULT --out (no "--out must be" ever), then the video
+    side's start checks (media_rec's directories and the sidecar's state; the state is injected,
+    so no docker call here) or h264's S2 recording dir."""
+    import os
+
+    import media_rec
     import record_session as rs
 
-    folder = tmp_path / "recordings" / "2026-11-22" / "20261122T150405-route-route"
-    fmt, why = rr.preflight("rdp", folder)
-    assert fmt == rs.VIDEO_FORMAT and why is not None and "--out must be" in why
-    assert rr.preflight("rdp", dataset_ship.LOCAL_ROOT) == (rs.VIDEO_FORMAT, None)
+    local, ctl = tmp_path / "poring-lab-rec", tmp_path / "mediarec"
+    calls: list[str] = []
+
+    def state(s: str) -> Any:
+        def got() -> str:
+            calls.append(s)
+            return s
+
+        return got
+
+    me = os.getuid()
+    fmt, why = rr.preflight("rdp", root=local, ctl=ctl, uid=me, container_state=state("running"))
+    assert fmt == rs.VIDEO_FORMAT and why is not None and "media_rec.py prep" in why
+    assert "--out must be" not in why and calls == []  # the directories first, as VideoFeed
+    ctl.mkdir(mode=0o700)
+    media_rec.rec_dir(local).mkdir(parents=True, mode=0o700)
+    fmt, why = rr.preflight("rdp", root=local, ctl=ctl, uid=me, container_state=state("exited"))
+    assert fmt == rs.VIDEO_FORMAT and why is not None
+    assert why.startswith("the video side cannot start:") and "is exited" in why
+    assert f"start:{media_rec.SERVICE}@60" in why
+    assert rr.preflight("rdp", root=local, ctl=ctl, uid=me,
+                        container_state=state("running")) == (rs.VIDEO_FORMAT, None)  # fmt: skip
     monkeypatch.setenv("S2_REC_DIR", str(tmp_path / "s2"))
-    fmt, why = rr.preflight("console", folder)
+    fmt, why = rr.preflight("console", root=local)
     assert fmt == "h264" and why is not None and "does not exist" in why
     (tmp_path / "s2").mkdir()
-    assert rr.preflight("console", folder) == ("h264", None)  # the same filesystem: a rename
+    assert rr.preflight("console", root=local) == ("h264", None)  # the same filesystem: a rename
+    fmt, why = rr.preflight("hold", root=local)
+    assert why is not None  # resolve_format's own refusal, in its words
+
+
+def test_the_session_is_found_under_the_local_root_after_the_start() -> None:
+    names = ["20261122T150000-rdp-xmas02-ifsH7",  # another recording: another label
+             "20261122T145950-rdp-route",  # an older route session: before this start
+             "20261122T150003-rdp-route",
+             ".media-rec", ".s2-h264", ".ship.lock"]  # fmt: skip
+    assert rr.pick_session(names, "rdp", "20261122T150001") == "20261122T150003-rdp-route"
+    assert rr.pick_session(names, "console", "20261122T150001") is None
+    h264 = [".20261122T150002-console-route.h264"]  # in the S2 dir until the end
+    assert rr.pick_session(h264, "console", "20261122T150001") == "20261122T150002-console-route"
+    hevc = [".20261122T150002-rdp-route.hevc", ".20261122T150002-rdp-route.ffmpeg.log"]
+    assert rr.pick_session(hevc, "rdp", "20261122T150001") == "20261122T150002-rdp-route"
+    assert rr.pick_session([], "rdp", "20261122T150001") is None
 
 
 def test_the_split_is_decided_at_the_start_from_the_earlier_ones() -> None:
@@ -388,24 +445,30 @@ def test_the_manifest_its_end_and_the_index() -> None:
     man = rr.manifest("20261122T150405", folder, map_name="xmas_dun02", backend="console",
                       fmt="h264", fps=5.0, split=("held-out", "rule"), start="2026-11-22T15:04:05",
                       t0_mono_ns=1, argv=["py", "x"], max_bytes=10, max_s=3570.0, check=None,
-                      s=rr.DEFAULTS)  # fmt: skip
+                      local=Path("/home/bot/poring-lab-rec"), s=rr.DEFAULTS)  # fmt: skip
+    assert man["session"] == {"id": None, "path": None, "root": "/home/bot/poring-lab-rec",
+                              "found": None}  # fmt: skip
     assert (man["purpose"], man["keep"], man["split"], man["end"]) == (
         "route", False, "held-out", None)  # fmt: skip
     assert (man["format"], man["fps"], man["stop_reason"], man["bytes"]) == (
         "h264", 5.0, None, None)  # fmt: skip
-    res = {"dir": "/s", "bytes": 123_000_000, "mb_per_min": 41.0,
+    sid = "20261122T150406-console-route"
+    res = {"dir": f"/home/bot/poring-lab-rec/{sid}", "bytes": 120_000_000, "mb_per_min": 41.0,
            "stop_reason": "stopped by signal"}  # fmt: skip
+    ptr = rr.session_pointer(Path("/home/bot/poring-lab-rec"), sid, "recorder")
     end = rr.ended(man, end="2026-11-22T15:07:05", t1_mono_ns=2, stop_reason="you pressed Stop",
-                   rc=0, result=res, seconds=180.04, refused=False)  # fmt: skip
+                   rc=0, result=res, seconds=180.04, refused=False, session=ptr,
+                   folder_bytes=123_000_000)  # fmt: skip
     assert (end["end"], end["stop_reason"], end["bytes"], end["seconds"]) == (
-        "2026-11-22T15:07:05",
-        "you pressed Stop",
-        123_000_000,
-        180.0,
-    )  # h264's result: no seconds
-    assert end["recorder"]["rc"] == 0 and end["recorder"]["session"] == "/s"
+        "2026-11-22T15:07:05", "you pressed Stop", 123_000_000, 180.0)  # fmt: skip
+    # the bytes: measured from the local session folder; the recorder's own count stays its own
+    assert end["recorder"]["result"]["bytes"] == 120_000_000 and end["recorder"]["rc"] == 0
+    assert end["session"] == {"id": sid, "path": f"/home/bot/poring-lab-rec/{sid}",
+                              "root": "/home/bot/poring-lab-rec", "found": "recorder"}  # fmt: skip
     e = rr.index_entry(end, "2026-11-22/" + folder.name)
     assert e["mb_per_min"] == 41.0 and e["dir"].startswith("2026-11-22/") and not e["refused"]
+    assert (e["session"], e["session_path"], e["bytes"]) == (
+        sid, f"/home/bot/poring-lab-rec/{sid}", 123_000_000)  # fmt: skip
     idx = rr.index_put({"recordings": [{"dir": "other"}]}, rr.index_entry(man, e["dir"]))
     idx = rr.index_put(idx, e)  # the end replaces the start's entry
     assert [x["dir"] for x in idx["recordings"]] == ["other", e["dir"]]
@@ -501,6 +564,11 @@ class FakeHost:
         self.script: Any = lambda t: Shot()
         self.lock_ = SimpleNamespace(backend="console", phase="steady")
         self.free_ = 100 * GB
+        self.free_paths: list[Path] = []  # which filesystem each free-bytes read asked for
+        self.unshipped_, self.cap_ = 0, 20 * GB  # dataset_ship.MAX_UNSHIPPED_BYTES's 20 GB
+        self.names_: list[str] = []  # the local root's listing (record_session's sessions)
+        self.tree_: dict[str, int] = {}  # a local session folder's bytes, by its name
+        self.preflight_roots: list[Path] = []
         self.ps_: list[str] = []
         self.fmt, self.problem = "h264", None
         self.spawned: list[tuple[list[str], FakeProc]] = []
@@ -519,10 +587,23 @@ class FakeHost:
         return self.lock_
 
     def free(self, path: Path) -> int:
+        self.free_paths.append(path)
         return self.free_
 
     def floor(self) -> int:
         return 30 * GB
+
+    def unshipped(self, root: Path) -> int:
+        return self.unshipped_
+
+    def unshipped_cap(self) -> int:
+        return self.cap_
+
+    def session_names(self, local: Path) -> list[str]:
+        return list(self.names_)
+
+    def tree_bytes(self, path: Path) -> int | None:
+        return self.tree_.get(path.name)
 
     def ps(self) -> list[str]:
         return self.ps_
@@ -530,7 +611,8 @@ class FakeHost:
     def limits(self) -> rr.Limits:
         return LIM
 
-    def preflight(self, backend: str, out: Path) -> tuple[str | None, str | None]:
+    def preflight(self, backend: str, local: Path) -> tuple[str | None, str | None]:
+        self.preflight_roots.append(local)
         return self.fmt, self.problem
 
     def spawn(self, argv: list[str], log: Path) -> FakeProc:
@@ -556,8 +638,10 @@ def rig(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Any:
     d = tmp_path / "settings" / "routerec"
     d.mkdir(parents=True)
     root = tmp_path / "store" / "recordings"
-    h = rr.Helper(d, host, root, clock=lambda: clk.t, wall=lambda: 1_763_798_400.0 + clk.t)
-    return SimpleNamespace(h=h, host=host, clk=clk, d=d, root=root)
+    local = tmp_path / "poring-lab-rec"  # the recorder's local root (LOCAL_ROOT in production)
+    h = rr.Helper(d, host, root, clock=lambda: clk.t, wall=lambda: 1_763_798_400.0 + clk.t,
+                  local=local)  # fmt: skip
+    return SimpleNamespace(h=h, host=host, clk=clk, d=d, root=root, local=local)
 
 
 def ask(rig: Any, action: str, rid: str, **kw: Any) -> None:
@@ -581,22 +665,32 @@ def test_a_check_writes_its_answer_with_the_request_id(rig: Any) -> None:
     ask(rig, "check", "check0001")
     c = rig.h.check
     assert c["id"] == "check0001" and c["ready"] and c["can_start"]
-    assert (c["format"], c["disk"]["minutes"], c["disk"]["verdict"]) == ("h264", 1707, "ok")
+    # the local root's disk: 70 GB above the floor, the 20 GB unshipped cap the smaller room
+    assert (c["format"], c["disk"]["minutes"], c["disk"]["verdict"]) == ("h264", 487, "ok")
+    assert (c["disk"]["limit"], c["disk"]["root"]) == ("unshipped", str(rig.local))
+    assert rig.host.free_paths == [rig.local] and rig.host.preflight_roots == [rig.local]
     assert c["minimap"] == "present" and c["xy"] == [50, 50] and c["frame"] == [1280, 720]
     rig.host.script = lambda t: Shot(basic=False, minimap="absent", xy=None)
     ask(rig, "check", "check0002")
     c = rig.h.check
     assert not c["ready"] and c["missing"] == ["basic_info"] and not c["can_start"]
     assert c["minimap"] == "absent" and "status window" in c["words"]
-    rig.host.fmt, rig.host.problem = "vpp-hevc444-10-q20", "--out must be /home/bot/poring-lab-rec"
+    why = "the video side cannot start: poring-lab-media-rec-1 is exited: ..."
+    rig.host.fmt, rig.host.problem = "vpp-hevc444-10-q20", why
     rig.host.script = lambda t: Shot()
     ask(rig, "check", "check0003")
     c = rig.h.check
-    assert c["ready"] and not c["can_start"] and c["recorder"].startswith("--out must be")
+    assert c["ready"] and not c["can_start"] and c["recorder"] == why
+    assert c["words"].startswith("the recorder would refuse: the video side cannot start")
     assert c["disk"]["minutes"] is None and c["disk"]["verdict"] == "unknown"  # not measured yet
     rig.h.write_status()
     st = json.loads((rig.d / "status.json").read_text())
     assert st["check"]["id"] == "check0003" and st["state"] == "idle" and st["recording"] is None
+    assert st["local_root"] == str(rig.local)
+    rig.host.fmt, rig.host.problem = "h264", None
+    rig.host.unshipped_ = 21 * GB  # the recorder would refuse: its unshipped cap is full
+    ask(rig, "check", "check0004")
+    assert rig.h.check["disk"]["verdict"] == "refuse" and "dataset_ship.py ship" in rig.h.detail
 
 
 def test_a_start_is_refused_while_a_bot_plays_or_the_game_is_not_ready(rig: Any) -> None:
@@ -620,9 +714,11 @@ def test_a_start_is_refused_while_a_bot_plays_or_the_game_is_not_ready(rig: Any)
 
 
 def test_a_recording_end_to_end(rig: Any) -> None:
-    """Start (the check first), the recorder's argv, the manifest and the index at the start; the
+    """Start (the check first), the recorder's argv (no --out: its local root), the manifest and
+    the index at the start; the session found under the local root (the manifest's pointer); the
     guide while it records (started, a map change once, indoors); Stop = SIGINT to its PID; the
-    end in the manifest, the index and the status."""
+    end in the manifest (the pointer as record_session reports it, the bytes measured from the
+    local session folder), the index and the status. The route folder holds no video."""
     ask(rig, "start", "start0001", map="xmas_dun02")
     ((argv, proc),) = rig.host.spawned
     folder = rig.h.rec.dir
@@ -630,10 +726,11 @@ def test_a_recording_end_to_end(rig: Any) -> None:
     assert argv[argv.index("--backend") + 1] == "console" and argv[argv.index("--fps") + 1] == "5"
     assert argv[argv.index("--seconds") + 1] == "3570"  # 60 min, the h264 cap
     assert argv[argv.index("--max-bytes") + 1] == str(8192 * 10**6)
-    assert argv[argv.index("--out") + 1] == str(folder) and "--format" not in argv
+    assert "--out" not in argv and "--format" not in argv  # its default folder and format
     man = json.loads((folder / "manifest.json").read_text())
     assert (man["purpose"], man["keep"], man["split"], man["end"]) == (
         "route", False, "held-out", None)  # fmt: skip
+    assert man["session"] == {"id": None, "path": None, "root": str(rig.local), "found": None}
     idx = json.loads((rig.root / "index.json").read_text())
     assert [e["dir"] for e in idx["recordings"]] == [f"{folder.parent.name}/{folder.name}"]
     assert rig.h.state == "starting"
@@ -646,38 +743,53 @@ def test_a_recording_end_to_end(rig: Any) -> None:
         return Shot(minimap="absent", xy=None)
 
     rig.host.script = script
+    sid = f"{rig.h.rec.id}-console-route"  # record_session stamps its id as it starts
+    rig.host.names_ = ["20261122T000000-console-route", ".s2-h264", f".{sid}.h264"]  # an old one
     advance(rig, 120.0)
+    man = json.loads((folder / "manifest.json").read_text())  # the pointer, written once found
+    assert man["session"] == {"id": sid, "path": str(rig.local / sid), "root": str(rig.local),
+                              "found": "listing"}  # fmt: skip
     assert rig.h.state == "recording"
     kinds = [n["kind"] for n in rig.h.notes]
     assert kinds == ["started", "map_change", "map_change", "indoors"], kinds
     assert len({n["id"] for n in rig.h.notes}) == len(kinds)  # each its own id
     rs = rig.h.rec_status()
     assert rs["minimap"] == "absent" and rs["ready"] and rs["elapsed_s"] == 120.0
+    assert rs["session"] == sid and rs["session_path"] == str(rig.local / sid)
+    assert set(rig.host.free_paths) == {rig.local}  # the disk the video fills, never the storage
 
     ask(rig, "stop", "stop00001")
     assert proc.signals == [signal.SIGINT] and rig.h.state == "stopping"
     ask(rig, "stop", "stop00002")  # a second Stop: nothing more is sent
     assert proc.signals == [signal.SIGINT]
-    result = {"dir": str(folder / "x"), "bytes": 300_000_000, "mb_per_min": 41.0,
-              "stop_reason": "stopped by signal", "format": "h264"}  # fmt: skip
+    result = {"dir": str(rig.local / sid), "bytes": 300_000_000, "mb_per_min": 41.0,
+              "stop_reason": "stopped by signal"}  # fmt: skip
+    rig.host.tree_[sid] = 300_100_000  # the local session folder: the video, its index, packets
     proc.end(0, json.dumps(result))
     advance(rig, 121.0)
     assert rig.h.rec is None and rig.h.state == "ended" and rig.host.released == 1  # at the end
     man = json.loads((folder / "manifest.json").read_text())
     assert (man["stop_reason"], man["bytes"], man["recorder"]["rc"]) == (
-        "you pressed Stop", 300_000_000, 0)  # fmt: skip
+        "you pressed Stop", 300_100_000, 0)  # fmt: skip
+    assert man["session"] == {"id": sid, "path": str(rig.local / sid), "root": str(rig.local),
+                              "found": "recorder"}  # fmt: skip
     assert man["end"] is not None and man["split"] == "held-out"
     (entry,) = json.loads((rig.root / "index.json").read_text())["recordings"]
-    assert entry["bytes"] == 300_000_000 and entry["mb_per_min"] == 41.0 and entry["end"]
+    assert entry["bytes"] == 300_100_000 and entry["mb_per_min"] == 41.0 and entry["end"]
+    assert entry["session"] == sid and entry["session_path"] == str(rig.local / sid)
+    assert sorted(p.name for p in folder.iterdir()) == [
+        "events.jsonl", "manifest.json", "recorder.log"]  # a pointer, no video  # fmt: skip
     last = rig.h.notes[-1]
     assert (last["kind"], last["level"]) == ("stopped", "info")
     assert "you pressed Stop" in last["text"]
     ev = [e["kind"] for e in events(folder)]
     assert ev[0] == "start" and ev[-1] == "end" and "stop" in ev and "jump" in ev
     assert "minimap_gone" in ev and ev.count("notification") == 5
+    assert ev.count("session_found") == 1
     rig.h.write_status()
     st = json.loads((rig.d / "status.json").read_text())
     assert st["last"]["stop_reason"] == "you pressed Stop" and st["recording"] is None
+    assert st["last"]["session_path"] == str(rig.local / sid)
     assert [n["kind"] for n in st["notifications"]][-1] == "stopped"
 
 
