@@ -1154,3 +1154,35 @@ A count under its minimum is NO VERDICT, never a pass.
 - **If it fails:** a round 10, pre-registered from its diagnosis.
 - **Code first** (this commit's sibling): fi_labels' and fi_eval's round 9 names (ifH21-ifH30,
   ifsH7, ifsH8), seed 76 and `--strata r9`, with tests.
+
+### Amendment 33 (2026-11-22 17:08 ICT from `date`, BEFORE any round-9 eval label): the dev client crashed during ifH22; that attempt is ABORTED and ifH22 is recorded again
+
+- **Done so far:** ifsH7 and ifsH8 (immune, shipped), immunity OFF judged on a frame, then
+  ifH21 (15:52-16:22: 1,637 frames, no pause, the time box ended normally; shipped).
+- **ifH22's first attempt (recording from 16:23:41):** the dev client crashed at **16:28:38**
+  (Windows showed the "Gravity(tm) Error Handler" box, Exception 0xc0000005 in PoringLab.exe, on
+  a black desktop). The last game frame is frame 295 (16:28:37); frames 296-320 are the box (the
+  recorder stores a frame on change, so 25 frames, one a minute, to 16:52).
+  - The runner paused at 16:28:38 (the taskbar showed) and pressed nothing until the series'
+    time-box Stop at 16:53. Its own log says "Ended: input_refused", but the series and
+    `pilot_rec.sh` said `play rc=0`, so the session SHIPPED with 4 min 57 s of play.
+  - It does not meet this held-out's definition (25-min natural pilots, Amendment 32). It is
+    renamed on the NAS `20261122T162341-rdp-xmas02-ifH22-ABORTED` (its checksums verified after
+    the rename) and is NOT part of the held-out, as round 8's ifH12 attempts (Amendment 28).
+  - The decision rests on the crash alone: no label, box or item crop of that session was looked
+    at (only frames 289-297's brightness and two frames of the error box).
+- **ifH23's first start (16:53:43)** stopped before any recording: the identity check read no
+  name plate (the box was on the screen), so nothing was typed; "zoom not default". Its
+  leftovers are renamed `-aborted-1706`; no session was made.
+- **Recovery (17:00-17:05):** the box's Exit closed the box but not the process; the server still
+  had the Rogue online. Three PoringLab.exe processes were found from the agent's own
+  non-elevated shell (today's crashed one and two windowless ones left from 11-20) and ended by
+  id; the account went offline; one `ro_agent.py recover gm --retries 0` was in game at 17:05:40.
+  The idle Rogue, not immune, had been killed while the crashed client held her session; each
+  pilot's own start heals her (`@heal`) and warps her to the stand.
+- **The rest:** ifH22 (recorded again under the same name), then ifH23 .. ifH26, by
+  `r9_pilots2.sh` from 17:07. It adds one check after each pilot: the recording holds at least
+  1,400 frames (a full pilot held 1,603-1,723 in rounds 8-9) and the run log has no PAUSED line;
+  otherwise it stops for a person. Nothing else changes: the held-out is ifsH7, ifsH8 and
+  ifH21 .. ifH26 (plus Amendment 32's one extension if a minimum is short), labelled, packed and
+  scored as Amendment 32 says.
