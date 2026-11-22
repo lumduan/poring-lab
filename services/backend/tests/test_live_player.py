@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import ast
 import inspect
+import io
 import json
 import sys
 import textwrap
@@ -921,6 +922,21 @@ def test_the_pause_notes_log_each_pause_and_return_and_sum_them(
     notes.session.close()
     kinds = [e["kind"] for e in events(demo)]
     assert kinds == ["pause", "resume"]
+
+
+def test_a_run_that_ends_paused_counts_the_open_pause() -> None:
+    """2026-11-22 16:28: the client crashed, the Run paused and was Stopped ~24 min later without a
+    resume; its summary said "0 s in all". An open pause counts up to the end."""
+    now = [100.0]
+    notes = fp.PauseNotes(out=io.StringIO())
+    notes.clock = lambda: now[0]
+    notes("pause", {"why": "the Windows taskbar shows", "t_wall": 1.0})
+    now[0] = 112.5
+    notes("resume", {"after_s": 12.5, "t_wall": 2.0})
+    assert notes.summary() == {"pauses": 1, "paused_s": 12.5}  # closed: as before
+    notes("pause", {"why": "the Windows taskbar shows", "t_wall": 3.0})
+    now[0] = 112.5 + 1468.0
+    assert notes.summary() == {"pauses": 2, "paused_s": 1480.5, "ended_paused": True}
 
 
 def test_a_run_turns_the_pause_on_and_stop_ends_it(

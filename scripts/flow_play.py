@@ -2679,22 +2679,34 @@ class PauseNotes:
         self.lock = threading.Lock()
         self.count = 0
         self.total_s = 0.0
+        # a pause still open (no "resume" yet): a Run that ENDS paused (Stop pressed while the game
+        # is off the screen, e.g. a client crash 2026-11-22) counts it up to the end; before, only
+        # a resume added a pause's time, so such a Run said "0 s in all" after ~24 min paused
+        self.open_since: float | None = None
+        self.clock = time.monotonic
 
     def __call__(self, kind: str, info: Mapping[str, Any]) -> None:
         with self.lock:
             if kind == "pause":
                 self.count += 1
+                self.open_since = self.clock()
                 say(f"PAUSED: {info.get('why')}. The bot waits and presses nothing; it goes on by "
                     "itself when the game is back on the screen.", self.out)  # fmt: skip
             else:
                 self.total_s += float(info.get("after_s") or 0.0)
+                self.open_since = None
                 say(f"RESUMED after {info.get('after_s')} s: the game is back on the screen; the "
                     "bot goes on.", self.out)  # fmt: skip
             if self.session is not None:
                 self.session.ev({"kind": kind, **info})
 
     def summary(self) -> dict[str, Any]:
-        return {"pauses": self.count, "paused_s": round(self.total_s, 1)}
+        with self.lock:
+            if self.open_since is None:
+                return {"pauses": self.count, "paused_s": round(self.total_s, 1)}
+            open_s = max(0.0, self.clock() - self.open_since)
+            return {"pauses": self.count, "paused_s": round(self.total_s + open_s, 1),
+                    "ended_paused": True}  # fmt: skip
 
 
 STOP_WHILE_PAUSED = "Stop was pressed while the run was paused (the game off the screen)"
@@ -2812,8 +2824,10 @@ def play(prep: Prepared, lio: LiveIO, *, label: str, stop_file: Path | None,
                 "keys": [] if player is None else player.keys_sent,
                 **({} if pause is None else pause.summary())})  # fmt: skip
         if pause is not None and pause.count:
-            say(f"paused {pause.count} time(s), {pause.total_s:.0f} s in all (the game off the "
-                "screen)")  # fmt: skip
+            ps = pause.summary()
+            tail = "; still paused at the end" if ps.get("ended_paused") else ""
+            say(f"paused {pause.count} time(s), {ps['paused_s']:.0f} s in all (the game off the "
+                f"screen){tail}")  # fmt: skip
         log.close()
         if bag0 is not None and bag1 is not None:
             try:
