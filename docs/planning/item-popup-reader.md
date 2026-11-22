@@ -360,5 +360,6 @@ set r2; `score-r2.json` sha256 5e2322a7...; pooled counts:
   `item_popup_eval` gains set `r3` (the regex, the packets and shard rule, the sha256 pin);
   synthetic tests (one shape with a tinted 6-pixel seal: a lead >= 0.5 is named; fewer than 6
   telling pixels joins the ids; no rival inside the margin = unchanged).
-- **If it passes:** the reader feeds each Run's item list (section 5) at 720; 1080 waits for
-  section 4's run-time check. **If it fails:** a round 4, pre-registered from its diagnosis.
+- **If it passes:** section 4's 1080 run-time check on dev is pre-registered next (its own
+  amendment); the reader feeds a Run's item list (section 5) only after that check.
+  **If it fails:** a round 4, pre-registered from its diagnosis.
