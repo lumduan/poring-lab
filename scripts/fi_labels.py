@@ -210,6 +210,8 @@ def r10_seed(names: Sequence[str]) -> int:
     the extension's 78 when any is ifH37 .. ifH40, else Amendment 36's 77."""
     ext = any(str(n).endswith(x) for n in names for x in R10_EXT_PILOTS)
     return R10_EXT_SEED if ext else R10_EVAL_SEED
+
+
 # every round `pack` packs (the CLI's --round choices; round 9's code first missed it, 11-22)
 PACK_ROUNDS = (1, 2, 3, 4, 5, 6, 7, 8, 9, 10)
 # Amendment 26: rounds 6 and 7's held-outs are SPENT (each scored once: 8a 11-21 14:59, round 7

@@ -911,7 +911,7 @@ def test_round7_pack_draws_natural_first_slot_and_staging_second() -> None:
 
 # --- Amendment 38: round 10's one extension (ifH37 .. ifH39), its pack seed 78 --------------------
 def test_round10_extension_seed_follows_the_sessions() -> None:
-    assert fl.R10_EXT_PILOTS == tuple(f"-xmas02-ifH{k}" for k in range(37, 41))
+    assert tuple(f"-xmas02-ifH{k}" for k in range(37, 41)) == fl.R10_EXT_PILOTS
     assert set(fl.R10_EXT_PILOTS) <= set(fl.R10_PILOTS)  # reserved and refused for TRAIN already
     eight = ["20261122T224432-rdp-xmas02-ifH31", "20261122T222134-rdp-xmas02-ifsH9"]
     assert fl.r10_seed(eight) == 77
