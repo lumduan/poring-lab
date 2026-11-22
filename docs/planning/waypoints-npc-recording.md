@@ -302,3 +302,58 @@ Batt, 2026-11-22 (~08:3x): "ok" to each recommendation.
    (`take_exit`) crosses. A one-point stay before a change gives no block.
    `keep_exit_cell=True` keeps the raw line for a caller that wants it.
 
+
+## Amendment 8 (2026-11-22 12:08 ICT from `date`): Batt's proposal -- routes from a RECORDING of the player's own play (video), recorded once, used twice
+
+**Batt, 2026-11-22 (~11:5x), the proposal:** the route helper records the player's own play as
+video. One recording serves two uses: the walk_to blocks (Amendment 5) and the future ML page
+(training data). Frames whose `x y` read badly are fixed from the frames beside them. Before a
+recording starts, the system checks the free disk and estimates how many minutes fit, so the user
+can manage their own disk. Recordings live in a folder layout like the logs, with a way to delete
+them when done.
+
+**The agent's view (given before any work):** agree. Analysis runs offline on the raw recording,
+so a better analysis can re-run on old recordings without walking the route again. The recorder
+already exists: `record_session.py`, whose RDP default is GPU video (ADR-0024: 0.84 vs 5.69 GB/h
+for PNG at 1 fps). PNG at 1080 and 1 fps measured 124.6 MB/min on ifH13 today.
+
+**Batt's decisions (11-22 ~12:0x):**
+1. **A notification on screen guides the player** step by step (e.g. "type /where now"), and is a
+   way to talk to the player. The player, not the bot, types `/where` on a new map: the bot never
+   types into the chat while a person plays. The reply is read from the video afterwards. If it
+   is missing, the editor asks for the map from a picker.
+   - Where it shows: in the CONSOLE page (web), over the stream view, plus an optional browser
+     notification. It is never drawn on the Windows game window: ADR-0019 (Windows stays clean)
+     needs a new ADR for any Windows-side piece. Agent's reading, to be confirmed by Batt.
+2. **5 fps video for a route recording** (agreed). The gap between two frames is filled with the
+   shortest walkable path on the map's GAT (`map_routes`).
+3. **The recording starts only when the game UI is up** (Batt: "this is easy"):
+   - Basic Information (the status window) and the chat window must be on screen, so a login
+     screen is never recorded;
+   - the minimap is optional. Indoor maps draw NO minimap on the lab's client, and so no `x y`
+     readout (`selfpos.py`: "a map where the client draws no minimap"). TO TEST on the dev client
+     before the design is fixed: which maps, and what the position source is there (the player's
+     `/where`, guided by the notification).
+   - Kept: recording only when the user presses Record, with a visible "recording" sign; other
+     players' names and chat stay local, never shipped; nothing on Windows (the server records).
+4. **Deleting is a user SETTING:** automatic (delete the video once its blocks are made) or manual
+   (one at a time, with the space freed shown). A recording marked "keep" is never deleted
+   automatically. The walk_to blocks live in the map's flow, so deleting the video loses no route.
+5. **Order, in parallel with the item-model work** (Batt: "if it can run in parallel, just do it"):
+   1. the offline pass on recordings: positions from the minimap readout, then smoothing over
+      neighbouring frames, scored against packet truth (lab sessions). The sessions and the bars
+      are pre-registered in a later amendment, before any score;
+   2. the "Record route" button: the readiness check (decision 3), the disk check and the minutes
+      estimate, the notifications;
+   3. walk_to blocks from a recording (`path_blocks.py`, Amendments 5-7);
+   4. the recordings page (list, size, keep, delete, the auto-delete setting), which the ML page
+      reuses.
+- **The folder layout** (like the logs; the root comes from the storage setting, no NAS assumed):
+
+      <storage>/recordings/<YYYY-MM-DD>/<stamp>-<map>-route/
+        manifest.json   format, fps, bytes, sha256, start/end, purpose (route / ml), keep,
+                        split (train / held-out, decided before anyone looks)
+        video ...       the recording (record_session.py's own files)
+        events.jsonl    minimap-change marks, readiness, notifications shown, the /where replies read
+        derived/        positions.jsonl (the smoothed track), blocks.json (the walk_to made)
+      <storage>/recordings/index.json   what the page lists: size, age, purpose, keep
