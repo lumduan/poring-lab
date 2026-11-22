@@ -370,3 +370,38 @@ def test_the_ranged_arm_plans_with_its_switch_and_its_player_setting(tmp_path: P
     assert isinstance(doc, dict), doc
     assert doc["vals"]["B"]["defend_box"] is True and doc["vals"]["B"]["defend_ranged"] is True
     assert doc["box_set"] == {"defend_box": True} and doc["player_set"] == {"defend_ranged": True}
+
+
+# --- Batt 2026-11-22, the fists: a switch turned OFF drops its own dependents -------------------
+def test_the_knife_swaps_dependents_are_its_options_and_keys() -> None:
+    deps = dict(sa.switch_dependents(("knife_swap",)))
+    assert deps == {"--steal-opener": True, "--dagger-key": True, "--knife-max-s": True,
+                    "--knife-hp-min": True, "--bare-ready": False, "--steal-cue": True,
+                    "--swap-gap": False}  # fmt: skip
+    assert "--bare-steal" not in deps  # the switch's own flag goes by ``switches``
+    assert sa.switch_dependents(()) == ()
+
+
+def test_a_switch_turned_off_may_drop_its_dependents_and_nothing_else() -> None:
+    deps = sa.switch_dependents(("knife_swap",))
+    a = ["play", "--loot", "trim", "--steal-opener", "F4", "--dagger-key", "F5", "--knife-max-s",
+         "8", "--bare-steal", "--bare-ready", "--steal-cue", "popup", "--swap-gap"]  # fmt: skip
+    b = ["play", "--loot", "trim"]
+    assert sa.argv_differs_in(a, b, (), (), ("--bare-steal",), deps)
+    assert not sa.argv_differs_in(a, b, (), (), ("--bare-steal",))  # not named: refused
+    assert not sa.argv_differs_in(a, [*b, "--dagger-key", "F5"], (), (), ("--bare-steal",), deps)
+    assert not sa.argv_differs_in(a, ["play", "--loot", "v1"], (), (), ("--bare-steal",), deps)
+
+
+def test_the_fists_block_plans_with_the_knife_swap_off(tmp_path: Path) -> None:
+    """--box-set knife_swap=false on the real box (stage10's B): only the swap's own setting
+    changes, the runner's argv loses --bare-steal and its dependents, nothing else."""
+    import stage10_ab as s10
+
+    text = s10.arm_text("B", 20)
+    box = sa.box_sets(["knife_swap=false"])
+    assert box == {"knife_swap": False}
+    doc = sa.plan_doc("fst-t", 1, 20, "1080", tmp_path, base=_base(), box_set=box,
+                      base_text=text)  # fmt: skip
+    assert isinstance(doc, dict), doc
+    assert doc["vals"]["B"]["knife_swap"] is False and doc["box_set"] == {"knife_swap": False}

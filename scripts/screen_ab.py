@@ -211,12 +211,49 @@ def without_tunes(argv: Sequence[str], names: Sequence[str]) -> list[str]:
     return out
 
 
+def switch_dependents(off: Sequence[str]) -> tuple[tuple[str, bool], ...]:
+    """PURE (Batt 2026-11-22, the fists: "no Knife swap, punch"): the runner flags of the settings
+    that are in use only while one of the switches ``off`` is on (Field.needs, followed to the end:
+    a dependent of a dependent too), each with whether it takes a value. Turning such a switch off
+    leaves them out of the argv with it (knife_swap: --steal-opener F4, --dagger-key F5, ...)."""
+    from poring_flow import settings as st
+
+    gone = set(off)
+    while True:
+        more = {
+            f.name
+            for f in st.FIELDS
+            if f.name not in gone and any(n in gone and want for n, want in f.needs)
+        }
+        if not more:
+            break
+        gone |= more
+    return tuple((f.flag, f.kind != "switch") for f in st.FIELDS
+                 if f.name in gone and f.name not in off and f.flag)  # fmt: skip
+
+
 def argv_differs_in(a: Sequence[str], b: Sequence[str], flags: Sequence[str],
-                    tunes: Sequence[str] = (), switches: Sequence[str] = ()) -> bool:  # fmt: skip
+                    tunes: Sequence[str] = (), switches: Sequence[str] = (),
+                    dropped: Sequence[tuple[str, bool]] = ()) -> bool:  # fmt: skip
     """PURE: argv ``b`` is ``a`` but for the VALUES right after ``flags``, the ``--tune`` pairs
     of ``tunes``, and the presence of the on / off ``switches`` (a switch box setting is a flag
     with no value: on adds it, off leaves it out; ranged-attacker-1080.md Amendment 2). Same
-    length otherwise, the same arguments everywhere else."""
+    length otherwise, the same arguments everywhere else. ``dropped`` (switch_dependents): flags
+    of a switch turned OFF that ``a`` may hold and ``b`` must not, each with its value if it
+    takes one."""
+    if dropped:
+        takes = dict(dropped)
+        if any(x in takes for x in b):
+            return False
+        kept: list[str] = []
+        i = 0
+        while i < len(a):
+            if a[i] in takes:
+                i += 2 if takes[a[i]] else 1
+                continue
+            kept.append(a[i])
+            i += 1
+        a = kept
     a, b = without_tunes(a, tunes), without_tunes(b, tunes)
     a = [x for x in a if x not in switches]
     b = [x for x in b if x not in switches]
@@ -231,7 +268,8 @@ def argv_differs_in(a: Sequence[str], b: Sequence[str], flags: Sequence[str],
 def player_set_arm(text: str, sets: Mapping[str, Any], secs: int,
                    flags: Sequence[str] = (),
                    tunes: Sequence[str] = (),
-                   switches: Sequence[str] = ()) -> dict[str, Any] | str:  # fmt: skip
+                   switches: Sequence[str] = (),
+                   dropped: Sequence[tuple[str, bool]] = ()) -> dict[str, Any] | str:  # fmt: skip
     """PURE but for flow_play.prepare: the block's box with its player settings -- its text, its
     settings and its project hash -- or a refusal: the settings must differ from the box's in the
     named ones alone, and the runner must get the same argv, box, keys and loop. ``flags``: runner
@@ -258,9 +296,10 @@ def player_set_arm(text: str, sets: Mapping[str, Any], secs: int,
         preps.append((h, prep.runners[s10.NODE]))
     (_, a), (h, b) = preps
     if not argv_differs_in(a.argv("L", None, None), b.argv("L", None, None), flags, tunes,
-                           switches):  # fmt: skip
+                           switches, dropped):  # fmt: skip
+        named = list(flags) + list(tunes) + list(switches) + [f for f, _v in dropped]
         return ("refused before any input: the settings changed the runner's argv beyond "
-                f"{list(flags) + list(tunes) + list(switches) or 'nothing'}'s value")  # fmt: skip
+                f"{named or 'nothing'}'s value")  # fmt: skip
     for k in ("box_kwargs", "keys", "loop", "tick_left_out"):
         va, vb = getattr(a, k), getattr(b, k)
         if (va() if callable(va) else va) != (vb() if callable(vb) else vb):
@@ -291,10 +330,11 @@ def plan_doc(label: str, n: int, minutes: float, screen: str, folder: Path,
         switches = tuple(by[k].flag for k in (box_set or {})
                          if by[k].flag and by[k].kind == "switch")  # fmt: skip
         tunes = tuple(k for k in (box_set or {}) if by[k].tune)
+        off = tuple(k for k, v in (box_set or {}).items() if by[k].kind == "switch" and v is False)
         ps = player_set_arm(base_text if base_text is not None
                             else s10.arm_text(BOX_ARM, minutes),
                             {**(sets or {}), **(box_set or {})}, secs, flags,
-                            tunes, switches)  # fmt: skip
+                            tunes, switches, switch_dependents(off))  # fmt: skip
         if isinstance(ps, str):
             return ps
         arm, vals = {**arm, "project_hash": ps["project_hash"]}, ps["vals"]

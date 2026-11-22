@@ -281,3 +281,12 @@ def test_a_measured_series_never_counts_the_bag() -> None:
     import flow_play as fp
 
     assert ab.env()[ab.fp_bag_env()] == "0" and ab.fp_bag_env() == fp.BAG_COUNT_ENV
+
+
+def test_the_setup_leaves_the_weapon_alone_when_the_block_turns_the_swap_off() -> None:
+    # Batt 2026-11-22: "no Knife swap; punch with the fists" -- both weapons in the bag reads
+    # "neither way", which stops a swap series but is the fists' own state
+    assert ab.swap_in_use({}) and ab.swap_in_use({"box_set": {}})
+    assert ab.swap_in_use({"box_set": {"knife_swap": True}})
+    assert ab.swap_in_use({"box_set": {"loot_items": "xmas02fi8"}})
+    assert not ab.swap_in_use({"box_set": {"knife_swap": False}})

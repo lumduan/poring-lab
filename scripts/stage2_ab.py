@@ -209,6 +209,14 @@ def clear_bag_refused(got: Mapping[str, Any]) -> str | None:
     return None
 
 
+def swap_in_use(doc: Mapping[str, Any]) -> bool:
+    """PURE (Batt 2026-11-22: "no Knife swap; punch with the fists"): False when the series'
+    block turns the Knife swap off (screen_ab --box-set knife_swap=false). Then the setup leaves
+    the weapon as the player set it (fists: none worn) and reads the two slots for the log only;
+    every other series (no box_set) keeps the Knife / dagger handling."""
+    return (doc.get("box_set") or {}).get("knife_swap") is not False
+
+
 def knife_worn(knife: Mapping[str, Any] | None) -> bool | None:
     """PURE: True when the slots read "the Knife worn" (its key EMPTY, the dagger's key showing
     an icon: the dagger in the bag), False when they read as a run's start wants them (the Knife
@@ -626,7 +634,12 @@ class Series:
         got = self.read()
         # the dagger on FIRST: clear-bag refuses with the dagger in the bag (2026-11-14 02:09)
         worn = knife_worn(got.get("knife"))
-        if worn:  # the dagger back on (the run's own dagger key), once, then read again
+        if not swap_in_use(self.doc):  # Batt 2026-11-22, the fists: the player's own weapon
+            self.log(
+                f"{r.label}: the Knife swap is off (box_set knife_swap false): the weapon "
+                f"is left as it is; the Knife / dagger slots read {got.get('knife')}"
+            )
+        elif worn:  # the dagger back on (the run's own dagger key), once, then read again
             self.log(
                 f"{r.label}: the Knife reads worn (F4 empty, F5 shows the dagger): {DAGGER_KEY}"
             )
