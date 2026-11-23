@@ -6,7 +6,7 @@ verdict_date: null
 verdict_ticket: null
 supersedes: null
 related: [xmas02-1080-detector.md, xmas02-detector.md, rogue-xmas02.md, screen-size-ab.md, fullscreen-client.md, ../../scripts/fi_labels.py, ../../scripts/fi_eval.py, ../../scripts/stage_items.py, ../../scripts/build_frame_cache.py]
-next_action: "ROUND 10 FAILS on I3-any (52 / 8,333 = 0.62 %; Amendment 40): 24 of the 52 frames are the snowflakes of one wall picture. Round 11 is pre-registered next from that diagnosis, before any round-11 data."
+next_action: "ROUND 11 (Amendment 41): xmas02fi9 = xmas02fi8 retrained with its own false boxes on rounds 8-10's spent held-outs as hard negatives (those 27 sessions join TRAIN), round 10's rule unchanged; a NEW held-out ifH41+ / ifsH11-12 (stagings in a later amendment), seed 79, scored ONCE by a wrapper committed first. Pass -> 8c (Batt deploys); fail -> round 12 from its diagnosis."
 title: "The floor-item model at 1920x1080: a 1080 round of the item detector, the 720 round 5's recipe with only the screen changed (pre-registration)"
 date: 2026-11-20
 owner: Batt
@@ -1519,3 +1519,73 @@ A count under its minimum is NO VERDICT, never a pass.
   I3-any here and on round 9's. Each held-out sits on one edge; the floor is not the fix.
 - **So the model has to learn the scenery as background.** Round 11 is pre-registered next, from
   this diagnosis and before any round-11 data.
+
+### Amendment 41 (2026-11-23 07:34 ICT from `date`, BEFORE any round-11 data): ROUND 11 pre-registered -- xmas02fi9: xmas02fi8 retrained on its own false boxes of the spent held-outs; those sessions join TRAIN; round 10's rule unchanged; a NEW held-out
+
+- **Why (Amendment 40):** xmas02fi8 + the rule has failed exactly one bar on each of three held-outs
+  (round 8 I1h at floor 0.50; rounds 9 and 10 I3-any at 0.40). What is left are SCENERY marks the
+  model takes for items: 24 of round 10's 52 frames are the snowflakes painted on one wall picture;
+  also a lamp post's foot, damage digits, monster and body parts. The same kind recurs (round 7's
+  floor snowflake, round 9's top-edge ornament). A rule cannot name them, and the floor only trades
+  I3-any against I1h. Round 8's recipe (the model's own false boxes as hard negatives) took I3-any
+  from 0.73 % to 0.28 %; the snowflake picture was never among its negatives (rounds 9-10's
+  held-outs did not exist yet). Batt's decision stands ("improve it until it passes").
+- **TRAIN** = round 8's TRAIN unchanged (Amendment 28: its 26 sessions + the linked round-5 cache,
+  62 sessions, 7,282 frames) PLUS the **27 SPENT held-out sessions of rounds 8-10**: ifH11-ifH16,
+  ifsH5, ifsH6; ifH21-ifH26, ifsH7, ifsH8; ifH31-ifH39, ifsH9, ifsH10.
+  - Released by exact name in code (`fi_labels.R11_RELEASED`, in `IF_RELEASED`); the reserved names
+    never recorded (ifH17-ifH20, ifH27-ifH30, ifH40) stay refused; an `-ABORTED` session is never
+    any split. `--eval-test` still reads them, so the old scores stay reproducible.
+  - Each is labelled `fi_labels.py label --spec 1080 --split train` at the frozen params
+    (ad268afd...) and judged by G2 as round 8 did (a session failing G2 is out, and counted).
+- **Negatives:**
+  - the session negatives as round 8: 150 from each pilot's own item-free kept frames, 1 per 3 item
+    frames for the stagings;
+  - **every hard negative:** an item-free kept frame on which xmas02fi8 boxed an item at
+    conf >= 0.25 (fi_eval.CONF) with no rule, mined by `fi_hard_negs.py mine` from the GPU
+    predictions ALREADY MADE on these 27 sessions (`archive/train/eval/xmas02fi8-r8`, `-r9`,
+    `data/train/eval/xmas02fi8-r10x`) with their eval label files. **Counted at 07:3x: 294
+    frames** over 25 sessions (1-25 each; the snowflake picture's ifH36 21, ifH38 14, ifH39 15;
+    20,084 item-free frames read). The TRAIN labels decide the final set: a listed frame they do
+    not keep item-free is counted, not written. Each is written once (no oversampling);
+  - no new mining on round 8's own 26 TRAIN sessions (xmas02fi8 learnt from them).
+- **The model, xmas02fi9:** trained from xmas02fi8's last.pt (74092985...) with round 8's trainer
+  settings (`--batch 2 --hsv-s 0.2 --close-mosaic 3 --scale 0.1`, imgsz 1280 and seed 20261004 by
+  default) and **`--workers 1`** (Batt 11-22); epochs by section 7's formula on the combined TRAIN
+  (`min(12, max(3, 5400 // (0.64 N + 100)))`: 3 at the expected ~10,000 frames); VAL ifF, a monitor
+  only; up to 3 resumes; then the freeze as round 8's (sha256, the 736 x 1280 ONNX, the archive) and
+  its registration for the detect server (a commit before the score).
+- **The rule at inference:** round 10's, unchanged: floor 0.40, ring 30 px, pad 6, view edge
+  12 / 32 (`--item-floor 0.4 --ring-red 30 --edge-margin 12 --edge-top 32`).
+- **The GPU:** the dev worker runs one job, so the training runs after the held-out pilots (they
+  need the detect server), never beside them. It does not stop for a live Run; the live detect
+  server's minute p95 is logged and reported.
+- **The new held-out:**
+  - **stagings ifsH11 and ifsH12**, immune; their seeds and cells come in a later amendment,
+    before any recording, sharing no cell with any earlier staging on this map;
+  - then immunity OFF, read back on a frame;
+  - **natural pilots ifH41, ifH42, ...**, NOT immune, 25 min each, xmas02v1080, stage2_ab's setup,
+    **her Knife-swap build** (rounds 8-10's; the fists trial's build is undone first and read
+    against the old window: HIT 205, FLEE 246 + 1, Aspd 176). As many as I2's 20 episodes need: 6
+    to start, then Amendment 16's one extension (3 more) if I2 is short;
+  - **one procedure change, for her safety only:** the pre-run checks wait in town (fists-1080.md
+    Amendment 4: `@warp prontera 156 191` before the checks and right after the zoom check), so she
+    no longer stands ~1.5 min on xmas_dun02, not immune, before each run. The run's own setup warps
+    her to its start cell as before, so the play is unchanged;
+  - every name refused for TRAIN in code before its first recording (`R11_HELD_OUT`, ifH41-ifH50,
+    ifsH11, ifsH12: this commit's sibling);
+  - labelled `--eval-test` against the frozen xmas02fi9; ONE pack `--round 11 --eval-test` at seed
+    **79**; two NEW blind labellers.
+- **The bars:** section 8a's, unchanged, scored ONCE by a wrapper committed before any round-11
+  label (`--strata r11` with round 10's rule; I5 for xmas02fi9 against xmas02fi5). Reported beside
+  them (no bar), on the same held-out: xmas02fi8 + round 10's rule, xmas02fi6 + the rule at 0.50,
+  xmas02fi5 with no rule.
+- **If it passes:** 8c at 1080 (A = xmas02fi5, B = xmas02fi9 + round 10's rule through the player's
+  settings, Amendment 37; 3 valid runs a side); deployed at 1080 only, on Batt's word.
+- **If it fails:** a round 12, pre-registered from its diagnosis.
+- **The order (estimates):** the fists trial ends ~08:55 -> her Knife-swap build back -> the
+  stagings -> ifH41-ifH46 (~3.3 h), with the TRAIN labelling, the hard-negative list and the cache
+  on the CPU beside them (held-out recordings are not timed arms) -> the training (~4-6 h with one
+  loader worker) -> the freeze -> the eval chain, the labellers and the one score.
+- **Code first (with tests, before any round-11 label):** fi_labels' round-11 names (refused for
+  TRAIN), `R11_RELEASED`, seed 79 and `pack --round 11`; fi_eval `--strata r11`.
