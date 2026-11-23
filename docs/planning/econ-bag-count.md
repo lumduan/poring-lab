@@ -7,7 +7,7 @@ verdict_date: null
 verdict_ticket: null
 supersedes: null
 related: [../econ/economics.md, ../../scripts/slot_items.py, ../../scripts/hotbar_count.py, ../../scripts/econ_dash.py, ../../packages/poring_env/src/poring_env/panelfind.py]
-next_action: "Build scripts/bag_count.py (section 3), then the offline trials against the lab database (section 4)."
+next_action: "The window's rows (7 x 6..12) are on main (Amendment 5: cf8ae9ea, ad19d6d0; the dev 7 x 6 trial passes B1-B4). Batt's 7 x 9 bag is checked on live by the Run's own start census once main is promoted to live (Batt's word, between Runs)."
 title: "The economy from the bot's own bag (Economy option b-i): count the inventory at a Run's start and end (pre-registration)"
 date: 2026-11-20
 owner: Batt
@@ -190,3 +190,28 @@ add (`@item 601 199`, items 927 / 933) simply is not in it.
 - Recommended: price a group by its one NPC-sold member. **Batt 2026-11-20: "ปีกไม่ต้องใส่ราคา"
   (do not price the wings).** The rule stays as built. The economy still shows the wings' USED
   counts; they are not in the cost.
+
+## Amendment 5 (2026-11-23 12:52 ICT from `date`): the window's ROWS (Batt's 7 x 9 live bag); on main; the dev trial
+
+- **Why:** live's Run start has always said "the bag did not count at the start: Alt+E showed no
+  bag (no oval lattice found)": Batt's bag window is 7 x 9 (dragged taller); section 3's rule
+  fitted a fixed 7 x 6, and on a 7 x 9 tab with 21+ items it would fit the ovals three rows LOW
+  (a silent wrong place). Batt 11-23 ~12:3x: "carry on" (fists-1080.md Amendment 10).
+- **The change** (built 11-22 04:1x on branch `bag-rows`, rebased onto main and merged 11-23 12:39:
+  cf8ae9ea, ad19d6d0): the ovals still fix the window's columns and its LAST row (the tail rule,
+  the clear ring); its TOP is the first row, going up, that shows no slot (a slot row shows >= 4
+  rows of oval or NEW-glow pixels in its oval box: an empty cell 10, an item 6-10, the title bar
+  1-2); rows 6..12, else no bag. `find_bag` returns the origin and the rows; the census records
+  "rows" and checks every tab at the same place and rows. Tests: 7 x 6 / 7 / 9 / 12 found at any
+  fill, a 7 x 9 tab read item for item, a bag cut by the frame's edge, taller than 12 = none.
+  35 tests pass (bag_count + ro_agent panels; the panel tests need the checkout's data/).
+- **The dev trial (12:49 and 12:5x, the trial command, B1-B4 of section 4):** the lab's 7 x 6 bag
+  found with rows 6 at (0, 120); 15 of 15 entries right, 0 wrong, every slot read, as found,
+  16.8 s: **PASS, twice**. Nothing regressed for 7 x 6.
+- **7 x 9 cannot be made on the dev client:** its inventory window did not grow from its resize
+  grip (three drags, fast and slow) -- Batt's client allows it, the lab's does not -- so 7 x 9 is
+  checked by the synthetic tests only, and on live by the Run's own start census after the
+  promotion (its log line names the rows).
+- **Live:** the live branch is 100 commits behind main (31 files: also the route recorder's
+  frontend, the fists fix 83645b20, popup round 5, the item rule's part C settings); a promotion is
+  Batt's word, between Runs.
