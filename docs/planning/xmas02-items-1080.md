@@ -6,7 +6,7 @@ verdict_date: null
 verdict_ticket: null
 supersedes: null
 related: [xmas02-1080-detector.md, xmas02-detector.md, rogue-xmas02.md, screen-size-ab.md, fullscreen-client.md, ../../scripts/fi_labels.py, ../../scripts/fi_eval.py, ../../scripts/stage_items.py, ../../scripts/build_frame_cache.py]
-next_action: "ROUND 11 (Amendment 41): xmas02fi9 = xmas02fi8 retrained with its own false boxes on rounds 8-10's spent held-outs as hard negatives (those 27 sessions join TRAIN), round 10's rule unchanged; a NEW held-out ifH41+ / ifsH11-12 (stagings in a later amendment), seed 79, scored ONCE by a wrapper committed first. Pass -> 8c (Batt deploys); fail -> round 12 from its diagnosis."
+next_action: "ROUND 11 (Amendments 41-44): xmas02fi9 frozen 4026896d, registered ee0177f5; the held-out ifsH11, ifsH12, ifH41-ifH46 meets every minimum (I2 27 episodes, 94 item crops); two blind labellers answering the seed-79 pack; the committed wrapper scores ONCE when both hold 114. Pass -> 8c (Batt deploys); fail -> round 12 from its diagnosis."
 title: "The floor-item model at 1920x1080: a 1080 round of the item detector, the 720 round 5's recipe with only the screen changed (pre-registration)"
 date: 2026-11-20
 owner: Batt
@@ -1628,3 +1628,68 @@ A count under its minimum is NO VERDICT, never a pass.
   deleted. clear-bag (etc, use) rc 1 on its early stock read, judged by the frame: weight 620 /
   2,430, F1 10 potions, F8 10 Fly Wings (the setup tops up F9). Immunity ON read in the Chat tab;
   the stagings ifsH11, ifsH12 started 09:07.
+
+### Amendment 44 (2026-11-23 18:18 ICT from `date`, BEFORE any blind answer and BEFORE any score): round 11's evaluation inputs; every minimum met
+
+- **The stagings** (`r11_stage.sh`, immune, under the popup reader's round-4 watcher): clear-bag
+  judged by the agent (Amendment 43), the DB's save holding none of the set (`held` rc 0 after 6
+  looks, 09:10); **ifsH11** seed 2613859 09:10:17-09:21:50, **ifsH12** seed 2613886
+  09:21:50-09:33:12, each stage rc 0, 4 spots, shipped. Immunity OFF read back at 09:33:54
+  (`r11/immune_off.ok` = 1).
+- **The pilots** (`r11_pilots.sh`, `chain2.sh` = round 10's with Amendment 41's town step, NOT
+  immune, under the round-4 watcher; round 9's check after each):
+
+  | pilot | ran | chain rc | frames | PAUSED |
+  |---|---|---|---|---|
+  | ifH41 | 09:34:03-10:05:38 | 0 | 1,633 | 0 |
+  | ifH42 | 10:05:38-10:36:49 | 0 | 1,612 | 0 |
+  | ifH43 | 10:36:49-11:07:56 | 0 | 1,615 | 0 |
+  | ifH44 | 11:07:57-11:38:48 | 0 | 1,601 | 0 |
+  | ifH45 | 11:38:48-12:12:17 | 0 | 1,736 | 0 |
+  | ifH46 | 12:12:18-12:43:18 | 0 | 1,602 | 0 |
+
+  No death; the Candy on F7 in every one (Amendment 43).
+- **TRAIN** (beside the recordings, on the CPU): the 27 spent held-outs labelled `--split train`
+  at ad268afd... (09:0x-09:24, all rc 0). G2: 10 PASS alone (ifsH5-ifsH10, ifH21, ifH35, ifH36,
+  ifH39), 17 NOT_ENOUGH alone and judged pooled (279 fits, median |dx| 2, |dy| 2 px: PASS), none
+  FAILS -> all 27 admitted; `train-ids.txt` = round 8's 26 + the 27 = 53 ids. **Hard negatives:**
+  294 frames over 25 sessions (Amendment 41's count; none left out by the TRAIN labels). The
+  cache (09:24-09:57): 89 sessions, 10,985 frames, 2,582 item frames, 5,181 labels, 8,403
+  negatives; the written counts EQUAL the dry run.
+- **The model** (`r11_train.sh`): from xmas02fi8's last.pt, round 8's settings and `--workers 1`;
+  TRAIN 11,232 frames -> **3 epochs**; one run, 12:44:14-16:47:42, guard rc 0, no resume. A live Run
+  was beside its first 49 min (the live detect server's minute p95, 50 samples 12:44-13:33: 19.9 ..
+  163.6 ms, median 156.6; nothing else was asked of the live server). **Frozen 16:47:52:
+  last.pt 4026896d...** (5,529,306 bytes), the 736 x 1280 ONNX **f0891a73...**, archived to the NAS
+  (`archive/train/xmas02-fi-r11-1080-20261123`, size + count checked, its sha256 the same) and the
+  local copy deleted; **registered for the detect server in ee0177f5** (not in MAP_MODELS).
+- **The eval chain** (`eval_chain_r11.sh`, 16:50-18:13): the frozen sha256 checked against the
+  archive; the eight sessions labelled `--eval-test` against xmas02fi9, all rc 0 (16:51-16:58);
+  refs over all eight: **6,394 frames**; GPU predictions fi9 17:11, fi8 17:23, fi6 17:35, fi5 17:46;
+  ONNX fi9 18:08; all rc 0, in `data/train/eval/xmas02fi9-r11`.
+- **The pack** (seed 79, `--round 11 --eval-test` over all eight; fi_labels at af3de531; built
+  18:13:48): **114 crops**: N 35, F 53, M 6 (**94 ITEM crops**) and E 20 (10 plain, 10 hard); the
+  pools N 73, F 159, M 21; the summary's `short`: no_aura 24, aura 2. The answer key
+  `key-eval-seed79/answer_key.json` sha256 `221d559474dcdd6c...`.
+- **The held-out's size, counted from the LABELS only** (no prediction read; `r11/size_r11.py`,
+  size_r10x.py with round 11's files; fi_eval's own selection rules):
+
+  | count | value | minimum | |
+  |---|---|---|---|
+  | I2: natural drop episodes | **27** (ifH41-ifH46: 3, 5, 1, 7, 5, 6; the stagings none) | 20 | met |
+  | I1h: item crops in the pack | 94 | 40 evaluated | met (both labellers' good boxes decide) |
+  | I3: item-free kept frames (natural) | 5,025 | 200 / 500 | met |
+  | I4: drop-less kills judged | 148 (0 with no frame) | 40 | met |
+
+  I2's side counts: 72 drops of our kills, 9 behind her (3 of them with a kept label).
+- **So the held-out is the eight:** ifsH11, ifsH12, ifH41 .. ifH46; Amendment 41's extension is not
+  needed. ifH47-ifH50 stay unused (still refused for TRAIN).
+- **Two NEW blind labellers, L1 and L2:** fresh agents that open only the pack's folder
+  (instructions, reference, crops) and write `t7/answers-eval-r11-L1.json` / `-L2.json`. They
+  started at 18:15 and 18:16, before this amendment; no answer has been read.
+- **The score:** `docs/records/scorers/xmas02_items_r11_score.sh`, committed in 5a1bccb9 before any
+  round-11 label, is copied to the scratch `score_r11.sh` (`cmp` identical). It runs ONCE, after both
+  answer files hold 114 entries and with no dev detect server (so before the fists re-trial's
+  pilots): the I5 latency sample, both-good, THE BARS (`fi_eval --strata r11 --item-floor 0.4
+  --ring-red 30 --edge-margin 12 --edge-top 32`), then the report-only lines (fi8 + round 10's rule,
+  fi6 + the rule at 0.50, fi5 with no rule). The bars are section 8a's, unchanged.
