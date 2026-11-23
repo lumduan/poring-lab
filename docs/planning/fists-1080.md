@@ -7,7 +7,7 @@ verdict_date: null
 verdict_ticket: null
 supersedes: null
 related: [rogue-xmas02.md, xmas02-items-1080.md, screen-size-ab.md, ../../scripts/screen_ab.py, ../../scripts/stage2_ab.py, ../../scripts/bare_steal.py]
-next_action: "fst1 was ABORTED (the MVP killed her in the pre-run checks, Amendment 4); fst1-fst3 again with fist_pilot_rec2.sh (her idle time in town); then the report against ifH31-ifH36 and her Knife-swap build put back. Batt: keep the build (Amendment 1 options); a fists benchmark run of his own."
+next_action: "fst1 stopped twice before any play (Amendments 4 and 5: the MVP in the pre-run checks; then the runner refused the box's recipes without the swap, fixed in 83645b20); fst1-fst3 again; then the report against ifH31-ifH36 and her Knife-swap build put back. Batt: keep the build (Amendment 1 options); a fists benchmark run of his own."
 title: "The fists at 1080: Batt's build, no Knife swap (a trial, written before any of its data)"
 date: 2026-11-22
 owner: Batt
@@ -268,3 +268,34 @@ interleaved A/B is the next step only on Batt's word.
   each. The queue waits for `fists/immune_off.ok` = 1 (written after the read above).
 - **For the item model's round 11:** its held-out pilots take the same town step (a procedure
   change written into its pre-registration).
+
+## 9. Amendment 5 (2026-11-23 07:21 ICT from `date`, BEFORE any fists play): the second fst1 stopped at the hunt core's start -- the box's recipes need the swap; fixed
+
+- **What happened (07:09-07:13):** `fist_pilot_rec2.sh` worked as Amendment 4 wrote it (both town
+  warps, zoom 1.000, the chat window standard, the recorder; the setup warped her to (7, 21), the
+  top-ups, the start check 7 of 7). The hunt core then refused before any input of its own: "the
+  box's recipes swap the Knife, but this run swaps no Knife (the Run settings' knife swap:
+  --bare-steal with --steal-opener)". The run ended after 0.4 min, rc 0; no hunt session, no economy
+  record; the series stopped ("ended within 60 s"). She was warped to Prontera at once (not immune,
+  HP full).
+- **Why:** the box (stage10's B, the base pilots' box) strikes its monsters by RECIPES, and the
+  runner (dungeon@9.51 `recipes_refused`) refuses any recipe without the swap: the recipes decide
+  the swap per monster. Section 4's switch (6e109461) dropped the swap's runner flags only. The
+  live player already drops the swap WHOLE (the Knife functions and the recipes,
+  `flow_play.without_knife`) when the start check finds the swap's set-up unreadable (Batt 11-19);
+  the Run setting turned off on purpose did not reach it. Amendment 2's plan was checked by
+  screen_ab's plan step (which compares the box's arguments and passed) but never played end to end.
+- **The fix (83645b20, main; the dev checkout fast-forwarded):** `flow_play.knife_swap_set_off` --
+  at the Run's start, a hunt core whose settings turn the swap off plays `without_knife` too, with a
+  NOTE in the run log. The runner then strikes every monster with its own plain recipe (strike,
+  wait for the kill, loot), as Batt's fists do. The runner file is unchanged (byte-pinned). Tests:
+  the unit case, and the real fists box through the runner's own `recipes_refused` (refused before,
+  accepted after); 325 tests of the 21 files that import flow_play pass.
+  - The A/B plan is unchanged (the drop happens at the start, never in `prepare`), so screen_ab's
+    box check still compares the box's own arguments.
+  - **The live lab does not have it** (live code changes only on Batt's word): a fists Run on live
+    would end the same way until it is promoted.
+- **Leftovers renamed:** `screen-ab/fst1-play-aborted-0713`, `fists/fst1-aborted-0713`,
+  `popup-w1080b/fst1-aborted-0713`, the demo folder `...-play-fst1-play-r01B-aborted-0713` and the
+  NAS session `20261123T071112-rdp-xmas02-fst1-ABORTED`.
+- **The trial again:** fst1, fst2, fst3, `fists_pilots2.sh` unchanged (Amendment 4's procedure).
