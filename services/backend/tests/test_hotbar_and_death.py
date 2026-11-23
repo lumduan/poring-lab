@@ -122,6 +122,30 @@ def test_the_knife_swap_goes_whole_its_functions_and_recipes_with_it() -> None:
     assert "its Knife functions and its 1 monster recipe(s)" in words
 
 
+def test_the_knife_swap_set_off_in_the_settings_drops_the_box_s_swap_whole() -> None:
+    """Batt 11-22, the fists: the Run settings turn the swap off (fst1, 11-23 07:13: the runner
+    refused "the box's recipes swap the Knife, but this run swaps no Knife"); the start drops the
+    box's Knife functions and recipes as knife_swap_off does."""
+    from dataclasses import replace
+
+    prep = types.SimpleNamespace(
+        runners={"field": replace(boxed_plan(), vals={"knife_swap": False})}
+    )
+    (words,) = fp.knife_swap_set_off(prep)  # type: ignore[arg-type]
+    got = prep.runners["field"]
+    assert got.vals["knife_swap"] is False and got.recipes == {}
+    assert got.plays == frozenset({"model", "potion"})
+    assert set(got.calls) == set(got.call_names) == {"home"}
+    assert "box_recipes" not in got.box_kwargs()
+    assert "off in the Run settings" in words
+    assert "its Knife functions and its 1 monster recipe(s)" in words
+    on = types.SimpleNamespace(runners={"field": boxed_plan()})
+    assert fp.knife_swap_set_off(on) == []  # type: ignore[arg-type]  # the swap on: untouched
+    assert on.runners["field"].recipes and "knife" in on.runners["field"].plays
+    plain = types.SimpleNamespace(runners={"field": plan(False)})
+    assert fp.knife_swap_set_off(plain) == []  # type: ignore[arg-type]  # nothing to drop
+
+
 def test_the_runner_s_own_start_lets_the_hotbar_pass_inside_the_player_only() -> None:
     dh = types.SimpleNamespace(
         player_stock_refused=lambda counts, heals: "no Fly Wing read",

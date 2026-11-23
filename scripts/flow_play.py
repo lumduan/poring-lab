@@ -2242,6 +2242,30 @@ def knife_swap_off(prep: Prepared, got: Mapping[str, Any]) -> list[str]:
     return out
 
 
+def knife_swap_set_off(prep: Prepared) -> list[str]:
+    """Batt 2026-11-22 (the fists: "no Knife swap, punch"): a hunt core whose Run settings turn
+    the Knife swap OFF plays without it WHOLE (``without_knife``, in place), as ``knife_swap_off``
+    does for a set-up that does not read right: the runner refuses the box's Knife functions and
+    its monsters' recipes without the swap (dungeon@9.51 recipes_refused: the recipes decide the
+    swap per monster, so with no swap there is nothing for them to decide), so they are left out
+    and the runner strikes every monster with its own plain recipe. Applied at the Run's start,
+    never in ``prepare``: an A/B box's plan stays the box's (screen_ab.player_set_arm). The words
+    of each change, for the log."""
+    out = []
+    for block, plan in list(prep.runners.items()):
+        if plan.vals.get("knife_swap") is not False or not ("knife" in plan.plays or plan.recipes):
+            continue
+        prep.runners[block] = without_knife(plan)
+        dropped = [x for x in ("its Knife functions" if "knife" in plan.plays else "",
+                               f"its {len(plan.recipes)} monster recipe(s)" if plan.recipes
+                               else "") if x]  # fmt: skip
+        out.append(
+            f"NOTE: the Knife swap is off in the Run settings: {block} plays without "
+            f"{' and '.join(dropped)} (they decide the swap; the runner strikes plainly)"
+        )
+    return out
+
+
 # roles-not-names.md step 2 (Batt 2026-11-20: "make it WEAPON, so other classes can use it"): the
 # items of two roles are the player's picks (settings swap_item / heal_item; ours the defaults).
 # The runner keeps them in module tables it reads when used (SLOT_ROLES' "opener" / "potion",
@@ -2770,7 +2794,7 @@ def play(prep: Prepared, lio: LiveIO, *, label: str, stop_file: Path | None,
         say("REFUSED before any input: nothing was pressed (the lines marked FAIL say why)")
         print(refuse(f"the start check: {why}"), flush=True)
         return 2
-    for ln in [*start_warnings(got), *knife_swap_off(prep, got)]:
+    for ln in [*start_warnings(got), *knife_swap_off(prep, got), *knife_swap_set_off(prep)]:
         say(ln)
     if stop_file is not None and stop_file.exists():
         print(refuse("Stop was pressed before the start"), flush=True)

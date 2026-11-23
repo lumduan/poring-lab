@@ -405,3 +405,36 @@ def test_the_fists_block_plans_with_the_knife_swap_off(tmp_path: Path) -> None:
                       base_text=text)  # fmt: skip
     assert isinstance(doc, dict), doc
     assert doc["vals"]["B"]["knife_swap"] is False and doc["box_set"] == {"knife_swap": False}
+
+
+def test_the_fists_box_plays_its_monsters_plainly_and_the_runner_accepts_it() -> None:
+    """fst1 (11-23 07:13): the fists box kept its monster recipes, and the runner refused at the
+    hunt core's start ("the box's recipes swap the Knife, but this run swaps no Knife"). The Run's
+    start drops them (flow_play.knife_swap_set_off); the runner's own recipes_refused then accepts
+    the box. The A/B plan stays the box's: player_set_arm compares box_kwargs before the start."""
+    import dungeon_hunt as dh
+    import flow_play as fp
+    import stage10_ab as s10
+
+    secs = 20 * 60
+    off = sa.switch_dependents(("knife_swap",))
+    ps = sa.player_set_arm(s10.arm_text("B", 20), {"knife_swap": False}, secs, (), (),
+                           ("--bare-steal",), off)  # fmt: skip
+    assert isinstance(ps, dict), ps
+    prep = fp.prepare(ps["text"], s10.NODE, secs, runner_vals={s10.NODE: ps["vals"]})
+    assert not isinstance(prep, str), prep
+
+    def refused(p: fp.RunnerPlan) -> str | None:
+        kw = p.box_kwargs()
+        return dh.recipes_refused(kw.get("box_plays", []), None, kw.get("box_model"),
+                                  kw.get("box_recipes"), knife_swap=bool(p.vals["knife_swap"]),
+                                  value_target=True)  # fmt: skip
+
+    before = prep.runners[s10.NODE]
+    assert before.recipes and "recipes swap the Knife" in (refused(before) or "")
+    (words,) = fp.knife_swap_set_off(prep)
+    after = prep.runners[s10.NODE]
+    assert after.recipes == {} and "recipes" not in after.plays and refused(after) is None
+    assert after.model_doc == before.model_doc  # the box's model stays (its monsters, its strikes)
+    assert after.argv("L", None, None) == before.argv("L", None, None)  # the argv is the box's
+    assert "monster recipe(s)" in words
