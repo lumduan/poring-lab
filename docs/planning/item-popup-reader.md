@@ -6,7 +6,7 @@ verdict_date: null
 verdict_ticket: null
 supersedes: null
 related: [econ-bag-count.md, ../econ/economics.md, ../../scripts/bare_steal.py, ../../scripts/bag_count.py, ../../scripts/slot_items.py, ../../scripts/econ_screen.py]
-next_action: "w1080b closed (Amendment 13: 9 sessions, 286 pickups); score-events ONCE with the four bars; a pass -> section 5 on dev; a fail -> round 5 from its diagnosis."
+next_action: "w1080b FAILS on P by one event (2.07 %; Amendment 14). Round 5 (Amendment 15, code 0f35e645): the merge by the popup's life alone. Its set w1080c = the recorded dev 1080 sessions that start after the dev checkout holds 0f35e645 (the fists re-trial first), >= 250 pickups and >= 4 sessions, then score-events once."
 title: "Every item gained, from the client's item-obtained popup: which item, how many (pre-registration)"
 date: 2026-11-21
 owner: Batt
@@ -701,3 +701,61 @@ Section 5 (the item list in the screen record) waits for a pass.
           --sessions <the nine names above> --out /dev/shm/poring-lab-tmp/popup-w1080b/score-w1080b.json
 
   A pass -> section 5 on dev (live only on Batt's word); a fail -> a round 5 from its diagnosis.
+
+### Amendment 14 (2026-11-23 11:20 ICT from `date`): w1080b FAILS on P by one event (scored once, 11:17); the false events read
+
+- **The one score** (Amendment 13's command; `popup-w1080b/score-w1080b.json`; 9 sessions):
+
+  | line | got | bar | |
+  |---|---|---|---|
+  | I1 the item named right | 280 / 284 = 98.6 % | >= 97 % | PASS |
+  | I2 the amount right | 284 / 284 = 100 % | >= 97 % | PASS |
+  | P false events | **6 / 290 = 2.07 %** | <= 2 % | **FAIL** (5 would pass) |
+  | R spaced pickups found | 284 / 285 = 99.6 % | >= 85 % | PASS |
+
+  - Round 3's w1080 had P 12.4 %: the merge removed most of its re-reads. I1 by part: natural
+    203 / 205, stagings 77 / 79; 2 of the matched events were unread ("far"); the one repeat
+    (the same item again within REPEAT_S) was found.
+  - The watchers: 0 grab errors; ticks p95 75-99 ms; the merge joined 0-13 pieces a session.
+- **Not deployed.** Section 5 waits.
+- **The 6 false events** (read after the score; scratch `popup-w1080b/diag/false_events.py`): every
+  one is **the same popup read again**, 0.95-4.48 s after its pickup (a popup lives ~4.75 s):
+  ifH38 911 x 1 (+3.59 s) and 538 x 1 (+3.74 s); fst2 1098 x 1 (+3.47 s); fst3 538 x 1 (+0.95 s,
+  17 frames); ifH41 911 x 1 (+4.48 s) and one UNREAD piece ("far", 1 frame, +4.21 s after a 911).
+  Five read the same ids and amount as the pickup before them; round 4's merge did not join them
+  because the gap since that popup's last read frame was longer than MERGE_GAP_S (1.25 s: the popup
+  hidden or unread for a while), and "None only joins None" kept the unread one apart.
+- **A life-only merge would remove them** (diagnosis on the now-spent set; it scores nothing;
+  `diag/life_join.py`, which re-merges round 4's events and replays `match`): an event joins the one
+  before it when it starts <= L s after that one's FIRST frame and reads the same ids and amount,
+  or no item at all:
+
+  | L | events | P | matched | I1 | repeats found |
+  |---|---|---|---|---|---|
+  | (round 4, scored) | 290 | 2.07 % | 284 | 98.6 % | 1 / 1 |
+  | 4.0 s | 288 | 1.39 % | 284 | 98.6 % | 1 / 1 |
+  | 5.0 s | 285 | 0.35 % | 284 | 98.9 % | 1 / 1 |
+  | 6.0 s | 285 | 0.35 % | 284 | 98.9 % | 1 / 1 |
+
+  No true pickup is lost at any L here. Its risk: a NEW pickup of the same item and amount within
+  L s of the last popup's first frame would merge into it (none in w1080b).
+
+### Amendment 15 (2026-11-23 11:20 ICT from `date`, BEFORE any round-5 data): ROUND 5 pre-registered -- the merge by the popup's life alone
+
+- **The change (code 0f35e645, with tests):** `joins()` -- a closed event joins the pending one
+  when it starts <= **MERGE_LIFE_S = 6.0 s** (round 4's constant, unchanged: the popup is seen <=
+  5.51 s at 1080, measured before w1080b) after that one's FIRST frame, and reads the same ids and
+  amount, or no item at all. MERGE_GAP_S is gone. The merger's `due()` holds an event until its
+  life has passed. Nothing else changes: the Tracker, the reader, the count font r4 (3f1ff7ee...).
+  L = 6.0 is the existing constant, not the table's pick.
+- **The held-out (set `w1080c`):** the dev 1080 sessions on xmas_dun02 recorded by
+  `record_session` that START after the dev checkout holds 0f35e645 (it is fast-forwarded after
+  the item model's round-11 pilots end), with the round-5 watcher over each whole session, in
+  time order until >= 250 pickup_results and >= 4 sessions; the session in progress then is the
+  last; a session ABORTED by its own rules is left out by name before any event is read. Truth as
+  Amendment 6. The first expected: the fists re-trial fst4-fst6 (fists-1080.md Amendment 6).
+- **The score, ONCE**, `score-events` with the same four bars (I1 >= 97 %, I2 >= 97 %, P <= 2 %,
+  R >= 85 %), after a pre-score amendment that names the set. Reported beside: the merge's joins,
+  by why, and the repeats found.
+- **If it passes:** section 5 on dev (live only on Batt's word). **If it fails:** a round 6 from its
+  diagnosis.
