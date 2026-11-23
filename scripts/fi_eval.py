@@ -133,24 +133,31 @@ R9_HELD_OUT = (*R9_PILOTS, *R9_STAGING)
 R10_PILOTS = tuple(f"-xmas02-ifH{k}" for k in range(31, 41))
 R10_STAGING = ("-xmas02-ifsH9", "-xmas02-ifsH10")
 R10_HELD_OUT = (*R10_PILOTS, *R10_STAGING)
+# Amendment 41 (round 11, 2026-11-23): xmas02fi9 + round 10's rule on a NEW 1080 held-out by NAME,
+# the one extension's names reserved too (fi_labels.R11_HELD_OUT; a test pins them equal)
+R11_PILOTS = tuple(f"-xmas02-ifH{k}" for k in range(41, 51))
+R11_STAGING = ("-xmas02-ifsH11", "-xmas02-ifsH12")
+R11_HELD_OUT = (*R11_PILOTS, *R11_STAGING)
 STRATA = {"r2": (R2_AURA, R2_NOAURA, R2_PILOTS), "r3": (R3_AURA, R3_NOAURA, R3_PILOTS),
           "r4": (R4_AURA, R4_NOAURA, R4_PILOTS), "r5": (R5_AURA_OFF, (), R5_PILOTS),
           "r6": (R6_HELD_OUT, (), R6_PILOTS), "r7": (R7_HELD_OUT, (), R7_PILOTS),
           "r8": (R8_HELD_OUT, (), R8_PILOTS), "r9": (R9_HELD_OUT, (), R9_PILOTS),
-          "r10": (R10_HELD_OUT, (), R10_PILOTS)}  # fmt: skip
+          "r10": (R10_HELD_OUT, (), R10_PILOTS), "r11": (R11_HELD_OUT, (), R11_PILOTS)}  # fmt: skip
 # the default: ("aura", "no_aura")
 STRATA_NAMES = {"r5": ("aura_off", ""), "r6": ("i1h", ""),
                 "r7": ("i1h", ""), "r8": ("i1h", ""), "r9": ("i1h", ""),
-                "r10": ("i1h", "")}  # fmt: skip
+                "r10": ("i1h", ""), "r11": ("i1h", "")}  # fmt: skip
 # the strata reported APART beside the bar (not bars: their verdicts never count)
 STRATA_APART = {"r6": {"natural": R6_PILOTS, "staging": R6_STAGING},
                 "r7": {"natural": R7_PILOTS, "staging": R7_STAGING},
                 "r8": {"natural": R8_PILOTS, "staging": R8_STAGING},
                 "r9": {"natural": R9_PILOTS, "staging": R9_STAGING},
-                "r10": {"natural": R10_PILOTS, "staging": R10_STAGING}}  # fmt: skip
+                "r10": {"natural": R10_PILOTS, "staging": R10_STAGING},
+                "r11": {"natural": R11_PILOTS, "staging": R11_STAGING}}  # fmt: skip
 R2_TARGET = 0.95  # Batt 2026-11-10 night: "toward 95 %" -- reported, not a bar
 # a round's label files, params, key: this screen
-SCREEN_OF = {"r6": "1080", "r7": "1080", "r8": "1080", "r9": "1080", "r10": "1080"}
+SCREEN_OF = {"r6": "1080", "r7": "1080", "r8": "1080", "r9": "1080", "r10": "1080",
+             "r11": "1080"}  # fmt: skip
 MINS = {
     "i1_recall": 40,
     "i1n_recall": 30,
@@ -168,6 +175,7 @@ ROUND_BARS["r7"] = dict(ROUND_BARS["r6"])  # Amendment 22: section 8a's bars, un
 ROUND_BARS["r8"] = dict(ROUND_BARS["r6"])  # Amendment 26: section 8a's bars, unchanged
 ROUND_BARS["r9"] = dict(ROUND_BARS["r6"])  # Amendment 32: section 8a's bars, unchanged
 ROUND_BARS["r10"] = dict(ROUND_BARS["r6"])  # Amendment 36: section 8a's bars, unchanged
+ROUND_BARS["r11"] = dict(ROUND_BARS["r6"])  # Amendment 41: section 8a's bars, unchanged
 
 
 def bars_of(strata: str | None) -> Mapping[str, float]:

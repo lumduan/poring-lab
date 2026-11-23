@@ -212,13 +212,28 @@ def r10_seed(names: Sequence[str]) -> int:
     return R10_EXT_SEED if ext else R10_EVAL_SEED
 
 
+# xmas02-items-1080.md Amendment 41 (round 11, pre-registered 2026-11-23): xmas02fi9 (xmas02fi8
+# retrained with its own false boxes on the spent held-outs as hard negatives) + round 10's rule,
+# scored on a NEW 1080 held-out (fi_eval.R11_*; a test pins them equal). Its names are reserved now,
+# the one extension's too (ifH41 .. ifH50).
+R11_PILOTS = tuple(f"-xmas02-ifH{k}" for k in range(41, 51))
+R11_STAGING = ("-xmas02-ifsH11", "-xmas02-ifsH12")
+R11_HELD_OUT = (*R11_PILOTS, *R11_STAGING)
+R11_EVAL_SEED = 79
 # every round `pack` packs (the CLI's --round choices; round 9's code first missed it, 11-22)
-PACK_ROUNDS = (1, 2, 3, 4, 5, 6, 7, 8, 9, 10)
+PACK_ROUNDS = (1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11)
 # Amendment 26: rounds 6 and 7's held-outs are SPENT (each scored once: 8a 11-21 14:59, round 7
 # 11-22 03:17) and RELEASED for TRAIN from round 8; --eval-test still reads them (old scores stay
 # reproducible). Matched like every name (the id ENDS with it): "-xmas02-ifH1" is not "-ifH11".
+# Amendment 41: rounds 8, 9 and 10's held-outs are SPENT too (scored once: 11-22 15:07, 21:30;
+# 11-23 06:47) and RELEASED for TRAIN from round 11 -- the sessions that were recorded and scored,
+# by exact name (the reserved names never recorded stay refused: ifH17-ifH20, ifH27-ifH30, ifH40).
+R11_RELEASED = (*(f"-xmas02-ifH{k}" for k in range(11, 17)), "-xmas02-ifsH5", "-xmas02-ifsH6",
+                *(f"-xmas02-ifH{k}" for k in range(21, 27)), "-xmas02-ifsH7", "-xmas02-ifsH8",
+                *(f"-xmas02-ifH{k}" for k in range(31, 40)), "-xmas02-ifsH9",
+                "-xmas02-ifsH10")  # fmt: skip
 IF_RELEASED = (*(f"-xmas02-ifH{k}" for k in range(1, 11)),
-               *(f"-xmas02-ifsH{k}" for k in range(1, 5)))  # fmt: skip
+               *(f"-xmas02-ifsH{k}" for k in range(1, 5)), *R11_RELEASED)  # fmt: skip
 PER_FLOOR_ITEM = 3  # O.5 / O.9: at most 3 crops per floor item
 HARD_POOL = 200  # absent points fitted to find the hard ones (one per TRAIN frame, seeded)
 NEG_DX, NEG_DY = 7, 5  # O.1e (fi_study.py): an absent point within +-7 x +-5 cells of ours ...
@@ -251,6 +266,7 @@ IF_HELD_OUT = (
     *R8_HELD_OUT,
     *R9_HELD_OUT,
     *R10_HELD_OUT,
+    *R11_HELD_OUT,
 )
 FIT_SCALES_1080 = tuple(round(0.85 + 0.05 * k, 2) for k in range(7))  # 0.85 .. 1.15 (T-I2)
 FIT_R_1080 = gi.R_MEASURE  # the anchor's search around the UNANCHORED prediction (gef10 8's +-10)
@@ -375,10 +391,10 @@ XMAS02_FI_1080 = FiSpec(
     world_scale=1.5,  # rec_paths.VIEW_1080's (a test pins the two equal)
     work=FI_1080,
     heldout_note=(
-        "round 10's ifH31-ifH40, ifsH9, ifsH10 (Amendment 36); round 9's ifH21-ifH30, ifsH7, "
-        "ifsH8 (Amendment 32); round 8's ifH11-ifH20, ifsH5, "
-        "ifsH6 (Amendment 26); rounds 6-7's ifH1-ifH10 and ifsH1-ifsH4 are spent and released "
-        "for TRAIN, xmas02-items-1080.md"
+        "round 11's ifH41-ifH50, ifsH11, ifsH12 (Amendment 41); rounds 8-10's reserved names "
+        "never recorded (ifH17-ifH20, ifH27-ifH30, ifH40); rounds 6-10's recorded held-outs "
+        "(ifH1-ifH16, ifH21-ifH26, ifH31-ifH39, ifsH1-ifsH10) are spent and released for TRAIN, "
+        "xmas02-items-1080.md"
     ),
     fit_note="ifF",
     refused_note="",
@@ -698,28 +714,31 @@ def pack_short(picks: Sequence[Mapping[str, Any]], by: Mapping[str, int], eval_t
 
 
 def round_refusal(spec: FiSpec, rnd: int, eval_test: bool) -> str | None:
-    """PURE (T-I4): rounds 1-5 are the 720 spec's (as they were); rounds 6-10 are the 1080
-    rounds' evaluations; the 1080 spec packs T2 (round 1's strata, its seed 71), round 6-10."""
+    """PURE (T-I4): rounds 1-5 are the 720 spec's (as they were); rounds 6-11 are the 1080
+    rounds' evaluations; the 1080 spec packs T2 (round 1's strata, its seed 71), round 6-11."""
     if spec.screen == "720":
-        return f"--round {rnd} is a 1080 round: --spec 1080" if rnd in (6, 7, 8, 9, 10) else None
+        return (f"--round {rnd} is a 1080 round: --spec 1080" if rnd in (6, 7, 8, 9, 10, 11)
+                else None)  # fmt: skip
     if rnd in (2, 3, 4, 5):
         return f"--round {rnd} is a 720 round: not under the {spec.screen} spec"
     if rnd == 1 and eval_test:
-        return f"the {spec.screen} spec's evaluation pack is --round 6, 7, 8, 9 or 10"
+        return f"the {spec.screen} spec's evaluation pack is --round 6, 7, 8, 9, 10 or 11"
     return None
 
 
 def seed_source(rnd: int, r2: bool, eval_test: bool) -> str:
     """PURE: where a pack's pre-registered seed is written."""
-    if rnd in (7, 8, 9, 10):
-        return {7: "Amendment 22", 8: "Amendment 26", 9: "Amendment 32", 10: "Amendment 36"}[rnd]
+    if rnd in (7, 8, 9, 10, 11):
+        return {7: "Amendment 22", 8: "Amendment 26", 9: "Amendment 32", 10: "Amendment 36",
+                11: "Amendment 41"}[rnd]  # fmt: skip
     return "O15" if r2 else "O.9" if eval_test else "O.5"
 
 
 def round_docs_refusal(rnd: int, docs: Sequence[Mapping[str, Any]]) -> str | None:
-    """PURE (Amendments 22, 26, 32): rounds 7, 8 and 9's packs read their own held-out only (by
+    """PURE (Amendments 22, 26, 32, 36, 41): rounds 7-11's packs read their own held-out only (by
     NAME; fail closed); other rounds: None."""
-    own = {7: R7_HELD_OUT, 8: R8_HELD_OUT, 9: R9_HELD_OUT, 10: R10_HELD_OUT}.get(rnd)
+    own = {7: R7_HELD_OUT, 8: R8_HELD_OUT, 9: R9_HELD_OUT, 10: R10_HELD_OUT,
+           11: R11_HELD_OUT}.get(rnd)  # fmt: skip
     if own is None:
         return None
     for d in docs:
@@ -2113,14 +2132,14 @@ def cmd_pack(a: argparse.Namespace) -> dict[str, Any]:
         raise SystemExit(why)
     # rounds 3-7 (O17 / O20 / O26 / items-1080 T-I4 / Amendment 22) pack as round 2, own seed +
     # slots
-    r2 = rnd in (2, 3, 4, 5, 6, 7, 8, 9, 10)
-    if rnd in (3, 4, 5, 6, 7, 8, 9, 10):
+    r2 = rnd in (2, 3, 4, 5, 6, 7, 8, 9, 10, 11)
+    if rnd in (3, 4, 5, 6, 7, 8, 9, 10, 11):
         if not a.eval_test:
             raise SystemExit(f"--round {rnd}: the evaluation's pack only (--eval-test)")
         # round 6: the seed from the CLI (T-I4), recorded in the key; round 7: the plan's 74
         want = {3: R3_EVAL_SEED, 4: R4_EVAL_SEED, 5: R5_EVAL_SEED, 6: a.seed,
                 7: R7_EVAL_SEED, 8: R8_EVAL_SEED, 9: R9_EVAL_SEED,
-                10: r10_seed([Path(p).stem for p in a.labels])}[rnd]  # fmt: skip
+                10: r10_seed([Path(p).stem for p in a.labels]), 11: R11_EVAL_SEED}[rnd]  # fmt: skip
     elif r2:
         want = R2_EVAL_SEED if a.eval_test else R2_PACK_SEED
     else:
@@ -2147,7 +2166,7 @@ def cmd_pack(a: argparse.Namespace) -> dict[str, Any]:
     if r2:
         second = {3: R3_NOAURA, 4: R4_NOAURA, 5: R5_STAGING, 6: R6_STAGING,
                   7: R7_STAGING, 8: R8_STAGING, 9: R9_STAGING,
-                  10: R10_STAGING}.get(rnd, R2_NOAURA)  # fmt: skip
+                  10: R10_STAGING, 11: R11_STAGING}.get(rnd, R2_NOAURA)  # fmt: skip
         picks = r2_picks(cands, a.eval_test, a.seed, spec.salt, second)
     elif a.eval_test:
         picks = draw_strata([{**c, "stratum": "X"} for c in cands], {"X": EVAL_ITEMS}, a.seed,
@@ -2319,7 +2338,8 @@ def main(argv: Sequence[str] | None = None) -> int:
                    help="O15: round 2's seeds (65 T2-r2, 66 the evaluation) and sizes; "
                         "6: the 1080 round's evaluation (T-I4, --spec 1080); 7: Amendment 22's "
                         "(seed 74); 8: Amendment 26's (seed 75); 9: Amendment 32's "
-                        "(seed 76); 10: Amendment 36's (seed 77)")  # fmt: skip
+                        "(seed 76); 10: Amendment 36's (seed 77; its extension 78); 11: "
+                        "Amendment 41's (seed 79)")  # fmt: skip
     p.add_argument("--eval-test", action="store_true")
     p.add_argument("--pack-dir", type=Path, default=None)
     p.add_argument("--key-dir", type=Path, default=None)
