@@ -6,7 +6,7 @@ verdict_date: null
 verdict_ticket: null
 supersedes: null
 related: [xmas02-1080-detector.md, xmas02-detector.md, rogue-xmas02.md, screen-size-ab.md, fullscreen-client.md, ../../scripts/fi_labels.py, ../../scripts/fi_eval.py, ../../scripts/stage_items.py, ../../scripts/build_frame_cache.py]
-next_action: "ROUND 11 (Amendment 45): every label bar PASSED and I5 CPU PASSED in the one score; I5 GPU had NO rows (the agent left out round 8's step: the ONNX into archive/models); that ONE measurement is re-taken as registered here (same 914 frames, fi9 and fi5); its bar decides the round. Pass -> 8c (Batt deploys); fail -> round 12."
+next_action: "ROUND 11 PASSES section 8a (Amendment 46: xmas02fi9 + round 10's rule; I3-any 0.20 %, I1h 97.8 %, I5 GPU 23.2 ms). Next: 8c in play at 1080 (A = xmas02fi5, B = xmas02fi9 + the rule, 3 valid runs a side), pre-registered before its first run; deployed at 1080 only, on Batt's word."
 title: "The floor-item model at 1920x1080: a 1080 round of the item detector, the 720 round 5's recipe with only the screen changed (pre-registration)"
 date: 2026-11-20
 owner: Batt
@@ -1725,3 +1725,46 @@ A count under its minimum is NO VERDICT, never a pass.
   no rows, the round stays NO_VERDICT and Batt is asked; there is no third try.
 - **For later rounds:** the ONNX copy into `archive/models` (read back) is a step of the freeze
   itself; a round's pre-score amendment lists the served models (`serve-cmd`) before the score.
+
+### Amendment 46 (2026-11-23 18:43 ICT from `date`): ROUND 11 PASSES section 8a -- xmas02fi9 + round 10's rule
+
+- **The result** (`score-r11.json` a8139864..., the one score; I5 GPU from Amendment 45's one
+  re-measurement, `score-r11-i5.json` 1e0b5091..., whose label bars and I5 CPU equal the score's
+  number for number). The GPU predictions decide; the ONNX's agree on every bar:
+
+  | bar | xmas02fi9 + the rule | rule | verdict |
+  |---|---|---|---|
+  | I1h (both-good crops) | **97.8 %** (90 / 92; ifH41-46 64 / 66, the stagings 26 / 26) | >= 90 % | PASS |
+  | precision | **97.1 %** (1,388 / 1,429; 41 false, 56 ambiguous) | >= 95 % | PASS |
+  | I2 (natural drop episodes) | **96.3 %** (26 / 27) | >= 80 % | PASS |
+  | I3-any (item-free frames) | **0.20 %** (10 / 5,025) | <= 0.5 % | PASS |
+  | I3 5 x 5 | **0.04 %** (2 / 5,025) | <= 0.2 % | PASS |
+  | I4 (drop-less kills) | **0.68 %** (1 / 148) | <= 5 % | PASS |
+  | I5 GPU (server forward p95) | **23.23 ms** vs xmas02fi5 24.30 (ratio 0.956; 914 calls each) | <= 35 ms, <= 1.10 x | PASS |
+  | I5 CPU (p95) | 173.1 ms vs 175.1 (ratio 0.989; 914 frames) | <= 1.10 x | PASS |
+
+  Every miss is ONE drop: the Oridecon (984) of ifH46 at frames 1485-1508 (the I2 episode and both
+  I1h crops). The rule dropped 97 boxes at the floor, none by the ring or the view edge.
+- **The blind labellers** answered all 114 alike on both questions (agreement 114 / 114): 92 good
+  item boxes, 2 unsure (the same pale cookie shape over a corpse, crops 065 / 098), no loose or off
+  box, all 20 E crops "no". Each PASSES its own check (present right 112 / 114).
+- **Reported beside it (no bar), the same held-out and crops:**
+
+  | model | I1h | precision | I2 | I3-any | I3 5 x 5 | I4 |
+  |---|---|---|---|---|---|---|
+  | xmas02fi9 + round 10's rule | 97.8 % | 97.1 % | 96.3 % | 0.20 % (10) | 0.04 % | 0.68 % |
+  | xmas02fi8 + round 10's rule | 96.7 % | 96.8 % | 92.6 % | 0.30 % (15) | 0.04 % | 0.68 % |
+  | xmas02fi6 + the rule at 0.50 | 95.7 % | 95.7 % | 88.9 % | 0.50 % (25) | 0.06 % | 0.68 % |
+  | xmas02fi5, no rule (deployed) | 94.6 % | 93.3 % | 92.6 % | 1.51 % (76) | 0.60 % | 2.03 % |
+
+- **Read with care:** xmas02fi8 + the rule ALSO meets every quality bar on this held-out (it failed
+  I3-any on rounds 9 and 10's). So this held-out is kinder than round 10's (its false-box scenery,
+  e.g. the snowflake wall picture, met less often); xmas02fi9 is better than xmas02fi8 on the SAME
+  frames (10 vs 15 false frames, I2 26 vs 25 of 27, I1h 90 vs 89 of 92), not by a margin that
+  proves round 10's snowflakes are gone. The pass stands as registered; 8c in play is the decisive
+  bar (section 8c), and its runs meet the whole map.
+- **Next:** 8c at 1080, as Amendment 41 registers it: A = xmas02fi5, B = xmas02fi9 + round 10's
+  rule through the player's settings (`--player-set item_floor_1080=0.4 item_ring_1080=30
+  item_edge_1080=12 item_edge_top_1080=32`, Amendment 37), 3 valid runs a side, 20 min each,
+  stage2_ab's setup; its plan is written and committed before its first run. Deployed at 1080
+  only, if 8c passes, on Batt's word.
