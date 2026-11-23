@@ -30,6 +30,11 @@ Read by shape, colour and digits only (Batt 10-26 / 11-11: no word is read):
   scrolls behind it: 38 of w1080's 307 events); (2) read_count names a digit run by the NEAREST
   glyph within SAME, not the first; (3) the count font with all ten digits is learned at 1080
   from a GM digit staging (item_popup_eval.py learn-count-1080).
+- ROUND 5 (Amendment 15, from w1080b's diagnosis): the merge by the popup's LIFE alone -- a closed
+  event joins the one before it when it starts <= MERGE_LIFE_S after that one's FIRST frame and
+  either reads the same ids and amount or reads no item at all; round 4's MERGE_GAP_S is gone
+  (w1080b's 6 false events were all the same popup read again 0.95-4.48 s after the pickup, after
+  a gap longer than 1.25 s, one of them unread).
 - AMENDMENT 6 (section 4's 1080 run-time check): at 1920 x 1080 the client draws the popup 1:1 at
   the 720 place moved right by (w - 1280) / 2 on the SAME rows (measured 2026-11-22 19:43 on dev).
   `item_popup.py watch` grabs only that band of the REAL frame (BAND, band_box), puts it back at
@@ -509,35 +514,35 @@ class Tracker:
         return out
 
 
-# --- round 4 (Amendment 10): the merge -- a popup read again after a lost tick is the same popup --
-MERGE_GAP_S = 1.25  # a piece joins the one before when it starts <= this after its last frame ...
-MERGE_LIFE_S = 6.0  # ... and <= this after its first frame (w1080: a popup is seen <= 5.51 s)
+# --- the merge (round 4, Amendment 10; round 5, Amendment 15): a popup read again is that popup --
+MERGE_LIFE_S = 6.0  # a piece joins the one before when it starts <= this after its FIRST frame
+# (w1080: a popup is seen <= 5.51 s). Round 4's gap rule (<= 1.25 s after the last frame) is gone:
+# w1080b's false events were re-reads after a longer gap (item-popup-reader.md Amendment 14).
 
 
-def joins(prev: Event, e: Event, gap_s: float = MERGE_GAP_S,
-          life_s: float = MERGE_LIFE_S) -> bool:  # fmt: skip
-    """PURE (round 4): is the closed event ``e`` the popup of ``prev`` read again? Both read the
-    same ids and the same amount (an unread amount, None, only joins None), and ``e`` starts <=
-    ``gap_s`` after prev's last frame and <= ``life_s`` after its first."""
-    return (e.ids == prev.ids and e.amount == prev.amount
-            and e.t - prev.t_last <= gap_s * 1e9 and e.t - prev.t <= life_s * 1e9)  # fmt: skip
+def joins(prev: Event, e: Event, life_s: float = MERGE_LIFE_S) -> bool:
+    """PURE (round 5): is the closed event ``e`` the popup of ``prev`` read again? It starts <=
+    ``life_s`` after prev's first frame, and it reads the same ids and the same amount (an unread
+    amount, None, only joins None) or no item at all (an unread piece of the popup on screen)."""
+    same = e.ids == prev.ids and e.amount == prev.amount
+    return (same or not e.ids) and e.t - prev.t <= life_s * 1e9
 
 
 class Merger:
-    """Round 4 (Amendment 10): between the Tracker and events.jsonl. ``add`` takes a closed event
-    and returns the events that are final; ``due`` returns the pending one once nothing can join
-    it; ``flush`` the pending one at the end. ``joined`` counts the pieces joined, ``parts`` holds
-    their t (the watcher drops their crops)."""
+    """Rounds 4-5 (Amendments 10, 15): between the Tracker and events.jsonl. ``add`` takes a
+    closed event and returns the events that are final; ``due`` returns the pending one once
+    nothing can join it; ``flush`` the pending one at the end. ``joined`` counts the pieces
+    joined, ``parts`` holds their t (the watcher drops their crops)."""
 
-    def __init__(self, gap_s: float = MERGE_GAP_S, life_s: float = MERGE_LIFE_S) -> None:
-        self.gap_s, self.life_s = gap_s, life_s
+    def __init__(self, life_s: float = MERGE_LIFE_S) -> None:
+        self.life_s = life_s
         self.pending: Event | None = None
         self.joined = 0
         self.parts: list[int] = []
 
     def add(self, e: Event) -> list[Event]:
         p = self.pending
-        if p is not None and joins(p, e, self.gap_s, self.life_s):
+        if p is not None and joins(p, e, self.life_s):
             p.t_last = max(p.t_last, e.t_last)
             p.frames += e.frames
             self.joined += 1
@@ -548,14 +553,13 @@ class Merger:
 
     def due(self, t_now: int, open_ev: Event | None) -> list[Event]:
         """The pending event once nothing can join it: the Tracker's open box began more than
-        gap_s after its last frame (or more than life_s after its first), or no box is open and
-        gap_s have passed."""
+        life_s after its first frame, or no box is open and life_s have passed since it."""
         p = self.pending
         if p is None:
             return []
-        limit = p.t_last + self.gap_s * 1e9
+        limit = p.t + self.life_s * 1e9
         if open_ev is not None:
-            if open_ev.t <= limit and open_ev.t - p.t <= self.life_s * 1e9:
+            if open_ev.t <= limit:
                 return []  # it may still join when it closes
         elif t_now <= limit:
             return []

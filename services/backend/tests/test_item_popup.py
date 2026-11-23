@@ -375,17 +375,21 @@ def _ev(t_s: float, ids: tuple[int, ...] | None = (912,), amount: int | None = 1
                     t_last=int((t_s if last_s is None else last_s) * S_NS))  # fmt: skip
 
 
-def test_round4_a_piece_joins_only_the_same_read_soon_after() -> None:
-    first = _ev(0.0, last_s=3.0)
-    assert ip.joins(first, _ev(3.5))  # 0.5 s after its last frame, 3.5 s after its first
-    assert ip.joins(first, _ev(4.25))  # MERGE_GAP_S = 1.25 s: at the edge
-    assert not ip.joins(first, _ev(4.3))  # too long after its last frame
+def test_round5_a_piece_joins_the_popup_read_again_within_its_life() -> None:
+    """Round 5 (Amendment 15): the popup's LIFE alone decides -- w1080b's 6 false events were the
+    same popup read again 0.95-4.48 s after the pickup, after gaps longer than round 4's 1.25 s."""
+    first = _ev(0.0, last_s=1.0)
+    assert ip.joins(first, _ev(3.5))  # 2.5 s after its last frame: round 4 split it
+    assert ip.joins(first, _ev(4.48))  # w1080b's latest re-read
+    assert ip.joins(first, _ev(6.0)) and not ip.joins(first, _ev(6.1))  # MERGE_LIFE_S = 6.0 s
     assert not ip.joins(first, _ev(3.5, ids=(913,)))  # another item
     assert not ip.joins(first, _ev(3.5, amount=2))  # another amount
-    assert not ip.joins(first, _ev(3.5, amount=None))  # unread only joins unread
+    assert not ip.joins(first, _ev(3.5, amount=None))  # an unread amount only joins unread
     assert ip.joins(_ev(0.0, amount=None, last_s=3.0), _ev(3.5, amount=None))
-    late = _ev(0.0, last_s=5.5)
-    assert ip.joins(late, _ev(6.0)) and not ip.joins(late, _ev(6.1))  # MERGE_LIFE_S = 6.0 s
+    assert ip.joins(first, _ev(4.21, ids=None))  # an unread piece of the popup ('far', w1080b)
+    assert ip.joins(first, _ev(4.21, ids=()))  # no item read at all
+    assert not ip.joins(first, _ev(6.5, ids=None))  # ... only within the life
+    assert not hasattr(ip, "MERGE_GAP_S")  # round 4's gap rule is gone
 
 
 def test_round4_the_merger_holds_a_piece_until_nothing_can_join_it() -> None:
@@ -406,13 +410,15 @@ def test_round4_the_merger_holds_a_piece_until_nothing_can_join_it() -> None:
     assert m.flush() == [] and m.add(_ev(30.0)) == [] and len(m.flush()) == 1
 
 
-def test_round4_watch_joins_a_popup_read_again_after_a_lost_tick(tmp_path, monkeypatch) -> None:  # type: ignore[no-untyped-def]
+def test_round5_watch_joins_a_popup_read_again_within_its_life(tmp_path, monkeypatch) -> None:  # type: ignore[no-untyped-def]
     bx, by = ip.BAND[0], ip.BAND[1]
     monkeypatch.setattr(
         ip, "box_of", lambda f: None if f[by, bx, 0] == 0 else ip.Popup(541, 720, b"")
     )
-    # 0.25 s ticks: popup 5, one lost tick, popup 5 again (the same popup), gone 2 s, 5 again (new)
-    seq = [0, 5, 5, 5, 0, 5, 5, 0, 0, 0, 0, 0, 0, 0, 0, 5, 5, 0, 0, 0, 0, 0, 0]
+    # 0.25 s ticks: popup 5, one lost tick, popup 5 again (the same popup), gone 2 s, 5 again (still
+    # the same popup: within MERGE_LIFE_S of its first frame, round 5), then gone past the life and
+    # 5 once more (a new popup)
+    seq = [0, 5, 5, 5, 0, 5, 5] + [0] * 8 + [5, 5] + [0] * 9 + [5, 5] + [0] * 26
     it = iter(enumerate(seq))
     done = [False]
 
@@ -432,10 +438,10 @@ def test_round4_watch_joins_a_popup_read_again_after_a_lost_tick(tmp_path, monke
     lines = [json.loads(x) for x in (tmp_path / "w" / "events.jsonl").read_text().splitlines()]
     q = S_NS // 4
     got_lines = [(e["t"], e["frames"], e["t_last"]) for e in lines]
-    assert got_lines == [(q, 5, 6 * q), (15 * q, 2, 16 * q)]
-    assert got["events"] == 2 and got["joined"] == 1
+    assert got_lines == [(q, 7, 16 * q), (26 * q, 2, 27 * q)]
+    assert got["events"] == 2 and got["joined"] == 2
     assert sorted(p.name for p in (tmp_path / "w").glob("crop-*.png")) == [
-        f"crop-{q}.png", f"crop-{15 * q}.png"]  # fmt: skip
+        f"crop-{q}.png", f"crop-{26 * q}.png"]  # fmt: skip
 
 
 def test_round4_read_count_names_the_nearest_glyph() -> None:
