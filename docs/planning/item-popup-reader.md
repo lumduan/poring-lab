@@ -6,7 +6,7 @@ verdict_date: null
 verdict_ticket: null
 supersedes: null
 related: [econ-bag-count.md, ../econ/economics.md, ../../scripts/bare_steal.py, ../../scripts/bag_count.py, ../../scripts/slot_items.py, ../../scripts/econ_screen.py]
-next_action: "Round 4 built and its font recorded (Amendment 11). The round-4 watcher runs beside the next RECORDED dev 1080 sessions (set w1080b, >= 250 pickups, >= 4 sessions), then score-events once."
+next_action: "w1080b is filling (Amendment 12): ifH37-ifH39 (120 pickups), the fists pilots fst1-fst3, then round 11's stagings and pilots, in time order until >= 250 pickups and >= 4 sessions; then score-events ONCE after a pre-score amendment."
 title: "Every item gained, from the client's item-obtained popup: which item, how many (pre-registration)"
 date: 2026-11-21
 owner: Batt
@@ -646,3 +646,20 @@ Section 5 (the item list in the screen record) waits for a pass.
 - **Which sessions:** w1080b takes `record_session` recordings only (Amendment 10). The fists
   trial (docs/planning/fists-1080.md section 4) runs `screen_ab.py run` blocks, which are not such
   recordings: the watcher runs beside them, reported only, and they are not w1080b's.
+
+
+### Amendment 12 (2026-11-23 07:42 ICT from `date`, before any w1080b event is read): which recordings w1080b holds so far
+
+- **Amendment 11's last bullet is superseded:** the fists trial no longer runs `screen_ab.py run`
+  blocks alone. fists-1080.md Amendment 2 made it three RECORDED pilots (`record_session` beside
+  each run), so by Amendment 10's rule fst1-fst3 ARE w1080b sessions. The same rule takes the item
+  model's round-11 stagings ifsH11 / ifsH12 and pilots ifH41+ (xmas02-items-1080.md Amendment 42).
+- **In time order so far:** ifH37 (03:12), ifH38 (03:42), ifH39 (04:14): **120 pickup_results** in
+  their windows (39, 42, 39; packets only, no event read). Then fst1.
+- **Left out by name** (Amendment 10: ABORTED by their own rules): `20261123T070246-rdp-xmas02-fst1-ABORTED`
+  (the MVP killed her before any play) and `20261123T071112-rdp-xmas02-fst1-ABORTED` (the runner
+  refused at the hunt core's start); fists-1080.md Amendments 4 and 5. Their watcher folders are
+  renamed `popup-w1080b/fst1-aborted-0704` / `-0713`.
+- **When it closes:** at >= 250 pickups and >= 4 sessions, the session in progress then being the
+  last; at ~40 pickups a pilot that is expected around ifH41 / ifH42. A pre-score amendment comes
+  before `score-events` runs once.
