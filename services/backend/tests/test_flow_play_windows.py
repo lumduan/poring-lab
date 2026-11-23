@@ -58,3 +58,20 @@ def test_the_windows_are_not_looked_for_while_the_game_is_off_the_screen() -> No
     assert "the bot sees it 1:1" in lines[0]
     assert "the windows: not looked for (the game is not on the screen)" in lines
     assert p.region == (0, 0, 1280, 720)
+
+
+def test_the_bag_line_names_the_rows_and_why_slots_were_unread() -> None:
+    """Batt 2026-11-23: live's start count said "0 kinds read, 27 slot(s) unread" and nothing
+    more -- the line now names the window's rows and the unread slots' reasons, counted."""
+    got = {"rows": 9, "tabs": [
+        {"tab": "use", "unread": [{"slot": 0, "why": "no known icon (the nearest Apple at 41.2)"},
+                                  {"slot": 1, "why": "no known icon (the nearest Jellopy at 39.0)"},
+                                  {"slot": 2, "why": "the count did not read"}]},
+        {"tab": "etc", "unread": [{"slot": 0, "why": "no known icon (the nearest Scell at 50.1)"}]},
+        {"tab": "eqp", "unread": []}]}  # fmt: skip
+    words = fp.bag_words(got)
+    assert words == "the window 7 x 9; unread: 3 no known icon, 1 the count did not read"
+    assert fp.bag_words({"tabs": []}) == "the window's rows not recorded"
+    assert fp.bag_words({"rows": 6, "tabs": [{"unread": [{"slot": 4}]}]}) == (
+        "the window 7 x 6; unread: 1 no reason given"
+    )

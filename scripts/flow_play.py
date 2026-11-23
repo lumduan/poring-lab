@@ -2897,8 +2897,26 @@ def take_bag(census: BagCensus, lio: Any, when: str) -> dict[str, Any] | None:
             f"{type(e).__name__}: {str(e)[:200]}")  # fmt: skip
         return None
     say(f"the bag at the {when}: {len(got.get('totals') or {})} kinds read, "
-        f"{got.get('unread', 0)} slot(s) unread, {got.get('seconds')} s")  # fmt: skip
+        f"{got.get('unread', 0)} slot(s) unread, {got.get('seconds')} s "
+        f"({bag_words(got)})")  # fmt: skip
     return got
+
+
+def bag_words(got: Mapping[str, Any]) -> str:
+    """PURE (Batt 2026-11-23: live's start count read "0 kinds, 27 slots unread" and the log did
+    not say why): the window's rows the census found, and its unread slots counted by their reason
+    (the words before a reason's details, most common first)."""
+    rows = got.get("rows")
+    parts = [f"the window 7 x {rows}" if rows else "the window's rows not recorded"]
+    whys: dict[str, int] = {}
+    for t in got.get("tabs") or []:
+        for u in t.get("unread") or []:
+            w = str(u.get("why") or "no reason given").split(" (")[0]
+            whys[w] = whys.get(w, 0) + 1
+    if whys:
+        top = sorted(whys.items(), key=lambda kv: (-kv[1], kv[0]))[:4]
+        parts.append("unread: " + ", ".join(f"{n} {w}" for w, n in top))
+    return "; ".join(parts)
 
 
 def bag_economy(start: Mapping[str, Any], end: Mapping[str, Any], events: Path,
