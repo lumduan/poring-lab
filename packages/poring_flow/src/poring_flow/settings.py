@@ -925,7 +925,9 @@ SWITCHES: tuple[Field, ...] = (
         "choice",
         "look for items with the item model",
         flag="--loot-items",
-        options=("xmas02fi5", "xmas02fi4", "xmas02fi3", "off"),
+        # xmas02fi9: xmas02-items-1080.md Amendment 46 (round 11 PASSED 8a), a choice for 8c's
+        # arm B; NOT the default and NOT deployed (live keeps xmas02fi5 until 8c and Batt's word)
+        options=("xmas02fi5", "xmas02fi4", "xmas02fi3", "xmas02fi9", "off"),
         needs=(("loot", "trim"),),
     ),  # fmt: skip
     Field(

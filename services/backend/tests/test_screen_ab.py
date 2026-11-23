@@ -273,10 +273,12 @@ def test_the_false_boss_line() -> None:
 # --- xmas02-items-1080.md 8c: a block's BOX setting (the item model) ------------------------------
 def test_box_sets_take_box_settings_with_a_runner_flag_only() -> None:
     assert sa.box_sets(["loot_items=xmas02fi4"]) == {"loot_items": "xmas02fi4"}
+    # xmas02-items-1080.md Amendment 46: 8c's arm B names round 11's model
+    assert sa.box_sets(["loot_items=xmas02fi9"]) == {"loot_items": "xmas02fi9"}
     assert "not a box setting" in sa.box_sets(["alarm_near_px=60"])  # a player setting
     assert "a setting's name" in sa.box_sets(["nope=1"])
     assert "given twice" in sa.box_sets(["loot_items=xmas02fi4", "loot_items=xmas02fi5"])
-    assert isinstance(sa.box_sets(["loot_items=xmas02fi9"]), str)  # not one of its options
+    assert isinstance(sa.box_sets(["loot_items=xmas02fi10"]), str)  # not one of its options
     assert isinstance(sa.box_sets(["loot_items=xmas02fi6"]), str)  # 8b FAILED: not offered
 
 
