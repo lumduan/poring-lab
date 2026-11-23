@@ -1613,3 +1613,18 @@ A count under its minimum is NO VERDICT, never a pass.
      PAUSED line), each under the round-4 watcher (w1080b sessions).
 - The TRAIN labelling, the hard-negative list and the cache run on the CPU beside the recordings;
   the training starts after the pilots' own last line (the dev worker runs one job).
+
+### Amendment 43 (2026-11-23 09:08 ICT from `date`, before any round-11 recording): a deviation in round 10's extension pilots; her build for round 11
+
+- **Found today (fists-1080.md Amendment 6):** when the fists build parked the Damascus shortcut on
+  F7 (11-23 01:5x), it replaced her **Candy** shortcut; the 03:05 restore (Amendment 38) moved the
+  Damascus back to F5 and left F7 empty. So **ifH37-ifH39 played without the box's candy eating**:
+  they pressed F7 0 / 0 / 0 times, ifH31-ifH36 2 / 4 / 0 / 1 / 4 / 4 (F6, the Candy Cane, worked in
+  both). It changes her HP top-ups only (no death in any of the nine); the held-out's frames,
+  labels and items are what the camera saw. Round 10's score stands as scored (Amendment 40).
+- **Her build for round 11** (09:00-09:05, read on a frame): the Knife-swap build of rounds 8-10,
+  HIT 205, FLEE 246 + 1, Aspd 176; the Damascus +8 worn (shortcut F5), the Knife on F4, **the
+  Candy back on F7**, both Rosaries, the plain Manteau, Thief Clothes +0; the carded Manteau [1]
+  deleted. clear-bag (etc, use) rc 1 on its early stock read, judged by the frame: weight 620 /
+  2,430, F1 10 potions, F8 10 Fly Wings (the setup tops up F9). Immunity ON read in the Chat tab;
+  the stagings ifsH11, ifsH12 started 09:07.
