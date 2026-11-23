@@ -6,7 +6,7 @@ verdict_date: null
 verdict_ticket: null
 supersedes: null
 related: [econ-bag-count.md, ../econ/economics.md, ../../scripts/bare_steal.py, ../../scripts/bag_count.py, ../../scripts/slot_items.py, ../../scripts/econ_screen.py]
-next_action: "w1080b is filling (Amendment 12): ifH37-ifH39 (120 pickups), the fists pilots fst1-fst3, then round 11's stagings and pilots, in time order until >= 250 pickups and >= 4 sessions; then score-events ONCE after a pre-score amendment."
+next_action: "w1080b closed (Amendment 13: 9 sessions, 286 pickups); score-events ONCE with the four bars; a pass -> section 5 on dev; a fail -> round 5 from its diagnosis."
 title: "Every item gained, from the client's item-obtained popup: which item, how many (pre-registration)"
 date: 2026-11-21
 owner: Batt
@@ -665,3 +665,39 @@ Section 5 (the item list in the screen record) waits for a pass.
 - **When it closes:** at >= 250 pickups and >= 4 sessions, the session in progress then being the
   last; at ~40 pickups a pilot that is expected around ifH41 / ifH42. A pre-score amendment comes
   before `score-events` runs once.
+
+### Amendment 13 (2026-11-23 11:16 ICT from `date`, BEFORE any w1080b event is read): the set is closed; the score command
+
+- **The set, in time order** (Amendment 10's rule: `record_session` dev 1080 sessions on xmas_dun02
+  after Amendment 11, the round-4 watcher over each whole session, until >= 250 pickups and >= 4
+  sessions, the session in progress then the last): the count stood at 248 after ifsH12, so ifH41
+  (09:36-10:05) is the last.
+
+  | session | pickups (packets) |
+  |---|---|
+  | 20261123T031200-rdp-xmas02-ifH37 | 39 |
+  | 20261123T034215-rdp-xmas02-ifH38 | 42 |
+  | 20261123T041458-rdp-xmas02-ifH39 | 39 |
+  | 20261123T072341-rdp-xmas02-fst1 | 25 |
+  | 20261123T075425-rdp-xmas02-fst2 | 27 |
+  | 20261123T082530-rdp-xmas02-fst3 | 28 |
+  | 20261123T091138-rdp-xmas02-ifsH11 | 24 |
+  | 20261123T092302-rdp-xmas02-ifsH12 | 24 |
+  | 20261123T093601-rdp-xmas02-ifH41 | 38 |
+
+  **286 pickup_results in 9 sessions** (minimums 250 / 4). The names' sha256 (one per line):
+  `3560ba6f73e64f7197da2b0c4c536bca927a62d1fd1c575ecf171fb1d219d2bf`. fst1-fst3 are the void fists
+  trial's runs (fists-1080.md Amendment 6: she fought with the Damascus): valid w1080b sessions all
+  the same (recorded, not aborted by their own rules). The two aborted fst1 attempts are out by
+  name (Amendment 12).
+- **The watchers:** each folder `popup-w1080b/<label>`, the round-4 code (item_popup.py unchanged
+  since 80bcf00a) and font (`item_popup_count_r4.npz`, sha256 3f1ff7ee...), 0 grab errors in all
+  nine; ticks p95 75-99 ms. Later sessions (ifH42+) ran under the watcher too and are not in the set.
+- **The score, ONCE** (Amendment 10's bars, unchanged: I1 >= 97 %, I2 >= 97 %, P <= 2 %,
+  R >= 85 %):
+
+        .venv/bin/python scripts/item_popup_eval.py score-events \
+          --watch /dev/shm/poring-lab-tmp/popup-w1080b/{ifH37,ifH38,ifH39,fst1,fst2,fst3,ifsH11,ifsH12,ifH41} \
+          --sessions <the nine names above> --out /dev/shm/poring-lab-tmp/popup-w1080b/score-w1080b.json
+
+  A pass -> section 5 on dev (live only on Batt's word); a fail -> a round 5 from its diagnosis.
