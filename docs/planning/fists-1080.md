@@ -7,7 +7,7 @@ verdict_date: null
 verdict_ticket: null
 supersedes: null
 related: [rogue-xmas02.md, xmas02-items-1080.md, screen-size-ab.md, ../../scripts/screen_ab.py, ../../scripts/stage2_ab.py, ../../scripts/bare_steal.py]
-next_action: "Batt 11-23 ~11:1x (Amendment 7): live already plays fists (no knife worn at the start -> the start check plays without the swap); recording live is allowed. live-fists-1 (11:14, 60 min, PNG 1 fps) is the fists reference: the runner's own kills / loot per hour + the popup reader offline. The dev re-trial fst4-fst6 stays registered (Amendment 6). Batt decides the open items after a look at live."
+next_action: "Live's fists reference measured (Amendment 9: 145.2 kills/h by the exp line, ~57.6 steals/h from the screen, no death, on Batt's server). The dev re-trial fst4-fst6 stays queued after the item model's round-11 score; Batt decides the open items after this look at live."
 title: "The fists at 1080: Batt's build, no Knife swap (a trial, written before any of its data)"
 date: 2026-11-22
 owner: Batt
@@ -393,3 +393,33 @@ interleaved A/B is the next step only on Batt's word.
 - **The reference** (reported when the watcher ends): over its window, the live Run's own events
   (kills by hit gap, loot clicks), the watcher's gains, a gain <= 3 s after one of our loot clicks
   counted as a pickup and any other as a steal -- a screen estimate, said so.
+
+## 13. Amendment 9 (2026-11-23 12:17 ICT from `date`): the live fists reference
+
+- **The recording `live-fists-1`** ran its full hour (11:14:24-12:14:34): 29 shards, 7.59 GB, the
+  bot's virtual 1280 x 720 view at 1 fps. Its last step (the packets) failed -- live has no
+  sniffer container (`docker exec poring-lab-live-sniffer-1 ls /captures` rc 1) -- so it wrote
+  no manifest; the frames are intact. It goes to the NAS as a recording.
+- **The window measured:** the round-5 popup watcher's, 11:26:01-12:16:06 (50.0 min, 11,993 ticks,
+  p95 84 ms, 0 grab errors), against the live Run's own events over the same span
+  (`flowplay-poring-lab-live-11231110`, its hunt1 and hunt2: one RE-READ at 11:44:35, "position
+  jump", hunting again 3 s later; no death).
+
+  | | live, fists (his server, his stats) | dev, Damascus + no swap (fst1-3, void as fists) | dev base, Knife swap (ifH31-36) | Batt, Knife swap (11-12) |
+  |---|---|---|---|---|
+  | kills/h | **145.2** (121, the runner's exp line) | 123.8 packets / 108.5 runner | 70.7 packets / 86.6 runner | 228.5 |
+  | steals/h | **~57.6** (48, screen estimate) | 37.3 packets | 53.1 packets | |
+  | item gains/h | 92.4 (77: 29 within 3 s of our loot click, 48 not) | | | |
+  | loot clicks/h | 37.2 | | | |
+  | deaths | 0 | 0 | 0 | |
+
+- **How the live numbers are read, and their limits:** kills are the runner's own (on live, read
+  from the exp line, all 121 here); gains are the popup reader's events (icons read for all 77,
+  amounts for none: live's client draws the count differently); a gain <= 3 s after one of our loot
+  clicks counts as a pickup, any other as a steal. No packets on live, so neither is the packet
+  ground truth the dev columns use. The servers differ (his renewal server and character vs the
+  lab's pre-renewal Rogue), so this is a reference, not an A/B.
+- Items gained (the watcher's reads): 911 x 26, 539-group x 17, 601-group x 7, 529-group x 7,
+  538-group x 4, 722 x 4, 1098 x 4, others <= 2.
+- Also seen on live (its log, for Batt's look): the minimap never names the map (best 0.15), the
+  bag count fails (7 x 9), F1 holds Yellow Potions.
