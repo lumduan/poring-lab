@@ -6,7 +6,7 @@ verdict_date: null
 verdict_ticket: null
 supersedes: null
 related: [xmas02-1080-detector.md, xmas02-detector.md, rogue-xmas02.md, screen-size-ab.md, fullscreen-client.md, ../../scripts/fi_labels.py, ../../scripts/fi_eval.py, ../../scripts/stage_items.py, ../../scripts/build_frame_cache.py]
-next_action: "ROUND 11 (Amendments 41-44): xmas02fi9 frozen 4026896d, registered ee0177f5; the held-out ifsH11, ifsH12, ifH41-ifH46 meets every minimum (I2 27 episodes, 94 item crops); two blind labellers answering the seed-79 pack; the committed wrapper scores ONCE when both hold 114. Pass -> 8c (Batt deploys); fail -> round 12 from its diagnosis."
+next_action: "ROUND 11 (Amendment 45): every label bar PASSED and I5 CPU PASSED in the one score; I5 GPU had NO rows (the agent left out round 8's step: the ONNX into archive/models); that ONE measurement is re-taken as registered here (same 914 frames, fi9 and fi5); its bar decides the round. Pass -> 8c (Batt deploys); fail -> round 12."
 title: "The floor-item model at 1920x1080: a 1080 round of the item detector, the 720 round 5's recipe with only the screen changed (pre-registration)"
 date: 2026-11-20
 owner: Batt
@@ -1693,3 +1693,35 @@ A count under its minimum is NO VERDICT, never a pass.
   pilots): the I5 latency sample, both-good, THE BARS (`fi_eval --strata r11 --item-floor 0.4
   --ring-red 30 --edge-margin 12 --edge-top 32`), then the report-only lines (fi8 + round 10's rule,
   fi6 + the rule at 0.50, fi5 with no rule). The bars are section 8a's, unchanged.
+
+### Amendment 45 (2026-11-23 18:36 ICT from `date`, after the one score, BEFORE any re-measurement): the score's I5 GPU line had no rows -- a setup step the agent left out; the one measurement re-taken
+
+- **The one score ran** (18:18:58-18:34:13, `score_r11.sh` identical to the committed wrapper):
+  both answer files held 114 at 18:21:30; both-good **92** crops; the bars' file
+  `score-r11.json` sha256 `a813986469158e36...`. Its overall verdict is **NO_VERDICT**, for one
+  reason only:
+  - **I5 GPU: 0 rows.** The detect server refused `xmas02fi9` ("a served model [...] is not ..."):
+    `unit_detector.present_models` serves only the models whose ONNX is in the storage folder's
+    `archive/models`, and the agent did not copy xmas02fi9's ONNX there. Round 8 did it as a
+    pre-score step (Amendment 29: "its ONNX is copied to the storage folder's models ... read
+    back"); Amendments 41 and 44 left it out, and the freeze copies the ONNX to the detector's
+    `/dev/shm` model folder only. The agent's slip; nothing about the model.
+  - Everything else was scored as registered and **stands as scored, never re-run on any label
+    or answer**: I1h, precision, I2, I3-any, I3 5 x 5, I4 and I5 CPU (the result amendment reports
+    them).
+- **The remedy, registered before it runs.** I5 GPU is a timing of the model file on the detect
+  server; it reads no label and no answer, so taking it again cannot be tuned on the held-out:
+  1. copy `xmas02fi9-last-736x1280.onnx` (f0891a73...) and its `.names.json` to `archive/models`,
+     each sha256 read back;
+  2. then, under the wrapper's own conditions (no dev detect server, no screen_ab run, the dev
+     worker idle) and with its own commands: `unit_detector.py serve-cmd --backend openvino
+     --seconds 900`, `fi_gpu_latency.py` over the SAME sample (`refs-lat.json`, 914 frames) for
+     xmas02fi9 THEN xmas02fi5 (both again, one server run, as the wrapper did), the server stopped;
+  3. `fi_eval.py` with the wrapper's bar arguments exactly, written to `score-r11-i5.json`. Its
+     label bars must equal `score-r11.json`'s number for number, or nothing is reported and Batt
+     is told; its I5 GPU line is the round's I5 GPU result.
+- **The verdict then** is the one score's bars plus this I5 GPU line (section 8a: the server's
+  forward p95 <= 35 ms AND <= 1.10 x xmas02fi5's, >= 200 calls each). If the server again yields
+  no rows, the round stays NO_VERDICT and Batt is asked; there is no third try.
+- **For later rounds:** the ONNX copy into `archive/models` (read back) is a step of the freeze
+  itself; a round's pre-score amendment lists the served models (`serve-cmd`) before the score.
