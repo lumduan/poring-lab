@@ -238,7 +238,7 @@ interleaved A/B is the next step only on Batt's word.
 - **After fst3:** her Knife-swap build is put back for the item model's round 11 (its held-out is
   played as rounds 8-10's were), read against the old window.
 
-## 8. Amendment 4 (2026-11-23 07:13 ICT from `date`, BEFORE any fists play): fst1 ABORTED -- the MVP killed her during the pre-run checks; her idle time moves to town
+## 8. Amendment 4 (2026-11-23 07:09 ICT from `date`, BEFORE any fists play): fst1 ABORTED -- the MVP killed her during the pre-run checks; her idle time moves to town
 
 - **What happened:** fst1's pre-run steps warped her to xmas_dun02 (114, 23), then the zoom check
   warped her to its reference cell (93, 82); the chat check, the recorder start and the detect
