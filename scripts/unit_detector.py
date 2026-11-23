@@ -395,6 +395,14 @@ GPU_WEIGHTS: dict[str, GpuWeights] = {
                             "74092985465cb990d814226fdfaf83d6abb5b9d90a52981bdec1caf175119d42",
                             "xmas02fi8-last-736x1280.onnx",
                             "371c2f2cfaeefcca6d7e05c76932d8ecb5555464e3a1a7a32d6dbf52ed143297"),
+    # xmas02-items-1080.md Amendment 41 (round 11): init xmas02fi8, + rounds 8-10's spent 1080
+    # held-outs and xmas02fi8's own false boxes on them as hard negatives; frozen 4026896d
+    # (2026-11-23 16:47), exported f0891a73; served for its held-out eval and I5 until section 8a's
+    # bars and 8c decide; NOT in MAP_MODELS
+    "xmas02fi9": GpuWeights("/datasets/archive/train/xmas02-fi-r11-1080-20261123/weights/last.pt",
+                            "4026896dfbb92929915c66a3eb576b9c678118df3162db0c9f9ae7982fb05633",
+                            "xmas02fi9-last-736x1280.onnx",
+                            "f0891a73712d2960ff7bf63c5fa4e64a6c678b041f4c7ce1311870f5ff2a39dc"),
     # xmas02-detector.md Amendment S4 (2026-11-14): + the Christmas Goblin and the Stormy Knight
     # (the masked cache), init xmas02gb; frozen 0b43ebbf, exported 76316fb4 (S4.8 / S4.9). S7.6's
     # alarm bar PASSED; DEPLOYED 2026-11-17 (live-blocks.md 18.14 / 18.15): MAP_MODELS xmas_dun02

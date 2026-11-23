@@ -28,6 +28,7 @@ ONNX = {"xmas02fi": "xmas02fi-last-736x1280.onnx", "xmas02fi2": "xmas02fi2-last-
         "xmas02fi5": "xmas02fi5-last-736x1280.onnx",
         "xmas02fi6": "xmas02fi6-last-736x1280.onnx",  # xmas02-items-1080.md: the 1080 round
         "xmas02fi8": "xmas02fi8-last-736x1280.onnx",  # xmas02-items-1080.md Amendment 26
+        "xmas02fi9": "xmas02fi9-last-736x1280.onnx",  # xmas02-items-1080.md Amendment 41
         "xmas02gb": "xmas02gb-last-736x1280.onnx",
         "xmas02sk": "xmas02sk-last-736x1280.onnx",
         # xmas02-1080-detector.md Amendment 17: the 1080 model's D1 (A7), beside xmas02sk
