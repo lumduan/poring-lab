@@ -7,7 +7,7 @@ verdict_date: null
 verdict_ticket: null
 supersedes: null
 related: [rogue-xmas02.md, xmas02-items-1080.md, screen-size-ab.md, ../../scripts/screen_ab.py, ../../scripts/stage2_ab.py, ../../scripts/bare_steal.py]
-next_action: "The fists build re-applied and read (Amendment 3, 06:56-07:01); fst1-fst3 running from 07:01 (25 min each, ~08:35); then the report against ifH31-ifH36 (Amendment 2's rulers) and her Knife-swap build put back for the item model's round 11. Batt: keep the build (Amendment 1 options); a fists benchmark run of his own."
+next_action: "fst1 was ABORTED (the MVP killed her in the pre-run checks, Amendment 4); fst1-fst3 again with fist_pilot_rec2.sh (her idle time in town); then the report against ifH31-ifH36 and her Knife-swap build put back. Batt: keep the build (Amendment 1 options); a fists benchmark run of his own."
 title: "The fists at 1080: Batt's build, no Knife swap (a trial, written before any of its data)"
 date: 2026-11-22
 owner: Batt
@@ -237,3 +237,34 @@ interleaved A/B is the next step only on Batt's word.
   Knife swap is off ... the weapon is left as it is".
 - **After fst3:** her Knife-swap build is put back for the item model's round 11 (its held-out is
   played as rounds 8-10's were), read against the old window.
+
+## 8. Amendment 4 (2026-11-23 07:13 ICT from `date`, BEFORE any fists play): fst1 ABORTED -- the MVP killed her during the pre-run checks; her idle time moves to town
+
+- **What happened:** fst1's pre-run steps warped her to xmas_dun02 (114, 23), then the zoom check
+  warped her to its reference cell (93, 82); the chat check, the recorder start and the detect
+  server's start followed there, about 1.5 min standing, NOT immune. The **Stormy Knight** (the
+  map's MVP; alive, Batt's player mode) and Cruisers hit her: the Battle Log reads 1,129, 1,092 and
+  5,615 from the Stormy Knight and 1,331, 125, 138 from Cruisers. The run's setup read HP 0 before
+  and after its `@heal` and stopped ("a person first", play rc 2, 07:03:53). **No fists play
+  happened.**
+- **Aftercare (07:05-07:12):** immunity ON (read: "You are now immune to attacks."), `@alive`,
+  `@warp prontera 156 191`, `@heal`; a frame read HP 5,828 / 5,828 and weight 899 / 4,290 (the bag
+  unchanged); immunity OFF again in town (read: "Returned to normal state.").
+- **fst1's leftovers renamed** (never part of the trial or of the popup reader's w1080b):
+  `screen-ab/fst1-play-aborted-0704`, `fists/fst1-aborted-0704`, `popup-w1080b/fst1-aborted-0704`
+  and the NAS session `20261123T070246-rdp-xmas02-fst1-ABORTED` (a 1-min recording, shipped
+  before the stop was seen).
+- **Why the base pilots never met it:** `pilot_rec.sh` (rounds 8-10's natural pilots, the base
+  ifH31-ifH36 too) has the same ~1.5-min idle on the map; no base pilot died there. It is an exposure
+  of the procedure, not of the fists.
+- **The fix (`fist_pilot_rec2.sh`, a new file; `fists_pilots2.sh` runs it):** `@warp prontera 156
+  191` first, and again right after the zoom check, so the chat check, the recorder start and the
+  detect server's start happen in town. Her time on xmas_dun02 before the run drops to the zoom
+  check (~30 s). The run's own setup warps her to its start cell as before, so the PLAY is
+  unchanged: the same runner config (ifH39's but `knife_swap`), the same 25 min, the same rulers.
+  The recording now opens with ~1 min of town frames (the rulers read packets and the runner's own
+  records from the run's start).
+- **The trial again:** fst1, fst2, fst3 under the same labels, the round-4 popup watcher beside
+  each. The queue waits for `fists/immune_off.ok` = 1 (written after the read above).
+- **For the item model's round 11:** its held-out pilots take the same town step (a procedure
+  change written into its pre-registration).
