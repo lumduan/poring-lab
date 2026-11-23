@@ -6,7 +6,7 @@ verdict_date: null
 verdict_ticket: null
 supersedes: null
 related: [xmas02-1080-detector.md, xmas02-detector.md, rogue-xmas02.md, screen-size-ab.md, fullscreen-client.md, ../../scripts/fi_labels.py, ../../scripts/fi_eval.py, ../../scripts/stage_items.py, ../../scripts/build_frame_cache.py]
-next_action: "ROUND 11 PASSES section 8a (Amendment 46: xmas02fi9 + round 10's rule; I3-any 0.20 %, I1h 97.8 %, I5 GPU 23.2 ms). Next: 8c in play at 1080 (A = xmas02fi5, B = xmas02fi9 + the rule, 3 valid runs a side), pre-registered before its first run; deployed at 1080 only, on Batt's word."
+next_action: "8c (Amendment 47): six interleaved 20-min runs A B B A A B (A xmas02fi5, B xmas02fi9 + round 10's rule), then the committed xmas02_items_8c_score.sh ONCE; pass -> Batt decides the 1080 deployment; fail -> named by time lost."
 title: "The floor-item model at 1920x1080: a 1080 round of the item detector, the 720 round 5's recipe with only the screen changed (pre-registration)"
 date: 2026-11-20
 owner: Batt
@@ -1768,3 +1768,39 @@ A count under its minimum is NO VERDICT, never a pass.
   item_edge_1080=12 item_edge_top_1080=32`, Amendment 37), 3 valid runs a side, 20 min each,
   stage2_ab's setup; its plan is written and committed before its first run. Deployed at 1080
   only, if 8c passes, on Batt's word.
+
+### Amendment 47 (2026-11-23 18:58 ICT from `date`, BEFORE 8c's first run): 8c as it runs; the dev client's crash before it
+
+- **The dev client crashed before 8c** (found 18:20, before any 8c step): a Gravity Error Handler
+  box (0xc0000005, PoringLab.exe) on a black desktop; the process (Id 3436, running since
+  2026-11-22 17:05) held the account online while it showed nothing. It played after round 11's
+  last pilot (ifH46, 12:43, 1,602 frames, 0 PAUSED), so no held-out session is touched. Recovered
+  as on 11-22 (memory `client-crash-error-handler`): a first `recover` at 18:47 came up black (the
+  dead process still there), the RDP session reconnected once (18:49, one client), the box's Exit,
+  then from the agent's own "poring-lab shell" `Get-Process PoringLab` -> 3436 only, stopped by
+  Id ("left: 0"), and `recover gm --retries 0` -> in game at 18:55:51 (Thief8fce, Rogue, HP 5,070 /
+  5,070, weight 863 / 2,430, in town).
+- **The loot model is nameable:** `loot_items` offers xmas02fi9 (05bb7db0; not the default); its
+  ONNX is in `archive/models`, so the stage2_ab series' detect server (`serve-cmd`) serves it.
+- **The runs (section 8c, Amendment 41):** six runs, each its own one-run series, **interleaved A B
+  B A A B** (`c8-A1 c8-B1 c8-B2 c8-A2 c8-A3 c8-B3`), each `screen_ab.py run --screen 1080 --runs
+  1 --minutes 20 --model xmas02v1080` plus
+  - A: `--box-set loot_items=xmas02fi5`;
+  - B: `--box-set loot_items=xmas02fi9 --player-set item_floor_1080=0.4 --player-set
+    item_ring_1080=30 --player-set item_edge_1080=12 --player-set item_edge_top_1080=32`.
+  - Her build: the Knife-swap build of rounds 8-11 (as now, Amendment 43); NOT immune; the
+    held-out pilots' procedure before each run (`pilot_rec2.sh`'s town step, heal, the zoom check
+    at the start cell, back to town, the chat-window standard), without a recording.
+  - After each run: rc 0, no PAUSED line in its log and the client in game (`ro_agent status`),
+    else the chain STOPS (a person first). An invalid run (screen_ab's `valid`: < 80 % of its time
+    box, not found, or rc not 0/130) is replaced by ONE more run of its arm at the end; at most one
+    replacement an arm.
+- **Scored ONCE** by `docs/records/scorers/xmas02_items_8c_score.sh` (committed here) with EVERY
+  run of each arm: loot/h mean(B) - mean(A) > +2 SE (better: the round's reason); kills/h no worse
+  than -2 SE; deaths B <= A; no new errors; any INCONCLUSIVE line -> INCONCLUSIVE. Reported beside
+  it: each arm's kills/h, loot/h and z/h as a % of Batt's run (228.5 kills/h, 135,737 common z/h)
+  and screen_ab's per-model report.
+- **Disclosed:** A is the deployed model with no rule; B the new model WITH the rule; 8c judges
+  the pair as it would ship, not the model alone.
+- **If 8c passes:** Batt decides the deployment at 1080 (live, between his Runs). **If it fails:**
+  the causes named by time lost; a next step registered from them.
