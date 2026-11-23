@@ -7,7 +7,7 @@ verdict_date: null
 verdict_ticket: null
 supersedes: null
 related: [rogue-xmas02.md, xmas02-items-1080.md, screen-size-ab.md, ../../scripts/screen_ab.py, ../../scripts/stage2_ab.py, ../../scripts/bare_steal.py]
-next_action: "Live's fists reference measured (Amendment 9: 145.2 kills/h by the exp line, ~57.6 steals/h from the screen, no death, on Batt's server). The dev re-trial fst4-fst6 stays queued after the item model's round-11 score; Batt decides the open items after this look at live."
+next_action: "Batt 11-23 ~12:3x (Amendment 10): fst4-fst6 stay queued after the item model's round-11 score; option 1 kept; the steal cue dropped; the 7 x 9 bag count next (dev first, live between Runs after a word to Batt); live's popup count font taught from popup-band crops only after Batt says the chat is checked and talk is off."
 title: "The fists at 1080: Batt's build, no Knife swap (a trial, written before any of its data)"
 date: 2026-11-22
 owner: Batt
@@ -423,3 +423,25 @@ interleaved A/B is the next step only on Batt's word.
   538-group x 4, 722 x 4, 1098 x 4, others <= 2.
 - Also seen on live (its log, for Batt's look): the minimap never names the map (best 0.15), the
   bag count fails (7 x 9), F1 holds Yellow Potions.
+
+## 14. Amendment 10 (2026-11-23 12:29 ICT from `date`): Batt's decisions after the look at live
+
+- **Batt, 11-23 ~12:3x (his words, translated), on the three open points:**
+  1. The dev re-trial fst4-fst6: "ok" -- read as: it stays queued (after the item model's round-11
+     score); he may still say "skip it".
+  2. The open choices (this build's option 1, the steal cue, the 7 x 9 bag, live deployment):
+     "carry on" -- the agent decides and does them:
+     - **option 1 is kept** (his stat totals and gear, the lab's pre-renewal numbers);
+     - **the steal cue is dropped**: it timed the Knife swap-back, and live plays fists with no
+       swap (Amendment 7);
+     - **the 7 x 9 bag**: bag_count learns his bag's size (built and tested on dev; to live only
+       between Runs, after a word to Batt);
+     - nothing else is ready for live (the item model and the popup reader have not passed).
+  3. Live's popup AMOUNTS (unread on live, Amendment 8): "I want it, teach it to read them too. But
+     if you record, tell me in advance: I will check the chat window and turn talking off, because
+     other users come in and play -- so you do not capture their words." So the count font for
+     his client is taught from crops of the popup BAND only (536 x 38 px at the top centre), taken
+     only after his "ready".
+- **The morning's full-screen recording** (`live-fists-1`, Amendment 9) was taken before this rule
+  and may hold other players' chat; it is on the NAS only. Batt was asked: delete it, or keep it
+  with the chat area blacked out.
