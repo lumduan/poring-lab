@@ -374,3 +374,22 @@ interleaved A/B is the next step only on Batt's word.
   steals are read from the screen (a gain not after a loot step of ours), and said so.
 - **The dev re-trial fst4-fst6 (Amendment 6) stays registered** for this evening, as the lab's
   pre-renewal side of the same question; Batt may drop it after he sees the live numbers.
+
+## 12. Amendment 8 (2026-11-23 11:28 ICT from `date`): live's item gains come from the popup watcher on its real screen
+
+- **The recording holds the bot's VIRTUAL view:** `live-fists-1`'s frames are 1280 x 720 (the
+  recorder grabs GAME_REGION's virtual picture, as on dev: fst1's are 1280 x 720 too). The popup is
+  shrunk there with the world (item-popup-reader.md Amendment 6), so the popup reader cannot read
+  it from the recording (tried on fst1: 0 events from 1,597 frames). The recording stays as the
+  record of the play (route, kills, video review).
+- **So the gains are read live:** the popup reader's ROUND-5 watcher (item_popup.py from
+  0f35e645, copied to scratch) runs on the live client's REAL frame through the LIVE checkout's own
+  ro_agent (its .env, its screen; `slot_items` and `bare_steal` are byte-identical in both
+  checkouts), dev's icon pictures and the r4 count font, from 11:26:01 for 3,000 s
+  (`popup-live/live-fists-1`). Pixels only: no input, no Run setting, no file the Run reads.
+- **Read so far:** the band is the same as on dev (853, 72, 536 x 38); the icons read (distance
+  2.4), the AMOUNT did not (live's client may draw the count differently): live counts gains, not
+  amounts.
+- **The reference** (reported when the watcher ends): over its window, the live Run's own events
+  (kills by hit gap, loot clicks), the watcher's gains, a gain <= 3 s after one of our loot clicks
+  counted as a pickup and any other as a steal -- a screen estimate, said so.
