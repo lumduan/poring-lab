@@ -1650,7 +1650,7 @@ A count under its minimum is NO VERDICT, never a pass.
 
   No death; the Candy on F7 in every one (Amendment 43).
 - **TRAIN** (beside the recordings, on the CPU): the 27 spent held-outs labelled `--split train`
-  at ad268afd... (09:0x-09:24, all rc 0). G2: 10 PASS alone (ifsH5-ifsH10, ifH21, ifH35, ifH36,
+  at ad268afd... (08:56-09:24, all rc 0). G2: 10 PASS alone (ifsH5-ifsH10, ifH21, ifH35, ifH36,
   ifH39), 17 NOT_ENOUGH alone and judged pooled (279 fits, median |dx| 2, |dy| 2 px: PASS), none
   FAILS -> all 27 admitted; `train-ids.txt` = round 8's 26 + the 27 = 53 ids. **Hard negatives:**
   294 frames over 25 sessions (Amendment 41's count; none left out by the TRAIN labels). The
