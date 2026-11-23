@@ -1589,3 +1589,26 @@ A count under its minimum is NO VERDICT, never a pass.
   loader worker) -> the freeze -> the eval chain, the labellers and the one score.
 - **Code first (with tests, before any round-11 label):** fi_labels' round-11 names (refused for
   TRAIN), `R11_RELEASED`, seed 79 and `pack --round 11`; fi_eval `--strata r11`.
+
+### Amendment 42 (2026-11-23 07:41 ICT from `date`, BEFORE any round-11 recording): the new held-out's stagings and order
+
+- **The stagings** (`--views near --n 4`, as rounds 7-10):
+  - **ifsH11: seed 2613859**, spots (102,82), (82,216), (212,69), (169,205);
+  - **ifsH12: seed 2613886**, spots (236,115), (126,214), (148,169), (25,159).
+  - Their cells share NONE with the 27 earlier stagings on this map (2,364 distinct cells:
+    `cells/earlier-r11.json` = round 10's file + ifsH9 + ifsH10, whose spots were recomputed and
+    match Amendment 36), nor with each other. Seeds 2613600-2613899 gave exactly these two clean
+    4-spot plans (298 shared a cell; none was short).
+- **The order**, after the fists trial ends (fists-1080.md) and her Knife-swap build is back and
+  read against the old window:
+  1. clear-bag (etc, use), judged by the agent on its weight, and the DB's save holding none of the
+     set (`stage_items held`, as round 10's `r10_stage.sh`);
+  2. ifsH11, then ifsH12, IMMUNE (`stage_rec.sh`; immunity ON judged on a frame first), each under
+     the popup reader's round-4 watcher (its set w1080b counts only `record_session` pilots, so the
+     stagings are outside it);
+  3. immunity OFF, its reply read on a frame;
+  4. the pilots ifH41 .. ifH46, NOT immune, 25 min each (`pilot_rec2.sh`: round 10's
+     `pilot_rec.sh` with Amendment 41's town step), round 9's check after each (>= 1,400 frames, no
+     PAUSED line), each under the round-4 watcher (w1080b sessions).
+- The TRAIN labelling, the hard-negative list and the cache run on the CPU beside the recordings;
+  the training starts after the pilots' own last line (the dev worker runs one job).
