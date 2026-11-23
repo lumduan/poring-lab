@@ -7,7 +7,7 @@ verdict_date: null
 verdict_ticket: null
 supersedes: null
 related: [rogue-xmas02.md, xmas02-items-1080.md, screen-size-ab.md, ../../scripts/screen_ab.py, ../../scripts/stage2_ab.py, ../../scripts/bare_steal.py]
-next_action: "fst1-fst3 VOID as a fists trial (Amendment 6: the box's candy event equipped the Damascus 0.6 s into fst1, through the dagger shortcut parked on F7); they measured Batt's stats + the Damascus + no swap. The real fists re-trial (fst4-fst6, the dagger shortcut on F2, a swap-free check from packets) runs after the item model's round-11 GPU work. Batt: keep the build (Amendment 1 options); a fists benchmark run of his own."
+next_action: "Batt 11-23 ~11:1x (Amendment 7): live already plays fists (no knife worn at the start -> the start check plays without the swap); recording live is allowed. live-fists-1 (11:14, 60 min, PNG 1 fps) is the fists reference: the runner's own kills / loot per hour + the popup reader offline. The dev re-trial fst4-fst6 stays registered (Amendment 6). Batt decides the open items after a look at live."
 title: "The fists at 1080: Batt's build, no Knife swap (a trial, written before any of its data)"
 date: 2026-11-22
 owner: Batt
@@ -347,3 +347,30 @@ interleaved A/B is the next step only on Batt's word.
   - **a run with any weapon change in its packets (`swaps` > 0) is void**, and the queue stops;
   - the same rulers and the same base; when: after the item model's round-11 GPU work (its pilots,
     training and evaluation hold the dev client and the dev GPU worker first), so this evening.
+
+## 11. Amendment 7 (2026-11-23 11:15 ICT from `date`): Batt's answers; live already plays fists; a live recording as the fists reference
+
+- **Batt, 11-23 ~11:1x (his words, translated):**
+  1. "You may record video on live: the bot there is punching with its fists and stealing now."
+  2. "It is being done, go and look; the fix is easy: just do not put the knife on at the start."
+  3. On the open choices (this build's option 1, frontend-dev, the steal cue, the 7 x 9 bag, live
+     deployment): "look at how live plays first."
+- **What live does (its run log, read only; Run `flowplay-poring-lab-live-11231110`, 11:10):** the
+  start check reads the knife and dagger slots as NOT the swap's set-up, and the Run plays WITHOUT
+  the swap whole: "NOTE: knife, dagger did not read as the weapon swap's set-up: xmas_dun02 plays
+  WITHOUT the swap this run (and its Knife functions and its 4 monster recipe(s): the runner
+  strikes plainly)" -- the start's `knife_swap_off` path (Batt 11-19, "do not lock this"). So live
+  needs no code for fists, and 83645b20 (the same drop when the Run SETTING turns the swap off) is
+  not needed there. Seen in the same log: the minimap did not name the map (best match 0.17), the
+  bag count failed (the 7 x 9 bag), F1 holds Yellow Potions (a warning, the player's choice).
+- **The live recording, `live-fists-1`:** `record_session.py --backend rdp --label live-fists-1
+  --seconds 3600 --fps 1 --format png --max-bytes 8G` from the LIVE checkout, started 11:14:24 beside
+  the running Run. Frames only: no input, no code change, no Run setting touched. PNG, not the
+  default GPU video, so the popup reader can read it offline (a popup lives ~4.75 s, so 1 fps sees
+  each one several times). It may stop at its 8 GB cap (~2.4 MB a frame) before the hour.
+- **What it is for:** the fists reference on HIS server with HIS stats (renewal, the numbers the lab
+  cannot reach, Amendment 1): over the recording's window, the runner's own kills / loot steps per
+  hour (its events.jsonl) and the item gains read from the popups offline; no packets on live, so
+  steals are read from the screen (a gain not after a loot step of ours), and said so.
+- **The dev re-trial fst4-fst6 (Amendment 6) stays registered** for this evening, as the lab's
+  pre-renewal side of the same question; Batt may drop it after he sees the live numbers.
