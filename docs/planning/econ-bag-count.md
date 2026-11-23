@@ -7,7 +7,7 @@ verdict_date: null
 verdict_ticket: null
 supersedes: null
 related: [../econ/economics.md, ../../scripts/slot_items.py, ../../scripts/hotbar_count.py, ../../scripts/econ_dash.py, ../../packages/poring_env/src/poring_env/panelfind.py]
-next_action: "The window's rows (7 x 6..12) are on main (Amendment 5: cf8ae9ea, ad19d6d0; the dev 7 x 6 trial passes B1-B4). Batt's 7 x 9 bag is checked on live by the Run's own start census once main is promoted to live (Batt's word, between Runs)."
+next_action: "Promoted to live 11-23 13:35-13:39 (Amendment 6, Batt's word): the next live Run's start census names the rows of his 7 x 9 bag -- read its log line and the Run's /economy items."
 title: "The economy from the bot's own bag (Economy option b-i): count the inventory at a Run's start and end (pre-registration)"
 date: 2026-11-20
 owner: Batt
@@ -215,3 +215,19 @@ add (`@item 601 199`, items 927 / 933) simply is not in it.
 - **Live:** the live branch is 100 commits behind main (31 files: also the route recorder's
   frontend, the fists fix 83645b20, popup round 5, the item rule's part C settings); a promotion is
   Batt's word, between Runs.
+
+## Amendment 6 (2026-11-23 13:39 ICT from `date`): promoted to live (Batt's word)
+
+- **Batt, 11-23 ~13:3x:** "do it, I have stopped live" (the promotion) and "do it" (frontend-dev).
+- **Before it:** the frontend's checks in frontend-dev (started for them, removed after): lint OK,
+  typecheck OK, unit tests 612 (611 pass, 1 skipped, 0 fail; the route recorder's included).
+- **The promotion (13:35-13:39):** the live branch fast-forwarded ffccaef3 -> 2b2e42da (70 files)
+  and pushed; the live backend restarted (guarded, ALL STEPS OK), its frontend image rebuilt and
+  recreated (guarded, ALL STEPS OK), its Run helper restarted by PID (3512557). After: the live
+  console 200, /flows 200, the backend's /health ok (mode HUMAN: a restart boots HUMAN and the guard
+  restores only ASSIST; Batt sets the mode for his next Run).
+- **Not installed:** the route recorder's host helper (`scripts/host/poring-lab-routerec.service`) is
+  a user unit for the DEV checkout; live would need its own, and it records from the live console:
+  Batt's word, after his announce-first rule.
+- **Next:** the next live Run's start census should name 9 rows; its log line and /economy's items
+  are read then (no new capture: logs only).
