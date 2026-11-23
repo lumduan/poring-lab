@@ -646,6 +646,8 @@ Section 5 (the item list in the screen record) waits for a pass.
 - **Which sessions:** w1080b takes `record_session` recordings only (Amendment 10). The fists
   trial (docs/planning/fists-1080.md section 4) runs `screen_ab.py run` blocks, which are not such
   recordings: the watcher runs beside them, reported only, and they are not w1080b's.
+  ➡️ SUPERSEDED (Amendment 12): fists-1080.md Amendment 2 made the fists trial three RECORDED
+  pilots, so fst1-fst3 are w1080b sessions.
 
 
 ### Amendment 12 (2026-11-23 07:42 ICT from `date`, before any w1080b event is read): which recordings w1080b holds so far
