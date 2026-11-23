@@ -7,7 +7,7 @@ verdict_date: null
 verdict_ticket: null
 supersedes: null
 related: [rogue-xmas02.md, xmas02-items-1080.md, screen-size-ab.md, ../../scripts/screen_ab.py, ../../scripts/stage2_ab.py, ../../scripts/bare_steal.py]
-next_action: "fst1 stopped twice before any play (Amendments 4 and 5: the MVP in the pre-run checks; then the runner refused the box's recipes without the swap, fixed in 83645b20); fst1-fst3 again; then the report against ifH31-ifH36 and her Knife-swap build put back. Batt: keep the build (Amendment 1 options); a fists benchmark run of his own."
+next_action: "fst1-fst3 VOID as a fists trial (Amendment 6: the box's candy event equipped the Damascus 0.6 s into fst1, through the dagger shortcut parked on F7); they measured Batt's stats + the Damascus + no swap. The real fists re-trial (fst4-fst6, the dagger shortcut on F2, a swap-free check from packets) runs after the item model's round-11 GPU work. Batt: keep the build (Amendment 1 options); a fists benchmark run of his own."
 title: "The fists at 1080: Batt's build, no Knife swap (a trial, written before any of its data)"
 date: 2026-11-22
 owner: Batt
@@ -299,3 +299,51 @@ interleaved A/B is the next step only on Batt's word.
   `popup-w1080b/fst1-aborted-0713`, the demo folder `...-play-fst1-play-r01B-aborted-0713` and the
   NAS session `20261123T071112-rdp-xmas02-fst1-ABORTED`.
 - **The trial again:** fst1, fst2, fst3, `fists_pilots2.sh` unchanged (Amendment 4's procedure).
+
+## 10. Amendment 6 (2026-11-23 09:08 ICT from `date`): fst1-fst3 are VOID as a fists trial -- she fought with the Damascus; what they did measure
+
+- **What happened:** the box's candy event (`eat_candy`: "hotbar_count(F7) >= 1 -> press F7")
+  pressed **F7 0.6 s into fst1**: "box eat_candy (hotbar_count(F7) 1)". Amendment 1 had parked the
+  Damascus shortcut on F7 (the client would not remove it), over her **Candy** shortcut, and this
+  client draws a "1" under one equipment item. So the box read one candy, pressed F7 and **put the
+  +8 Damascus on**. fst2 and fst3 started with it on. Proof: the packets' weapon changes
+  (weapon_swap_study `swaps`): fst1 1, fst2 0, fst3 0; the equipment window at 09:0x showed the
+  Damascus worn; no other F7 press in any run.
+- **So fst1-fst3 measured Batt's stat totals and gear (Amendment 1) + the Damascus +8 + NO Knife
+  swap**, not his fists. Each run was otherwise as registered: 25.3 min, rc 0, 0 deaths, ended by
+  its time box, >= 1,597 frames, 0 PAUSED, the economy recorded.
+- **The numbers (Amendment 2's rulers, `fists/score_fists.py`, which reproduces the base table):**
+
+  | run | runner kills/h | runner loot/h | packet kills/h | steals/h | kills stolen | kill s median (stolen / not) | gross z/h | net z/h | weapon changes |
+  |---|---|---|---|---|---|---|---|---|---|
+| fst1 | 116.6 | 174.8 | 130.5 | 36.0 | 16 / 58 | 3.71 / 3.96 | 26,040 | 25,311 | 1 |
+| fst2 | 119.1 | 150.7 | 125.4 | 40.3 | 18 / 56 | 3.97 / 4.43 | 20,890 | 19,820 | 0 |
+| fst3 | 89.8 | 155.3 | 115.5 | 35.5 | 16 / 52 | 4.69 / 3.71 | 25,086 | 24,358 | 0 |
+| ifH31 | 65.6 | 82.6 | 55.4 | 44.4 | 20 / 25 | 20.78 / 5.17 | 16,430 | -1,831 | 42 |
+| ifH32 | 97.1 | 128.7 | 80.3 | 53.5 | 24 / 36 | 10.42 / 7.71 | 65,297 | 45,875 | 80 |
+| ifH33 | 82.6 | 131.1 | 70.8 | 55.3 | 25 / 32 | 11.69 / 7.5 | 69,090 | 67,195 | 56 |
+| ifH34 | 65.6 | 128.7 | 60.0 | 41.4 | 20 / 29 | 14.71 / 8.89 | 23,912 | 22,418 | 62 |
+| ifH35 | 94.8 | 116.6 | 71.9 | 51.6 | 23 / 32 | 15.21 / 8.69 | 29,168 | 19,206 | 50 |
+| ifH36 | 114.2 | 140.9 | 86.4 | 73.1 | 33 / 39 | 13.09 / 9.58 | 35,821 | 34,582 | 70 |
+
+  Pooled: the no-swap Damascus runs **123.8 packet kills/h** (base 70.7), **37.3 steals/h** (base
+  53.1), 30.1 % of kills stolen (base 75.1 %), gross **24,007 z/h** (base 39,955; the base's runs
+  range 16,430-69,090 z/h). Batt's Knife-swap run: 228.5 kills/h. Not an A/B (one block after the
+  other, the build differs too).
+- **A side effect in the base pilots, found the same way:** the Candy shortcut on F7 was lost when
+  the Damascus was parked there at 01:5x. ifH31-ifH36 pressed F7 (ate a candy) 2, 4, 0, 1, 4, 4
+  times; ifH37-ifH39 (the item model's round-10 extension) 0, 0, 0. Their play lacked candy eating
+  (HP from candies); no death. Written into xmas02-items-1080.md too. Restored at 09:05 (a Candy
+  dragged from the bag onto F7).
+- **Her build at 09:0x (for the item model's round 11):** the Knife-swap build put back and read
+  (HIT 205, FLEE 246 + 1, Aspd 176; Damascus +8 worn with its shortcut on F5, the Knife on F4, the
+  Candy on F7, both Rosaries and the plain Manteau; the carded Manteau [1] deleted).
+- **The real fists re-trial (fst4, fst5, fst6), registered now, before any of its data:**
+  - the build as Amendment 1 (the stat lines, the carded Manteau [1], the Thief Clothes +6, no
+    weapon, no Rosaries), with the Damascus shortcut on **F2**: no key of the box (F1, F4-F9) and
+    no event reads F2; the Candy stays on F7;
+  - the equipment window read before each pilot (the weapon slot empty);
+  - `fist_pilot_rec2.sh` and `fists_pilots2.sh` unchanged but for the labels;
+  - **a run with any weapon change in its packets (`swaps` > 0) is void**, and the queue stops;
+  - the same rulers and the same base; when: after the item model's round-11 GPU work (its pilots,
+    training and evaluation hold the dev client and the dev GPU worker first), so this evening.
