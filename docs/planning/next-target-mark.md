@@ -7,7 +7,7 @@ verdict_date: null
 verdict_ticket: null
 supersedes: null
 related: [fists-1080.md, search-targets.md, ../../scripts/search_gap.py, ../../scripts/time_budget.py, ../../scripts/weapon_swap_study.py]
-next_action: "Compute M1-M4 (section 2) on the live hour, the dev pilots and Batt's 11-12 run; then the design in an amendment from the numbers."
+next_action: "The numbers are in (Amendment 1): Batt 4.7 s after a kill, the dev bot 15-17 s (73 % of it standing); 2 in 3 kills already have the next monster in view. The design of the mark (Amendment 2) is written from them, then built on the player side and A/B-tested on dev."
 title: "Mark the next target while fighting (Batt 2026-11-23): measure the after-kill time first (pre-registration)"
 date: 2026-11-23
 owner: Batt
@@ -77,3 +77,56 @@ the byte-pinned runner; an A/B on dev; live only on Batt's word.
 
 The live frames show other players: they stay on the NAS; only numbers enter this document
 (CLAUDE.md rule 9; Batt 11-23: any NEW live capture is announced first and waits for his ready).
+
+## Amendment 1 (2026-11-23 13:25 ICT from `date`): the numbers (M1-M4, section 2's sources, never pooled across them)
+
+Computed offline by one agent (scratch `/dev/shm/poring-lab-tmp/ntm/`: its scripts and per-kill
+rows; spot-checked: the medians recompute from the rows). Windows: Batt's demo by the lab's
+`--live` rule (30.46 min, 116 kills = his 228.5 kills/h); dev by the runner's run windows (ifH31-36
+148.2 min, 193 kills; fst1-3 74.1 min, 166 kills); live by the recording's frames (59.97 min, 136
+kills from the exp line).
+
+**M1, the after-kill time (death -> our first attack on the next monster; packets):**
+
+| source | n | median | p75 | >= 5 s | split loot / walking / standing |
+|---|---|---|---|---|---|
+| Batt | 115 | **4.7 s** | 8.5 s | 47 % | 2 / **61** / 37 % |
+| dev, Knife swap | 189 | **17.2 s** | 28.0 s | 95 % | 0.3 / 27 / **72** % |
+| dev, Damascus no swap | 165 | **15.2 s** | 26.4 s | 97 % | 0.4 / 27 / **73** % |
+
+- The after-kill time is 40.5 % of Batt's window and 45.8 % / 74.5 % of the dev windows.
+- What the dev bot does in it (its own events over the packets' gaps, swap / no swap): waiting
+  until the runner registers the death 13 / 12 % (~2.0 s after it: the hit-gap inference), defend
+  scans 18 / 22 %, the target box's settle 14 / 16 %, strike 6 / 5 %, loot 2 / 2 %, other
+  (its walking included) 48 / 43 %.
+- Live, on the events ruler (kill event -> next engage): median 6.8 s, p75 13.6 s, >= 5 s 72 %
+  (dev on the same ruler 2.2 / 3.1 s, its kill events come ~2 s late and include false ones: the
+  ruler is rough across sites).
+
+**M2, another target monster in view at the kill:** Batt 65.5 %, dev 59.6 / 68.1 % (packets: the
+four common species alive, feet on the 1280 x 720 view); the detector on the recorded frame:
+Batt 58.6 %, dev 61.1 / 66.9 %, **live 56.6 %** (the deployed xmas02v1080 on the CPU, boxes more
+than 1 cell from her; it agrees with the packets' share within ~0.03 on dev, but misses 20-26 % of
+in-view monsters one by one). The nearest is ~7 cells away (median) everywhere.
+
+**M3, the mark Batt describes:**
+- The after-kill time with >= 1 target in view vs none: Batt **3.5 vs 7.6 s**; dev 13.8 / 12.7 vs
+  23.5 / 23.8 s; live (events) 6.0 vs 11.4 s. Every source is ~2x faster with one in view.
+- With one in view, the next monster attacked WAS one of them: **Batt 81 %**, dev 67 / 63 %.
+- In-view targets not attacked next: about half were still alive in reach at our next attack
+  (median ~8 cells).
+
+**M4, walked past (packets; within 5 cells during the after-kill time, not attacked before the
+next attack):** per kill Batt 0.26, dev 0.54 / 0.61 (twice as many); per after-kill minute Batt
+passes MORE (2.4 vs 1.5 / 1.8): he walks more, through denser ground. Live: not computable.
+
+**Doubts (the agent's, kept):** 57 of live's 136 kill events came with no strike in the 10 s
+before (many during search walks), each after a Battle Log damage or exp line -- the cause is not
+known from events; live is his own server (its minimap never named the map); Batt's 11-12 camera
+zoom is assumed default; "in view" by packets ignores UI windows.
+
+**What the numbers say for the design** (Amendment 2 writes it): the bot does not lack targets --
+2 in 3 kills already have the next one in view, as for Batt -- it STANDS: ~11 of its ~15-17 s,
+in the death's late registration, defend scans and the next box's settle. Batt walks to the next
+one he already chose (81 %). A mark that removes those standing steps on the kills with a target in
+view is worth up to ~10 s on 2 kills in 3.
