@@ -7,7 +7,7 @@ verdict_date: null
 verdict_ticket: null
 supersedes: null
 related: [fists-1080.md, search-targets.md, ../../scripts/search_gap.py, ../../scripts/time_budget.py, ../../scripts/weapon_swap_study.py]
-next_action: "The numbers are in (Amendment 1): Batt 4.7 s after a kill, the dev bot 15-17 s (73 % of it standing); 2 in 3 kills already have the next monster in view. The design of the mark (Amendment 2) is written from them, then built on the player side and A/B-tested on dev."
+next_action: "Amendment 2 designs the mark from the numbers; next: find its home on the player side (the box's hunt loop / the tick hook, never the runner file), build it with tests, then pre-register the dev A/B (an amendment before any A/B run)."
 title: "Mark the next target while fighting (Batt 2026-11-23): measure the after-kill time first (pre-registration)"
 date: 2026-11-23
 owner: Batt
@@ -130,3 +130,41 @@ zoom is assumed default; "in view" by packets ignores UI windows.
 in the death's late registration, defend scans and the next box's settle. Batt walks to the next
 one he already chose (81 %). A mark that removes those standing steps on the kills with a target in
 view is worth up to ~10 s on 2 kills in 3.
+
+## Amendment 2 (2026-11-23 13:46 ICT from `date`): the design of the mark, from Amendment 1's numbers
+
+**What it must remove** (the dev bot's ~15-17 s after a kill, 73 % standing; Batt 4.7 s, 61 %
+walking): the late death (~2 s of hit-gap inference), the defend scans after it, the next box's
+settle (waiting for it to stand still), and the search walk when a target was already in view (2
+kills in 3).
+
+**The behaviour (Batt's own, in his words: "kill > loot > walk toward the zone where the marked one
+is"):**
+1. **Mark during the fight.** Every tick of a fight already grabs a frame and runs the detector;
+   the OTHER target boxes (not the one being struck) are kept as candidates: their cell (the box's
+   feet, as Amendment 1's M2 maps them) and their heading (the cell change across the ticks that saw
+   them, matched nearest-first). The mark is the nearest candidate that the walk can reach; it is
+   kept up to date each tick and forgotten after MARK_TTL_S without a sighting.
+2. **After the kill (and the loot, when a drop is there):** with a fresh mark and no nearer target
+   in the new frame, the next goal is the mark's PREDICTED cell (its last cell + its heading x the
+   time since), walked at once, with no defend scan and no settle on arrival: the box near the
+   predicted cell is struck as soon as it is seen (the click led by its heading, the frames' ~0.5 s
+   lag, [[frames-lag-server-half-second]]).
+3. **Without a mark** (1 kill in 3): today's search, unchanged.
+4. **Safety is not traded:** a survival event (a hit taken, HP low, the boss or an alarm species
+   seen) pre-empts the mark exactly as it pre-empts today's search. The defend scan is skipped only
+   when the frame shows no attacker and no damage was taken in the fight's last seconds.
+
+**Where it lives:** on the player side only -- the box's hunt loop / the hunt core's tick hook
+(live-blocks 5b-2 and 5c: the box may drive the hunt loop and read each tick), never the
+byte-pinned runner file. Its settings (MARK_TTL_S, the reach) are player settings with our values
+as defaults ([[feedback-everything-user-settable]]); off by default until its A/B passes.
+
+**How it is judged (pre-registered in a later amendment, before any A/B run):** an interleaved A/B
+on dev at 1080 (A today, B the mark; the same build and box), packets as the ruler: kills/h
+(B >= A + 2 SE), deaths and errors no worse, and beside them M1-M4 on both arms (the after-kill
+time, its standing share, the next target in view at the kill). Live only on Batt's word.
+
+**Open, to measure while building:** the death's registration (dev's hit-gap ~2 s vs live's exp
+line ~0.3 s): on dev the mark's walk can start at the last strike's death cue only if a faster
+death cue exists; otherwise the mark saves the rest and the ~2 s stays.
