@@ -55,9 +55,11 @@ def _frame(
     origin: tuple[int, int] = ORIGIN,
     rows: int = 6,
     canvas: tuple[int, int] = (1080, 1920),
+    count_dx: int = 0,
 ) -> np.ndarray:
     """A BGR frame (``canvas``: h, w) with a 7 x ``rows`` bag at ``origin``: ``items`` (id, count)
-    in reading order, then empty slots (white face, the oval)."""
+    in reading order, then empty slots (white face, the oval). ``count_dx``: every count drawn
+    this many px right of the lab's place (Batt's live client: -2)."""
     f = np.full((*canvas, 3), 90, np.uint8)
     ox, oy = origin
     ww, wh = bc.window_size(rows)
@@ -77,8 +79,8 @@ def _frame(
         width = sum(font[ch].shape[1] for ch in text) + len(text) - 1
         # the client's rule: 1-3 digits from x + 14 (+ 1 for a leading '1'); 4 digits END at x + 26
         # (measured: "1000" = x+1 .. 26)
-        left = x + 14 + (1 if text[0] == "1" else 0)
-        cx = left if len(text) <= 3 else x + 26 - width + 1
+        left = x + 14 + (1 if text[0] == "1" else 0) + count_dx
+        cx = left if len(text) <= 3 else x + 26 - width + 1 + count_dx
         for ch in text:
             g = font[ch]
             f[y + bc.COUNT_DY : y + bc.COUNT_DY + 9, cx : cx + g.shape[1]][g] = 0
@@ -379,3 +381,52 @@ def test_a_thin_icon_is_an_item_not_a_hole_before_the_tail() -> None:
         ey + rows.start : ey + rows.stop, ex + cols.start : ex + cols.stop
     ]
     assert bc.find_bag(f) != bc.Bag(ORIGIN, 9)
+
+
+# --- 2026-11-23: Batt's live client (a 7 x 10 bag, its counts 2 px left, taller tabs) ------------
+
+
+# (a count drawn RIGHT of the lab's place would reach into the next slot's icon, where the shapes
+# rightly refuse it: no client seen does that; Batt's draws them 2 px left)
+@pytest.mark.parametrize("dx", [0, -1, -2])
+def test_a_client_whose_counts_sit_elsewhere_is_learned_from_its_own_counts(dx: int) -> None:
+    """Batt's live client draws every count 2 px LEFT of the lab's ("89" at x+12, a leading '1' at
+    x+13): the census learns the shift from the tab's own clean counts and reads them all."""
+    font, icons = _font(), _icons(45)
+    ids = list(icons)
+    stacks = [(ids[k], n) for k, n in enumerate([89, 1, 304, 120, 506, 194, 24, 44, 15, 5, 1000])]
+    f = _frame(stacks, icons, font, rows=10, count_dx=dx)
+    origin = bc.find_window(f)
+    assert origin == ORIGIN
+    sh, votes = bc.count_shift(f, origin, range(bc.COLS * 10), font)
+    assert sh == -dx and votes >= bc.COUNT_SHIFT_VOTES
+    empty = bc.empty_picture(f, origin, rows=10)
+    assert empty is not None
+    pics = bc.Pictures.over(_refs(icons), empty)
+    tab = bc.TabRead("t", bc.read_tab(f, origin, pics, empty, font, rows=10, shift=sh))
+    assert [b.count for b in tab.items()] == [n for _i, n in stacks]
+    if dx:  # the lab's own shapes (no shift) read none of them: the old live result
+        old = bc.TabRead("t", bc.read_tab(f, origin, pics, empty, font, rows=10))
+        assert old.items() == [] and len(old.unread()) == len(stacks)
+
+
+def test_the_count_shift_needs_agreeing_counts() -> None:
+    assert bc.shift_of([]) is None and bc.shift_of([(3, 8, None)]) is None
+    assert bc.shift_of([(12, 17, "8"), (19, 24, "9")]) == 2  # Batt's "89"
+    assert bc.shift_of([(13, 17, "1")]) == 2  # a leading '1' one column in
+    assert bc.shift_of([(14, 19, "3")]) == 0  # the lab's
+    font, icons = _font(), _icons(5)
+    one = _frame([(list(icons)[0], 7)], icons, font, count_dx=-2)  # a single count: one vote
+    assert bc.count_shift(one, ORIGIN, range(bc.COLS * 6), font) == (0, 0)
+
+
+def test_a_taller_window_stretches_its_tabs() -> None:
+    """The lab's 7 x 6 keeps its measured tabs; Batt's 7 x 10 (centres measured ~61 / 144 / 227 /
+    310, each ~83 px tall) is clicked inside each of its tabs."""
+    assert {n: bc.tab_xy(n, 6) for n in bc.TABS} == bc.TABS
+    measured = {"use": (20, 100), "eqp": (102, 185), "etc": (187, 267), "fav": (270, 352)}
+    for n, (y0, y1) in measured.items():
+        x, y = bc.tab_xy(n, 10)
+        assert x == 10 and y0 + 8 <= y <= y1 - 8, (n, y)
+    ys = [bc.tab_xy(n, 12)[1] for n in bc.TABS]
+    assert ys == sorted(ys) and ys[-1] < bc.ICON0[1] + bc.PITCH * 12 + bc.TAB_BOTTOM_PAD

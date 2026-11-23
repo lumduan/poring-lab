@@ -80,6 +80,10 @@ SLOT_ROWS = 4
 GLOW_RB_MIN, GLOW_G_MAX = 220, 215  # a NEW item's pink glow (255, 131-165, 247): R, B >= / G <=
 TABS: dict[str, tuple[int, int]] = {"use": (10, 45), "eqp": (10, 100), "etc": (10, 154),
                                     "fav": (10, 205)}  # fmt: skip
+# a TALLER window stretches its four tabs evenly down the strip (measured 2026-11-23 on Batt's live
+# 7 x 10 bag: tab centres ~61 / 144 / 227 / 310 px, each ~83 px tall; the lab's 7 x 6: 45 / 100 /
+# 154 / 205): the strip from TAB_TOP to the last row's bottom + TAB_BOTTOM_PAD, in four equal tabs
+TAB_TOP, TAB_BOTTOM_PAD = 18.3, 18.7
 COUNT_DY, COUNT_ROWS = 18, 9  # the digits' rows from the icon's top
 # the count's place (measured 2026-11-20 on the trials' 1- to 4-digit stacks, icon-relative x):
 #   1 digit  x+14 .. 19 | 2 digits x+14 .. 26 | 3 digits x+14 .. 33 | 4 digits x+0 .. 26
@@ -89,6 +93,11 @@ COUNT_DY, COUNT_ROWS = 18, 9  # the digits' rows from the icon's top
 COUNT_X0, COUNT_X1 = -2, 36  # the band searched, from the icon's x
 COUNT_SHAPES = {1: ((14, 15), 19), 2: ((14, 15), 26), 3: ((14, 15), 33), 4: ((0, 1), 26)}
 COUNT_INK = 3  # a count pixel is pure black: max channel <= this
+# Batt's live client draws every count 2 px LEFT of the lab's (2026-11-23: "89" at x+12 .. 24, "304"
+# at x+12 .. 31, a leading '1' at x+13): the shapes above are the lab's; a census learns its
+# client's shift from its own clean counts (count_shift: the most common, at least COUNT_SHIFT_VOTES
+# of them agreeing, within +-COUNT_SHIFT_MAX px; none: 0, the lab's)
+COUNT_SHIFT_MAX, COUNT_SHIFT_VOTES = 4, 2
 # find_bag's EMPTY cell also shows no count ink in these columns of the count's rows (from the
 # icon's x): every count starts in them (a 4-digit one at x+0/1, so from x+2 on), and the previous
 # slot's 3-digit count ends at its x+33 = our x+1, outside them. A THIN icon (a tooth, a talon, a
@@ -444,9 +453,13 @@ def count_of_runs(runs: Sequence[tuple[int, int, str | None]]) -> int | None:
     return None
 
 
-def read_count(frame_bgr: Any, origin: tuple[int, int], slot: int,
-               templates: Mapping[str, Any]) -> int | None:  # fmt: skip
-    """PURE: the stack's count, or None: the band's pure-black glyphs (count_of_runs' shapes)."""
+Run = tuple[int, int, str | None]  # a glyph run: first col, last col, the digit (None: no digit)
+
+
+def count_runs(frame_bgr: Any, origin: tuple[int, int], slot: int,
+               templates: Mapping[str, Any]) -> list[Run] | None:  # fmt: skip
+    """PURE: the slot's count band as glyph runs (first col, last col, the digit or None), in
+    icon-relative columns; None outside the frame."""
     import hotbar_count as hb
 
     x, y = icon_xy(origin, slot)
@@ -455,13 +468,71 @@ def read_count(frame_bgr: Any, origin: tuple[int, int], slot: int,
     if x0 < 0 or x1 > img.shape[1] or y + COUNT_DY + COUNT_ROWS > img.shape[0]:
         return None
     band = img[y + COUNT_DY : y + COUNT_DY + COUNT_ROWS, x0:x1, :3]
-    runs = [(c + COUNT_X0, c + COUNT_X0 + g.shape[1] - 1, hb.match(g, templates))
+    return [(c + COUNT_X0, c + COUNT_X0 + g.shape[1] - 1, hb.match(g, templates))
             for c, g in hb.glyph_runs(band.max(axis=2) <= COUNT_INK)]  # fmt: skip
-    return count_of_runs(runs)
+
+
+def shift_of(runs: Sequence[Run]) -> int | None:
+    """PURE: how many px RIGHT this slot's count must move to sit in the lab's shapes, from its
+    first clean group (1-4 digit runs, each a digit, at most DIGIT_GAP apart): 1-3 digits are
+    left-aligned at x+14 (x+15 for a leading '1'), 4 right-aligned at x+26; None: no clean group."""
+    digits = [r for r in runs if r[2] is not None]
+    if not digits:
+        return None
+    grp = [digits[0]]
+    for r in digits[1:]:
+        if r[0] - grp[-1][1] - 1 > DIGIT_GAP:
+            break
+        grp.append(r)
+    if not 1 <= len(grp) <= 4:
+        return None
+    if len(grp) == 4:
+        return COUNT_SHAPES[4][1] - grp[-1][1]
+    want = COUNT_SHAPES[len(grp)][0][1 if grp[0][2] == "1" else 0]
+    return want - grp[0][0]
+
+
+def count_shift(frame_bgr: Any, origin: tuple[int, int], slots: Sequence[int],
+                templates: Mapping[str, Any]) -> tuple[int, int]:  # fmt: skip
+    """PURE: (the client's count shift, its votes): the most common shift_of over ``slots`` within
+    +-COUNT_SHIFT_MAX, when at least COUNT_SHIFT_VOTES agree; else (0, 0), the lab's."""
+    votes: Counter[int] = Counter()
+    for s in slots:
+        runs = count_runs(frame_bgr, origin, s, templates)
+        d = None if runs is None else shift_of(runs)
+        if d is not None and abs(d) <= COUNT_SHIFT_MAX:
+            votes[d] += 1
+    if not votes:
+        return 0, 0
+    (d, n), *rest = votes.most_common()
+    if n < COUNT_SHIFT_VOTES or (rest and rest[0][1] == n):
+        return 0, 0
+    return d, n
+
+
+def read_count(frame_bgr: Any, origin: tuple[int, int], slot: int,
+               templates: Mapping[str, Any], shift: int = 0) -> int | None:  # fmt: skip
+    """PURE: the stack's count, or None: the band's pure-black glyphs (count_of_runs' shapes),
+    moved ``shift`` px right first (the client's count_shift; 0: the lab's client)."""
+    runs = count_runs(frame_bgr, origin, slot, templates)
+    if runs is None:
+        return None
+    return count_of_runs([(a + shift, b + shift, d) for a, b, d in runs])
+
+
+def tab_xy(name: str, rows: int) -> tuple[int, int]:
+    """PURE: the tab's click point from the window's origin: TABS for the lab's 6 rows (measured);
+    a taller window's tabs share its strip in four (TAB_TOP .. the last row + TAB_BOTTOM_PAD)."""
+    if rows == ROWS_MIN:
+        return TABS[name]
+    k = list(TABS).index(name)
+    top, bottom = TAB_TOP, ICON0[1] + PITCH * rows + TAB_BOTTOM_PAD
+    return TABS[name][0], round(top + (k + 0.5) * (bottom - top) / len(TABS))
 
 
 def read_slot(frame_bgr: Any, origin: tuple[int, int], slot: int, pics: Pictures,
-              empty: np.ndarray, templates: Mapping[str, Any]) -> BagSlot:  # fmt: skip
+              empty: np.ndarray, templates: Mapping[str, Any],
+              shift: int = 0) -> BagSlot:  # fmt: skip
     """PURE: what the slot shows."""
     sq = square(frame_bgr, origin, slot)
     if sq is None:
@@ -501,20 +572,21 @@ def read_slot(frame_bgr: Any, origin: tuple[int, int], slot: int, pics: Pictures
     pm = min((m for _p, m in rivals), default=float("inf"))
     if pm < PAIR_LEAD:
         return BagSlot(slot, "unread", ids, None, d1, d2, f"two icons alike (lead {pm:.2f})")
-    n = read_count(frame_bgr, origin, slot, templates)
+    n = read_count(frame_bgr, origin, slot, templates, shift)
     if n is None:
         return BagSlot(slot, "unread", ids, None, d1, d2, "the count did not read")
     return BagSlot(slot, "item", ids, n, d1, d2)
 
 
 def read_tab(frame_bgr: Any, origin: tuple[int, int], pics: Pictures, empty: np.ndarray,
-             templates: Mapping[str, Any], *, rows: int) -> list[BagSlot]:  # fmt: skip
+             templates: Mapping[str, Any], *, rows: int,
+             shift: int = 0) -> list[BagSlot]:  # fmt: skip
     """PURE: every slot of the open tab (7 x ``rows``, the found window's); after the first empty
     slot every later slot must be empty (items fill a tab in reading order), else that slot is
     unread."""
     out, seen_empty = [], False
     for s in range(COLS * rows):
-        b = read_slot(frame_bgr, origin, s, pics, empty, templates)
+        b = read_slot(frame_bgr, origin, s, pics, empty, templates, shift)
         if b.kind == "empty":
             seen_empty = True
         elif seen_empty:
@@ -668,7 +740,8 @@ def census(agent: Any, screen: Any, *, refs: Any | None = None,
     if not was_open:
         agent.chord(*keys)
         time.sleep(1.2)
-    out: dict[str, Any] = {"tabs": [], "origin": None, "rows": None, "was_open": was_open}
+    out: dict[str, Any] = {"tabs": [], "origin": None, "rows": None, "was_open": was_open,
+                           "count_shift": 0}  # fmt: skip
     opened = not was_open
     try:
         f = _grab(r, screen)
@@ -685,6 +758,8 @@ def census(agent: Any, screen: Any, *, refs: Any | None = None,
         pics = None if empty is None else Pictures.over(refs, empty)
         tabs: list[TabRead] = []
         before = grid_signature(f, origin, rows=rows)
+
+        shift_seen: list[int] = []  # the client's count shift, once a tab's counts tell it
 
         def read_one(name: str, tx: int, ty: int, before: np.ndarray) -> tuple[TabRead, Any]:
             nonlocal empty, pics
@@ -711,7 +786,11 @@ def census(agent: Any, screen: Any, *, refs: Any | None = None,
                 if pics is None or empty is None:
                     reads.append(None)
                 else:
-                    reads.append(read_tab(f, local, pics, empty, templates, rows=rows))
+                    sh, votes = count_shift(f, local, range(COLS * rows), templates)
+                    if votes:
+                        shift_seen[:] = [sh]
+                    reads.append(read_tab(f, local, pics, empty, templates, rows=rows,
+                                          shift=shift_seen[0] if shift_seen else 0))  # fmt: skip
                 time.sleep(0.2)
             tab = TabRead(name)
             if reads[0] is None or reads[1] is None:
@@ -725,7 +804,8 @@ def census(agent: Any, screen: Any, *, refs: Any | None = None,
                                                             a.d2, why))  # fmt: skip
             return tab, f
 
-        for name, (tx, ty) in TABS.items():
+        for name in TABS:
+            tx, ty = tab_xy(name, rows)  # a taller window's tabs are taller (Batt's live 7 x 10)
             tab, last = read_one(name, tx, ty, before)
             if shared_items([*tabs, tab]).get(name):  # the click did not take: once more
                 tab, last = read_one(name, tx, ty, before)
@@ -744,6 +824,7 @@ def census(agent: Any, screen: Any, *, refs: Any | None = None,
         out["totals"] = bag_totals(tabs)
         out["unread"] = sum(len(t.unread()) for t in tabs)
         out["full_tabs"] = [t.tab for t in tabs if t.full]
+        out["count_shift"] = shift_seen[0] if shift_seen else 0
     finally:
         if opened:
             agent.chord(*keys)
