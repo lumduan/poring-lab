@@ -7,7 +7,7 @@ verdict_date: null
 verdict_ticket: null
 supersedes: null
 related: [rogue-xmas02.md, xmas02-items-1080.md, screen-size-ab.md, ../../scripts/screen_ab.py, ../../scripts/stage2_ab.py, ../../scripts/bare_steal.py]
-next_action: "The trial per Amendment 2: three recorded 25-min pilots fst1-fst3 (round 10's pilot procedure, the Knife swap off) after round 10's eval chain, under the round-4 popup watcher; then the report against ifH31-ifH36 (Amendment 2's rulers). Batt: keep the build (Amendment 1 options)."
+next_action: "The fists build re-applied and read (Amendment 3, 06:56-07:01); fst1-fst3 running from 07:01 (25 min each, ~08:35); then the report against ifH31-ifH36 (Amendment 2's rulers) and her Knife-swap build put back for the item model's round 11. Batt: keep the build (Amendment 1 options); a fists benchmark run of his own."
 title: "The fists at 1080: Batt's build, no Knife swap (a trial, written before any of its data)"
 date: 2026-11-22
 owner: Batt
@@ -208,3 +208,32 @@ played, 0 deaths, ended by its time box, no error.
 
 **Still not an A/B** (section 4): one block after the other, and the build differs. No verdict; an
 interleaved A/B is the next step only on Batt's word.
+
+## 7. Amendment 3 (2026-11-23 07:04 ICT from `date`, after fst1 started, before any fists result): the build applied again; the trial started
+
+- **Why again:** her Knife-swap build was put back at 03:05-03:10 for the item model's round-10
+  extension (xmas02-items-1080.md Amendment 38), and the carded Manteau [1] was deleted then (its
+  weight). Round 10 is scored (Amendment 40: FAIL), there is no 8c, so the trial runs now.
+- **The build, Amendment 1's exactly** (dev client, in Prontera, 06:5x-07:00; the GM lines typed
+  through the UI gate, each answered in the Chat tab):
+  - `@str 62`, `@vit 16`, `@int 3`, `@dex -26`, `@luk 1` ("Stat changed"); `@refine 16 6` ("1
+    item has been refined": the Thief Clothes +6, worn);
+  - `@item 2506 1`, `@item 4102 1` ("Item created" x 2), then the client's Insert Card window (the
+    card double-clicked in the Etc tab, the Manteau [1] picked, OK): "Compounding has completed
+    successfully";
+  - the equipment window: the Damascus +8 and both Rosaries taken off, the carded Manteau [1] put
+    on (Battle Log: each "taken off" / "put on"); the plain Manteau in the bag;
+  - the hotbar: the Damascus shortcut dragged F5 -> F7 (F5 empty, the Knife still on F4).
+- **Her status window (07:00, fullscreen frame):** Str 63+6, Agi 99+8, Vit 17+6, Int 4+4, Dex
+  73+7, Luk 2; **ATK 121 + 0, HIT 179, FLEE 266 + 1, DEF 27 + 23, Aspd 180**; Status Point 688;
+  weight 899 / 4,290. The same as Amendment 1's table.
+- **Not immune:** two `@monsterignore` lines, read in the Chat tab ("You are now immune to
+  attacks." then "Returned to normal state.").
+- **The dev checkout** fast-forwarded to a5984788 (two docs commits after 61a4f913; the switch
+  6e109461 in it); `fists/ff.ok` = 1.
+- **fst1 started 07:01:39** (`fists_pilots.sh`, Amendment 2's procedure unchanged): heal, warp,
+  zoom 1.000, the chat window standard, the recorder, then the run. Its runner config differs from
+  round 10's base pilot ifH39 in one key only (`knife_swap` true -> false); the series log: "the
+  Knife swap is off ... the weapon is left as it is".
+- **After fst3:** her Knife-swap build is put back for the item model's round 11 (its held-out is
+  played as rounds 8-10's were), read against the old window.
