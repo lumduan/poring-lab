@@ -7,7 +7,7 @@ verdict_date: null
 verdict_ticket: null
 supersedes: null
 related: [../econ/economics.md, ../../scripts/slot_items.py, ../../scripts/hotbar_count.py, ../../scripts/econ_dash.py, ../../packages/poring_env/src/poring_env/panelfind.py]
-next_action: "Promoted to live 11-23 13:35-13:39 (Amendment 6, Batt's word): the next live Run's start census names the rows of his 7 x 9 bag -- read its log line and the Run's /economy items."
+next_action: "Live has the count shift and the tall-window tabs (Amendment 7, 1486b645, 14:59): the next live Run's start line should read ~25 of Batt's 29 slots and name 7 x 10; then its /economy items."
 title: "The economy from the bot's own bag (Economy option b-i): count the inventory at a Run's start and end (pre-registration)"
 date: 2026-11-20
 owner: Batt
@@ -231,3 +231,29 @@ add (`@item 601 199`, items 927 / 933) simply is not in it.
   Batt's word, after his announce-first rule.
 - **Next:** the next live Run's start census should name 9 rows; its log line and /economy's items
   are read then (no new capture: logs only).
+
+## Amendment 7 (2026-11-23 15:00 ICT from `date`): live's first census -- the window found, every count missed; two fixes
+
+- **Live's Run at 13:40** (after Amendment 6's promotion) found the bag for the first time but read
+  "0 kinds, 27 slot(s) unread"; the line said no more. 5981cd88 makes the line name the window's
+  rows and the unread slots' reasons (`flow_play.bag_words`).
+- **One census on Batt's client at his ask** (14:39, Batt: "ready", live's Run stopped, the console
+  set to ASSIST by him; the live checkout's `bag_count.census` with `frames_dir`: the bag window's
+  box only, per tab read): the window **7 x 10** at (873, 130), 20.2 s, left as found; 46 slots
+  unread:
+  - the icons matched (nearest-picture distances 1.6-3.2);
+  - **"the count did not read" on nearly every slot**: his client draws every count **2 px left**
+    of the lab's (the digits themselves read right with either font: "89" at x+12 .. 24, "304" at
+    x+12 .. 31, a leading '1' at x+13), and the shapes are the lab's (x+14 / x+15);
+  - **the tab clicks missed**: a taller window stretches its four tabs (centres ~61 / 144 / 227 /
+    310 px, ~83 px each vs the lab's 45 / 100 / 154 / 205), so the "Eqp" click hit cons., "Etc" hit
+    equip and "Fav" hit etc.
+- **The fixes (1486b645, with tests):** `count_shift` learns a client's count shift from its own
+  clean counts (the most common, >= 2 agreeing, within +-4 px; else 0, the lab's); `tab_xy` keeps the
+  lab's measured tabs at 6 rows and splits a taller window's strip in four. On the census's own
+  pictures: shift +2 (17 votes); the cons. tab 16 of 17 read, every count right (89, 1, 304, 120,
+  506, 194, 24, 1, 15, 12, 5, 2, 4, 1, 1, 1); the rest of the 29 distinct slots read except 4 icons
+  the lab's pictures lack (his server's items: never guessed). The lab's 7 x 6 is unchanged (shift 0,
+  TABS).
+- **Live updated at 14:59:52** (Batt: "ok"; 2b2e42da -> 1486b645, two script files, between his
+  Runs: the 14:46 Run had ended at 14:59:50); the next Run is the check.
