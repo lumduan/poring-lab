@@ -1604,8 +1604,9 @@ A count under its minimum is NO VERDICT, never a pass.
   1. clear-bag (etc, use), judged by the agent on its weight, and the DB's save holding none of the
      set (`stage_items held`, as round 10's `r10_stage.sh`);
   2. ifsH11, then ifsH12, IMMUNE (`stage_rec.sh`; immunity ON judged on a frame first), each under
-     the popup reader's round-4 watcher (its set w1080b counts only `record_session` pilots, so the
-     stagings are outside it);
+     the popup reader's round-4 watcher: they are `record_session` recordings, so by
+     item-popup-reader.md Amendment 10's rule they are w1080b sessions too, in time order (the
+     fists trial's recorded pilots are as well);
   3. immunity OFF, its reply read on a frame;
   4. the pilots ifH41 .. ifH46, NOT immune, 25 min each (`pilot_rec2.sh`: round 10's
      `pilot_rec.sh` with Amendment 41's town step), round 9's check after each (>= 1,400 frames, no
