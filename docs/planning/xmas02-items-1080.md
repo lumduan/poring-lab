@@ -1804,3 +1804,16 @@ A count under its minimum is NO VERDICT, never a pass.
   the pair as it would ship, not the model alone.
 - **If 8c passes:** Batt decides the deployment at 1080 (live, between his Runs). **If it fails:**
   the causes named by time lost; a next step registered from them.
+
+### Amendment 48 (2026-11-23 19:02 ICT from `date`, BEFORE 8c's first run): her hotbar at 8c's start; no candies in any 8c run
+
+- **Read on the frame after the recover (18:55):** F1 5 White Potions, F4 the Knife, F5 empty (the
+  worn Damascus hides its shortcut: ifH46's own start check read "F5 empty" too), **F6 and F7
+  empty**, F8 25 Fly Wings, F9 1 Butterfly Wing; weight 863 / 2,430.
+- **The candies were eaten** in round 11's pilots (the player's `eat_candy` events: ifH41 19,
+  ifH42 7, ifH43 7, ifH44 7, ifH45 1, ifH46 13), so none is left on F6 / F7.
+- **8c plays with NO candy in any run, A and B alike** (as ifH37-ifH39 did, Amendment 43): a
+  restock would not hold equal, because stage2_ab's setup runs clear-bag (every Use-tab stack
+  dropped, only potions and Fly Wings restocked) whenever the bag reads >= 40 %, so the first runs
+  would have candies and the later ones none. The setup's own top-ups (F1 -> 10 under 7, F8 -> 40
+  under 30, F9 -> 3 under 2) apply to every run.
