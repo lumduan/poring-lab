@@ -7,7 +7,7 @@ verdict_date: null
 verdict_ticket: null
 supersedes: null
 related: [fists-1080.md, search-targets.md, ../../scripts/search_gap.py, ../../scripts/time_budget.py, ../../scripts/weapon_swap_study.py]
-next_action: "Amendment 2 designs the mark from the numbers; next: find its home on the player side (the box's hunt loop / the tick hook, never the runner file), build it with tests, then pre-register the dev A/B (an amendment before any A/B run)."
+next_action: "Amendment 3 (Batt 2026-11-24 ~11:0x: start the mark on dev): the runner's own --queue is the mark's body (no player click exists); its 4CN failure was the re-find; diagnostic pilot ntq1 (fists + --queue, 25 min) measures today's re-find; then the player-side re-find (bq_next swap) with tests, and the A/B pre-registered before any A/B run."
 title: "Mark the next target while fighting (Batt 2026-11-23): measure the after-kill time first (pre-registration)"
 date: 2026-11-23
 owner: Batt
@@ -168,3 +168,54 @@ time, its standing share, the next target in view at the kill). Live only on Bat
 **Open, to measure while building:** the death's registration (dev's hit-gap ~2 s vs live's exp
 line ~0.3 s): on dev the mark's walk can start at the last strike's death cue only if a faster
 death cue exists; otherwise the mark saves the rest and the ~2 s stays.
+
+## Amendment 3 (2026-11-24 11:37 ICT from `date`, before ntq1's data): where the mark can live, the queue's lesson, and a diagnostic pilot
+
+- **Batt, 2026-11-24 ~11:0x:** "start the next-target mark on dev".
+- **What the player side can do mid-hunt** (read from dungeon_hunt.py, never edited; a read-only
+  trace with line numbers, checked by hand at the points used below):
+  - no click and no goal API: the hook's `press` presses only the box's keys, `hook.call`'s click
+    is the respawn's, HuntView is read-only, and `leave_out` takes only loot / ready / plant. A
+    click of the player's own between cursor steps would bypass the runner's walk settle, its lock
+    and its kill reads (a strike it does not know has no hit-gap kill and no loot entry);
+  - the defend scan and box_target's settle run inside the fight step (closures of run()):
+    not skippable from the player side;
+  - **swappable** (module-level, looked up by name when called, the way flow_play already swaps
+    `BoxWatch.near` and `alarm_seen` for one hunt core): `bq_next`, `bq_refind`, `bq_pick`,
+    `bq_refresh`, `bq_mark`, `scan_needed`, `quiet_kill_ends`, `kill_gapped`, ...;
+  - **`--queue` (dungeon@9.30, rogue-xmas02.md 4CC/4CN) is the mark's body already**: during a
+    fight it keeps the OTHER monster boxes in view as a queue (attacking first, then nearest); after
+    the fight and its loot step it re-finds the head on a fresh detection and strikes it with no
+    settle, no still wait and no hold. On its picks the gap from the loot step's end to the strike
+    was 2.58 s against 7.67 s. It stayed a flag because picks were rare: p77 16 picks / 48 re-find
+    fails / 19 empty, p78 3 / 50 / 15 (the miss reason "gone": no box within QUEUE_MATCH_PX = 60 px
+    of the entry's last foot).
+- **Why its re-finds failed (offline, p77 + p78's packets and the runner's own detections; scratch
+  ntm2/queue_*.py):** in 20 of the 98 misses she had moved >= 2 cells since the fight's end (the
+  queue keeps screen pixels, which her own step shifts); in the other 78 she had not moved, 76 had a
+  target monster alive within 9 cells, and 86 % of those monsters had not moved either. The runner's
+  detection at the re-find held no monster box at all in 39 of the 98 misses. So mainly the
+  re-find's single fresh detection missed monsters that were there, plus her own steps. Caveat:
+  those runs had the camera at 1.14x zoom (reset 2026-11-20), the 720 window and the Knife swap,
+  so the pixel-level comparison is not trusted to the number; hence the pilot below.
+- **The mark's design, refined (Amendment 2's behaviour within what the player side can reach):**
+  1. turn the runner's `--queue` on (an existing switch: `queue`, needs `box_strike`);
+  2. swap its re-find (`bq_next`) for the mark's: each entry anchored to the WORLD (her cell at its
+     detection + its rel cell), its foot predicted on the current view from her current cell
+     (her step no longer loses it), the re-find matched there; when the fresh detection holds no
+     box there, the predicted foot is HOVERED through the runner's own aim (a strike only on a
+     SWORD cursor, the box path's skips first: unreachable, ignored spots, far); entries older than
+     MARK_TTL_S are dropped. Settings with our values as defaults; off by default until its A/B.
+  - Not reachable from the player side, so not in this mark: the dev kill's late registration
+    (the hit gap, ~2-3 s; live reads the exp line at ~0.3 s) and the defend scan after a fight in
+    which she was hit.
+- **The diagnostic pilot ntq1, registered now (before any of its data):** fst4-fst6's procedure
+  exactly (`fist_pilot_rec2.sh`: the fists build, town checks, 1 fps recorder, packets, 25 min, not
+  immune), copied as `ntq_pilot_rec.sh` with ONE change: `--box-set queue=true` beside
+  `knife_swap=false`. One run, not an A/B and no verdict. Reported:
+  - the queue's events: picks / re-find fails / empty and the reasons;
+  - per miss: her movement since the fight's end (packets), target monsters in view by packets
+    against the detector's boxes at the re-find (the runner's detections.jsonl);
+  - beside fst4-fst6 (the same build): kills/h and steals/h (packets), Amendment 1's M1 (the
+    after-kill time) and its standing share; deaths, errors.
+  - Checks as fst4-fst6: >= 1,400 frames, no PAUSED line, 0 weapon changes, else void.
