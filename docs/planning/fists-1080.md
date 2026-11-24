@@ -542,3 +542,8 @@ interleaved A/B is the next step only on Batt's word.
 - **Next, Batt's word:** keep the fists as they are (live already plays them: Amendment 7), or a
   pre-registered interleaved A/B (fists vs the Knife swap, one build, one block) if the z/h gap
   matters to him.
+- **Records:** the scorer is committed verbatim as `docs/records/scorers/fists_1080_score.py`
+  (cf9d3ac8; sha256 e0e41897...). fst4-fst6's scratch (the play folders, progress, the score's JSON)
+  is on the NAS in `scratch-archive/2026-11-24/arch-i1080-r11-8c-fists456-20261124.tar` (sha256
+  77681ba1..., checked on the NAS before the local delete). The popup watcher's w1080c folders stay
+  in /dev/shm until that reader's own score.
