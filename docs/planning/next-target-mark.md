@@ -1,13 +1,13 @@
 ---
 doc_type: hypothesis
 hypothesis: "After a kill the bot loses time it need not: it starts looking for its next monster only then, walks past monsters and pauses to choose a way, while Batt has already marked the next one (and its heading) during the fight and walks to it at once. Measured first (this plan), then a 'mark the next target' built from the numbers."
-status: PROPOSED
+status: "A/B FAIL 2026-11-24 (Amendment 6): queue + mark 78.3 vs today's fists box 87.4 packet kills/h (diff -9.1, SE 7.4; the bar > +2 SE); steals, deaths, errors pass; the mark stays OFF (its default). Earlier: the after-kill time measured (Amendment 1), the mark designed (2, 3) and built (4, 771cf35b)."
 role: null
-verdict_date: null
+verdict_date: 2026-11-24
 verdict_ticket: null
 supersedes: null
 related: [fists-1080.md, search-targets.md, ../../scripts/search_gap.py, ../../scripts/time_budget.py, ../../scripts/weapon_swap_study.py]
-next_action: "Amendment 5: the A/B goes on in mk_chain2.sh (mk-B2 mk-A2 mk-A3 mk-B3 mk-B4 mk-A4 after mk-A1 mk-B1), validity read from the runner record's `error`; scored once by docs/records/scorers/next_mark_ab_score_v2.py."
+next_action: "None queued: the mark stays off (Amendment 6). Its re-find picked in 24 of 122 non-empty queues; any next step is Batt's."
 title: "Mark the next target while fighting (Batt 2026-11-23): measure the after-kill time first (pre-registration)"
 date: 2026-11-23
 owner: Batt
@@ -309,3 +309,71 @@ most), entries older than 8 s dropped, and one `mark` event a decision in the pl
     first and logs them;
   - the scorer's fix is a NEW committed file, `docs/records/scorers/next_mark_ab_score_v2.py` (one
     line: `sc.error`); v1 stays verbatim. **The A/B is scored once by v2.**
+
+## Amendment 6 (2026-11-24 16:14 ICT from `date`, after the A/B's last run and its one score): the RESULT -- FAIL; the mark stays off
+
+**Scored once** at 16:09:21-16:09:57 by the committed `docs/records/scorers/next_mark_ab_score_v2.py`
+(sha256 e2901b0d...; Amendment 5), arms `mk-A1+mk-A2+mk-A3+mk-A4` vs `mk-B1+mk-B2+mk-B3+mk-B4`.
+All eight runs are VALID by its rule (no replacement ran; the "mk-A5 / mk-B5 queued" lines of the
+first chain are void, Amendment 5). Every run: one hunt core, ended by its time box, 0 deaths, no
+error, 0 weapon changes, play rc 0, 0 PAUSED lines, the client in game after.
+
+| run | played min | packet kills | kills/h | steals | steals/h |
+|---|---|---|---|---|---|
+| mk-A1 | 19.73 | 23 | 69.96 | 17 | 51.71 |
+| mk-B1 | 19.80 | 27 | 81.80 | 19 | 57.57 |
+| mk-B2 | 19.71 | 27 | 82.21 | 18 | 54.81 |
+| mk-A2 | 19.79 | 33 | 100.03 | 25 | 75.78 |
+| mk-A3 | 19.72 | 30 | 91.30 | 21 | 63.91 |
+| mk-B3 | 19.73 | 22 | 66.90 | 14 | 42.57 |
+| mk-B4 | 19.71 | 27 | 82.19 | 17 | 51.75 |
+| mk-A4 | 19.71 | 29 | 88.27 | 16 | 48.70 |
+
+**The lines (Amendment 4):**
+- **K** packet kills/h: A 87.39, B 78.28, diff **-9.11**, SE 7.37; the bar > +2 SE (+14.7) -> **FAIL**.
+- **S** steals/h: A 60.02, B 51.67, diff -8.35, SE 7.00; the bar >= -2 SE (-14.0) -> PASS.
+- **D** deaths: A 0, B 0 -> PASS. **E** errors: A 0, B 0 -> PASS.
+- **The A/B: FAIL** (K). As registered: the FAIL is recorded and the mark stays OFF (it is off by
+  default; nothing to change). B's deficit is -1.2 SE: no harm is shown either; the queue + mark is
+  simply not better than today's box at this length.
+
+**Reported beside (not judged; Amendment 4's list; post-score scratch in
+/dev/shm/poring-lab-tmp/ntm2/post):**
+- **The mark acted rarely.** Its decisions over the four B runs (the player's `mark` records, the
+  same as the runner's `queue` records): pick 24 (7 / 8 / 3 / 6), refind_fail 98 (19 / 21 / 26 /
+  32), empty 55 (16 / 16 / 10 / 13). So 24 picks of 122 non-empty queues (19.7 %), about 18 an
+  hour against ~78 kills an hour. Entries tried: by a box in the fresh detection 43, by a predicted
+  spot 145, passed as gone 10, as old 5. Fail reasons (one per entry passed): verdict 62 (aimed,
+  no SWORD), far 49, off 35 (off the view), unreachable 18, gone 10, old 5.
+- **Its picks worked when it made them:** 17 of the 24 picks were followed by the runner's kill (4.1
+  to 13.6 s after the pick), 7 ended at a scan.
+- **Its own time is small:** the step before a queue record to the record: pick median 0.36 s (10.0
+  s in all), refind_fail median 0.18 s (p90 0.59; 25.7 s in all), empty ~0 (0.6 s): ~36 s in 79 min
+  of B. Where B lost its kills is not the mark's own time.
+- **M1, the after-kill time** (Amendment 1's ruler: ntm_packets_fists.py's analysis imported
+  unchanged, sources = each run's own hunt-core session folder): A n 113, median 14.62 s, p75 22.19,
+  standing 69.7 % of it; B n 101, median 15.31 s, p75 24.12, standing 72.3 %. With a target in view
+  at the death: A 11.34 / B 11.43 s median; none in view: A 20.44 / B 24.38 s. The mark did not
+  shorten it (ntq1's single-run 10.4 s, Amendment 4, did not repeat).
+- **The runner's own kill count** (what the live page counts): A 120 (22 / 39 / 29 / 30) vs 115 by
+  packets; B 126 (32 / 32 / 31 / 31) vs 103 by packets. B's runner over-counts by 23 (22 %), A's by
+  5 (4 %): on the live page B would have looked AHEAD (95.8 vs 91.2 an hour). Judge on packets.
+- **Economy** (data/econ/lab.sqlite, `runs.judge_value.value_h`, the same field as Amendment 4's
+  "gross z/h" row): A mean 33,250 z/h (17,087 / 54,485 / 29,018 / 32,412), B 30,246 (14,761 /
+  46,605 / 38,083 / 21,534). Items picked from the floor A 27, B 30; stolen A 91, B 89.
+- **The alarm (Garm Baby) flights:** escapes A 27 (12 / 5 / 2 / 8), B 33 (7 / 6 / 13 / 7); the
+  lowest run of each arm had the most (mk-A1 12, mk-B3 13).
+
+**Disclosed (none changes the verdict's rule; listed so a reader can weigh them):**
+- The dev checkout was 771cf35b for mks1, mk-A1 and mk-B1 and 50ab3228 from mk-B2 on: the change
+  is this doc, the scorers README and the v2 scorer only (3 files); no code a run loads changed.
+- Beside mk-B1 (13:37-13:44 ICT), focused pytest files (test_item_tally, test_live_player,
+  test_item_popup, test_flow_run*, test_econ*) and ruff ran in the item-tally worktree on this
+  machine (CPU, minutes; no full suite). Beside mk-A2 (14:00-14:04), the item popup watcher ran
+  on this machine against the LIVE lab's client (Batt's word; econ-bag-count.md), not dev's.
+
+**What is open (Batt's to decide; nothing is pre-registered here):** the mark as built stays off.
+The numbers say the re-find, not the time it costs, is what limits it: four in five non-empty queues
+end with no pick (no SWORD at the spot, too far, off the view after her step), and the longest
+after-kill times are the ones with no target in view at all (median 20-24 s), which a mark of the
+monsters in view cannot shorten.
