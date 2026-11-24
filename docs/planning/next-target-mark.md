@@ -169,7 +169,7 @@ time, its standing share, the next target in view at the kill). Live only on Bat
 line ~0.3 s): on dev the mark's walk can start at the last strike's death cue only if a faster
 death cue exists; otherwise the mark saves the rest and the ~2 s stays.
 
-## Amendment 3 (2026-11-24 11:37 ICT from `date`, before ntq1's data): where the mark can live, the queue's lesson, and a diagnostic pilot
+## Amendment 3 (2026-11-24 11:19 ICT from `date`, before ntq1's data): where the mark can live, the queue's lesson, and a diagnostic pilot
 
 - **Batt, 2026-11-24 ~11:0x:** "start the next-target mark on dev".
 - **What the player side can do mid-hunt** (read from dungeon_hunt.py, never edited; a read-only
