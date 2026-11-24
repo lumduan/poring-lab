@@ -7,7 +7,7 @@ verdict_date: null
 verdict_ticket: null
 supersedes: null
 related: [../econ/economics.md, ../../scripts/slot_items.py, ../../scripts/hotbar_count.py, ../../scripts/econ_dash.py, ../../packages/poring_env/src/poring_env/panelfind.py]
-next_action: "Live has the count shift and the tall-window tabs (Amendment 7, 1486b645, 14:59): the next live Run's start line should read ~25 of Batt's 29 slots and name 7 x 10; then its /economy items."
+next_action: "Amendment 8 (Batt 2026-11-24): the item tally -- the item popups counted as they come (the Run's log, /flows), the end census adjusts it, a Run with no end census keeps it as its economy; built on branch feat/item-tally; dev check on the client after the mark A/B, frontend checks, then live on Batt's word (copy the count font to live's data/)."
 title: "The economy from the bot's own bag (Economy option b-i): count the inventory at a Run's start and end (pre-registration)"
 date: 2026-11-20
 owner: Batt
@@ -257,3 +257,76 @@ add (`@item 601 199`, items 927 / 933) simply is not in it.
   TABS).
 - **Live updated at 14:59:52** (Batt: "ok"; 2b2e42da -> 1486b645, two script files, between his
   Runs: the 14:46 Run had ended at 14:59:50); the next Run is the check.
+
+## Amendment 8 (2026-11-24 13:42 ICT from `date`): the item tally -- counted as the items come, the census adjusts
+
+- **Batt, 2026-11-24 ~13:1x (his words, translated):** "Why don't we count each time an item comes
+  in, so it updates in real time? Do it on /flows, and in the Run's log too: what was collected.
+  The count after the Run is an adjustment. Then a Run ended by HUMAN keeps the count made while
+  it played." (His 09:42 Run ended by HUMAN: the end census needs the keys, so it had no count:
+  xmas02-items-1080.md Amendment 52.)
+- **Built (branch `feat/item-tally`):**
+  - `scripts/item_tally.py`: during a Run, the item popup reader (item_popup.py, round 5's code)
+    as a thread with its OWN screen pipe, grabbing the popup's band on the real frame 4 times a
+    second (as the 11-23 live watcher did: 0 grab errors, ticks p95 84 ms). Each popup read is
+    one gain: its key is bag_count's group key, its amount the count font's read (None -> counted
+    as 1, said so); a popup whose item did not read is not counted, said so. Display and record
+    only: no decision reads it; a failure stops the tally with a WARNING, never the Run.
+  - `flow_play.play`: the tally starts after the start census and stops before the end census, in
+    the Run's own record (`item_gained`, `items_tally`, `items_adjust`) and the Run's log
+    (`+ Zargon x1 (Zargon 12 in all)`). It plays with the Economy's bag count (the Run option, on
+    by default); `PORING_ITEM_TALLY=0` turns it off in one process.
+  - **The end:** with both censuses, the bag's change is the truth and `items_adjust` records the
+    tally beside it per kind (the log says whether they agree); **with no end census** (a HUMAN
+    stop, a death, an error) the Run's economy is written FROM THE TALLY (`econ_bag.run_from_tally`,
+    `counted_by: popups`; no consumables, since only a census sees what was used).
+  - `flow_run` (the Run helper's live tracker): the gains on the Run's story (`+ Zargon x1`, also
+    into the Run log on the Settings page), and the tally in the page's summary (`items`,
+    `items_total`, `items_kinds`, `items_unread`, `items_census`).
+  - /flows: the monitor bar's items tile shows the tally (it showed loot clicks before), and a
+    box "Items gained" lists the kinds, most first, with the end's count beside them.
+- **What it is NOT yet:** the reader has passed its bars at 720 (round 3) but not yet at 1080
+  (round 4 failed P by one re-read: 2.07 % against 2 %; round 5's set w1080c is not complete).
+  On live its icons read and its AMOUNTS do not (his client's digits; a count font from crops of
+  the popup band needs Batt's "ready" first). So on live each gain counts as 1 until then, and the
+  end census stays the truth whenever it runs.
+- **Checks:** tests for the tally, the watcher's emit, the play() wiring (both ends counted; no end
+  count -> the tally's economy), the helper's summary and the economy from the tally; the related
+  Python suites pass. The frontend's checks (lint, typecheck, unit tests) run in frontend-dev after
+  the mark's A/B chain ends (no CPU burst during its runs), then a dev Run on the client, then
+  live on Batt's word (with the count font copied into live's data/ui_anchors).
+
+## Amendment 9 (2026-11-24 16:47 ICT from `date`, before its run): the branch's checks; the tally's check on the dev client registered
+
+- **Checks run after the mark's A/B chain ended (16:08):**
+  - the full Python suite on the branch (its worktree, the main .venv): every test passes but six
+    whose failures are the worktree's alone -- five need the gitignored `data/` (UI templates,
+    loot icons, GAT; they pass with the dev checkout's data folders linked in: 15 of 15), and
+    `test_collect_v2::test_preflight_fails_closed_then_passes`, the order dependence of its own
+    (next-target-mark.md Amendment 4; it passes alone); mypy clean (150 files); ruff format clean;
+    ruff check: 2 E501 lines that main has too (`routes_econprices.py` and its test, since
+    57b963e6 on 11-21), not this branch's;
+  - the frontend in frontend-dev (started through guarded_build for the checks, removed after):
+    lint clean; typecheck found one error in this branch's new test (`itemRows(base)`: a summary
+    sharing no field with `Pick<LiveSummary, "items">`), fixed (866cc59f); then lint, typecheck
+    and the unit tests clean: 613 tests, 612 pass, 0 fail, 1 skipped. The same run found main's two
+    registry-count tests red since the next-target mark's three optional blocks (771cf35b: 137 ->
+    140); fixed on main (5300e4a2: main alone 611 pass, 0 fail, 1 skipped).
+- **The check on the dev client (registered now, before its run): itc1.** One 10-min screen_ab run
+  of today's fists box (`--box-set knife_swap=false`; mk_run.sh's procedure: town, heal, the zoom
+  check, town, the chat-window standard) from the dev checkout with this branch merged, its series
+  run with the Run's bag count ON (screen_ab's measured series turn it off, `PORING_BAG_COUNT=0`;
+  a scratch wrapper drops that one variable from stage2_ab's child environment, the series' code
+  unchanged), so the tally starts after the start count. Not immune; no recording; no picture is
+  saved (the watcher's crops are off in a Run; the census saves none without `--frames`).
+- **Scored once after it** by the committed `docs/records/scorers/item_tally_check.py itc1`:
+  - PLUMBING (all three -> PASS): P1 the run ended rc 0; P2 the tally started (its start line, no
+    off / did-not-start / stopped-early line) and wrote >= 1 `item_gained` while the packets show
+    >= 1 gain in its window; P3 its totals recorded at the end (`items_tally`; `items_adjust`
+    reported when both counts read);
+  - REPORTED, not judged (the reader's 1080 accuracy bar is item-popup-reader.md's round 5):
+    each packet gain (`pickup_result` ok) matched to a tally gain with that item among its ids
+    from 1.0 s before to 3.0 s after it -- recall, precision, amounts equal, item / amount unread,
+    totals (tally vs packets), the end count's adjustment, the median lag.
+- **After:** a PASS -> main pushed with the branch; live only on Batt's word (and the count font
+  copied into live's `data/ui_anchors`). A FAIL -> fixed before main is pushed.

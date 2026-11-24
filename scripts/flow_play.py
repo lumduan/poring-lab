@@ -425,11 +425,13 @@ class SessionLog:
         self.fh = (self.dir / "events.jsonl").open("a")
         self.ns = clock_ns
         self.n = 0
+        self.lock = threading.Lock()  # the item tally's thread writes here too (Batt 2026-11-24)
 
     def ev(self, rec: Mapping[str, Any]) -> None:
-        self.fh.write(json.dumps({"t_ns": self.ns(), **rec}) + "\n")
-        self.fh.flush()
-        self.n += 1
+        with self.lock:
+            self.fh.write(json.dumps({"t_ns": self.ns(), **rec}) + "\n")
+            self.fh.flush()
+            self.n += 1
 
     def close(self) -> None:
         self.fh.close()
@@ -2813,7 +2815,9 @@ def enable_pause(stop_file: Path | None) -> PauseNotes:
 def play(prep: Prepared, lio: LiveIO, *, label: str, stop_file: Path | None,
          demo: Path = DEMO, checker: Callable[[Prepared, LiveIO], dict[str, Any]] | None = None,
          hunt: HuntCore | None = None, pause: PauseNotes | None = None,
-         run_dir: Path | None = None, census: BagCensus | None = None) -> int:  # fmt: skip
+         run_dir: Path | None = None, census: BagCensus | None = None,
+         tally_fn: Callable[[Path, Callable[[dict[str, Any]], None]], Any] | None = None,
+         ) -> int:  # fmt: skip
     """The run: the start check (reads), the input path, the UI gate, the runtime, the end.
     0: it played and ended; 2: refused before any input. Its diary (say): the environment, each
     check line, the pauses, a fault's traceback (no picture is saved: Batt 2026-11-18)."""
@@ -2858,6 +2862,8 @@ def play(prep: Prepared, lio: LiveIO, *, label: str, stop_file: Path | None,
         census = bag_count.census
     bag0: dict[str, Any] | None = None
     bag1: dict[str, Any] | None = None
+    tally_w: Any = None
+    tally_doc: dict[str, Any] | None = None
     try:
         lio.open()  # the ONE input path (refuses unless ASSIST and the lock is steady)
         lio.ui_clear()
@@ -2873,6 +2879,9 @@ def play(prep: Prepared, lio: LiveIO, *, label: str, stop_file: Path | None,
         player.start_world(prep.map)
         if census is not None:  # the Economy: the bag at the start (after run_start)
             bag0 = take_bag(census, lio, "start")
+        if census is not None and (tally_fn is not None or (
+                isinstance(lio, PixelIO) and os.environ.get(ITEM_TALLY_ENV) != "0")):  # fmt: skip
+            tally_w = start_tally(log, tally_fn)  # Batt 2026-11-24: the items, as they come
         end = player.run()
         words = player.words
     except SystemExit as e:  # ro_agent.Stop outside a block (the Agent, the UI gate, a grab)
@@ -2900,8 +2909,12 @@ def play(prep: Prepared, lio: LiveIO, *, label: str, stop_file: Path | None,
             lio.release()
         raise
     finally:
+        if tally_w is not None:  # before the end's count: its window shows no popup
+            tally_doc = stop_tally(tally_w, log)
         if census is not None and bag0 is not None and end not in NO_END_COUNT:
             bag1 = take_bag(census, lio, "end")  # after a Stop too ("count, then stop")
+        if tally_doc is not None and bag0 is not None and bag1 is not None:
+            adjust_tally(tally_doc, bag0, bag1, log)
         elapsed = 0.0 if player is None else player.t
         text = end_words(end, words, elapsed, None if player is None else player.flow_stop)
         log.ev({"kind": "run_end", "reason": end, "words": text,
@@ -2917,6 +2930,13 @@ def play(prep: Prepared, lio: LiveIO, *, label: str, stop_file: Path | None,
             try:
                 path = bag_economy(bag0, bag1, log.dir / "events.jsonl", label)
                 say(f"the Run's economy: {path.name} (the Economy page)")
+            except Exception as e:  # noqa: BLE001 -- the economy never fails a Run
+                say(f"WARNING: the Run's economy was not written: {type(e).__name__}: {e}")
+        elif tally_doc is not None and tally_doc.get("gains"):  # no end count: the tally stands
+            try:
+                path = tally_economy(tally_doc, log.dir / "events.jsonl", label)
+                say(f"the Run's economy from the item popups (no count of the bag at the end): "
+                    f"{path.name} (the Economy page)")  # fmt: skip
             except Exception as e:  # noqa: BLE001 -- the economy never fails a Run
                 say(f"WARNING: the Run's economy was not written: {type(e).__name__}: {e}")
         print(f"flow_play: {text}", flush=True)
@@ -2978,6 +2998,81 @@ def bag_economy(start: Mapping[str, Any], end: Mapping[str, Any], events: Path,
     doc = econ_dash.document([run], label, tpath, tdoc, names, mobs)
     doc["sources"]["judges"] = "bag_count censuses (the Run's start, its end) + its own events"
     return econ_dash.write(doc, data / "econ" / "dashboard")
+
+
+# Batt 2026-11-24 ("count the items as they come in, live on /flows and in the Run's log; the count
+# after the Run only adjusts it, so a Run ended by HUMAN still has its count"): the item tally
+# (scripts/item_tally.py) watches the item popups from the start count to the end count, on its
+# own screen pipe; it plays with the Economy's bag count (the Settings page's Run option) and is
+# DISPLAY AND RECORD ONLY. PORING_ITEM_TALLY=0: none in this process.
+ITEM_TALLY_ENV = "PORING_ITEM_TALLY"
+
+
+def start_tally(log: SessionLog,
+                tally_fn: Callable[[Path, Callable[[dict[str, Any]], None]], Any] | None = None,
+                ) -> Any:  # fmt: skip
+    """The Run's item tally started (its Watch), or None with the reason in the Run's log."""
+    import item_tally as it
+
+    def emit(rec: dict[str, Any]) -> None:
+        log.ev(rec)
+        say(it.words(rec))
+
+    if tally_fn is None:
+        why = it.ready()
+        if why is not None:
+            say(f"the item tally is off this Run: {why}")
+            return None
+        tally_fn = it.Watch
+    w = tally_fn(log.dir / "popups", emit)
+    why = w.start()
+    if why is not None:
+        say(f"WARNING (the Run plays on): the item tally did not start: {why}")
+        return None
+    say("the item tally: each item popup is counted as it comes (the bag's count at the end "
+        "adjusts it)")  # fmt: skip
+    return w
+
+
+def stop_tally(w: Any, log: SessionLog) -> dict[str, Any] | None:
+    """The tally stopped: its totals recorded and said (None: it never counted)."""
+    doc = w.stop()
+    if getattr(w, "error", None):
+        say(f"WARNING: the item tally stopped early: {w.error}")
+    if doc is None:
+        return None
+    log.ev({"kind": "items_tally", **doc})
+    kinds = len(doc.get("counts") or {})
+    extra = f"; {doc['unread']} popup(s) unread" if doc.get("unread") else ""
+    say(f"the item popups counted {doc.get('total', 0)} item(s) of {kinds} kind(s){extra}")
+    return dict(doc)
+
+
+def adjust_tally(doc: Mapping[str, Any], bag0: Mapping[str, Any], bag1: Mapping[str, Any],
+                 log: SessionLog) -> None:  # fmt: skip
+    """The end's count beside the tally: recorded and said (the bag's change is the truth)."""
+    import econ_bag
+    import item_tally as it
+
+    a, b = econ_bag.census_of(bag0), econ_bag.census_of(bag1)
+    ch = econ_bag.changes(a.get("totals") or {}, b.get("totals") or {})
+    adj = it.adjust(doc.get("counts") or {}, ch)
+    log.ev({"kind": "items_adjust", **adj})
+    say(it.adjust_words(adj))
+
+
+def tally_economy(doc: Mapping[str, Any], events: Path, label: str,
+                  data: Path = ROOT / "data") -> Path:  # fmt: skip
+    """The Run's economy from its item tally (no end count): one export for /economy."""
+    import econ_bag
+    import econ_dash
+
+    evs = [json.loads(x) for x in events.read_text().splitlines() if x.strip()]
+    tpath, tdoc, names, mobs = econ_dash.sources(data)
+    run = econ_bag.run_from_tally(doc, evs, tdoc["items"], names, session=label)
+    out = econ_dash.document([run], label, tpath, tdoc, names, mobs)
+    out["sources"]["judges"] = "the item popups read during the Run + its own events"
+    return econ_dash.write(out, data / "econ" / "dashboard")
 
 
 def default_checker(prep: Prepared, lio: LiveIO) -> dict[str, Any]:

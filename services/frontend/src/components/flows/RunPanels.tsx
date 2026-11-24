@@ -15,7 +15,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import type { Live } from "@/components/flows/LiveRun";
-import { ACTIVE, liveLabel, monitorTiles, REFUSALS, STORY_CLOCKS, storyStamp, type StoryClock } from "@/lib/flow/liverun";
+import { ACTIVE, itemRows, itemsCensusWords, liveLabel, monitorTiles, REFUSALS, STORY_CLOCKS, storyStamp, type StoryClock } from "@/lib/flow/liverun";
 import { browserStorage, KEYS, readChoice, writeChoice } from "@/lib/flow/prefs";
 import type { Project } from "@/lib/flow/project";
 import {
@@ -256,6 +256,38 @@ export function RunStateBox({ live }: { live: Live }) {
   );
 }
 
+/** Batt 2026-11-24 ("count the items as they come in, live on /flows"): the items gained so far,
+ * from the item popups as they come (most first), and the bag's count at the end beside them.
+ * Nothing while the Run has no tally. Display only. */
+export function RunItems({ live }: { live: Live }) {
+  const l = live.st?.live ?? null;
+  const rows = itemRows(l);
+  if (!l || typeof l.items_total !== "number") return null;
+  const census = itemsCensusWords(l);
+  return (
+    <div className="box stack" data-testid="run-items">
+      <div className="strong">
+        Items gained: {l.items_total}
+        {l.items_kinds ? ` of ${l.items_kinds} kind${l.items_kinds === 1 ? "" : "s"}` : ""}
+      </div>
+      <div className="muted">counted from the item popups as they come in (picked up and stolen); the bag&apos;s count at the end sets them</div>
+      {rows.length === 0 ? (
+        <div className="muted">None yet.</div>
+      ) : (
+        <ul className="run-items" data-testid="run-items-list">
+          {rows.map((r) => (
+            <li key={r.key}>
+              {r.name} <span className="muted">x{r.n}</span>
+            </li>
+          ))}
+        </ul>
+      )}
+      {l.items_unread ? <div className="muted">{l.items_unread} popup(s) whose item did not read (not counted)</div> : null}
+      {census && <div className="notice-sub" data-testid="run-items-census">{census}</div>}
+    </div>
+  );
+}
+
 /** What she does (newest first): the Run helper's story of the session's events, in words. */
 export function RunStory({ live }: { live: Live }) {
   const story = [...(live.st?.live?.story ?? [])].reverse();
@@ -323,6 +355,7 @@ export function LogsPanel({ live }: { live: Live }) {
   return (
     <div className="stack" data-testid="logs-pane">
       <RunStateBox live={live} />
+      <RunItems live={live} />
       <RunStory live={live} />
       <RunLogBox live={live} />
     </div>

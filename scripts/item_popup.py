@@ -47,6 +47,7 @@ lazily in main); no input.
 from __future__ import annotations
 
 import argparse
+import contextlib
 import json
 import os
 import signal
@@ -621,13 +622,15 @@ def tick_stats(ms: Sequence[float]) -> dict[str, Any]:
 def watch(out_dir: Path, grab: Callable[[], tuple[int, np.ndarray]], tracker: Tracker,
           stop: Callable[[], bool], period_s: float = WATCH_PERIOD_S, crops: bool = False,
           sleep: Callable[[float], None] = time.sleep,
-          clock: Callable[[], float] = time.perf_counter) -> dict[str, Any]:  # fmt: skip
+          clock: Callable[[], float] = time.perf_counter,
+          emit: Callable[[Event], None] | None = None) -> dict[str, Any]:  # fmt: skip
     """The watcher's loop: grab the band (t_mono_ns, BGRA), put it at the 720 place, feed the
     Tracker, pass each CLOSED event through the round-4 Merger and append each FINAL one to
     events.jsonl (flushed), until ``stop()``; then the open and the pending one. ``crops``: the
     band of each event's first frame as crop-<t>.png (dev only; a joined piece's is dropped). A
-    failed grab is counted and the loop goes on. Writes and returns summary.json's dict (with
-    ``joined``: the pieces the merge joined)."""
+    failed grab is counted and the loop goes on. ``emit``: each FINAL event is also handed to it
+    as it is written (a Run's item tally, Batt 2026-11-24); a failing emit never stops the loop.
+    Writes and returns summary.json's dict (with ``joined``: the pieces the merge joined)."""
     out_dir.mkdir(parents=True, exist_ok=True)
     ticks: list[float] = []
     slow = errors = events = 0
@@ -640,6 +643,9 @@ def watch(out_dir: Path, grab: Callable[[], tuple[int, np.ndarray]], tracker: Tr
             fh.write(json.dumps(e.doc()) + "\n")
             fh.flush()
             events += 1
+            if emit is not None:
+                with contextlib.suppress(Exception):  # the tally is the Run's display, never ours
+                    emit(e)
             band = first.pop(e.t, None)
             if crops and band is not None:
                 from PIL import Image

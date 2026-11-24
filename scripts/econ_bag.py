@@ -175,6 +175,75 @@ def run_from_bags(
     return out
 
 
+def run_from_tally(
+    tally: Mapping[str, Any],
+    events: Sequence[Mapping[str, Any]],
+    table: Mapping[str, Mapping[str, Any]],
+    names: Mapping[str, str],
+    session: str | None = None,
+) -> dict[str, Any]:
+    """PURE: the /economy run entry from the Run's ITEM TALLY (scripts/item_tally.py: the item
+    popups read during the Run; Batt 2026-11-24) when no end census came (a stop by HUMAN, a death,
+    an error). Each tallied key is income (``picked`` = ``income``; a pickup and a Steal look alike
+    on the popup too); no consumables (only a census sees what was used)."""
+    import econ_dash as ed
+
+    win = window(events)
+    if win is None:
+        raise ValueError("the events have no run_start .. run_end window")
+    why: dict[str, Any] = {
+        "source": "the item popups read during the Run (item_popup.py through item_tally.py): no "
+        "end census; a pickup and a Steal look alike (stolen = 0); nothing used is counted",
+    }
+    no_amt = {k: v for k, v in (tally.get("no_amount") or {}).items() if v}
+    if no_amt:
+        why["amounts_unread"] = (f"{sum(no_amt.values())} gain(s) whose amount did not read, "
+                                 f"each counted as 1: {no_amt}")  # fmt: skip
+    if tally.get("unread"):
+        why["items_unread"] = f"{tally['unread']} popup(s) whose item did not read: not counted"
+    items, unpriced = [], []
+    for key, n in sorted((tally.get("counts") or {}).items()):
+        if n <= 0:
+            continue
+        ids = _ids(key)
+        t0 = table.get(str(ids[0]))
+        sell, sell_oc = one_price(key, table, "sell"), one_price(key, table, "sell_oc10")
+        if sell is None and len(ids) > 1:
+            unpriced.append(key)
+        items.append({
+            "item_id": ids[0], "ids": ids, "name": _name(key, names, table),
+            "type": None if t0 is None else t0.get("type"),
+            "weight": None if t0 is None else t0.get("weight"),
+            "sellable": None if t0 is None else bool(t0.get("sellable", True)),
+            "sell": sell, "sell_oc": sell_oc, "picked": int(n), "stolen": 0, "stolen_steal": 0,
+            "stolen_snatcher": 0, "income": int(n), "other": 0, "staged": 0, "dropped": 0,
+            "picked_of_dropped": 0,
+        })  # fmt: skip
+    if unpriced:
+        why["shared_icons_unpriced"] = (f"{unpriced}: items alike on screen with different "
+                                        "prices: price null")  # fmt: skip
+    items.sort(key=lambda r: (-r["income"], r["item_id"]))
+    t0_ns, t1_ns = win
+    kills = sum(1 for e in events if e.get("kind") == "kill")
+    out: dict[str, Any] = {
+        "session": session, "dir": None, "map": next((e.get("map") for e in events
+                                                      if e.get("kind") == "run_start"), None),
+        "char": None, "strategy": None,
+        "version": next((e.get("version") for e in events if e.get("kind") == "run_start"), None),
+        "window": {"t0_ns": t0_ns, "t1_ns": t1_ns, "source": "the Run's run_start .. run_end"},
+        "minutes": round((t1_ns - t0_ns) / NS / 60, 1),
+        "hours": (t1_ns - t0_ns) / NS / 3600,
+        "hours_are": "the Run's run_start .. run_end; every count here is divided by it",
+        "kills": kills, "deaths": 0, "items": items, "species": [], "consumables": [],
+        "econ_row": {}, "econ_row_is": "none: a popup-counted run (no packets, no end census)",
+        "judge_value": {}, "why": {**why, "species": "kills by the bot's own records; the "
+                                   "species are not counted from the popups"},
+        "counted_by": "popups",
+    }  # fmt: skip
+    out["totals"] = ed.totals(out)
+    return out
+
+
 def _read_events(path: Path) -> list[dict[str, Any]]:
     out = []
     for line in path.read_text().splitlines():

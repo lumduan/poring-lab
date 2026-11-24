@@ -33,7 +33,7 @@ import CodeView from "@/components/flows/CodeView";
 import NodeInspector from "@/components/maps/NodeInspector";
 import LiveMap from "@/components/flows/LiveMap";
 import LiveRun, { LiveRunButtons, RunNotReady, useLiveRun } from "@/components/flows/LiveRun";
-import { RunLogBox, RunMonitor, RunOptionsBox, RunStateBox, RunStory } from "@/components/flows/RunPanels";
+import { RunItems, RunLogBox, RunMonitor, RunOptionsBox, RunStateBox, RunStory } from "@/components/flows/RunPanels";
 import { effectiveLimitS } from "@/lib/flow/runoptions";
 import { DEFAULT_SIM, FlowSettings, HuntRulesPanel, LintPanel, PathPanel, scenarioOf, type SimForm, SimulatePanel } from "@/components/flows/Panels";
 import { ApiError, type CatalogueDoc, type Finding, FlowsApi, type LintDoc, type PythonFiles, type SimDoc, sitePath, type WorldSource } from "@/lib/flow/api";
@@ -1120,6 +1120,7 @@ export default function ProjectStudio({ backendUrl, initialNode = null }: { back
                       <RunLogBox live={live} />
                     </div>
                     <div className="run-log-right">
+                      <RunItems live={live} />
                       <RunStory live={live} />
                     </div>
                   </div>

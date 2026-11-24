@@ -63,3 +63,8 @@ they were used (mtime and sha256 below), so every published number can be re-der
 - `next_mark_ab_score_v2.py`: next-target-mark.md Amendment 5 -- next_mark_ab_score.py with ONE
   line fixed before any score: it read the runner record's `errors` (Score10 has `error`), so no
   run's error could count. The A/B is scored by v2; v1 stays here verbatim
+- `item_tally_check.py`: docs/planning/econ-bag-count.md Amendment 9 (the item tally's check on
+  the dev client, run itc1), written and committed BEFORE its run; scored once after it:
+  `.venv/bin/python docs/records/scorers/item_tally_check.py itc1`; it reads the run's own player
+  and hunt-core folders (the tally's records, the packets' `pickup_result`) and screen_ab's logs,
+  read-only
