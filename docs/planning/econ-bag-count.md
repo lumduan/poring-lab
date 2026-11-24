@@ -330,3 +330,41 @@ add (`@item 601 199`, items 927 / 933) simply is not in it.
     totals (tally vs packets), the end count's adjustment, the median lag.
 - **After:** a PASS -> main pushed with the branch; live only on Batt's word (and the count font
   copied into live's `data/ui_anchors`). A FAIL -> fixed before main is pushed.
+
+## Amendment 10 (2026-11-24 17:04 ICT from `date`, after itc1 and its one score): the check's RESULT -- PASS (plumbing); the end count's word "sets" undercounts used items
+
+- **itc1** ran 16:48:59-17:02:30 (setup from 16:49, the Run 16:51:56-17:02:28: 10.5 min, rc 0,
+  ended by its time box, 0 deaths, 17 runner kills) from the dev checkout at 14f85b9e (main with
+  this branch merged locally, not pushed before the score). The start count read 19 kinds (0 slots
+  unread, 16.4 s), the end count 19 kinds (15.3 s). The watcher: 2,355 ticks, p95 87.3 ms, max
+  706 ms, 0 grab errors, 18 events, 2 joined pieces.
+- **Scored once** at 17:02:43 by the committed `docs/records/scorers/item_tally_check.py itc1`
+  (sha256 b4599296...): **P1 PASS** (rc 0), **P2 PASS** (the start line, no off / did-not-start /
+  stopped-early line; 18 `item_gained`, the packets 18 gains in its window), **P3 PASS**
+  (`items_tally` and `items_adjust` written) -> **PASS**.
+- **Its reported lines, as written:** recall 0.0, precision 0.0 (0 of 18 matched), totals 18 vs 18,
+  0 gains with the item unread. **The 0 is the scorer's window, not the tally:** it matched on the
+  RECORD's time, and the tally writes a gain when its popup ENDS (the reader's Tracker closes an
+  event after the popup goes): every record came 6.19-7.18 s after its packet gain (median 6.43 s),
+  outside the registered -1.0 .. +3.0 s.
+- **After the score (a diagnostic, not a scored line):** the watcher's own events
+  (`popups/events.jsonl`, each popup's first-seen time `t`), paired with the window's packet gains
+  in order: **18 of 18 the same item among the popup's ids, 18 of 18 the same amount** (every gain
+  was x1, so amounts above 1 were not tried); the popup first seen 0.07-0.90 s after the packet
+  gain (median 0.21 s), shown 4.75 s (median). So on /flows a gain appears ~6.4 s after it happens.
+- **The end count ("the bag's count sets the items gained: 15 (the popups counted 18)"):** per kind
+  the bag and the tally agree on 6 of 7 (Scell 5, Zargon 3, Red Herb 1, Manacles 3, Well-baked
+  Cookie 2, Piece of Cake 1); they differ on the Candy kind, 3 by the popups and 0 by the bag. The
+  packets show 3 Candy gains AND 3 Candy uses (`use_item_result` 529, 0 left each time: she ate
+  each one). So the tally's 18 is what she COLLECTED (the packets' 18), and the bag's 15 is what
+  she KEPT (its net change). Amendment 8's rule "the bag's change is the truth" holds for what is
+  kept and undercounts what is collected whenever the Run uses an item it gains (Candy here; heal
+  items in general).
+- **Not changed (a decision for Batt):** which number the Run's "items gained" ends on after the
+  end count -- (1) the tally, raised per kind where the bag saw MORE (a popup missed), never
+  lowered by a kind the Run used (recommended: it keeps what was collected, and the bag still
+  catches what the popups missed), or (2) the bag's net change, as built. Both numbers stay in the
+  Run's record either way (`items_adjust`: popups, bag, per kind).
+- **Small follow-ups noted, not built:** the tally's record could carry the popup's first-seen time
+  (so a log line and a later check use the moment of the gain, not the popup's end); amounts above
+  x1 still need a run with stacked pickups to be seen.
