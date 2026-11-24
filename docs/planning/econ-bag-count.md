@@ -7,7 +7,7 @@ verdict_date: null
 verdict_ticket: null
 supersedes: null
 related: [../econ/economics.md, ../../scripts/slot_items.py, ../../scripts/hotbar_count.py, ../../scripts/econ_dash.py, ../../packages/poring_env/src/poring_env/panelfind.py]
-next_action: "Amendment 8 (Batt 2026-11-24): the item tally -- the item popups counted as they come (the Run's log, /flows), the end census adjusts it, a Run with no end census keeps it as its economy; built on branch feat/item-tally; dev check on the client after the mark A/B, frontend checks, then live on Batt's word (copy the count font to live's data/)."
+next_action: "Amendment 10: the item tally is on main (merged 14f85b9e) and PASSED its plumbing check on the dev client (itc1: 18 gains, the packets 18). Waiting on Batt: (1) which number a Run ends on after the end count (the tally raised where the bag saw more -- recommended -- or the bag's net change, as built); (2) live on his word (between his Runs; the count font copied into live's data/ui_anchors; live's amounts read as 1 until its own count font)."
 title: "The economy from the bot's own bag (Economy option b-i): count the inventory at a Run's start and end (pre-registration)"
 date: 2026-11-20
 owner: Batt
