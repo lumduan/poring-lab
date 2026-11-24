@@ -59,3 +59,8 @@ they were used (mtime and sha256 below), so every published number can be re-der
   run; scored once after the chain: `.venv/bin/python docs/records/scorers/next_mark_ab_score.py
   "mk-A1+mk-A2+mk-A3+mk-A4" "mk-B1+mk-B2+mk-B3+mk-B4"` (a replacement run appended to its arm's
   list); it reads the runs' own session folders' packets and screen_ab's series, read-only
+- `item_tally_check.py`: docs/planning/econ-bag-count.md Amendment 9 (the item tally's check on
+  the dev client, run itc1), written and committed BEFORE its run; scored once after it:
+  `.venv/bin/python docs/records/scorers/item_tally_check.py itc1`; it reads the run's own player
+  and hunt-core folders (the tally's records, the packets' `pickup_result`) and screen_ab's logs,
+  read-only
