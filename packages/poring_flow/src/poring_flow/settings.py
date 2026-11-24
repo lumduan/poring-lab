@@ -925,9 +925,10 @@ SWITCHES: tuple[Field, ...] = (
         "choice",
         "look for items with the item model",
         flag="--loot-items",
-        # xmas02fi9: xmas02-items-1080.md Amendment 46 (round 11 PASSED 8a), a choice for 8c's
-        # arm B; NOT the default and NOT deployed (live keeps xmas02fi5 until 8c and Batt's word)
-        options=("xmas02fi5", "xmas02fi4", "xmas02fi3", "xmas02fi9", "off"),
+        # xmas02fi9: xmas02-items-1080.md Amendment 46 (round 11 PASSED 8a). "auto" (Batt
+        # 2026-11-24, after 8c: "ship fi9"; Amendment 19's model per screen size): the screen's
+        # own model, LOOT_ITEMS_AUTO -- xmas02fi9 + its rule at 1080, xmas02fi5 at 720
+        options=("auto", "xmas02fi5", "xmas02fi4", "xmas02fi3", "xmas02fi9", "off"),
         needs=(("loot", "trim"),),
     ),  # fmt: skip
     Field(
@@ -1705,11 +1706,23 @@ def clash(vals: Mapping[str, Any]) -> str | None:
     return None
 
 
+# xmas02-items-1080.md Amendment 50 (Batt 2026-11-24: "ship fi9"; Amendment 19: a model per screen
+# size): loot_items "auto" is the screen's own item model. The runner's flag gets the 720 model
+# here (the settings cannot see the screen); the live player (flow_play.Plan.argv) puts the 1080
+# model in at 1080, with ITEM_RULE_AUTO_1080 (8c's arm B) for every rule part the player left unset
+LOOT_ITEMS_AUTO = {"720": "xmas02fi5", "1080": "xmas02fi9"}
+ITEM_RULE_AUTO_1080 = {"item_floor_1080": 0.4, "item_ring_1080": 30.0, "item_edge_1080": 12.0,
+                       "item_edge_top_1080": 32.0}  # fmt: skip
+
+
 def flag_value(f: Field, v: Any) -> str:
     """A value as the runner's flag takes it (a share with two decimals, as 9.41 did; the time box
-    0 = no limit: the runner's --minutes has no "none", so NO_LIMIT_MINUTES)."""
+    0 = no limit: the runner's --minutes has no "none", so NO_LIMIT_MINUTES; loot_items "auto" =
+    the 720 model, LOOT_ITEMS_AUTO)."""
     if f.name == "minutes" and not v:
         return str(NO_LIMIT_MINUTES)
+    if f.name == "loot_items" and v == "auto":
+        return LOOT_ITEMS_AUTO["720"]
     if f.kind == "share":
         return f"{float(v):.2f}"
     if f.kind == "int":

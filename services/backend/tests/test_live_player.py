@@ -1169,11 +1169,28 @@ def test_a_read_end_on_another_map_or_with_stop_pressed_ends_the_run(
 
 # --- roles-not-names.md step 2 (Batt 2026-11-20): the player's role items in the runner's tables
 def test_role_items_at_the_defaults_leave_the_runners_tables_as_they_are() -> None:
+    """...but for the heal key's role: at the default pick any heal potion counts (Batt
+    2026-11-24, his live F1 holds Yellow Potions: "use yellow, do not lock this")."""
     from poring_flow import settings as st
 
     got = fp.role_tables(dh, st.DEFAULTS, name=lambda i: f"item {i}")
-    assert got["SLOT_ROLES"] is dh.SLOT_ROLES and got["STOCK_ITEMS"] is dh.STOCK_ITEMS
-    assert got["HEAL_ORDER"] is dh.HEAL_ORDER
+    assert got["STOCK_ITEMS"] is dh.STOCK_ITEMS and got["HEAL_ORDER"] is dh.HEAL_ORDER
+    roles = got["SLOT_ROLES"]
+    assert {k: v for k, v in roles.items() if k != "potion"} == {
+        k: v for k, v in dh.SLOT_ROLES.items() if k != "potion"
+    }
+    assert {503, 504, 501, 502} <= set(roles["potion"].items) and roles["potion"].items[0] == 504
+    assert dh.SLOT_ROLES["potion"].items == (504,)  # the runner's own table is unchanged
+
+
+def test_a_yellow_potion_on_the_heal_key_reads_right_at_the_default_pick() -> None:
+    from poring_flow import settings as st
+
+    roles = fp.role_tables(dh, st.DEFAULTS, name=lambda i: f"item {i}")["SLOT_ROLES"]
+    assert 503 in roles["potion"].items  # Yellow: no warning on Batt's live F1
+    picked = fp.role_tables(dh, {**st.DEFAULTS, "heal_item": 505},
+                            name=lambda i: f"item {i}")["SLOT_ROLES"]  # fmt: skip
+    assert picked["potion"].items == (505,)  # a picked heal item stays exact
 
 
 def test_picked_role_items_are_swapped_in_for_the_block_then_restored() -> None:
@@ -1427,3 +1444,26 @@ def test_near_keeps_is_the_distance_and_the_sure_score() -> None:
 def test_the_hunt_core_applies_the_near_alarm_rule() -> None:
     src = inspect.getsource(fp.HuntCore.play)
     assert "near_alarm(dh, plan.vals)" in src
+
+
+# --- xmas02-items-1080.md Amendment 50 (Batt 2026-11-24, "ship fi9"): loot_items "auto" ---------
+def test_auto_is_the_720_model_in_the_settings_and_the_1080_model_in_the_player_at_1080() -> None:
+    from poring_flow import settings as st
+
+    vals = {**st.DEFAULTS, "loot": "trim", "loot_items": "auto"}
+    argv = st.argv(vals)
+    assert argv[argv.index("--loot-items") + 1] == "xmas02fi5"  # the settings cannot see the screen
+    assert fp.loot_items_auto(vals, argv, at_1080=lambda: True) == "xmas02fi9"
+    assert fp.loot_items_auto(vals, argv, at_1080=lambda: False) is None  # 720 keeps xmas02fi5
+    named = {**vals, "loot_items": "xmas02fi5"}  # a named model is never swapped (A/B arms)
+    assert fp.loot_items_auto(named, st.argv(named), at_1080=lambda: True) is None
+
+
+def test_auto_takes_8cs_rule_for_every_part_the_player_left_unset() -> None:
+    from poring_flow import settings as st
+
+    base = {**st.DEFAULTS, "loot": "trim"}
+    assert fp.item_rule_parts({**base, "loot_items": "xmas02fi5"}) == (0.0, 0, 0, 0)
+    assert fp.item_rule_parts({**base, "loot_items": "auto"}) == (0.4, 30, 12, 32)
+    own = {**base, "loot_items": "auto", "item_floor_1080": 0.5}
+    assert fp.item_rule_parts(own)[0] == 0.5 and fp.item_rule_parts(own)[1:] == (30, 12, 32)

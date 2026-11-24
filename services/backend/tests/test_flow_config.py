@@ -295,4 +295,8 @@ def test_a_technique_switched_off_takes_its_settings_with_it() -> None:
 def test_the_item_models_a_choice_names_exist() -> None:
     text = (ROOT / "scripts" / "unit_detector.py").read_text()
     for m in fc.BY_NAME["loot_items"].options:
-        assert m == "off" or f'"{m}": GpuWeights(' in text, m
+        assert m in ("off", "auto") or f'"{m}": GpuWeights(' in text, m
+    from poring_flow import settings as st
+
+    for m in st.LOOT_ITEMS_AUTO.values():  # auto's models exist too
+        assert f'"{m}": GpuWeights(' in text, m

@@ -259,10 +259,29 @@ class RunnerPlan:
         flow = fr.FLOWS[self.flow_id]
         stop = [] if stop_file is None else ["--stop-file", str(stop_file)]
         out = [*fr.FIXED, "--label", label, *stop, *flow.flags, *fc.argv(self.vals)]
+        auto = loot_items_auto(self.vals, out)
+        if auto is not None:
+            out[out.index("--loot-items") + 1] = auto
         if minutes is not None and "--minutes" in out:
             i = out.index("--minutes") + 1
             out[i] = f"{min(float(out[i]), minutes):.2f}"
         return out
+
+
+def loot_items_auto(vals: Mapping[str, Any], argv: Sequence[str],
+                    at_1080: Callable[[], bool] | None = None) -> str | None:  # fmt: skip
+    """xmas02-items-1080.md Amendment 50 (Batt 2026-11-24, "ship fi9"): with loot_items "auto" and
+    the client at 1080 (ro_agent.virtual_active), the 1080 item model for the runner's
+    --loot-items (the settings gave it the 720 one); else None (the argv as it is)."""
+    from poring_flow import settings as st
+
+    if vals.get("loot_items") != "auto" or "--loot-items" not in argv:
+        return None
+    if at_1080 is None:
+        import ro_agent as r
+
+        at_1080 = r.virtual_active
+    return st.LOOT_ITEMS_AUTO["1080"] if at_1080() else None
 
 
 def cap_json(cap_s: float) -> float | None:
@@ -2271,6 +2290,12 @@ def knife_swap_set_off(prep: Prepared) -> list[str]:
 # The runner keeps them in module tables it reads when used (SLOT_ROLES' "opener" / "potion",
 # STOCK_ITEMS' "potion", HEAL_ORDER), so for the length of one check or hunt core they are swapped
 # here -- the runner file is unchanged (byte-pinned) and a Run at the defaults sees its own tables.
+HEAL_DEFAULT = 504  # settings DEFAULTS heal_item: the White Potion
+# the heal potions a heal key may show at the default pick: White, Yellow, Orange, Red and their
+# Condensed forms (rAthena item ids)
+HEAL_POTIONS = (504, 503, 502, 501, 547, 546, 545)
+
+
 def item_name(iid: int, kb: Path = ROOT / "data" / "kb" / "items.json") -> str:
     """The item's display name (the local KB: run-time data, never committed), else "item N"."""
     try:
@@ -2288,6 +2313,11 @@ def role_tables(dh: Any, vals: Mapping[str, Any],
                            "HEAL_ORDER": dh.HEAL_ORDER}  # fmt: skip
     weapon, heal = vals.get("swap_item"), vals.get("heal_item")
     roles = dict(dh.SLOT_ROLES)
+    # Batt 2026-11-24 (his live F1 holds Yellow Potions: "use yellow, do not lock this"): at the
+    # default heal pick the heal key may show ANY heal potion; a picked heal item stays exact
+    if (heal is None or heal == HEAL_DEFAULT) and roles["potion"].items == (HEAL_DEFAULT,):
+        roles["potion"] = dh.SlotRole(HEAL_POTIONS, "a heal potion",
+                                      "put a heal potion on the heal item's key")  # fmt: skip
     if isinstance(weapon, int) and weapon not in roles["opener"].items:
         w = name(weapon)
         roles["opener"] = dh.SlotRole((weapon,), f"the idle weapon ({w})",
@@ -2431,6 +2461,22 @@ def item_boxes_kept(boxes: Sequence[Any], img_bgr: Any, floor: float, ring: int,
     return out
 
 
+def item_rule_parts(vals: Mapping[str, Any]) -> tuple[float, int, int, int]:
+    """PURE: the 1080 rule's parts (floor, ring, edge, top) from the player's settings; with
+    loot_items "auto" (Amendment 50) a part the player left unset (0 or not in use) is 8c's arm B
+    value (settings.ITEM_RULE_AUTO_1080)."""
+    from poring_flow import settings as st
+
+    auto = vals.get("loot_items") == "auto"
+
+    def part(name: str) -> float:
+        v = float(vals.get(name) or 0.0) if st.in_use(name, vals) else 0.0
+        return st.ITEM_RULE_AUTO_1080[name] if auto and v <= 0 else v
+
+    return (part("item_floor_1080"), int(part("item_ring_1080")), int(part("item_edge_1080")),
+            int(part("item_edge_top_1080")))  # fmt: skip
+
+
 @contextlib.contextmanager
 def item_rule(vals: Mapping[str, Any]) -> Iterator[None]:
     """xmas02-items-1080.md Amendment 22 (round 7): at 1080 only (ro_agent.virtual_active), the
@@ -2439,12 +2485,7 @@ def item_rule(vals: Mapping[str, Any]) -> Iterator[None]:
     byte-identical. Off (every part 0, not in use, or 720) = unchanged. A failing filter gives the
     detector's own boxes (the old behaviour), never a stop. Amendment 36 adds C, the view edge
     (item_edge_1080 / item_edge_top_1080)."""
-    from poring_flow import settings as st
-
-    floor = float(vals.get("item_floor_1080") or 0.0) if st.in_use("item_floor_1080", vals) else 0.0
-    ring = int(vals.get("item_ring_1080") or 0) if st.in_use("item_ring_1080", vals) else 0
-    edge = int(vals.get("item_edge_1080") or 0) if st.in_use("item_edge_1080", vals) else 0
-    top = int(vals.get("item_edge_top_1080") or 0) if st.in_use("item_edge_top_1080", vals) else 0
+    floor, ring, edge, top = item_rule_parts(vals)
     import ro_agent as r
 
     if (floor <= 0 and ring <= 0 and edge <= 0 and top <= 0) or not r.virtual_active():
