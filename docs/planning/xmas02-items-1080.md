@@ -6,7 +6,7 @@ verdict_date: null
 verdict_ticket: null
 supersedes: null
 related: [xmas02-1080-detector.md, xmas02-detector.md, rogue-xmas02.md, screen-size-ab.md, fullscreen-client.md, ../../scripts/fi_labels.py, ../../scripts/fi_eval.py, ../../scripts/stage_items.py, ../../scripts/build_frame_cache.py]
-next_action: "8c (Amendment 47): six interleaved 20-min runs A B B A A B (A xmas02fi5, B xmas02fi9 + round 10's rule), then the committed xmas02_items_8c_score.sh ONCE; pass -> Batt decides the 1080 deployment; fail -> named by time lost."
+next_action: "8c FAILED as registered (Amendment 49: loot/h +1.0 vs 2 SE 9.6; but that line counts the runner's loot STEPS, near-blind to the model; packets: 56 % vs 57 % of dropped items picked). Not deployed. Batt decides: keep xmas02fi5, or ship xmas02fi9 for its offline gain; any next in-play item A/B judged on packets (picked of dropped)."
 title: "The floor-item model at 1920x1080: a 1080 round of the item detector, the 720 round 5's recipe with only the screen changed (pre-registration)"
 date: 2026-11-20
 owner: Batt
@@ -1817,3 +1817,48 @@ A count under its minimum is NO VERDICT, never a pass.
   dropped, only potions and Fly Wings restocked) whenever the bag reads >= 40 %, so the first runs
   would have candies and the later ones none. The setup's own top-ups (F1 -> 10 under 7, F8 -> 40
   under 30, F9 -> 3 under 2) apply to every run.
+
+### Amendment 49 (2026-11-24 09:07 ICT from `date`): 8c's RESULT (scored once) -- FAIL on its loot line; that line counts loot STEPS; the packets show the same pickup share
+
+- **The runs** (`c8_chain.sh`, 2026-11-23 19:02-21:27, A B B A A B): all six valid (19.7-19.8 min,
+  ended by the time box, 0 PAUSED lines, 0 deaths, the client in game after each). **Scored
+  2026-11-24 09:05** by the committed `xmas02_items_8c_score.sh` (copy `cmp` identical): the
+  chain was started detached and untracked, so its end at 21:27 woke nobody; the agent found it
+  at 09:04. Nothing was read or changed in between.
+
+  | run | arm | runner kills/h | loot steps/h (the judged "loot/h") | packet kills/h | our drops | picked of them |
+  |---|---|---|---|---|---|---|
+  | c8-A1 | A | 85.1 | 121.6 | 76.0 | 10 | 5 |
+  | c8-B1 | B | 70.0 | 127.9 | 57.8 | 7 | 5 |
+  | c8-B2 | B | 109.5 | 118.6 | 76.0 | 6 | 2 |
+  | c8-A2 | A | 82.1 | 127.6 | 57.7 | 9 | 5 |
+  | c8-A3 | A | 94.3 | 127.8 | 82.1 | 13 | 8 |
+  | c8-B3 | B | 109.3 | 133.5 | 91.1 | 8 | 5 |
+
+- **The lines (section 8c):**
+  - loot/h: A 125.7 (SE 2.0), B 126.7 (SE 4.3); diff **+1.0**, SE 4.8: not > +2 SE -> **FAIL**;
+  - kills/h: A 87.2 (3.7), B 96.3 (13.1); diff +9.1 >= -2 SE -> PASS;
+  - deaths 0 / 0 -> PASS; errors 0 / 0 -> PASS.
+  - **8c: FAIL. xmas02fi9 is not deployed; live keeps xmas02fi5** (Amendment 41).
+- **What the judged line measures (found while reporting; nothing re-scored):** screen_ab's
+  `loot_h` is stage2_ab's `loot_steps` per hour: the runner's `loot_step` events, one loot attempt
+  after a kill. The item model changes where a loot step looks and clicks, not how many steps
+  there are, so this line is nearly blind to the model; section 8c's "the reason for the round"
+  could hardly have shown a gain on it. Every earlier stage2_ab / screen_ab A/B used the same
+  definition.
+- **Reported beside it (no bar), from the packets (the economy DB, `run_items`):** of the items our
+  kills dropped, A picked **18 of 32 (56 %)**, B **12 of 21 (57 %)**: the same share. Items picked
+  per hour A 18.2, B 12.2 (B's runs dropped fewer). The runner's picks per loot step: A 0.03 /
+  0.05 / 0.14, B 0.05 / 0.03 / 0.07. Packet kills/h A 71.9, B 75.0. Floor-pickup value per hour
+  (`gross_h`, the floor pickups only, steals not valued): A 5,270, B 4,139 (not comparable with
+  Batt's 135,737 common z/h). False boss Fly Wings per hour A 19.3, B 13.2 ("not lower").
+  As a % of Batt's run (228.5 kills/h): runner kills/h A 38 %, B 42 %; packet kills/h A 31 %,
+  B 33 %.
+- **Read:** with either model she picks up a little over half of what her kills drop, and her kills
+  drop few items (6-13 in 20 min). The offline gain (I3-any 1.51 % -> 0.20 %: far fewer false item
+  boxes) does not turn into more pickups in these six runs; what limits loot in play is not the
+  item model's eye.
+- **For Batt (his decision):** (1) keep xmas02fi5 (the registered outcome); (2) ship xmas02fi9 + the
+  rule anyway for its offline gain, since it is no worse in play (a new decision, not 8c's); (3) any
+  later in-play item A/B is judged on the packets (picked of dropped, picked items per hour), not on
+  loot steps (to register before it runs).
