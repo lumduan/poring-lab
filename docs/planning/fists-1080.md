@@ -445,3 +445,38 @@ interleaved A/B is the next step only on Batt's word.
 - **The morning's full-screen recording** (`live-fists-1`, Amendment 9) was taken before this rule
   and may hold other players' chat; it is on the NAS only. Batt was asked: delete it, or keep it
   with the chat area blacked out.
+
+## 15. Amendment 11 (2026-11-24 09:17 ICT from `date`, BEFORE any fst4 data): Batt's answers; the build applied for fst4-fst6
+
+- **Batt, 2026-11-23 ~13:3x:** promote live (done 13:35-13:39), frontend-dev allowed (done), and
+  the morning's `live-fists-1` recording **stays on the NAS, not deleted**: "no other people's chat
+  in this video, I had it turned off; keep it as the reference to improve the bot". Amendment 10's
+  open question is closed.
+- **Batt, 2026-11-24 ~09:1x:** "carry on" with fst4-fst6 (the item model's round 11 and its 8c are
+  done, xmas02-items-1080.md Amendments 46-49); live's heal item stays the Yellow Potion, "do not
+  lock this" (the live player's check is a warning; the agent makes it accept any heal potion).
+- **The build, Amendment 1's exactly** (dev client, in town, 09:0x-09:16; the GM lines through the
+  UI gate, each answered in the Chat tab):
+  - `@str 62`, `@vit 16`, `@int 3`, `@dex -26`, `@luk 1` ("Stat changed"); `@refine 16 6`
+    ("Upgrade success!!", "1 item has been refined": the Thief Clothes +6, worn);
+  - `@item 2506 1`, `@item 4102 1` ("Item created" x 2); the Insert Card window: "Compounding has
+    completed successfully";
+  - the equipment window: the Damascus +8 [1] and both Rosaries taken off, the plain Manteau
+    taken off, the carded Manteau [1] put on (the Battle Log, each line); the weapon slot, acc.1 and
+    acc.2 read EMPTY;
+  - the hotbar: the Damascus shortcut dragged F5 -> **F2** (its tooltip "F2 +8 ... [1]: 1"); F5,
+    F6, F7 empty; F1 7 White Potions, F4 the Knife, F8 28 Fly Wings, F9 2 Butterfly Wings.
+- **Her status window (09:1x, fullscreen frame):** Str 63+6, Agi 99+8, Vit 17+6, Int 4+4, Dex
+  73+7, Luk 2; **ATK 121 + 0, HIT 179, FLEE 266 + 1, DEF 27 + 23, Aspd 180**; Status Point 688;
+  weight 1,032 / 4,290. Amendment 1's table, unchanged.
+- **Not immune:** two `@monsterignore` lines read in the Chat tab ("You are now immune to
+  attacks." then "Returned to normal state."). The chat window standard read back (Battle Log
+  tab selected).
+- **One difference from Amendment 6: NO candy.** F7's Candy and F6's Candy Cane were eaten in the
+  item model's round-11 pilots, and the series' setup runs clear-bag (every Use-tab stack dropped)
+  whenever the bag reads >= 40 %, so a restock would not hold equally across fst4-fst6 (the same
+  reason as xmas02-items-1080.md Amendment 48). The base ifH31-ifH36 had candies at times; ifH37-ifH39
+  had none. Reported, not corrected for.
+- **The queue:** `fists_pilots3.sh` (registered in Amendment 6), started now with a TRACKED waiter;
+  after each pilot, Amendment 2's checks and the packets' weapon changes (`swaps` must be 0, else the
+  run is void and the queue stops).
