@@ -7,7 +7,7 @@ verdict_date: null
 verdict_ticket: null
 supersedes: null
 related: [fists-1080.md, search-targets.md, ../../scripts/search_gap.py, ../../scripts/time_budget.py, ../../scripts/weapon_swap_study.py]
-next_action: "Amendment 4: ntq1 (the queue alone, one run) 94.6 packet kills/h on its play window, the after-kill median 10.4 s vs fst4-6's 16.6 s; the mark built (next_mark.py, off by default); the A/B registered (A today vs B queue + mark, eight 20-min runs A B B A A B B A, packet kills/h > +2 SE) after a 5-min smoke; scored once by docs/records/scorers/next_mark_ab_score.py."
+next_action: "Amendment 5: the A/B goes on in mk_chain2.sh (mk-B2 mk-A2 mk-A3 mk-B3 mk-B4 mk-A4 after mk-A1 mk-B1), validity read from the runner record's `error`; scored once by docs/records/scorers/next_mark_ab_score_v2.py."
 title: "Mark the next target while fighting (Batt 2026-11-23): measure the after-kill time first (pre-registration)"
 date: 2026-11-23
 owner: Batt
@@ -291,3 +291,21 @@ most), entries older than 8 s dropped, and one `mark` event a decision in the pl
   dependence of its own, not this change; reported, not fixed here). The frontend's unit tests were
   not run (no node on this host and frontend-dev is down); its only change is the generated
   registry's three optional entries, which the Python drift test checks.
+
+## Amendment 5 (2026-11-24 13:47 ICT from `date`, during the A/B, before any score): a field name in the chain's check and the scorer
+
+- **The slip:** the chain's validity check after each run, and the committed scorer's error read,
+  asked the runner's record (stage10_ab.score_run's Score10) for `errors`. Its field is `error`.
+  In the chain the check then printed nothing, so mk-A1 (played 19.7 min, ended by its time box,
+  0 deaths, play rc 0) read "invalid" and a replacement mk-A5 was queued; every later run would
+  have read invalid and the chain would have stopped itself after mk-B2. In the scorer, no run's
+  error could ever count (E always passing, and validity blind to errors).
+- **What was done (no A/B result was read; nothing was scored):**
+  - a STOP file at 13:44 ended mk_chain.sh cleanly after mk-B1 (it checks before each run); its
+    "mk-A5 queued" / "mk-B5 queued" lines are void;
+  - `mk_chain2.sh` continues the same order, mk-B2 mk-A2 mk-A3 mk-B3 mk-B4 mk-A4 (A B B A A B B A
+    over both chains), the same per-run procedure and checks, validity read from `error`, one
+    replacement an arm for a run invalid by that rule; it re-checks mk-A1 and mk-B1 by that rule
+    first and logs them;
+  - the scorer's fix is a NEW committed file, `docs/records/scorers/next_mark_ab_score_v2.py` (one
+    line: `sc.error`); v1 stays verbatim. **The A/B is scored once by v2.**

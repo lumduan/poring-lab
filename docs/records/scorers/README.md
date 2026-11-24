@@ -39,6 +39,7 @@ they were used (mtime and sha256 below), so every published number can be re-der
 | `gpu_rec_r1_fingerprint.py` | 2026-11-08 18:19 | `ae2da14dbf5d1fbd` |
 | `fists_1080_score.py` | 2026-11-23 07:53 | `e0e418973180b39b` |
 | `next_mark_ab_score.py` | 2026-11-24 11:54 | `2f9d4e72e3a2bdfb` |
+| `next_mark_ab_score_v2.py` | 2026-11-24 13:44 | `e2901b0dbf128bd4` |
 
 **Cited elsewhere:**
 - `decision_hash.py`: demonstrations.md (the walk decision-code hash, cited as scratch)
@@ -59,3 +60,6 @@ they were used (mtime and sha256 below), so every published number can be re-der
   run; scored once after the chain: `.venv/bin/python docs/records/scorers/next_mark_ab_score.py
   "mk-A1+mk-A2+mk-A3+mk-A4" "mk-B1+mk-B2+mk-B3+mk-B4"` (a replacement run appended to its arm's
   list); it reads the runs' own session folders' packets and screen_ab's series, read-only
+- `next_mark_ab_score_v2.py`: next-target-mark.md Amendment 5 -- next_mark_ab_score.py with ONE
+  line fixed before any score: it read the runner record's `errors` (Score10 has `error`), so no
+  run's error could count. The A/B is scored by v2; v1 stays here verbatim
