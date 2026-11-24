@@ -95,6 +95,8 @@ def test_every_setting_has_a_valid_default_and_the_run_flows_are_todays() -> Non
         "cursor_click_on_sight": False,
         # ranged-attacker-1080.md: the defend box takes the shooter first, off by default
         "defend_ranged": False,
+        # next-target-mark.md Amendment 3: the mark's re-find for the queue, off by default
+        "mark": False, "mark_ttl_s": 8.0, "mark_hover_max": 2,
     }  # fmt: skip
     got = fr.FLOWS["xmas_dun02_rogue"].defaults
     assert got == today and list(got) == [f.name for f in fc.FIELDS if not f.tune]

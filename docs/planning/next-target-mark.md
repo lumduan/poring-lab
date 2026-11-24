@@ -7,7 +7,7 @@ verdict_date: null
 verdict_ticket: null
 supersedes: null
 related: [fists-1080.md, search-targets.md, ../../scripts/search_gap.py, ../../scripts/time_budget.py, ../../scripts/weapon_swap_study.py]
-next_action: "Amendment 3 (Batt 2026-11-24 ~11:0x: start the mark on dev): the runner's own --queue is the mark's body (no player click exists); its 4CN failure was the re-find; diagnostic pilot ntq1 (fists + --queue, 25 min) measures today's re-find; then the player-side re-find (bq_next swap) with tests, and the A/B pre-registered before any A/B run."
+next_action: "Amendment 4: ntq1 (the queue alone, one run) 94.6 packet kills/h on its play window, the after-kill median 10.4 s vs fst4-6's 16.6 s; the mark built (next_mark.py, off by default); the A/B registered (A today vs B queue + mark, eight 20-min runs A B B A A B B A, packet kills/h > +2 SE) after a 5-min smoke; scored once by docs/records/scorers/next_mark_ab_score.py."
 title: "Mark the next target while fighting (Batt 2026-11-23): measure the after-kill time first (pre-registration)"
 date: 2026-11-23
 owner: Batt
@@ -219,3 +219,75 @@ death cue exists; otherwise the mark saves the rest and the ~2 s stays.
   - beside fst4-fst6 (the same build): kills/h and steals/h (packets), Amendment 1's M1 (the
     after-kill time) and its standing share; deaths, errors.
   - Checks as fst4-fst6: >= 1,400 frames, no PAUSED line, 0 weapon changes, else void.
+
+## Amendment 4 (2026-11-24 11:58 ICT from `date`, before the smoke and any A/B run): ntq1's numbers; the mark built; the A/B registered
+
+**ntq1, the queue alone (Amendment 3's diagnostic; one run, not an A/B, no verdict):**
+- Ran clean: 24.7 min played, rc 0, ended by its time box, 0 deaths, no error; 1,625 frames, 0
+  PAUSED, 0 weapon changes (session `20261124T112329-rdp-xmas02-ntq1`). Its runner file is
+  byte-identical to fst6's, and its runner config and project differ from fst6's only in
+  `queue: true`.
+- **Disclosed:** the mark's settings (settings.py, three new player fields, off by default) were
+  edited at 11:24:12, before ntq1's player process started (11:25:08), and its flow_play hook may
+  have loaded too; with `mark` off neither changes play (`marking` swaps nothing; the trail only
+  records her cells). A `mypy` run went for under a minute beside it (~11:31) before it was
+  stopped (the full test suite waits for the dev client to be idle).
+- **The queue at 1080 with the fists:** 24 picks, 26 re-find fails, 17 empty queues (4CN: 16 / 48
+  / 19 and 3 / 50 / 15). Fail reasons (one per entry passed): gone 25, far 5, unreachable 3,
+  verdict 1, spot 1, off 1. Of the 25 fails scored against the packets: she had moved >= 1 cell in
+  5; the detection held no monster box in 4; target monsters in view by the packets 91, boxed
+  within 60 px 34 (at the picks: 110 in view, 57 boxed). Pick gap (the fight's end -> the strike)
+  median 1.55 s.
+- **Beside fst4-fst6 (the same build, queue off; Amendment 1's and fists-1080's rulers):**
+
+  | | ntq1 (queue on) | fst4-fst6 (queue off) |
+  |---|---|---|
+  | packet kills/h (the recording's window) | 86.3 (39) | 75.2 (71.5-80.4) |
+  | steals/h | 66.4 | 56.6 (49.2-67.0) |
+  | after-kill time, median / p75 | 10.4 / 21.2 s | 16.6 / 25.6 s |
+  | ... with a target in view / none | 8.8 / 21.8 s | 11.8 / 22.6 s |
+  | standing s a kill: until known / scan / box settle / other | 2.6 / 2.6 / 1.6 / 2.7 | 3.3 / 4.1 / 2.3 / 3.9 |
+  | gross z/h | 54,936 | 28,845 |
+  | deaths | 0 | 0 |
+
+**The mark, built** (scripts/next_mark.py; tests services/backend/tests/test_next_mark.py): Amendment
+3's design. `mark` (a player switch, needs the runner's `queue`), `mark_ttl_s` 8 s, `mark_hover_max`
+2; off by default. flow_play swaps the runner's `bq_next` for one hunt core (`next_mark.marking`, put
+back after) and the hook keeps her cells by tick time. The re-find keeps `bq_next`'s answers
+(its own test cases pass through the mark unchanged) and adds: the predicted foot after her step
+(the runner's camera + the map's GAT), the predicted spot hovered when no box is there (a strike
+only on a SWORD; at most 2 such spots a pick), down the queue past a refused aim (3 aims a pick at
+most), entries older than 8 s dropped, and one `mark` event a decision in the player's record.
+
+**The A/B (registered now, before any of its runs):**
+- **Arms:** A = today's fists box (`--box-set knife_swap=false`; queue off, mark off); B = A +
+  `--box-set queue=true --player-set mark=true` (the mark's defaults). The fists build as fst4-fst6
+  (Amendment 11 of fists-1080.md), no candy, not immune.
+- **Runs:** eight 20-min runs, interleaved **A B B A A B B A** (mk-A1 mk-B1 mk-B2 mk-A2 mk-A3 mk-B3
+  mk-B4 mk-A4), each `mk_run.sh` (8c's c8_run.sh procedure: town, heal, the zoom check, town, the
+  chat-window standard; no recording: each run's own session folder carries its packets), from the
+  chain `mk_chain.sh`. After each: ALL DONE, play rc 0, no PAUSED line, the client in game, else the
+  chain stops (a person first). An invalid run gets ONE replacement of its arm at the end.
+- **First, a 5-min SMOKE of arm B (mks1):** the mark has never played; the chain goes on to the A/B
+  only if the smoke's play rc is 0, its player record shows the mark ON and deciding, and its log
+  has no error. Not scored.
+- **Scored ONCE after the chain**, by the committed `docs/records/scorers/next_mark_ab_score.py`
+  (packets per run from the run's own session folders through weapon_swap_study, over the play
+  window; the runner's record for minutes, end, deaths, errors):
+  - **K** packet kills/h: mean(B) - mean(A) > +2 SE (Welch) -> PASS, else FAIL;
+  - **S** steals/h: mean(B) - mean(A) >= -2 SE (no harm);
+  - **D** deaths: B's total <= A's;
+  - **E** errors: no B run ends with an error unless an A run does too;
+  - a run is valid with >= 18 min played, ended by its time box, no error, 0 weapon changes;
+    fewer than 3 valid runs an arm -> INCONCLUSIVE. **The A/B PASSES when K, S, D and E pass.**
+- **Reported beside (not judged):** the queue's and the mark's events (picks by a box / by a
+  hovered spot, fails and reasons), Amendment 1's M1 and its standing split per arm, items and z/h
+  per hour per arm (the econ DB), the live player's own kills/h.
+- **After:** a PASS goes to Batt with the numbers; live only on his word (the mark and the queue are
+  two settings he would turn on in his project). A FAIL is recorded and the mark stays off.
+- **Checks before the chain:** mypy (150 files) passes; the full Python suite passes but for one
+  test, `test_collect_v2::test_preflight_fails_closed_then_passes`, which fails in a full run and
+  passes alone, and fails the same way on the clean HEAD 57029aff without the mark (an order
+  dependence of its own, not this change; reported, not fixed here). The frontend's unit tests were
+  not run (no node on this host and frontend-dev is down); its only change is the generated
+  registry's three optional entries, which the Python drift test checks.

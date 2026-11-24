@@ -147,6 +147,7 @@ for _p in ("packages/poring_flow/src", "packages/poring_skills/src", "packages/p
 
 import flow_config as fc  # noqa: E402
 import flow_run as fr  # noqa: E402
+import next_mark as nm  # noqa: E402
 
 from poring_env.protocol import Key, ReleaseAll  # noqa: E402
 from poring_flow import functions as fn  # noqa: E402
@@ -1117,10 +1118,12 @@ class HuntHook:
         self._hp0 = Hp0Watch()
         self.seen = seen or Seen()  # the boxes the HUD / the detector saw (the story's words)
         self.target_name: str | None = None
+        self.trail = nm.CellTrail()  # her cells by tick time (the mark's world anchor)
 
     def tick(self, view: Any) -> str | None:
         self.res.ticks += 1
         self.last = view
+        self.trail.add(float(getattr(view, "t", 0.0)), getattr(view, "pos", None))
         if self._hp0.feed(self.player.io.clock(), getattr(view, "hp_pct", None),
                           bool(getattr(view, "dead", False))):  # fmt: skip
             self.res.dead = self.res.dead_hp0 = True  # the hunt does not go on (Batt 2026-11-19)
@@ -1315,6 +1318,9 @@ class HuntCore:
                 item_rule(plan.vals),
                 click_on_sight(plan.vals, sight),
                 ranged_defend(dh, plan.vals, player.rec.ev),
+                nm.marking(
+                    dh, plan.vals, hook.trail, getattr(player.prep, "map", None), player.rec.ev
+                ),
                 seen_boxes(seen, sight),
                 purse_reads(purse),
             ):

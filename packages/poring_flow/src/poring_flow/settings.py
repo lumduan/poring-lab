@@ -836,6 +836,46 @@ SWITCHES: tuple[Field, ...] = (
         flag="--queue",
         needs=(("box_strike", _ON),),
     ),  # fmt: skip
+    # next-target-mark.md Amendment 3 (Batt 2026-11-23/24: "mark the next one while fighting, walk
+    # to it at once"): the runner's own queue re-finds its next monster with the MARK's re-find --
+    # each queued monster anchored to the world (her cell + its cell), its foot predicted on the
+    # current view, and, when the detection holds no box there, that spot hovered for a SWORD. The
+    # live player applies it (flow_play, next_mark.marking), never a runner flag. Off by default
+    # until its A/B passes
+    Field(
+        "mark",
+        "aim",
+        "switch",
+        "mark the next monster in the fight; re-find it where it stands",
+        needs=(("queue", _ON),),
+        optional=True,
+        player=True,
+    ),  # fmt: skip
+    Field(
+        "mark_ttl_s",
+        "aim",
+        "number",
+        "the mark: forget a monster not seen for this long",
+        1.0,
+        30.0,
+        0.5,
+        unit="s",
+        needs=(("mark", _ON),),
+        optional=True,
+        player=True,
+    ),  # fmt: skip
+    Field(
+        "mark_hover_max",
+        "aim",
+        "number",
+        "the mark: spots looked at when no box is there",
+        0,
+        4,
+        1,
+        needs=(("mark", _ON),),
+        optional=True,
+        player=True,
+    ),  # fmt: skip
     Field(
         "self_recheck",
         "aim",
@@ -1290,6 +1330,9 @@ DEFAULTS: dict[str, Any] = {
     "quiet_scan": True,
     "defend_box": False,
     "defend_ranged": False,  # ranged-attacker-1080.md: off by default (its A/B tests it)
+    "mark": False,  # next-target-mark.md Amendment 3: off by default (its A/B tests it)
+    "mark_ttl_s": 8.0,
+    "mark_hover_max": 2,
     "quick_drop": False,
     "quick_drop_scaled": False,
     "value_target": True,
@@ -1357,6 +1400,9 @@ FIND: dict[str, tuple[str, ...]] = {
     "CURSOR_WAIT_S": ("cursor", "hover", "sword", "1080", "late"),
     "cursor_click_on_sight": ("cursor", "click", "sight", "sword", "strike", "lock", "arrow"),
     "defend_ranged": ("defend", "ranged", "shoot", "range", "attacker", "far", "hit"),
+    "mark": ("mark", "next", "target", "queue", "monster", "refind"),
+    "mark_ttl_s": ("mark", "next", "forget"),
+    "mark_hover_max": ("mark", "next", "hover", "spot"),
     "potion_below": ("drink",),
     "knife_hp_min": ("hp",),
     "respawn_at": ("click", "button"),

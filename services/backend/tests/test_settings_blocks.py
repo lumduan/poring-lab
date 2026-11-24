@@ -109,13 +109,17 @@ def test_the_one_box_with_its_blocks_at_their_defaults_plays_todays_argv() -> No
         "item_edge_top_1080",
         "cursor_click_on_sight",
         "defend_ranged",
+        "mark",
+        "mark_ttl_s",
+        "mark_hover_max",
     }
     # 120: + fly_first (18), + fly_first_hp (18.11), + fly_first_land and FF_LAND_S (18.17)
     # 8 optional since 2026-11-21: + item_floor_1080, item_ring_1080 (xmas02-items-1080.md A22)
     # + cursor_click_on_sight (cursor-1080.md Amendment 8): 9 optional
     # + defend_ranged (ranged-attacker-1080.md): 10 optional
     # + item_edge_1080, item_edge_top_1080 (xmas02-items-1080.md Amendment 36): 12 optional
-    assert len(held) == len(fc.BLOCKS) - 5 - 12 == 120
+    # + mark, mark_ttl_s, mark_hover_max (next-target-mark.md Amendment 3): 15 optional
+    assert len(held) == len(fc.BLOCKS) - 5 - 15 == 120
     assert hunt_argv(json.dumps(d)) == TODAY
 
 

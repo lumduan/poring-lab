@@ -38,6 +38,7 @@ they were used (mtime and sha256 below), so every published number can be re-der
 | `decision_hash.py` | 2026-10-08 15:40 | `d93daa4a48dd1c71` |
 | `gpu_rec_r1_fingerprint.py` | 2026-11-08 18:19 | `ae2da14dbf5d1fbd` |
 | `fists_1080_score.py` | 2026-11-23 07:53 | `e0e418973180b39b` |
+| `next_mark_ab_score.py` | 2026-11-24 11:54 | `2f9d4e72e3a2bdfb` |
 
 **Cited elsewhere:**
 - `decision_hash.py`: demonstrations.md (the walk decision-code hash, cited as scratch)
@@ -53,3 +54,8 @@ they were used (mtime and sha256 below), so every published number can be re-der
   fst1-fst3 and fst4-fst6. Run from the repo root with the main `.venv`:
   `.venv/bin/python docs/records/scorers/fists_1080_score.py fst4 fst5 fst6` (it reads
   `/dev/shm/poring-lab-tmp/screen-ab/<label>-play/` and the NAS session; read-only)
+- `next_mark_ab_score.py`: docs/planning/next-target-mark.md Amendment 4 (the mark's A/B: A today's
+  fists box, B + the runner's queue + the player's mark), written and committed BEFORE its first
+  run; scored once after the chain: `.venv/bin/python docs/records/scorers/next_mark_ab_score.py
+  "mk-A1+mk-A2+mk-A3+mk-A4" "mk-B1+mk-B2+mk-B3+mk-B4"` (a replacement run appended to its arm's
+  list); it reads the runs' own session folders' packets and screen_ab's series, read-only
