@@ -37,6 +37,7 @@ they were used (mtime and sha256 below), so every published number can be re-der
 | `walk16_score.py` | 2026-10-09 08:40 | `90214debc1a67642` |
 | `decision_hash.py` | 2026-10-08 15:40 | `d93daa4a48dd1c71` |
 | `gpu_rec_r1_fingerprint.py` | 2026-11-08 18:19 | `ae2da14dbf5d1fbd` |
+| `fists_1080_score.py` | 2026-11-23 07:53 | `e0e418973180b39b` |
 
 **Cited elsewhere:**
 - `decision_hash.py`: demonstrations.md (the walk decision-code hash, cited as scratch)
@@ -46,3 +47,9 @@ they were used (mtime and sha256 below), so every published number can be re-der
   reproduces round 1's `vpp-hevc420-q20` numbers; run 18:19-18:24 ICT from the worktree's
   `scripts/` on PYTHONPATH, its JSON sha256 `3232c1d6f198af7f`; reads the NAS sessions
   read-only: `python gpu_rec_r1_fingerprint.py OUT.json`)
+- `fists_1080_score.py`: docs/planning/fists-1080.md Amendments 2, 6 and 12 (the fists trial's
+  rulers: `stage10_ab.score_run` per run, `scripts/weapon_swap_study.py` on the NAS session, the
+  economy line); it was `/dev/shm/poring-lab-tmp/fists/score_fists.py` and scored ifH31-ifH36,
+  fst1-fst3 and fst4-fst6. Run from the repo root with the main `.venv`:
+  `.venv/bin/python docs/records/scorers/fists_1080_score.py fst4 fst5 fst6` (it reads
+  `/dev/shm/poring-lab-tmp/screen-ab/<label>-play/` and the NAS session; read-only)
