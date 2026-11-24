@@ -6,7 +6,7 @@ verdict_date: null
 verdict_ticket: null
 supersedes: null
 related: [xmas02-1080-detector.md, xmas02-detector.md, rogue-xmas02.md, screen-size-ab.md, fullscreen-client.md, ../../scripts/fi_labels.py, ../../scripts/fi_eval.py, ../../scripts/stage_items.py, ../../scripts/build_frame_cache.py]
-next_action: "DEPLOY xmas02fi9 at 1080 (Amendment 50, Batt 2026-11-24 option b): loot_items auto built (1d17a1a9); live promoted between Batt's Runs; his project's item lookup is OFF, so it takes effect when he picks auto. Then: in-play item A/Bs judged on packets (picked of dropped)."
+next_action: "LIVE since 09:42 2026-11-24 (Amendment 51): Batt picked auto; his Run plays xmas02fi9 on the GPU path; first 74.8 min: a loot step 116 ms (was 3,955), floor picks 16.0/h (was 23.6), kills 129.1/h (was 137.9), 0 deaths. Judge at the Run's end with its bag census (items by kind) against the overnight Run; in-play item A/Bs judged on packets (picked of dropped)."
 title: "The floor-item model at 1920x1080: a 1080 round of the item detector, the 720 round 5's recipe with only the screen changed (pre-registration)"
 date: 2026-11-20
 owner: Batt
@@ -1887,3 +1887,38 @@ A count under its minimum is NO VERDICT, never a pass.
 - **Live:** promoted between Batt's Runs (a Run was playing at 09:11-; the promotion waits for its
   end or his word), with the same commit's heal-key change (any heal potion at the default pick:
   Batt, "use yellow, do not lock this").
+
+### Amendment 51 (2026-11-24 11:0x ICT from `date`): live plays xmas02fi9 -- the first look at Batt's Run
+
+- **Batt picked `auto`** in his project (the "look for items with the item model" block: `loot_items`
+  `auto`) and started a Run at 09:41 (`flowplay-poring-lab-live-11240941`, live 2f8c3988, no time
+  limit). Read from its files only: no picture, no input, no setting touched.
+- **It runs as shipped:** the runner's item worker loads `xmas02fi9-last-736x1280.onnx`, live's
+  detect server serves xmas02fi9 (f0891a73...), and every loot step's item read took the GPU path
+  (216 of 216). The start check passed 5 of 6 (the minimap did not name the map, as before); the
+  bag at the start read 19 kinds, 4 slots unread (4 icons the lab does not know; no count missed).
+- **The first 74.8 min against his overnight Run** (`flowplay-poring-lab-live-11232135`, 7.25 h,
+  the item lookup off; the same character, map and runner; the runner's own events):
+
+  | | today, auto (fi9) | overnight, off |
+  |---|---|---|
+  | kills/h (the exp line) | 129.1 (161) | 137.9 (1,000) |
+  | loot steps/h | 173.2 | 177.8 |
+  | a loot step, median / p90 | 116 / 173 ms | 3,955 / 5,212 ms |
+  | time in loot steps | 1.7 % | 12.9 % |
+  | hovers a step | 0.24 | 4.80 |
+  | steps that saw an item | 28 of 216 (31 items) | (no model) |
+  | floor picks/h (the runner's picks) | 16.0 (20) | 23.6 (171) |
+  | loot clicks/h | 27.3 | 31.0 |
+  | deaths / stuck / stalls | 0 / 1 / 7 | 0 / 11 / 85 |
+
+- **What it says so far:** the loot step is ~34x shorter and the sweep's hovers are gone, as
+  designed. The floor picks are fewer (16.0 vs 23.6 an hour; 20 against ~29 at the old rate, a
+  small sample), which agrees with 8c on dev (the same pickup share, no gain: Amendment 49). The
+  ~11 % of the time saved has not shown as more kills (129.1 vs 137.9, within one run's noise).
+  Floor picks are the smaller part of her income (on dev's fists, 17.8 picked vs 72.1 stolen an
+  hour: fists-1080.md Amendment 12).
+- **The judgement waits for the Run's end:** its bag census (start vs end, items by kind) against
+  the overnight Run's (22 -> 29 kinds), and the screen record's picks and kills per hour. If the
+  floor picks stay ~30 % lower with no gain elsewhere, the choice goes back to Batt (keep fi9, or
+  `off`, which he can set himself at any time).
