@@ -304,7 +304,8 @@ test("the item tally: the items tile counts the popups' gains, the rows and the 
   assert.match(by.items.title, /1 popup\(s\) whose item did not read/);
   assert.equal(Object.fromEntries(monitorTiles({ ...ok, state: "running", live: base }).map((t) => [t.key, t])).items.text, "9"); // no tally: the pickups as before
   assert.deepEqual(itemRows(l), [{ key: "912", name: "Zargon", n: 12 }, { key: "911", name: "Scell", n: 5 }]);
-  assert.deepEqual(itemRows(base), []);
+  assert.deepEqual(itemRows({}), []); // no tally in this Run
+  assert.deepEqual(itemRows(null), []);
   assert.equal(itemsCensusWords(l), "");
   assert.equal(itemsCensusWords({ ...l, items_census: { bag: 18, popups: 17 } }), "the bag's count at the end sets it: 18 items (the popups counted 17)");
   assert.equal(itemsCensusWords({ ...l, items_census: { bag: 17, popups: 17 } }), "the bag's count at the end agrees: 17 items");
