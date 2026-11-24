@@ -7,7 +7,7 @@ verdict_date: null
 verdict_ticket: null
 supersedes: null
 related: [../econ/economics.md, ../../scripts/slot_items.py, ../../scripts/hotbar_count.py, ../../scripts/econ_dash.py, ../../packages/poring_env/src/poring_env/panelfind.py]
-next_action: "Live has the count shift and the tall-window tabs (Amendment 7, 1486b645, 14:59): the next live Run's start line should read ~25 of Batt's 29 slots and name 7 x 10; then its /economy items."
+next_action: "Amendment 8 (Batt 2026-11-24): the item tally -- the item popups counted as they come (the Run's log, /flows), the end census adjusts it, a Run with no end census keeps it as its economy; built on branch feat/item-tally; dev check on the client after the mark A/B, frontend checks, then live on Batt's word (copy the count font to live's data/)."
 title: "The economy from the bot's own bag (Economy option b-i): count the inventory at a Run's start and end (pre-registration)"
 date: 2026-11-20
 owner: Batt
@@ -257,3 +257,41 @@ add (`@item 601 199`, items 927 / 933) simply is not in it.
   TABS).
 - **Live updated at 14:59:52** (Batt: "ok"; 2b2e42da -> 1486b645, two script files, between his
   Runs: the 14:46 Run had ended at 14:59:50); the next Run is the check.
+
+## Amendment 8 (2026-11-24 13:42 ICT from `date`): the item tally -- counted as the items come, the census adjusts
+
+- **Batt, 2026-11-24 ~13:1x (his words, translated):** "Why don't we count each time an item comes
+  in, so it updates in real time? Do it on /flows, and in the Run's log too: what was collected.
+  The count after the Run is an adjustment. Then a Run ended by HUMAN keeps the count made while
+  it played." (His 09:42 Run ended by HUMAN: the end census needs the keys, so it had no count:
+  xmas02-items-1080.md Amendment 52.)
+- **Built (branch `feat/item-tally`):**
+  - `scripts/item_tally.py`: during a Run, the item popup reader (item_popup.py, round 5's code)
+    as a thread with its OWN screen pipe, grabbing the popup's band on the real frame 4 times a
+    second (as the 11-23 live watcher did: 0 grab errors, ticks p95 84 ms). Each popup read is
+    one gain: its key is bag_count's group key, its amount the count font's read (None -> counted
+    as 1, said so); a popup whose item did not read is not counted, said so. Display and record
+    only: no decision reads it; a failure stops the tally with a WARNING, never the Run.
+  - `flow_play.play`: the tally starts after the start census and stops before the end census, in
+    the Run's own record (`item_gained`, `items_tally`, `items_adjust`) and the Run's log
+    (`+ Zargon x1 (Zargon 12 in all)`). It plays with the Economy's bag count (the Run option, on
+    by default); `PORING_ITEM_TALLY=0` turns it off in one process.
+  - **The end:** with both censuses, the bag's change is the truth and `items_adjust` records the
+    tally beside it per kind (the log says whether they agree); **with no end census** (a HUMAN
+    stop, a death, an error) the Run's economy is written FROM THE TALLY (`econ_bag.run_from_tally`,
+    `counted_by: popups`; no consumables, since only a census sees what was used).
+  - `flow_run` (the Run helper's live tracker): the gains on the Run's story (`+ Zargon x1`, also
+    into the Run log on the Settings page), and the tally in the page's summary (`items`,
+    `items_total`, `items_kinds`, `items_unread`, `items_census`).
+  - /flows: the monitor bar's items tile shows the tally (it showed loot clicks before), and a
+    box "Items gained" lists the kinds, most first, with the end's count beside them.
+- **What it is NOT yet:** the reader has passed its bars at 720 (round 3) but not yet at 1080
+  (round 4 failed P by one re-read: 2.07 % against 2 %; round 5's set w1080c is not complete).
+  On live its icons read and its AMOUNTS do not (his client's digits; a count font from crops of
+  the popup band needs Batt's "ready" first). So on live each gain counts as 1 until then, and the
+  end census stays the truth whenever it runs.
+- **Checks:** tests for the tally, the watcher's emit, the play() wiring (both ends counted; no end
+  count -> the tally's economy), the helper's summary and the economy from the tally; the related
+  Python suites pass. The frontend's checks (lint, typecheck, unit tests) run in frontend-dev after
+  the mark's A/B chain ends (no CPU burst during its runs), then a dev Run on the client, then
+  live on Batt's word (with the count font copied into live's data/ui_anchors).

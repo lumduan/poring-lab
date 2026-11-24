@@ -292,6 +292,24 @@ test("the live line and the monitor bar carry SP, the weight % and the zeny", as
   assert.equal(unread.weight.text, "weight not read");
 });
 
+// Batt 2026-11-24: "count the items as they come in, live on /flows; the count after the Run only
+// adjusts it"
+test("the item tally: the items tile counts the popups' gains, the rows and the end's count", async () => {
+  const { itemRows, itemsCensusWords, monitorTiles } = await import("./liverun.ts");
+  const base = { hp: 99, hp_low: 82, pos: [238, 125], doing: "walking", block: null, elapsed_s: 600, kills: 30, loot_steps: 40, pickups: 9, knife: 0, steals: 0, potions: 0, flies: 3, end: {}, retries: 0 };
+  const l = { ...base, items: [["912", "Zargon", 12], ["911", "Scell", 5]] as [string, string, number][], items_total: 17, items_kinds: 2, items_unread: 1, items_census: null };
+  const by = Object.fromEntries(monitorTiles({ ...ok, state: "running", live: l }).map((t) => [t.key, t]));
+  assert.equal(by.items.text, "17 (2 kinds)");
+  assert.match(by.items.title, /item popups as they come in/);
+  assert.match(by.items.title, /1 popup\(s\) whose item did not read/);
+  assert.equal(Object.fromEntries(monitorTiles({ ...ok, state: "running", live: base }).map((t) => [t.key, t])).items.text, "9"); // no tally: the pickups as before
+  assert.deepEqual(itemRows(l), [{ key: "912", name: "Zargon", n: 12 }, { key: "911", name: "Scell", n: 5 }]);
+  assert.deepEqual(itemRows(base), []);
+  assert.equal(itemsCensusWords(l), "");
+  assert.equal(itemsCensusWords({ ...l, items_census: { bag: 18, popups: 17 } }), "the bag's count at the end sets it: 18 items (the popups counted 17)");
+  assert.equal(itemsCensusWords({ ...l, items_census: { bag: 17, popups: 17 } }), "the bag's count at the end agrees: 17 items");
+});
+
 // Batt 2026-11-21: what the flow uses (the heal item on its key, the swap's keys) is a NOTE (ℹ), not ✗
 test("a note line shows ℹ, sorts after the failures and is never a refusal", async () => {
   const { markOf, runCheckLines, tickFor } = await import("./liverun.ts");

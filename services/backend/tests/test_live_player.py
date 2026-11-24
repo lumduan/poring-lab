@@ -1277,6 +1277,110 @@ def test_no_end_count_after_a_death_and_a_failed_count_only_warns(
     assert fp.NO_END_COUNT == ("input_refused", "error", "stopped_by_parent", "dead")
 
 
+class FakeTally:
+    """item_tally.Watch's interface: start (None: started), stop (the tally's doc); it emits its
+    gains at the start, as popups would during the Run."""
+
+    def __init__(self, out_dir: Path, emit: Any, gains: Any = ((911, 1), (912, None))) -> None:
+        import item_tally as it
+
+        self.out_dir, self.emit, self.gains = out_dir, emit, gains
+        self.tally = it.Tally({911: "Scell", 912: "Zargon"})
+        self.error: str | None = None
+        self.stopped = False
+
+    def start(self) -> str | None:
+        for i, a in self.gains:
+            self.emit(self.tally.add((i,), a))
+        return None
+
+    def stop(self) -> dict[str, Any]:
+        self.stopped = True
+        return self.tally.doc()
+
+
+def _events(d: Path) -> list[dict[str, Any]]:
+    f = next(d.glob("*-play-r1")) / "events.jsonl"
+    return [json.loads(x) for x in f.read_text().splitlines()]
+
+
+def test_the_item_tally_counts_during_the_run_and_the_end_count_adjusts_it(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """Batt 2026-11-24: the items as they come (the Run's log, its events for /flows); the bag's
+    count at the end sets them, and both are recorded."""
+    bags = iter([_bag({"601": 20, "911": 1}), _bag({"601": 18, "911": 2, "912": 2})])
+    monkeypatch.setattr(fp, "bag_economy", lambda *a, **k: tmp_path / "e.json")
+    monkeypatch.setattr(fp, "tally_economy",
+                        lambda *a, **k: (_ for _ in ()).throw(AssertionError))  # fmt: skip
+    made: list[FakeTally] = []
+
+    def tally_fn(out_dir: Path, emit: Any) -> FakeTally:
+        made.append(FakeTally(out_dir, emit))
+        return made[-1]
+
+    io_ = FakeIO()
+    opts = tmp_path / "flowrun"
+    opts.mkdir()
+    monkeypatch.setattr(fr, "DIR", opts)
+    d = tmp_path / "demo"
+    d.mkdir()
+    fp.play(hunt_prep(tmp_path), io_, label="r1", stop_file=None, demo=d, checker=ok_check,
+            hunt=fp.HuntCore("r1", None, run_fn=FakeRunner(io_)),
+            census=lambda a, s: next(bags), tally_fn=tally_fn)  # fmt: skip
+    assert len(made) == 1 and made[0].stopped and made[0].out_dir.name == "popups"
+    evs = _events(d)
+    kinds = [e["kind"] for e in evs]
+    assert kinds.count("item_gained") == 2
+    assert kinds.index("items_tally") < kinds.index("items_adjust") < kinds.index("run_end")
+    adj = next(e for e in evs if e["kind"] == "items_adjust")
+    assert (adj["popups"], adj["bag"], adj["bag_more"]) == (2, 3, {"912": 1})
+    out = capsys.readouterr().out
+    assert "+ Scell x1 (Scell 1 in all)" in out and "the item popups counted 2 item(s)" in out
+    assert "the bag's count sets the items gained: 3" in out
+
+
+def test_without_an_end_count_the_tally_is_the_run_s_economy(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """A Run ended by HUMAN cannot count the bag (the keys): its tally stands (Batt 2026-11-24)."""
+    calls = iter([_bag({"601": 20})])
+
+    def census(agent: Any, screen: Any) -> dict[str, Any]:
+        try:
+            return next(calls)
+        except StopIteration:
+            raise SystemExit("Stop: mux left ASSIST / BOT (HUMAN): stopping") from None
+
+    monkeypatch.setattr(fp, "bag_economy", lambda *a, **k: (_ for _ in ()).throw(AssertionError))
+    written: dict[str, Any] = {}
+
+    def economy(doc: Any, events: Path, label: str) -> Path:
+        written.update(doc=doc, label=label)
+        return tmp_path / "t.json"
+
+    monkeypatch.setattr(fp, "tally_economy", economy)
+    io_ = FakeIO()
+    opts = tmp_path / "flowrun"
+    opts.mkdir()
+    monkeypatch.setattr(fr, "DIR", opts)
+    d = tmp_path / "demo"
+    d.mkdir()
+    fp.play(hunt_prep(tmp_path), io_, label="r1", stop_file=None, demo=d, checker=ok_check,
+            hunt=fp.HuntCore("r1", None, run_fn=FakeRunner(io_)), census=census,
+            tally_fn=lambda o, e: FakeTally(o, e))  # fmt: skip
+    assert written["label"] == "r1" and written["doc"]["counts"] == {"911": 1, "912": 1}
+    assert "items_adjust" not in [e["kind"] for e in _events(d)]
+    out = capsys.readouterr().out
+    assert "the Run's economy from the item popups (no count of the bag at the end)" in out
+
+
+def test_no_tally_without_the_economy_s_count() -> None:
+    """The tally plays with the Run option's bag count (off: none), and never without a real
+    screen unless a test gives one."""
+    assert fp.ITEM_TALLY_ENV == "PORING_ITEM_TALLY"
+
+
 def test_the_bag_count_is_a_run_option_on_by_default() -> None:
     from poring_env import runoptions as ro
 

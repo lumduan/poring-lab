@@ -570,6 +570,15 @@ def _cell(v: Any) -> str:
         return "?"
 
 
+def item_words(e: Mapping[str, Any]) -> str:
+    """PURE: an item gained (a popup the tally read) in the story's words."""
+    if not e.get("key"):
+        return "gains an item (its picture did not read)"
+    amt = e.get("amount")
+    a = f"x{amt}" if isinstance(amt, int) and not isinstance(amt, bool) else "x1 (amount unread)"
+    return f"+ {str(e.get('name') or e.get('key'))[:40]} {a}"
+
+
 def event_words(e: Mapping[str, Any]) -> str | None:
     """PURE: one session event in a person's words, or None (not worth a line). Display only."""
     k = e.get("kind")
@@ -608,6 +617,11 @@ def event_words(e: Mapping[str, Any]) -> str | None:
         return f"loot: {e.get('picks', 0)} picked ({e.get('end') or 'done'})"
     if k == "loot_click":
         return "picks up an item"
+    if k == "item_gained":  # Batt 2026-11-24: the item tally (scripts/item_tally.py)
+        return item_words(e)
+    if k == "items_adjust":
+        return (f"the bag's count at the end: {e.get('bag', '?')} item(s) gained (the popups "
+                f"counted {e.get('popups', '?')})")  # fmt: skip
     if k == "press":
         what = str(e.get("what") or "")
         return f"presses {e.get('key') or '?'}: {PRESS_DOING.get(what, what)}"
@@ -766,6 +780,9 @@ TRAIL_N = 240  # the live map: her last cells (one a change)
 SIGHT_MAX_MOBS = 24  # the live map: monster cells a record may carry
 
 
+ITEMS_N = 40  # the item tally's kinds the page gets (most first)
+
+
 @dataclass
 class Live:
     """PURE: the live summary of one run's session events (fed line by line)."""
@@ -820,6 +837,12 @@ class Live:
     weight_nm: list[int] | None = None  # Batt 2026-11-21: the bag's N / M as the runner read it
     zeny: int | None = None
     zeny_start: int | None = None
+    # Batt 2026-11-24 ("count the items as they come in, live on /flows"): the item tally's gains
+    # (item_gained: key -> [name, count]); the end's census beside it (items_adjust); None: no
+    # tally in this Run (an older player, the Economy's count off, no reader on this install)
+    items: dict[str, list[Any]] | None = None
+    items_unread: int = 0
+    items_census: dict[str, Any] | None = None
 
     def clock_at(self, t: Any) -> str | None:
         """The event's clock time, "HH:MM:SS", in this server's time zone (None: no clock)."""
@@ -929,6 +952,23 @@ class Live:
                 self.weight = float(sh)
             self.weight_red = bool(e.get("red"))
             return
+        elif k == "item_gained":
+            if self.items is None:
+                self.items = {}
+            key = e.get("key")
+            if not key:
+                self.items_unread += 1
+                return
+            n = e.get("counted")
+            n = n if isinstance(n, int) and not isinstance(n, bool) and n > 0 else 1
+            row = self.items.setdefault(str(key)[:40], [str(e.get("name") or key)[:40], 0])
+            row[1] += n
+            return
+        elif k == "items_adjust":
+            self.items_census = {"bag": e.get("bag"), "popups": e.get("popups"),
+                                 "bag_more": e.get("bag_more"),
+                                 "popups_more": e.get("popups_more")}  # fmt: skip
+            return
         elif k == "press":
             w = str(e.get("what"))
             self.knife += w == "opener"
@@ -966,7 +1006,18 @@ class Live:
                 "mobs_age_s": self.mobs_age_s(), "sp": self.sp, "sp_low": self.sp_low,
                 "weight": None if self.weight is None else round(self.weight * 100, 1),
                 "weight_red": self.weight_red, "weight_nm": self.weight_nm, "zeny": self.zeny,
-                "zeny_start": self.zeny_start}  # fmt: skip
+                "zeny_start": self.zeny_start, **self.items_summary()}  # fmt: skip
+
+    def items_summary(self) -> dict[str, Any]:
+        """The item tally for the page: the kinds, most first ([key, name, count]), the total,
+        the unread popups and the end's census beside it; nothing when no tally played."""
+        if self.items is None:
+            return {}
+        rows = sorted(([k, v[0], v[1]] for k, v in self.items.items()),
+                      key=lambda r: (-int(r[2]), str(r[1])))  # fmt: skip
+        return {"items": rows[:ITEMS_N], "items_total": sum(int(r[2]) for r in rows),
+                "items_kinds": len(rows), "items_unread": self.items_unread,
+                "items_census": self.items_census}  # fmt: skip
 
     def mobs_age_s(self) -> float | None:
         """How old the monsters' record is (s), by the newest event's time."""

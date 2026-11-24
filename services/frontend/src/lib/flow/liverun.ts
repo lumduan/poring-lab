@@ -142,7 +142,31 @@ export type LiveSummary = {
   weight_nm?: [number, number] | null; // Batt 2026-11-21: the bag's N / M, "40 % (1680/4200)"
   zeny?: number | null;
   zeny_start?: number | null;
+  // Batt 2026-11-24 ("count the items as they come in, live on /flows; the count after the Run only
+  // adjusts it"): the item tally -- the item popups read as they come (key, name, count; most
+  // first), its total and kinds, the popups whose item did not read, and the bag's count at the
+  // end beside it. Absent: no tally in this Run (the Economy's count off, an older helper)
+  items?: [string, string, number][];
+  items_total?: number;
+  items_kinds?: number;
+  items_unread?: number;
+  items_census?: { bag: number | null; popups: number | null; bag_more?: Record<string, number> | null; popups_more?: Record<string, number> | null } | null;
 };
+
+/** PURE: the item tally's rows for the page ("Zargon", 12), most first; [] when no tally. */
+export function itemRows(l: Pick<LiveSummary, "items"> | null | undefined): { key: string; name: string; n: number }[] {
+  const rows = l?.items;
+  if (!Array.isArray(rows)) return [];
+  return rows.filter((r) => Array.isArray(r) && r.length === 3 && typeof r[2] === "number").map(([key, name, n]) => ({ key: String(key), name: String(name), n }));
+}
+
+/** PURE: the end's count beside the tally, in words ("" while the Run plays, or with no count). */
+export function itemsCensusWords(l: Pick<LiveSummary, "items_census" | "items_total"> | null | undefined): string {
+  const c = l?.items_census;
+  if (!c || typeof c.bag !== "number") return "";
+  if (c.bag === c.popups) return `the bag's count at the end agrees: ${c.bag} item${c.bag === 1 ? "" : "s"}`;
+  return `the bag's count at the end sets it: ${c.bag} item${c.bag === 1 ? "" : "s"} (the popups counted ${c.popups ?? "?"})`;
+}
 
 /** PURE: " (1680/4200)" -- the bag's N / M as read, "" when the helper sent none. */
 export function weightNm(l: Pick<LiveSummary, "weight_nm">): string {
@@ -257,7 +281,9 @@ export function monitorTiles(st: LiveStatus | null | undefined): MonitorTile[] {
   out.push(
     { key: "cell", icon: "📍", text: l.pos ? `${l.pos[0]}, ${l.pos[1]}` : "not read", title: "her cell (the minimap)" },
     { key: "kills", icon: "⚔️", text: String(l.kills), title: "kills" },
-    { key: "items", icon: "🫳", text: `${l.pickups}${l.steals ? ` + ${l.steals} stolen` : ""}`, title: `items gained: picked up${l.steals ? " + stolen" : ""} (${l.loot_steps} loot steps)` },
+    typeof l.items_total === "number"
+      ? { key: "items", icon: "🫳", text: `${l.items_total}${l.items_kinds ? ` (${l.items_kinds} kind${l.items_kinds === 1 ? "" : "s"})` : ""}`, title: `items gained, counted from the item popups as they come in (picked up and stolen); the bag's count at the end sets them${l.items_unread ? `; ${l.items_unread} popup(s) whose item did not read` : ""} (${l.pickups} pickup clicks, ${l.loot_steps} loot steps)` }
+      : { key: "items", icon: "🫳", text: `${l.pickups}${l.steals ? ` + ${l.steals} stolen` : ""}`, title: `items gained: picked up${l.steals ? " + stolen" : ""} (${l.loot_steps} loot steps)` },
     { key: "potions", icon: "🧪", text: String(l.potions), title: "potions drunk" },
     { key: "wings", icon: "🪽", text: String(l.flies), title: "Fly Wings flown" },
     { key: "time", icon: "⏱️", text: time, title: "time played" },
