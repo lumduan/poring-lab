@@ -6,7 +6,7 @@ verdict_date: null
 verdict_ticket: null
 supersedes: null
 related: [xmas02-1080-detector.md, xmas02-detector.md, rogue-xmas02.md, screen-size-ab.md, fullscreen-client.md, ../../scripts/fi_labels.py, ../../scripts/fi_eval.py, ../../scripts/stage_items.py, ../../scripts/build_frame_cache.py]
-next_action: "8c FAILED as registered (Amendment 49: loot/h +1.0 vs 2 SE 9.6; but that line counts the runner's loot STEPS, near-blind to the model; packets: 56 % vs 57 % of dropped items picked). Not deployed. Batt decides: keep xmas02fi5, or ship xmas02fi9 for its offline gain; any next in-play item A/B judged on packets (picked of dropped)."
+next_action: "DEPLOY xmas02fi9 at 1080 (Amendment 50, Batt 2026-11-24 option b): loot_items auto built (1d17a1a9); live promoted between Batt's Runs; his project's item lookup is OFF, so it takes effect when he picks auto. Then: in-play item A/Bs judged on packets (picked of dropped)."
 title: "The floor-item model at 1920x1080: a 1080 round of the item detector, the 720 round 5's recipe with only the screen changed (pre-registration)"
 date: 2026-11-20
 owner: Batt
@@ -1862,3 +1862,28 @@ A count under its minimum is NO VERDICT, never a pass.
   rule anyway for its offline gain, since it is no worse in play (a new decision, not 8c's); (3) any
   later in-play item A/B is judged on the packets (picked of dropped, picked items per hour), not on
   loot steps (to register before it runs).
+
+### Amendment 50 (2026-11-24 09:23 ICT from `date`): Batt's decision -- ship xmas02fi9 at 1080 (option b); how it is shipped
+
+- **Asked** (the 09:1x report): "(a) keep xmas02fi5 as 8c says, or (b) ship fi9 because it boxes
+  far fewer non-items and plays no worse; (b) is a new decision of yours, not 8c's." **Batt: "b".**
+  8c's FAIL stands as recorded (Amendment 49); this is his decision, not a pass.
+- **The model per screen size** (Amendment 19, never built until now; 1d17a1a9): the `loot_items`
+  setting gains **`auto`**, the screen's own item model:
+  - at **1080** (ro_agent.virtual_active): **xmas02fi9 + 8c's arm-B rule** (floor 0.4, ring 30,
+    view edge 12 / 32) -- `flow_play.loot_items_auto` puts the model into the runner's
+    `--loot-items`; `item_rule_parts` takes ITEM_RULE_AUTO_1080 for every part the player left
+    unset (a player's own value wins);
+  - at **720**: xmas02fi5 with no rule (the settings give the runner the 720 model, since the
+    settings cannot see the screen; the Run helper's direct runner path also gets xmas02fi5);
+  - a NAMED model is never swapped (screen_ab's A/B arms stay as named); the default stays `off`
+    (Batt 2026-11-12: the item lookup is off by default).
+- **Batt's live project has the item lookup OFF** (`loot_items: off` in its project), so live uses
+  no item model today, fi5 included. Shipping makes `auto` (and xmas02fi9) available there; it takes
+  effect when he picks it in his project's "look for items with the item model" block (his
+  project, his choice: the agent never edits it).
+- **Files:** fi9's ONNX (f0891a73...) and names in the lab's `archive/models` (Amendment 45) and in
+  live's storage folder `archive/models` (sha256 read back), so each copy's detect server serves it.
+- **Live:** promoted between Batt's Runs (a Run was playing at 09:11-; the promotion waits for its
+  end or his word), with the same commit's heal-key change (any heal potion at the default pick:
+  Batt, "use yellow, do not lock this").
