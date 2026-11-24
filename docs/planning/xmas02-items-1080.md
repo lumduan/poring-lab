@@ -6,7 +6,7 @@ verdict_date: null
 verdict_ticket: null
 supersedes: null
 related: [xmas02-1080-detector.md, xmas02-detector.md, rogue-xmas02.md, screen-size-ab.md, fullscreen-client.md, ../../scripts/fi_labels.py, ../../scripts/fi_eval.py, ../../scripts/stage_items.py, ../../scripts/build_frame_cache.py]
-next_action: "LIVE since 09:42 2026-11-24 (Amendment 51): Batt picked auto; his Run plays xmas02fi9 on the GPU path; first 74.8 min: a loot step 116 ms (was 3,955), floor picks 16.0/h (was 23.6), kills 129.1/h (was 137.9), 0 deaths. Judge at the Run's end with its bag census (items by kind) against the overnight Run; in-play item A/Bs judged on packets (picked of dropped)."
+next_action: "Amendment 52: Batt's first fi9 Run (auto, 3.07 h, ended by HUMAN at 12:47): kills 148.9/h vs the overnight 137.9, floor picks 11.7/h vs 23.6, loot time 1.5 % vs 12.9 %, bag weight +6.6 vs +6.2 points/h, 0 deaths; no end census (stopped by HUMAN). Batt decides keep fi9 / auto or off; in-play item A/Bs judged on packets (picked of dropped)."
 title: "The floor-item model at 1920x1080: a 1080 round of the item detector, the 720 round 5's recipe with only the screen changed (pre-registration)"
 date: 2026-11-20
 owner: Batt
@@ -1922,3 +1922,33 @@ A count under its minimum is NO VERDICT, never a pass.
   the overnight Run's (22 -> 29 kinds), and the screen record's picks and kills per hour. If the
   floor picks stay ~30 % lower with no gain elsewhere, the choice goes back to Batt (keep fi9, or
   `off`, which he can set himself at any time).
+
+### Amendment 52 (2026-11-24 12:48 ICT from `date`): Batt's first Run with xmas02fi9 (auto), whole
+
+- **The Run** `flowplay-poring-lab-live-11240941`: 09:42-12:47 (185 min), three hunt cores (two
+  position re-reads, 11:26 and 11:48: "position jump", hunting again 3 s later), 0 deaths. Batt
+  ended it by taking the console to HUMAN, so the end's bag census did not run (it needs the
+  keys); the screen record holds each hunt core (live econ DB screen_runs).
+- **Pooled over its 3.07 h of hunt cores, against his overnight Run** (`11232135`, 7.25 h, the item
+  lookup off; the runner's own events; Amendment 51's first 74.8 min superseded by these):
+
+  | | auto (xmas02fi9) | overnight, off |
+  |---|---|---|
+  | kills/h (the exp line) | 148.9 (457) | 137.9 (1,000) |
+  | loot steps/h | 185.7 | 177.8 |
+  | a loot step, median | 109 ms | 3,955 ms |
+  | time in loot steps | 1.5 % | 12.9 % |
+  | steps that saw an item | 64 of 570 (70 items) | (no model) |
+  | floor picks/h | 11.7 (36) | 23.6 (171) |
+  | loot clicks/h | 20.2 | 31.0 |
+  | bag weight (the runner's reads) | 37.2 -> 56.9 % in 2.99 h: +6.6 points/h | 38.3 -> 81.7 % in 6.97 h: +6.2 points/h |
+  | Fly Wing escapes/h | 13.7 | 14.3 |
+  | deaths / stuck / stalls | 0 / 8 / 50 | 0 / 11 / 85 |
+
+- **What it says:** kills/h rose 8 % (the loot step's time went to hunting), the floor picks halved,
+  and the bag grew at about the same rate (consumables not subtracted; the Fly Wing rate is the
+  same in both). Steals are most of her income, so the lost floor picks show little in the bag.
+  One Run each, on his server: a reference, not an A/B.
+- **For the next Run's census:** a Run stopped with the page's Stop counts the bag first ("count,
+  then stop": flow_play's end census, items by kind); a stop by taking the console to HUMAN cannot
+  (the census needs the keys).
