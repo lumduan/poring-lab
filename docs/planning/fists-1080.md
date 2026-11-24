@@ -7,7 +7,7 @@ verdict_date: null
 verdict_ticket: null
 supersedes: null
 related: [rogue-xmas02.md, xmas02-items-1080.md, screen-size-ab.md, ../../scripts/screen_ab.py, ../../scripts/stage2_ab.py, ../../scripts/bare_steal.py]
-next_action: "Batt 11-23 ~12:3x (Amendment 10): fst4-fst6 stay queued after the item model's round-11 score; option 1 kept; the steal cue dropped; the 7 x 9 bag count next (dev first, live between Runs after a word to Batt); live's popup count font taught from popup-band crops only after Batt says the chat is checked and talk is off."
+next_action: "2026-11-24 10:5x (Amendment 12): fst4-fst6 played clean (0 weapon changes, 0 deaths, 1,605-1,610 frames); the fists match the Knife-swap base on packet kills/h (75.2 vs 70.7) and steals/h (56.6 vs 53.1) with no swap, gross z/h 28,845 vs 39,955 (noisy). Not an A/B. Batt decides: keep the fists as they are, or an interleaved fists-vs-Knife A/B (pre-registered first)."
 title: "The fists at 1080: Batt's build, no Knife swap (a trial, written before any of its data)"
 date: 2026-11-22
 owner: Batt
@@ -480,3 +480,65 @@ interleaved A/B is the next step only on Batt's word.
 - **The queue:** `fists_pilots3.sh` (registered in Amendment 6), started now with a TRACKED waiter;
   after each pilot, Amendment 2's checks and the packets' weapon changes (`swaps` must be 0, else the
   run is void and the queue stops).
+
+## 16. Amendment 12 (2026-11-24 10:53 ICT from `date`, after fst6 ended at 10:51): the fists re-trial's numbers
+
+- **The three pilots ran as registered** (`fists_pilots3.sh`, Amendment 6's procedure, started
+  09:17:47, done 10:51:11):
+
+  | pilot | session (NAS) | played | frames | PAUSED | weapon changes | deaths | end |
+  |---|---|---|---|---|---|---|---|
+  | fst4 | 20261124T091941-rdp-xmas02-fst4 | 24.68 min | 1,610 | 0 | 0 | 0 | the time box |
+  | fst5 | 20261124T095053-rdp-xmas02-fst5 | 24.70 min | 1,605 | 0 | 0 | 0 | the time box |
+  | fst6 | 20261124T102154-rdp-xmas02-fst6 | 24.70 min | 1,609 | 0 | 0 | 0 | the time box |
+
+  Each: play rc 0, no runner error, the economy recorded ("economy record done"), the round-5 popup
+  watcher beside it (set w1080c: 44, 36, 35 events; 0 grab errors; scored with that reader's own
+  plan, not here).
+- **The dev checkout moved during fst4** (disclosed): it was fast-forwarded fbecefec -> 1d17a1a9 at
+  09:22:53, 1.3 min after fst4's hunt began (09:21:33). 1d17a1a9 changes the player's loot_items
+  `auto` and the heal role at the default heal pick; neither reaches these runs. Their runner
+  (`runner-5b1.py`, sha256 521e86ac...), project (`project-B.json`, d313eb48...) and runner
+  config (`runner-config-B.json`) are byte-identical in fst4, fst5 and fst6.
+- **The numbers (Amendment 2's rulers, `fists/score_fists.py`, the same as for fst1-fst3):**
+
+  | run | runner kills/h | runner loot/h | packet kills/h | steals/h | kills stolen | kill s median (stolen / not) | gross z/h | net z/h | weapon changes |
+  |---|---|---|---|---|---|---|---|---|---|
+  | fst4 | 109.4 | 158.0 | 80.4 | 67.0 | 30 / 36 | 18.08 / 5.98 | 31,175 | 30,202 | 0 |
+  | fst5 | 68.0 | 123.9 | 71.5 | 49.2 | 22 / 32 | 16.90 / 10.12 | 35,087 | 33,605 | 0 |
+  | fst6 | 94.7 | 143.3 | 73.6 | 53.6 | 24 / 33 | 21.09 / 9.13 | 20,272 | 16,288 | 0 |
+
+- **Pooled, beside the other blocks (packets: kills and steals over the judged windows; items from
+  the econ DB's run_items):**
+
+  | | fists (fst4-6) | Knife swap, the base (ifH31-36) | Damascus +8, no swap (fst1-3) | Batt, Knife swap (11-12) | live, fists (his server, Amendment 9) |
+  |---|---|---|---|---|---|
+  | hours | 1.235 | 2.471 | 1.235 | | 0.83 |
+  | packet kills/h | **75.2** (101) | 70.7 | 123.8 | 228.5 | 145.2 (runner, exp line) |
+  | steals/h | **56.6** (76) | 53.1 | 37.3 | | ~57.6 (screen estimate) |
+  | kills stolen | 75.2 % | 75.1 % | 30.1 % | | |
+  | weapon changes / run | 0 | 42-80 | 0 (fst1: 1) | | |
+  | items gained / h | 89.9 (111) | 84.6 (209) | 63.1 (78) | | 92.4 (screen) |
+  | of which stolen / picked | 72.1 / 17.8 | 68.0 / 16.6 | 39.7 / 23.5 | | |
+  | picked of dropped | 22 / 32 (68.8 %) | 41 / 67 (61.2 %) | 29 / 53 (54.7 %) | | |
+  | gross z/h (mean of runs) | 28,845 (20,272-35,087) | 39,955 (16,430-69,090) | 24,007 | | |
+  | deaths | 0 | 0 | 0 | | 0 |
+
+- **Items per hour, fists (fst4-6, 1.235 h; income = picked + stolen):** Zargon (912) 34 = 27.5/h
+  (25 stolen); Scell (911) 26 = 21.1/h (20); Well-baked Cookie (538) 11 = 8.9/h; Red Herb (507),
+  Piece of Cake (539), Manacles (1098) 8 each = 6.5/h; Candy (529) 6 = 4.9/h (all stolen); Candy
+  Cane (530) 4 = 3.2/h; Level 3 Cold Bolt (688) and Iron (998) 2 each = 1.6/h; Level 3 Heal
+  (12001) and Pearl (722) 1 each = 0.8/h.
+- **What it says (not an A/B; one block after the other, and the builds differ):**
+  - The fists kill and steal **about as well as the Knife swap** (+6 % kills/h, +7 % steals/h, the
+    same stolen share), with **no weapon change at all** where the base made 42-80 a run.
+  - A kill takes long either way: the fists' stolen kills take 16.9-21.1 s (median), the base's
+    10.4-20.8 s; ATK 121 with no weapon. The Damascus without the swap kills 75 % more an hour but
+    steals on 30 % of its kills, not 75 %.
+  - Gross z/h is lower (28,845 vs 39,955), but the base's own runs range 16,430-69,090: a few rare
+    drops decide it, so three runs cannot separate the two.
+  - No candy in fst4-fst6 (Amendment 11); the base ate candies at times (Amendment 6). Not
+    corrected for.
+- **Next, Batt's word:** keep the fists as they are (live already plays them: Amendment 7), or a
+  pre-registered interleaved A/B (fists vs the Knife swap, one build, one block) if the z/h gap
+  matters to him.
