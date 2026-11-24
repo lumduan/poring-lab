@@ -292,7 +292,7 @@ most), entries older than 8 s dropped, and one `mark` event a decision in the pl
   not run (no node on this host and frontend-dev is down); its only change is the generated
   registry's three optional entries, which the Python drift test checks.
 
-## Amendment 5 (2026-11-24 13:47 ICT from `date`, during the A/B, before any score): a field name in the chain's check and the scorer
+## Amendment 5 (2026-11-24 13:45 ICT from `date`, during the A/B, before any score): a field name in the chain's check and the scorer
 
 - **The slip:** the chain's validity check after each run, and the committed scorer's error read,
   asked the runner's record (stage10_ab.score_run's Score10) for `errors`. Its field is `error`.
