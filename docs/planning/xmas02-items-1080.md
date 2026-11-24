@@ -1888,7 +1888,7 @@ A count under its minimum is NO VERDICT, never a pass.
   end or his word), with the same commit's heal-key change (any heal potion at the default pick:
   Batt, "use yellow, do not lock this").
 
-### Amendment 51 (2026-11-24 11:0x ICT from `date`): live plays xmas02fi9 -- the first look at Batt's Run
+### Amendment 51 (2026-11-24 10:59 ICT from `date`): live plays xmas02fi9 -- the first look at Batt's Run
 
 - **Batt picked `auto`** in his project (the "look for items with the item model" block: `loot_items`
   `auto`) and started a Run at 09:41 (`flowplay-poring-lab-live-11240941`, live 2f8c3988, no time
